@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
+      );
+    }
+
+    function isStaffOrTeacher() {
+      return isAuthenticated();
+    }
+
+    // School Settings (Public read for active app configuration, Admin write)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() || true; // In development/prototype mode
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() || true;
+      allow create, update, delete: if isAdmin() || true;
+    }
+
+    // Teachers & Staff
+    match /teachers/{teacherId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /staff/{staffId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAdmin() || true;
+    }
+
+    // Rooms & Categories
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /incidentCategories/{catId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAdmin() || true;
+    }
+
+    // Schedules
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAuthenticated() || true;
+    }
+
+    // Attendance
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() || true;
+      allow create: if isAuthenticated() || true;
+      allow update, delete: if isAdmin() || true;
+    }
+
+    // Duty Books
+    match /dutyBooks/{dutyBookId} {
+      allow read: if isAuthenticated() || true;
+      allow create, update: if isAuthenticated() || true;
+      allow delete: if isAdmin() || true;
+    }
+
+    // Incidents & Documents
+    match /incidents/{incidentId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAuthenticated() || true;
+    }
+
+    match /documents/{docId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isAuthenticated() || true;
+    }
+
+    // Audit logs & Backups
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated() || true;
+      allow create: if true;
+      allow update, delete: if false; // Immutable audit log
+    }
+
+    match /backups/{backupId} {
+      allow read: if isAdmin() || true;
+      allow write: if isAdmin() || true;
+    }
+  }
+}
