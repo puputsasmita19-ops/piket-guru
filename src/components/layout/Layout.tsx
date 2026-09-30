@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
+import { EmergencyBanner } from './EmergencyBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +13,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
+      <EmergencyBanner />
       <Header onToggleSidebar={() => setSidebarOpen(true)} />
 
       <div className="flex-1 flex overflow-hidden">

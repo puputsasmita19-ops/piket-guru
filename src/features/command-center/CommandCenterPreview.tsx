@@ -241,9 +241,6 @@ export const CommandCenterPreview: React.FC = () => {
             attendance={attendance}
             visitors={visitors}
             incidents={incidents}
-            onSelectPost={(postName) => {
-              alert(`Informasi Pos Piket: ${postName}\nSeluruh petugas pos terkoordinasi secara real-time.`);
-            }}
           />
         </CardContent>
       </Card>

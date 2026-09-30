@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#grad)" />
+  <circle cx="256" cy="256" r="170" fill="none" stroke="#60a5fa" stroke-width="14" stroke-opacity="0.3" />
+  <!-- Shield and Book Emblem -->
+  <path d="M256 120 L370 170 V270 C370 340 315 395 256 420 C197 395 142 340 142 270 V170 Z" fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-width="18" stroke-linejoin="round" />
+  <!-- Checkmark / Bookmark -->
+  <path d="M200 270 L240 310 L320 220" fill="none" stroke="#38bdf8" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

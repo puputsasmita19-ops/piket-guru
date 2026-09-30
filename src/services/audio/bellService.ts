@@ -144,4 +144,96 @@ export class SchoolBellService {
       console.warn('Audio Context error:', e);
     }
   }
+
+  /**
+   * Earthquake / Seismic Rumble Alarm
+   */
+  public static playEarthquakeAlarm() {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(280, now + 1.2);
+      osc.frequency.linearRampToValueAtTime(140, now + 2.5);
+
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 3.0);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 3.0);
+    } catch (e) {
+      console.warn('Audio Context error playing earthquake alarm:', e);
+    }
+  }
+
+  /**
+   * Fire Alarm (Hi-Lo rapid pulsed horn)
+   */
+  public static playFireAlarm() {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.2, now);
+
+      for (let i = 0; i < 6; i++) {
+        const t = now + i * 0.4;
+        osc.frequency.setValueAtTime(i % 2 === 0 ? 880 : 587, t);
+      }
+
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 2.5);
+    } catch (e) {
+      console.warn('Audio Context error playing fire alarm:', e);
+    }
+  }
+
+  /**
+   * Plays tone based on tone identifier
+   */
+  public static playToneByType(toneType: string) {
+    switch (toneType) {
+      case 'MORNING_IN':
+        this.playSchoolBell();
+        break;
+      case 'PERIOD_CHANGE':
+        this.playPeriodChangeBell();
+        break;
+      case 'BREAK':
+        this.playBreakBell();
+        break;
+      case 'DISMISSAL':
+        this.playDismissalBell();
+        break;
+      case 'EARTHQUAKE':
+        this.playEarthquakeAlarm();
+        break;
+      case 'FIRE':
+        this.playFireAlarm();
+        break;
+      case 'EMERGENCY':
+      case 'SECURITY':
+      case 'EVACUATION':
+        this.playEmergencyAlarm();
+        break;
+      default:
+        this.playPeriodChangeBell();
+        break;
+    }
+  }
 }

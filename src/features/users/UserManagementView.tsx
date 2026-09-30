@@ -12,6 +12,7 @@ import {
   Phone,
   Mail,
   Filter,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -43,6 +44,7 @@ export const UserManagementView: React.FC = () => {
   const [targetPinUser, setTargetPinUser] = useState<UserProfile | null>(null);
 
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<UserProfile | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     UserService.bootstrapIfEmpty();
@@ -85,9 +87,11 @@ export const UserManagementView: React.FC = () => {
   const handleToggleStatus = async (user: UserProfile) => {
     if (!currentUser) return;
     if (user.id === currentUser.id) {
-      alert('Anda tidak dapat menonaktifkan akun yang sedang digunakan saat ini.');
+      setActionError('Anda tidak dapat menonaktifkan akun yang sedang digunakan saat ini.');
+      setTimeout(() => setActionError(null), 5000);
       return;
     }
+    setActionError(null);
     const newStatus = !user.isActive;
     await UserService.toggleActiveStatus(user.id, newStatus, currentUser);
   };
@@ -96,9 +100,12 @@ export const UserManagementView: React.FC = () => {
   const handleDeleteUser = async () => {
     if (!deleteConfirmUser || !currentUser) return;
     if (deleteConfirmUser.id === currentUser.id) {
-      alert('Anda tidak dapat menghapus akun Anda sendiri.');
+      setActionError('Anda tidak dapat menghapus akun Anda sendiri.');
+      setTimeout(() => setActionError(null), 5000);
+      setDeleteConfirmUser(null);
       return;
     }
+    setActionError(null);
     await UserService.deleteUser(deleteConfirmUser.id, currentUser);
     setDeleteConfirmUser(null);
   };
@@ -126,6 +133,21 @@ export const UserManagementView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span className="font-semibold">{actionError}</span>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>

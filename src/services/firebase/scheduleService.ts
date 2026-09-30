@@ -24,27 +24,31 @@ export class ScheduleService {
       if (newSchedule.id && item.id === newSchedule.id) continue;
       if (item.status === 'DIBATALKAN') continue;
 
-      // Check same day or same date
-      const sameDay = item.hari === newSchedule.hari;
-      const sameDate = newSchedule.tanggal && item.tanggal && item.tanggal === newSchedule.tanggal;
+      // If both schedules specify a specific calendar date, conflict occurs only if dates match exactly.
+      // If either schedule does not specify a specific date (recurring day template), then check day of week match.
+      const hasSpecificDates = Boolean(newSchedule.tanggal && item.tanggal);
+      const isDateMatching = hasSpecificDates
+        ? item.tanggal === newSchedule.tanggal
+        : item.hari === newSchedule.hari;
 
-      if (sameDay || sameDate) {
+      if (isDateMatching) {
         // Check time overlap: (StartA < EndB) and (EndA > StartB)
         const isTimeOverlap =
           newSchedule.jamMulai < item.jamSelesai && newSchedule.jamSelesai > item.jamMulai;
 
         if (isTimeOverlap) {
+          const dateLabel = item.tanggal ? `tanggal ${item.tanggal}` : `hari ${item.hari}`;
           if (item.petugasId === newSchedule.petugasId) {
             return {
               hasConflict: true,
-              reason: `Petugas "${item.petugasName}" sudah memiliki jadwal piket pada hari ${item.hari} (${item.jamMulai} - ${item.jamSelesai}) di ${item.ruangName}.`,
+              reason: `Petugas "${item.petugasName}" sudah memiliki jadwal piket pada ${dateLabel} (${item.jamMulai} - ${item.jamSelesai}) di ${item.ruangName}.`,
             };
           }
 
           if (item.ruangId === newSchedule.ruangId) {
             return {
               hasConflict: true,
-              reason: `Pos/Ruangan "${item.ruangName}" sudah dialokasikan untuk ${item.petugasName} pada jam yang sama (${item.jamMulai} - ${item.jamSelesai}).`,
+              reason: `Pos/Ruangan "${item.ruangName}" sudah dialokasikan untuk ${item.petugasName} pada ${dateLabel} (${item.jamMulai} - ${item.jamSelesai}).`,
             };
           }
         }

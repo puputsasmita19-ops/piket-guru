@@ -108,7 +108,7 @@ export class StudentTardyService {
       userName: user.fullName,
       role: user.role,
       action: 'CREATE',
-      module: 'SETTINGS',
+      module: 'TARDINESS',
       recordId: id,
       details: `Mencatat siswa terlambat: ${payload.namaSiswa} (${payload.kelas}) - Terlambat ${payload.menitTerlambat} menit (${payload.pembinaan})`,
     });
@@ -139,7 +139,7 @@ export class StudentTardyService {
       userName: user.fullName,
       role: user.role,
       action: 'STATUS_CHANGE',
-      module: 'SETTINGS',
+      module: 'TARDINESS',
       recordId: tardyId,
       details: `Siswa terlambat ${existing.namaSiswa} (${existing.kelas}) selesai pembinaan & diizinkan masuk kelas`,
     });
@@ -155,7 +155,7 @@ export class StudentTardyService {
       userName: user.fullName,
       role: user.role,
       action: 'DELETE',
-      module: 'SETTINGS',
+      module: 'TARDINESS',
       recordId: tardyId,
       details: `Menghapus catatan siswa terlambat ID: ${tardyId}`,
     });

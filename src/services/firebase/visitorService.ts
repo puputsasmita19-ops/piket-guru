@@ -89,7 +89,7 @@ export class VisitorService {
       userName: user.fullName,
       role: user.role,
       action: 'CREATE',
-      module: 'SETTINGS',
+      module: 'VISITORS',
       recordId: id,
       details: `Mencatat tamu baru: ${payload.namaTamu} (${payload.instansiAsal}) bertemu dengan ${payload.tujuanBertemu}`,
     });
@@ -122,7 +122,7 @@ export class VisitorService {
       userName: user.fullName,
       role: user.role,
       action: 'STATUS_CHANGE',
-      module: 'SETTINGS',
+      module: 'VISITORS',
       recordId: visitorId,
       details: `Check-out tamu: ${existing.namaTamu} (Keluar pukul ${exitTime} WIB)`,
     });
@@ -138,7 +138,7 @@ export class VisitorService {
       userName: user.fullName,
       role: user.role,
       action: 'DELETE',
-      module: 'SETTINGS',
+      module: 'VISITORS',
       recordId: visitorId,
       details: `Menghapus catatan buku tamu ID: ${visitorId}`,
     });

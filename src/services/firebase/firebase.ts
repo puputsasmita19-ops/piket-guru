@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, User } from 'firebase/auth';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
@@ -12,4 +12,14 @@ export const db: Firestore =
     : getFirestore(app);
 
 export const auth = getAuth(app);
+
+/**
+ * Returns active Firebase Auth user if present
+ */
+export const ensureFirebaseAuth = async (): Promise<User | null> => {
+  return auth.currentUser || null;
+};
+
 export default app;
+
+

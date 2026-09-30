@@ -90,7 +90,7 @@ export class StudentPermitService {
       userName: user.fullName,
       role: user.role,
       action: 'CREATE',
-      module: 'SETTINGS',
+      module: 'PERMITS',
       recordId: id,
       details: `Menerbitkan surat izin keluar gerbang untuk siswa: ${payload.namaSiswa} (${payload.kelas}) - Alasan: ${payload.jenisIzin}`,
     });
@@ -123,7 +123,7 @@ export class StudentPermitService {
       userName: user.fullName,
       role: user.role,
       action: 'STATUS_CHANGE',
-      module: 'SETTINGS',
+      module: 'PERMITS',
       recordId: permitId,
       details: `Siswa ${existing.namaSiswa} (${existing.kelas}) telah kembali masuk sekolah pukul ${returnTime} WIB`,
     });
@@ -139,7 +139,7 @@ export class StudentPermitService {
       userName: user.fullName,
       role: user.role,
       action: 'DELETE',
-      module: 'SETTINGS',
+      module: 'PERMITS',
       recordId: permitId,
       details: `Menghapus surat izin siswa ID: ${permitId}`,
     });

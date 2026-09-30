@@ -51,8 +51,41 @@ export interface AuditLogRecord {
   userId: string;
   userName: string;
   role: UserRole;
-  action: 'LOGIN' | 'LOGOUT' | 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'UPLOAD' | 'BACKUP' | 'RESTORE' | 'ATTENDANCE' | 'STATUS_CHANGE';
-  module: 'USERS' | 'TEACHERS' | 'STAFF' | 'ROOMS' | 'CATEGORIES' | 'SCHEDULES' | 'ATTENDANCE' | 'DUTY_BOOK' | 'INCIDENTS' | 'REPORTS' | 'SETTINGS' | 'SYSTEM';
+  action:
+    | 'LOGIN'
+    | 'LOGOUT'
+    | 'CREATE'
+    | 'UPDATE'
+    | 'DELETE'
+    | 'IMPORT'
+    | 'EXPORT'
+    | 'UPLOAD'
+    | 'BACKUP'
+    | 'RESTORE'
+    | 'ATTENDANCE'
+    | 'STATUS_CHANGE'
+    | 'SECURITY'
+    | 'EMERGENCY';
+  module:
+    | 'USERS'
+    | 'TEACHERS'
+    | 'STAFF'
+    | 'ROOMS'
+    | 'CATEGORIES'
+    | 'SCHEDULES'
+    | 'ATTENDANCE'
+    | 'DUTY_BOOK'
+    | 'INCIDENTS'
+    | 'REPORTS'
+    | 'SETTINGS'
+    | 'SYSTEM'
+    | 'PERMITS'
+    | 'TARDINESS'
+    | 'SUBSTITUTIONS'
+    | 'VISITORS'
+    | 'ANNOUNCEMENTS'
+    | 'SECURITY'
+    | 'BELL';
   recordId?: string;
   details: string;
   timestamp: string;

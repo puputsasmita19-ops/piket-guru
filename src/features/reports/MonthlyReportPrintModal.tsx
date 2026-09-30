@@ -3,8 +3,12 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { SchoolSettings } from '../../types';
 import { TeacherAttendanceSummary, IncidentCategorySummary } from '../../services/reports/reportService';
+import { StudentTardyRecord } from '../../types/studentTardy.types';
+import { StudentPermitRecord } from '../../types/studentPermit.types';
+import { TeacherSubstitutionRecord } from '../../types/substitution.types';
+import { VisitorRecord } from '../../types/visitor.types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, X } from 'lucide-react';
+import { Printer } from 'lucide-react';
 
 interface MonthlyReportPrintModalProps {
   isOpen: boolean;
@@ -15,6 +19,10 @@ interface MonthlyReportPrintModalProps {
   incidentSummaries: IncidentCategorySummary[];
   totalIncidents: number;
   resolvedIncidents: number;
+  tardyRecords?: StudentTardyRecord[];
+  permitRecords?: StudentPermitRecord[];
+  substitutionRecords?: TeacherSubstitutionRecord[];
+  visitorRecords?: VisitorRecord[];
 }
 
 export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = ({
@@ -26,6 +34,10 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
   incidentSummaries,
   totalIncidents,
   resolvedIncidents,
+  tardyRecords = [],
+  permitRecords = [],
+  substitutionRecords = [],
+  visitorRecords = [],
 }) => {
   if (!isOpen) return null;
 
@@ -37,12 +49,17 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
     ? Math.round(attendanceSummaries.reduce((acc, curr) => acc + curr.percentage, 0) / attendanceSummaries.length)
     : 100;
 
+  const totalTardy = tardyRecords.length;
+  const totalPermits = permitRecords.length;
+  const totalSubstitutions = substitutionRecords.length;
+  const totalVisitors = visitorRecords.length;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Cetak Rekapitulasi Laporan Bulanan" maxWidth="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Cetak Rekapitulasi Laporan Bulanan Resmi" maxWidth="2xl">
       <div className="space-y-6">
         <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 text-xs no-print">
           <span className="font-semibold text-blue-900 dark:text-blue-200">
-            Pratinjau Berkas Rekapitulasi Resmi Siap Cetak (Format Standar A4)
+            Pratinjau Berkas Rekapitulasi Resmi Siap Cetak (Format Standar A4 Cetak/PDF)
           </span>
           <Button
             variant="primary"
@@ -70,13 +87,34 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
             <p className="text-[11px] font-sans font-bold">Periode: {periodLabel}</p>
           </div>
 
-          {/* RINGKASAN EKSEKUTIF */}
-          <div className="border border-slate-300 p-3 rounded-lg text-[11px] space-y-1 bg-slate-50">
-            <h5 className="font-bold underline">Ringkasan Statistik Utama:</h5>
-            <div className="grid grid-cols-3 gap-2 pt-1 font-sans">
-              <div>Rata-rata Kehadiran Piket: <strong>{avgAttendance}%</strong></div>
-              <div>Total Kejadian Dilaporkan: <strong>{totalIncidents} Kasus</strong></div>
-              <div>Kasus Selesai Ditangani: <strong>{resolvedIncidents} ({totalIncidents > 0 ? Math.round((resolvedIncidents / totalIncidents) * 100) : 100}%)</strong></div>
+          {/* RINGKASAN EKSEKUTIF 6 MODUL */}
+          <div className="border border-slate-300 p-3 rounded-lg text-[11px] space-y-1.5 bg-slate-50">
+            <h5 className="font-bold underline">Ringkasan Statistik Eksekutif Seluruh Bidang Piket:</h5>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1 font-sans text-[10px]">
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Kepatuhan Guru Piket:</span>
+                <strong className="text-xs text-blue-700">{avgAttendance}%</strong> ({attendanceSummaries.filter(a => a.percentage >= 80).length} Disiplin)
+              </div>
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Insiden & Kasus:</span>
+                <strong className="text-xs text-slate-800">{totalIncidents} Kasus</strong> ({resolvedIncidents} Selesai)
+              </div>
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Keterlambatan Siswa:</span>
+                <strong className="text-xs text-amber-700">{totalTardy} Kasus</strong> ({tardyRecords.reduce((acc, c) => acc + (c.poinPelanggaran || 0), 0)} Total Poin)
+              </div>
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Izin Meninggalkan Sekolah:</span>
+                <strong className="text-xs text-emerald-700">{totalPermits} Siswa</strong>
+              </div>
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Guru Pengganti (Inval):</span>
+                <strong className="text-xs text-indigo-700">{totalSubstitutions} Penugasan</strong>
+              </div>
+              <div className="p-2 border border-slate-200 rounded bg-white">
+                <span className="text-slate-500 block">Buku Tamu Masuk:</span>
+                <strong className="text-xs text-teal-700">{totalVisitors} Kunjungan</strong>
+              </div>
             </div>
           </div>
 
@@ -144,12 +182,187 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
             </table>
           </div>
 
-          {/* TANDA TANGAN REKAP */}
+          {/* TABEL 3: REKAPITULASI KETERLAMBATAN SISWA */}
+          <div className="space-y-1.5 pt-2">
+            <h4 className="font-bold text-xs uppercase tracking-tight">
+              C. Rekapitulasi Kedisiplinan & Keterlambatan Siswa
+            </h4>
+            <table className="w-full border-collapse border border-black text-[10px] text-center font-sans">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black p-1.5">No</th>
+                  <th className="border border-black p-1.5 text-left">Nama Siswa</th>
+                  <th className="border border-black p-1.5">Kelas</th>
+                  <th className="border border-black p-1.5">Tanggal & Jam</th>
+                  <th className="border border-black p-1.5">Menit Terlambat</th>
+                  <th className="border border-black p-1.5 text-left">Alasan</th>
+                  <th className="border border-black p-1.5 text-left">Bentuk Pembinaan</th>
+                  <th className="border border-black p-1.5">Poin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tardyRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="border border-black p-2 italic text-slate-500">
+                      Tidak ada catatan keterlambatan siswa pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  tardyRecords.slice(0, 10).map((r, idx) => (
+                    <tr key={r.id}>
+                      <td className="border border-black p-1.5">{idx + 1}</td>
+                      <td className="border border-black p-1.5 text-left font-semibold">{r.namaSiswa}</td>
+                      <td className="border border-black p-1.5">{r.kelas}</td>
+                      <td className="border border-black p-1.5 font-mono">{r.tanggal} ({r.jamDatang})</td>
+                      <td className="border border-black p-1.5 text-amber-800 font-bold">{r.menitTerlambat} mnt</td>
+                      <td className="border border-black p-1.5 text-left">{r.alasan.replace(/_/g, ' ')}</td>
+                      <td className="border border-black p-1.5 text-left">{r.pembinaan.replace(/_/g, ' ')}</td>
+                      <td className="border border-black p-1.5 font-bold text-rose-700">{r.poinPelanggaran}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {tardyRecords.length > 10 && (
+              <p className="text-[9px] italic text-slate-500 text-right">
+                * Menampilkan 10 dari total {tardyRecords.length} catatan keterlambatan. Rekapitulasi penuh tersedia pada arsip CSV.
+              </p>
+            )}
+          </div>
+
+          {/* TABEL 4: REKAPITULASI IZIN SISWA */}
+          <div className="space-y-1.5 pt-2">
+            <h4 className="font-bold text-xs uppercase tracking-tight">
+              D. Rekapitulasi Perizinan Meninggalkan Sekolah / Kelas
+            </h4>
+            <table className="w-full border-collapse border border-black text-[10px] text-center font-sans">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black p-1.5">No</th>
+                  <th className="border border-black p-1.5 text-left">Nama Siswa</th>
+                  <th className="border border-black p-1.5">Kelas</th>
+                  <th className="border border-black p-1.5">Waktu Keluar</th>
+                  <th className="border border-black p-1.5 text-left">Jenis Izin</th>
+                  <th className="border border-black p-1.5 text-left">Alasan / Kepentingan</th>
+                  <th className="border border-black p-1.5">Penjemput</th>
+                  <th className="border border-black p-1.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {permitRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="border border-black p-2 italic text-slate-500">
+                      Tidak ada perizinan keluar siswa tercatat pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  permitRecords.slice(0, 10).map((r, idx) => (
+                    <tr key={r.id}>
+                      <td className="border border-black p-1.5">{idx + 1}</td>
+                      <td className="border border-black p-1.5 text-left font-semibold">{r.namaSiswa}</td>
+                      <td className="border border-black p-1.5">{r.kelas}</td>
+                      <td className="border border-black p-1.5 font-mono">{r.tanggal} ({r.jamKeluar})</td>
+                      <td className="border border-black p-1.5 text-left">{r.jenisIzin.replace(/_/g, ' ')}</td>
+                      <td className="border border-black p-1.5 text-left">{r.alasan}</td>
+                      <td className="border border-black p-1.5">{r.penjemput}</td>
+                      <td className="border border-black p-1.5 font-bold">{r.status.replace(/_/g, ' ')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* TABEL 5: REKAPITULASI GURU PENGGANTI (INVAL) */}
+          <div className="space-y-1.5 pt-2">
+            <h4 className="font-bold text-xs uppercase tracking-tight">
+              E. Rekapitulasi Layanan Guru Pengganti (Inval Pembelajaran)
+            </h4>
+            <table className="w-full border-collapse border border-black text-[10px] text-center font-sans">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black p-1.5">No</th>
+                  <th className="border border-black p-1.5 text-left">Guru Berhalangan</th>
+                  <th className="border border-black p-1.5 text-left">Mata Pelajaran & Kelas</th>
+                  <th className="border border-black p-1.5">Jam Pelajaran</th>
+                  <th className="border border-black p-1.5 text-left">Guru Pengganti (Inval)</th>
+                  <th className="border border-black p-1.5 text-left">Alasan Berhalangan</th>
+                  <th className="border border-black p-1.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {substitutionRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="border border-black p-2 italic text-slate-500">
+                      Tidak ada penugasan guru inval pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  substitutionRecords.slice(0, 10).map((r, idx) => (
+                    <tr key={r.id}>
+                      <td className="border border-black p-1.5">{idx + 1}</td>
+                      <td className="border border-black p-1.5 text-left font-semibold">{r.guruBerhalanganName}</td>
+                      <td className="border border-black p-1.5 text-left">{r.mataPelajaran} ({r.kelas})</td>
+                      <td className="border border-black p-1.5 font-mono">{r.jamPelajaran}</td>
+                      <td className="border border-black p-1.5 text-left font-semibold text-blue-900">{r.guruPenggantiName || '-'}</td>
+                      <td className="border border-black p-1.5 text-left">{r.alasan.replace(/_/g, ' ')}</td>
+                      <td className="border border-black p-1.5 font-bold">{r.status.replace(/_/g, ' ')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* TABEL 6: REKAPITULASI BUKU TAMU */}
+          <div className="space-y-1.5 pt-2">
+            <h4 className="font-bold text-xs uppercase tracking-tight">
+              F. Rekapitulasi Kunjungan Tamu Sekolah
+            </h4>
+            <table className="w-full border-collapse border border-black text-[10px] text-center font-sans">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black p-1.5">No</th>
+                  <th className="border border-black p-1.5 text-left">Nama Tamu</th>
+                  <th className="border border-black p-1.5 text-left">Instansi / Asal</th>
+                  <th className="border border-black p-1.5">Kategori</th>
+                  <th className="border border-black p-1.5 text-left">Tujuan Bertemu</th>
+                  <th className="border border-black p-1.5 text-left">Keperluan</th>
+                  <th className="border border-black p-1.5">Waktu Masuk</th>
+                  <th className="border border-black p-1.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visitorRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="border border-black p-2 italic text-slate-500">
+                      Tidak ada kunjungan tamu tercatat pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  visitorRecords.slice(0, 10).map((r, idx) => (
+                    <tr key={r.id}>
+                      <td className="border border-black p-1.5">{idx + 1}</td>
+                      <td className="border border-black p-1.5 text-left font-semibold">{r.namaTamu}</td>
+                      <td className="border border-black p-1.5 text-left">{r.instansiAsal}</td>
+                      <td className="border border-black p-1.5">{r.kategori.replace(/_/g, ' ')}</td>
+                      <td className="border border-black p-1.5 text-left">{r.tujuanBertemu}</td>
+                      <td className="border border-black p-1.5 text-left">{r.keperluan}</td>
+                      <td className="border border-black p-1.5 font-mono">{r.tanggal} {r.jamMasuk}</td>
+                      <td className="border border-black p-1.5 font-bold">{r.status.replace(/_/g, ' ')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* TANDA TANGAN REKAP RESMI */}
           <div className="grid grid-cols-2 gap-8 pt-8 text-center text-[10px]">
             <div>
               <p>Koordinator Tim Piket Sekolah,</p>
               <div className="h-16 flex items-center justify-center italic text-slate-400">
-                [Tanda Tangan & Cap]
+                [Tanda Tangan & Cap Tim Piket]
               </div>
               <p className="font-bold underline">Drs. H. Ahmad Fauzi, M.Pd.</p>
               <p className="text-[9px] font-mono">NIP. 198503152010011002</p>
@@ -169,3 +382,4 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
     </Modal>
   );
 };
+

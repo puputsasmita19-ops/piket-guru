@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Changelog v1.0.0 - Piket Guru</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 10.5pt; line-height: 1.4; color: #000; background: #f1f5f9; padding: 20px; }
+    .page-container { background: #fff; max-width: 210mm; margin: 0 auto; padding: 20mm; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 20px; }
+    .kop-surat h2 { font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+    .kop-surat h1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .kop-surat p { font-size: 9.5pt; font-style: italic; }
+    .doc-title { text-align: center; margin-bottom: 20px; }
+    .doc-title h3 { font-size: 13pt; text-decoration: underline; text-transform: uppercase; margin-bottom: 4px; }
+    .doc-title span { font-size: 10pt; font-weight: bold; }
+    h4 { font-size: 11pt; font-weight: bold; margin: 14px 0 4px 0; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    p, ol, ul { margin-bottom: 8px; text-align: justify; }
+    ol, ul { margin-left: 20px; }
+    li { margin-bottom: 3px; }
+    .badge-pass { background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: sans-serif; font-size: 9pt; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+    .btn-print:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 210mm; margin: 0 auto 10px auto; text-align: right;">
+    <a href="/docs/index.html" style="font-family: sans-serif; color: #475569; text-decoration: none; margin-right: 15px; font-size: 14px;">&larr; Kembali ke Portal Dokumen</a>
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan sebagai PDF</button>
+  </div>
+
+  <div class="page-container">
+    <div class="kop-surat">
+      <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA</h2>
+      <h2>DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+      <h1>CATATAN PERILISAN RESMI SISTEM (CHANGELOG)</h1>
+      <p>Sistem Piket Guru Digital &bull; Dokumen Riwayat Rekayasa Perangkat Lunak &bull; Edisi 2026</p>
+    </div>
+
+    <div class="doc-title">
+      <h3>CATATAN RILIS VERSI PRODUKSI v1.0.0</h3>
+      <span>TANGGAL PERILISAN: 30 SEPTEMBER 2026 &bull; STATUS: FINAL PRODUCTION</span>
+    </div>
+
+    <h4>Fitur Utama Ditambahkan (Added)</h4>
+    <ul>
+      <li><strong>Presensi Geofence GPS &amp; Swafoto:</strong> Algoritma Haversine radius 100m dan kompresi kanvas otomatis &lt; 100KB.</li>
+      <li><strong>Alur Kerja 5 Tahapan Buku Piket:</strong> Siklus formal <em>Draft &rarr; Diajukan &rarr; Diverifikasi &rarr; Disetujui &rarr; Dikunci</em>.</li>
+      <li><strong>Pusat Komando &amp; Bel Sekolah:</strong> Web Audio API 3 nada harmonik tanpa dependensi file MP3 eksternal dan panel alarm darurat.</li>
+      <li><strong>Mode Kiosk TV Display:</strong> Papan informasi rotasi per 8 detik dengan ticker teks pengumuman lobi berjalan.</li>
+      <li><strong>Administrasi Terpadu:</strong> Buku Tamu Digital, Siswa Terlambat, Izin Siswa Keluar, dan Guru Pengganti (Inval).</li>
+      <li><strong>Disaster Recovery 1-Klik:</strong> Pencadangan 16 koleksi Firestore ke format JSON dan pemulihan tervalidasi.</li>
+    </ul>
+
+    <h4>Peningkatan &amp; Optimalisasi (Improved)</h4>
+    <ul>
+      <li><strong>Routing Hash URL:</strong> Navigasi persisten (<code>/#schedules</code>, <code>/#reports</code>) kebal refresh F5.</li>
+      <li><strong>Deteksi Jadwal Bentrok:</strong> Logika penanggalan spesifik dipisahkan dari template mingguan untuk mencegah bentrok semu.</li>
+      <li><strong>Ekspor Dokumen:</strong> Penambahan UTF-8 BOM pada CSV dan tata letak cetak lembar dinas resmi bertandatangan.</li>
+    </ul>
+
+    <h4>Perbaikan Celah &amp; Keamanan (Security Hardening)</h4>
+    <ul>
+      <li><strong>Enkripsi Salted SHA-256:</strong> Hashing PIN dengan salt acak 16 karakter unik dan proteksi lockout 15 menit.</li>
+      <li><strong>Aturan Firestore Permanen:</strong> Penguncian koleksi <code>auditLogs</code> kebal hapus dan modifikasi.</li>
+      <li><strong>Pemberantasan Celah Prototyping:</strong> Pencabutan seluruh bypass pengembang pada <code>firestore.rules</code>.</li>
+    </ul>
+
+    <h4>Hasil Pengujian Regresi Final</h4>
+    <p>Pengujian regresi menyeluruh telah dilakukan pada 44 skenario operasional: <span class="badge-pass">44 / 44 PASSED (100%)</span>.</p>
+
+    <div style="margin-top: 40px; text-align: right;">
+      <p>Ditetapkan di: Jakarta<br>Pada tanggal: 30 September 2026<br>Kepala Sekolah,</p>
+      <br><br><br>
+      <p><strong>Dr. Hj. Siti Rohmah, M.Pd.</strong><br>NIP. 19760512 200003 2 001</p>
+    </div>
+  </div>
+
+</body>
+</html>

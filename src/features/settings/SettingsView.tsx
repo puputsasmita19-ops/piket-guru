@@ -7,23 +7,30 @@ import {
   Save,
   CheckCircle2,
   AlertTriangle,
-  Search,
+  ShieldCheck,
+  Bell,
+  Camera,
+  HardDrive,
+  Palette,
+  FileText,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { RestoreConfirmModal } from './RestoreConfirmModal';
 import { ThemeSettingsCard } from './ThemeSettingsCard';
-import { AuditLogsTable } from './AuditLogsTable';
+import { SecurityCenterCard } from './SecurityCenterCard';
+import { BellEmergencyAutomationCard } from './BellEmergencyAutomationCard';
+import { SnapshotManagerCard } from './SnapshotManagerCard';
+import { AuditForensicViewer } from './AuditForensicViewer';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
-import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
-import { SchoolSettings } from '../../types';
+import { SchoolSettings, UserProfile } from '../../types';
 import { AuditLogRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
-type SettingsTab = 'school' | 'theme' | 'backup' | 'audit';
+type SettingsTab = 'school' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
 export const SettingsView: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -32,6 +39,7 @@ export const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('school');
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
 
   // School Form State
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
@@ -39,25 +47,23 @@ export const SettingsView: React.FC = () => {
   const [address, setAddress] = useState(DEFAULT_SCHOOL_SETTINGS.address);
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
-  const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(DEFAULT_SCHOOL_SETTINGS.allowedRadiusMeters);
+  const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(
+    DEFAULT_SCHOOL_SETTINGS.allowedRadiusMeters
+  );
   const [startHour, setStartHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.start || '06:30');
   const [endHour, setEndHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.end || '15:30');
 
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
+  const [locationErrorBanner, setLocationErrorBanner] = useState<string | null>(null);
 
   // Backup & Restore State
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [restorePayload, setRestorePayload] = useState<BackupPayload | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // Audit Logs Filter
-  const [auditSearch, setAuditSearch] = useState('');
-  const [auditModuleFilter, setAuditModuleFilter] = useState('SEMUA');
-  const [auditActionFilter, setAuditActionFilter] = useState('SEMUA');
-
-  // Load Settings and Logs
+  // Load Settings, Users, and Logs
   useEffect(() => {
     FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
       if (data) {
@@ -73,13 +79,20 @@ export const SettingsView: React.FC = () => {
       }
     });
 
+    const unsubUsers = FirestoreService.subscribeToCollection<UserProfile>('users', (data) => {
+      setUsers(data);
+    });
+
     const unsubLogs = FirestoreService.subscribeToCollection<AuditLogRecord>('auditLogs', (data) => {
       setAuditLogs(
         data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       );
     });
 
-    return () => unsubLogs();
+    return () => {
+      unsubUsers();
+      unsubLogs();
+    };
   }, []);
 
   // --- SAVE SCHOOL PROFILE & GPS ---
@@ -103,6 +116,8 @@ export const SettingsView: React.FC = () => {
       };
 
       await FirestoreService.setDocument('settings', 'school_config', updated);
+      setSettings(updated);
+
       await FirestoreService.logAudit({
         userId: currentUser.id,
         userName: currentUser.fullName,
@@ -122,14 +137,20 @@ export const SettingsView: React.FC = () => {
   // --- AUTO-DETECT CURRENT GPS ---
   const handleDetectCurrentLocation = async () => {
     setIsDetectingLocation(true);
+    setLocationErrorBanner(null);
     try {
       const pos = await LocationService.getCurrentPosition();
       setSchoolLat(parseFloat(pos.latitude.toFixed(6)));
       setSchoolLng(parseFloat(pos.longitude.toFixed(6)));
-      setSaveSuccessBanner(`Berhasil mendeteksi koordinat perangkat: ${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`);
+      setSaveSuccessBanner(
+        `Berhasil mendeteksi koordinat perangkat: ${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`
+      );
       setTimeout(() => setSaveSuccessBanner(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Gagal membaca koordinat GPS perangkat.');
+      setLocationErrorBanner(
+        err.message || 'Gagal membaca koordinat GPS perangkat. Pastikan izin lokasi aktif.'
+      );
+      setTimeout(() => setLocationErrorBanner(null), 6000);
     } finally {
       setIsDetectingLocation(false);
     }
@@ -175,58 +196,31 @@ export const SettingsView: React.FC = () => {
   const handleExecuteRestore = async (payload: BackupPayload) => {
     if (!currentUser) return;
     const result = await BackupService.restoreFullBackup(payload, currentUser);
-    setSaveSuccessBanner(`Pemulihan database berhasil! ${result.restoredCount} dokumen telah disinkronkan ke Firestore.`);
+    setSaveSuccessBanner(
+      `Pemulihan database berhasil! ${result.restoredCount} dokumen telah disinkronkan ke Firestore.`
+    );
     setTimeout(() => setSaveSuccessBanner(null), 5000);
   };
-
-  // --- EXPORT AUDIT LOG TO CSV ---
-  const handleExportAuditCsv = () => {
-    const headers = ['Waktu', 'Pengguna', 'Role', 'Aksi', 'Modul', 'Rincian Aktivitas', 'ID Rekaman'];
-    const rows = filteredAuditLogs.map((log) => [
-      log.timestamp,
-      log.userName,
-      log.role,
-      log.action,
-      log.module,
-      log.details,
-      log.recordId || '-',
-    ]);
-
-    ExportUtils.exportToCsv(`Audit_Logs_PiketGuru_${Date.now()}`, headers, rows);
-  };
-
-  // Filtered Audit Logs
-  const filteredAuditLogs = auditLogs.filter((log) => {
-    const matchMod = auditModuleFilter === 'SEMUA' || log.module === auditModuleFilter;
-    const matchAct = auditActionFilter === 'SEMUA' || log.action === auditActionFilter;
-    const matchSearch =
-      log.userName.toLowerCase().includes(auditSearch.toLowerCase()) ||
-      log.details.toLowerCase().includes(auditSearch.toLowerCase()) ||
-      log.action.toLowerCase().includes(auditSearch.toLowerCase()) ||
-      log.module.toLowerCase().includes(auditSearch.toLowerCase());
-
-    return matchMod && matchAct && matchSearch;
-  });
 
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <Settings className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            Pengaturan Sistem & Database
+            Pengaturan Sistem, Keamanan & Otomasi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Konfigurasi profil instansi, tema tampilan, Geofence GPS presensi, arsip cadangan, dan jejak audit
+            Tata kelola profil instansi, Geofence presensi, audit forensik, snapshot darurat, dan bel sekolah otomatis
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl">
           <button
             onClick={() => setActiveTab('school')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'school'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -235,34 +229,67 @@ export const SettingsView: React.FC = () => {
             Profil & GPS
           </button>
           <button
-            onClick={() => setActiveTab('theme')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'theme'
+            onClick={() => setActiveTab('security')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'security'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Tema Tampilan
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            Keamanan Siber
+          </button>
+          <button
+            onClick={() => setActiveTab('bell')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'bell'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5 text-amber-500" />
+            Bel & Darurat
+          </button>
+          <button
+            onClick={() => setActiveTab('snapshots')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'snapshots'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-indigo-500" />
+            Snapshot Cloud
           </button>
           <button
             onClick={() => setActiveTab('backup')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'backup'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Backup & Restore
+            Backup JSON
+          </button>
+          <button
+            onClick={() => setActiveTab('theme')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'theme'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Tema
           </button>
           <button
             onClick={() => setActiveTab('audit')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'audit'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Jejak Audit ({auditLogs.length})
+            Audit Forensik ({auditLogs.length})
           </button>
         </div>
       </div>
@@ -274,8 +301,12 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB: THEME PREFERENCES */}
-      {activeTab === 'theme' && <ThemeSettingsCard />}
+      {locationErrorBanner && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center gap-3 animate-in fade-in duration-200">
+          <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span className="font-bold">{locationErrorBanner}</span>
+        </div>
+      )}
 
       {/* TAB 1: SCHOOL PROFILE & GEOFENCE */}
       {activeTab === 'school' && (
@@ -445,18 +476,28 @@ export const SettingsView: React.FC = () => {
         </form>
       )}
 
-      {/* TAB 2: BACKUP & RESTORE DATABASE */}
+      {/* TAB 2: SECURITY & SYSTEM DIAGNOSTICS */}
+      {activeTab === 'security' && <SecurityCenterCard settings={settings} users={users} />}
+
+      {/* TAB 3: BELL AUTOMATION & PANIC EMERGENCY */}
+      {activeTab === 'bell' && (
+        <BellEmergencyAutomationCard schoolName={settings.schoolName} />
+      )}
+
+      {/* TAB 4: POINT-IN-TIME CLOUD SNAPSHOTS */}
+      {activeTab === 'snapshots' && <SnapshotManagerCard />}
+
+      {/* TAB 5: BACKUP & RESTORE JSON */}
       {activeTab === 'backup' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card 1: Full Backup Download */}
           <Card>
             <CardHeader
               title="Cadangkan Seluruh Database (Backup JSON)"
-              subtitle="Ekspor seluruh 11 koleksi Firestore ke satu berkas arsip terstruktur"
+              subtitle="Ekspor seluruh 16 koleksi Firestore ke satu berkas arsip terstruktur"
             />
             <CardContent className="p-5 space-y-4">
               <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-200 text-xs leading-relaxed">
-                Berkas arsip JSON memuat seluruh koleksi: Pengguna, Guru, Staff, Ruangan, Jadwal, Presensi GPS, Jurnal Buku Piket, Insiden, Pengaturan, dan Riwayat Audit.
+                Berkas arsip JSON memuat seluruh koleksi: Pengguna, Guru, Staff, Ruangan, Jadwal, Presensi GPS, Jurnal Buku Piket, Insiden, Keterlambatan, Izin, Tamu, Guru Pengganti, Pengaturan, dan Riwayat Audit.
               </div>
 
               <div className="pt-2">
@@ -474,7 +515,6 @@ export const SettingsView: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Card 2: Restore from Backup */}
           <Card>
             <CardHeader
               title="Pulihkan Database dari Cadangan (Restore)"
@@ -513,79 +553,12 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: AUDIT TRAIL LOGS */}
+      {/* TAB 6: THEME PREFERENCES */}
+      {activeTab === 'theme' && <ThemeSettingsCard />}
+
+      {/* TAB 7: FORENSIC AUDIT TRAIL */}
       {activeTab === 'audit' && (
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-col lg:flex-row gap-3 items-center justify-between">
-                <div className="relative w-full lg:w-72">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={auditSearch}
-                    onChange={(e) => setAuditSearch(e.target.value)}
-                    placeholder="Cari aktivitas, user, atau rincian..."
-                    className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
-                  <select
-                    value={auditModuleFilter}
-                    onChange={(e) => setAuditModuleFilter(e.target.value)}
-                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
-                  >
-                    <option value="SEMUA">Semua Modul</option>
-                    <option value="USERS">USERS</option>
-                    <option value="SCHEDULES">SCHEDULES</option>
-                    <option value="ATTENDANCE">ATTENDANCE</option>
-                    <option value="DUTY_BOOK">DUTY_BOOK</option>
-                    <option value="INCIDENTS">INCIDENTS</option>
-                    <option value="REPORTS">REPORTS</option>
-                    <option value="SETTINGS">SETTINGS</option>
-                  </select>
-
-                  <select
-                    value={auditActionFilter}
-                    onChange={(e) => setAuditActionFilter(e.target.value)}
-                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
-                  >
-                    <option value="SEMUA">Semua Aksi</option>
-                    <option value="LOGIN">LOGIN</option>
-                    <option value="CREATE">CREATE</option>
-                    <option value="UPDATE">UPDATE</option>
-                    <option value="DELETE">DELETE</option>
-                    <option value="STATUS_CHANGE">STATUS_CHANGE</option>
-                    <option value="EXPORT">EXPORT</option>
-                    <option value="BACKUP">BACKUP</option>
-                    <option value="RESTORE">RESTORE</option>
-                  </select>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    leftIcon={<Download className="w-3.5 h-3.5" />}
-                    onClick={handleExportAuditCsv}
-                  >
-                    Ekspor CSV
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title={`Riwayat Log Audit Sistem (${filteredAuditLogs.length})`}
-              subtitle="Pencatatan rekam jejak aktivitas pengguna demi akuntabilitas dan transparansi sistem"
-            />
-            <CardContent className="p-0 overflow-x-auto">
-              <AuditLogsTable logs={filteredAuditLogs} />
-            </CardContent>
-          </Card>
-        </div>
+        <AuditForensicViewer logs={auditLogs} settings={settings} />
       )}
 
       {/* RESTORE CONFIRMATION MODAL */}

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Dokumentasi Database - Piket Guru v1.0.0</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.4; color: #000; background: #f1f5f9; padding: 20px; }
+    .page-container { background: #fff; max-width: 210mm; margin: 0 auto; padding: 20mm; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 20px; }
+    .kop-surat h2 { font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+    .kop-surat h1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .kop-surat p { font-size: 9.5pt; font-style: italic; }
+    .doc-title { text-align: center; margin-bottom: 20px; }
+    .doc-title h3 { font-size: 13pt; text-decoration: underline; text-transform: uppercase; margin-bottom: 4px; }
+    .doc-title span { font-size: 10pt; font-weight: bold; }
+    h4 { font-size: 10.5pt; font-weight: bold; margin: 14px 0 6px 0; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 8.5pt; }
+    th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+    th { background: #f2f2f2; text-align: center; font-weight: bold; }
+    pre { background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; font-family: monospace; font-size: 8.5pt; margin-bottom: 12px; overflow-x: auto; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+    .btn-print:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 210mm; margin: 0 auto 10px auto; text-align: right;">
+    <a href="/docs/index.html" style="font-family: sans-serif; color: #475569; text-decoration: none; margin-right: 15px; font-size: 14px;">&larr; Kembali ke Portal Dokumen</a>
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan sebagai PDF</button>
+  </div>
+
+  <div class="page-container">
+    <div class="kop-surat">
+      <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA</h2>
+      <h2>DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+      <h1>SPESIFIKASI TEKNIS BASIS DATA CLOUD FIRESTORE</h1>
+      <p>Sistem Piket Guru Digital &bull; Arsitektur Data NoSQL &bull; Edisi 2026</p>
+    </div>
+
+    <div class="doc-title">
+      <h3>STRUKTUR KOLEKSI BASIS DATA &amp; DIAGRAM RELASI ENTITAS</h3>
+      <span>STATUS: DOKUMEN RESMI (v1.0.0)</span>
+    </div>
+
+    <h4>1. Diagram Konseptual Relasi Dokumen</h4>
+    <pre>
+[users] 1:1 [teachers/staff]
+   │
+   ├── 1:N ──> [schedules] ──┬── 1:N ──> [attendance] (Presensi GPS & Foto)
+   │                         ├── 1:N ──> [dutyBooks] (Jurnal Harian Piket)
+   │                         └── 1:N ──> [incidents] (Laporan Kejadian)
+   │
+   └── 1:N ──> [auditLogs] (Riwayat Forensik Tidak Terhapuskan)
+    </pre>
+
+    <h4>2. Rincian Koleksi Inti Firestore</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Nama Koleksi</th>
+          <th>Fungsi Utama</th>
+          <th>Field Kunci (*Key Attributes*)</th>
+          <th>Indeks / Relasi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>settings</code></td>
+          <td>Konfigurasi sekolah &amp; geofence</td>
+          <td><code>schoolName</code>, <code>schoolLat</code>, <code>schoolLng</code>, <code>allowedRadiusMeters</code></td>
+          <td>Dokumen tunggal <code>school_config</code></td>
+        </tr>
+        <tr>
+          <td><code>users</code></td>
+          <td>Kredensial &amp; hak izin peran</td>
+          <td><code>nip</code>, <code>fullName</code>, <code>role</code>, <code>pinHash</code>, <code>pinSalt</code>, <code>isActive</code></td>
+          <td>Indexed by <code>nip</code></td>
+        </tr>
+        <tr>
+          <td><code>teachers</code></td>
+          <td>Master dewan guru pengajar</td>
+          <td><code>nip</code>, <code>fullName</code>, <code>mataPelajaran</code>, <code>statusKepegawaian</code></td>
+          <td>Foreign Key: <code>userId</code></td>
+        </tr>
+        <tr>
+          <td><code>staff</code></td>
+          <td>Master pegawai kependidikan</td>
+          <td><code>nip</code>, <code>fullName</code>, <code>divisi</code>, <code>jabatan</code></td>
+          <td>Foreign Key: <code>userId</code></td>
+        </tr>
+        <tr>
+          <td><code>rooms</code></td>
+          <td>Pos piket &amp; ruangan pantau</td>
+          <td><code>code</code>, <code>name</code>, <code>building</code>, <code>floor</code>, <code>isActive</code></td>
+          <td>Primary: <code>id</code></td>
+        </tr>
+        <tr>
+          <td><code>incidentCategories</code></td>
+          <td>Klasifikasi tingkat urgensi</td>
+          <td><code>code</code>, <code>name</code>, <code>severity</code> (RENDAH, SEDANG, TINGGI, KRITIS)</td>
+          <td>Primary: <code>id</code></td>
+        </tr>
+        <tr>
+          <td><code>schedules</code></td>
+          <td>Jadwal tugas harian &amp; mingguan</td>
+          <td><code>hari</code>, <code>tanggal</code>, <code>jamMulai</code>, <code>jamSelesai</code>, <code>petugasId</code>, <code>ruangId</code></td>
+          <td>Index: <code>hari</code>, <code>tanggal</code></td>
+        </tr>
+        <tr>
+          <td><code>attendance</code></td>
+          <td>Presensi GPS &amp; swafoto wajah</td>
+          <td><code>scheduleId</code>, <code>userId</code>, <code>latitude</code>, <code>longitude</code>, <code>distance</code>, <code>photoUrl</code></td>
+          <td>Index: <code>tanggal</code>, <code>userId</code></td>
+        </tr>
+        <tr>
+          <td><code>dutyBooks</code></td>
+          <td>Jurnal buku piket digital</td>
+          <td><code>scheduleId</code>, <code>petugasId</code>, 5 kondisi sekolah, <code>catatanPiket</code>, <code>status</code></td>
+          <td>Index: <code>tanggal</code>, <code>status</code></td>
+        </tr>
+        <tr>
+          <td><code>incidents</code></td>
+          <td>Catatan kejadian &amp; kronologi</td>
+          <td><code>tanggal</code>, <code>waktu</code>, <code>pelaporId</code>, <code>lokasi</code>, <code>kategori</code>, <code>status</code></td>
+          <td>Index: <code>tanggal</code>, <code>status</code></td>
+        </tr>
+        <tr>
+          <td><code>auditLogs</code></td>
+          <td>Jejak rekam forensik kebal hapus</td>
+          <td><code>userId</code>, <code>action</code>, <code>module</code>, <code>details</code>, <code>timestamp</code></td>
+          <td>Sorted by <code>timestamp desc</code></td>
+        </tr>
+        <tr>
+          <td><code>visitors</code></td>
+          <td>Buku tamu digital sekolah</td>
+          <td><code>nama</code>, <code>instansi</code>, <code>keperluan</code>, <code>jamMasuk</code>, <code>jamKeluar</code></td>
+          <td>Index: <code>tanggal</code></td>
+        </tr>
+        <tr>
+          <td><code>studentTardiness</code></td>
+          <td>Data siswa terlambat</td>
+          <td><code>nis</code>, <code>nama</code>, <code>kelas</code>, <code>jamTiba</code>, <code>alasan</code>, <code>tindakan</code></td>
+          <td>Index: <code>tanggal</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top: 30px; text-align: right;">
+      <p>Ditetapkan di: Jakarta<br>Pada tanggal: 30 September 2026<br>Kepala Sekolah,</p>
+      <br><br>
+      <p><strong>Dr. Hj. Siti Rohmah, M.Pd.</strong><br>NIP. 19760512 200003 2 001</p>
+    </div>
+  </div>
+
+</body>
+</html>

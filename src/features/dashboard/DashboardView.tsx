@@ -17,6 +17,10 @@ import {
   Info,
   Building2,
   Sparkles,
+  UserX,
+  FileText,
+  GraduationCap,
+  Building,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
@@ -35,6 +39,10 @@ import {
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { IncidentRecord } from '../../types/incident.types';
 import { AnnouncementRecord } from '../../types/announcement.types';
+import { StudentTardyRecord } from '../../types/studentTardy.types';
+import { StudentPermitRecord } from '../../types/studentPermit.types';
+import { TeacherSubstitutionRecord } from '../../types/substitution.types';
+import { VisitorRecord } from '../../types/visitor.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime, getCurrentDayName } from '../../utils/dateUtils';
 
@@ -52,6 +60,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const [dutyBooks, setDutyBooks] = useState<DutyBookRecord[]>([]);
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [studentTardiness, setStudentTardiness] = useState<StudentTardyRecord[]>([]);
+  const [studentPermits, setStudentPermits] = useState<StudentPermitRecord[]>([]);
+  const [substitutions, setSubstitutions] = useState<TeacherSubstitutionRecord[]>([]);
+  const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
 
   // Modals
   const [isAnnModalOpen, setIsAnnModalOpen] = useState(false);
@@ -84,6 +96,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', (data) => {
       setAnnouncements(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     });
+    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setStudentTardiness);
+    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setStudentPermits);
+    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions);
+    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
 
     return () => {
       unsubSched();
@@ -91,14 +107,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       unsubBooks();
       unsubInc();
       unsubAnn();
+      unsubTardy();
+      unsubPermits();
+      unsubSubs();
+      unsubVisitors();
     };
   }, []);
 
-  // Today's schedules
+  // Today's schedules & operational items
   const todaySchedules = schedules.filter((s) => s.hari === todayName);
   const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
   const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
   const todayIncidents = incidents.filter((i) => i.tanggal === todayISO);
+  const todayTardiness = studentTardiness.filter((t) => t.tanggal === todayISO);
+  const todayPermits = studentPermits.filter((p) => p.tanggal === todayISO);
+  const todaySubstitutions = substitutions.filter((s) => s.tanggal === todayISO);
+  const todayVisitors = visitors.filter((v) => v.tanggal === todayISO);
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;
@@ -149,17 +173,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              variant="outline"
+              variant="glass"
               size="md"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs font-bold"
+              className="text-xs font-bold"
               onClick={() => onNavigateTab('attendance')}
             >
               Presensi Mandiri
             </Button>
             <Button
-              variant="primary"
+              variant="white"
               size="md"
-              className="bg-white hover:bg-slate-100 text-blue-900 border-none text-xs font-bold shadow-lg"
+              className="text-xs font-bold shadow-lg"
               onClick={() => onNavigateTab('duty-book')}
             >
               Isi Buku Piket
@@ -242,6 +266,73 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* OPERATIONAL SUMMARY ROW (STUDENT TARDINESS, PERMITS, SUBSTITUTIONS, VISITORS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div
+          onClick={() => onNavigateTab('student-tardiness')}
+          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-amber-400 dark:hover:border-amber-600 transition-all cursor-pointer shadow-xs group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-amber-600">Siswa Terlambat</span>
+            <div className="p-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600">
+              <UserX className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+            {todayTardiness.length} Siswa
+          </div>
+          <div className="text-[10px] text-slate-400 font-medium">Hari Ini • Masuk Gerbang</div>
+        </div>
+
+        <div
+          onClick={() => onNavigateTab('student-permits')}
+          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-blue-400 dark:hover:border-blue-600 transition-all cursor-pointer shadow-xs group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-blue-600">Izin Keluar Kelas</span>
+            <div className="p-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600">
+              <FileText className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+            {todayPermits.length} Siswa
+          </div>
+          <div className="text-[10px] text-slate-400 font-medium">Hari Ini • Disetujui Piket</div>
+        </div>
+
+        <div
+          onClick={() => onNavigateTab('substitutions')}
+          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer shadow-xs group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-indigo-600">Guru Pengganti (Inval)</span>
+            <div className="p-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+              <GraduationCap className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+            {todaySubstitutions.length} Jam Pelajaran
+          </div>
+          <div className="text-[10px] text-slate-400 font-medium">Hari Ini • Tugas Inval</div>
+        </div>
+
+        <div
+          onClick={() => onNavigateTab('visitors')}
+          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-teal-400 dark:hover:border-teal-600 transition-all cursor-pointer shadow-xs group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-teal-600">Buku Tamu Sekolah</span>
+            <div className="p-1 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600">
+              <Building className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+            {todayVisitors.length} Tamu
+          </div>
+          <div className="text-[10px] text-slate-400 font-medium">Hari Ini • Pos Keamanan</div>
+        </div>
       </div>
 
       {/* PAPAN INFORMASI & PENGUMUMAN PIKET */}

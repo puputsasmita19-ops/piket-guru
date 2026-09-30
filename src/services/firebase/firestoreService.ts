@@ -96,17 +96,52 @@ export class FirestoreService {
     data: Partial<T>
   ): Promise<void> {
     const docRef = doc(db, collectionName, id);
-    const payload = {
+    const rawPayload: Record<string, any> = {
       ...data,
       id,
       updatedAt: new Date().toISOString(),
     };
+
+    // Sanitize: strip out any undefined fields to prevent Firestore unsupported field value errors
+    const payload: Record<string, any> = {};
+    for (const [key, value] of Object.entries(rawPayload)) {
+      if (value !== undefined) {
+        payload[key] = value;
+      }
+    }
+
     await setDoc(docRef, payload, { merge: true });
     
     // Update local cache
     const existing = await this.getAll<T>(collectionName);
     const updated = existing.filter((item) => item.id !== id).concat(payload as unknown as T);
     localStorage.setItem(`piket_firestore_${collectionName}`, JSON.stringify(updated));
+  }
+
+  /**
+   * Real-time listener for a single document
+   */
+  public static subscribeToDocument<T>(
+    collectionName: string,
+    id: string,
+    onData: (data: T | null) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    const docRef = doc(db, collectionName, id);
+    return onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          onData({ id: snapshot.id, ...snapshot.data() } as unknown as T);
+        } else {
+          onData(null);
+        }
+      },
+      (error) => {
+        console.warn(`Snapshot listener warning for doc ${collectionName}/${id}:`, error);
+        if (onError) onError(error);
+      }
+    );
   }
 
   /**

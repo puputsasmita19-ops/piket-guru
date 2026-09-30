@@ -9,6 +9,9 @@ export interface UserProfile {
   phone: string;
   avatarUrl?: string;
   pin?: string;
+  pinSalt?: string;
+  pinHash?: string;
+  loginAt?: number;
   isActive: boolean;
   permissions: string[];
   createdAt?: string;

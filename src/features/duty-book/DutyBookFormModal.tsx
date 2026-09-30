@@ -5,6 +5,7 @@ import { Badge } from '../../components/common/Badge';
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { DutyBookStatus, ScheduleItem } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { PERMISSIONS } from '../../config/permissions';
 import { formatIndonesianDate, getCurrentDayName } from '../../utils/dateUtils';
 import {
   Save,
@@ -38,9 +39,20 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
   dutyBook,
   schedules,
 }) => {
-  const { currentUser, hasRole } = useAuth();
+  const { currentUser, hasRole, hasPermission } = useAuth();
   const isAdmin = hasRole('ADMIN');
   const isKepsek = hasRole('KEPALA_SEKOLAH');
+  const canVerify =
+    isAdmin ||
+    isKepsek ||
+    hasPermission(PERMISSIONS.DUTYBOOK_VERIFY) ||
+    (currentUser?.permissions?.includes('verify_duty_book') ?? false) ||
+    (currentUser?.permissions?.includes('*') ?? false);
+  const canApprove =
+    isAdmin ||
+    isKepsek ||
+    (currentUser?.permissions?.includes('approve_duty_book') ?? false) ||
+    (currentUser?.permissions?.includes('*') ?? false);
 
   const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
   const [hari, setHari] = useState<string>(getCurrentDayName());
@@ -65,8 +77,9 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
   const [unlockReason, setUnlockReason] = useState<string>('');
   const [showUnlockPrompt, setShowUnlockPrompt] = useState<boolean>(false);
 
+  const isOwner = !dutyBook || dutyBook.petugasId === currentUser?.id || isAdmin;
   const isLocked = status === 'DIKUNCI';
-  const isReadOnly = isLocked && !isAdmin;
+  const isReadOnly = (isLocked && !isAdmin) || (!isOwner && status === 'DRAFT');
 
   useEffect(() => {
     if (dutyBook) {
@@ -423,7 +436,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Draft Save */}
-            {!isLocked && (
+            {!isLocked && isOwner && (
               <Button
                 type="submit"
                 variant="outline"
@@ -436,7 +449,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
             )}
 
             {/* Advance to DIAJUKAN */}
-            {status === 'DRAFT' && (
+            {status === 'DRAFT' && isOwner && (
               <Button
                 type="button"
                 variant="primary"
@@ -449,8 +462,14 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               </Button>
             )}
 
+            {!isOwner && status === 'DRAFT' && (
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold px-2 py-1 bg-amber-50 dark:bg-amber-950/40 rounded-lg">
+                Hanya pemilik draft ({dutyBook?.petugasName}) atau Admin yang dapat mengubah.
+              </span>
+            )}
+
             {/* Advance to DIVERIFIKASI */}
-            {status === 'DIAJUKAN' && (isAdmin || isKepsek) && (
+            {status === 'DIAJUKAN' && canVerify && (
               <Button
                 type="button"
                 variant="primary"
@@ -464,7 +483,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
             )}
 
             {/* Advance to DISETUJUI */}
-            {status === 'DIVERIFIKASI' && (isAdmin || isKepsek) && (
+            {status === 'DIVERIFIKASI' && canApprove && (
               <Button
                 type="button"
                 variant="success"

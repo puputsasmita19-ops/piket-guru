@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Pengguna - Piket Guru v1.0.0</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 10.5pt; line-height: 1.45; color: #000; background: #f1f5f9; padding: 20px; }
+    .page-container { background: #fff; max-width: 210mm; margin: 0 auto; padding: 20mm; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+    }
+    .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 20px; }
+    .kop-surat h2 { font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+    .kop-surat h1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .kop-surat p { font-size: 9.5pt; font-style: italic; }
+    .doc-title { text-align: center; margin-bottom: 24px; }
+    .doc-title h3 { font-size: 14pt; text-decoration: underline; text-transform: uppercase; margin-bottom: 4px; }
+    .doc-title span { font-size: 10pt; font-weight: bold; }
+    h4 { font-size: 11pt; font-weight: bold; margin: 18px 0 6px 0; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    p, ol, ul { margin-bottom: 10px; text-align: justify; }
+    ol, ul { margin-left: 22px; }
+    li { margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 9.5pt; }
+    th, td { border: 1px solid #000; padding: 5px 7px; vertical-align: top; }
+    th { background: #f2f2f2; text-align: center; font-weight: bold; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+    .btn-print:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 210mm; margin: 0 auto 10px auto; text-align: right;">
+    <a href="/docs/index.html" style="font-family: sans-serif; color: #475569; text-decoration: none; margin-right: 15px; font-size: 14px;">&larr; Kembali ke Portal Dokumen</a>
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan sebagai PDF</button>
+  </div>
+
+  <div class="page-container">
+    <div class="kop-surat">
+      <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA</h2>
+      <h2>DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+      <h1>BUKU PANDUAN PENGGUNA TERPADU (MASTER HANDBOOK)</h1>
+      <p>Sistem Piket Guru Digital &bull; Dokumen Resmi Penyelenggaraan Sistem &bull; Edisi 2026</p>
+    </div>
+
+    <div class="doc-title">
+      <h3>PANDUAN OPERASIONAL &amp; TATA KELOLA PIKET SEKOLAH</h3>
+      <span>APLIKASI PIKET GURU DIGITAL VERSI PRODUKSI v1.0.0</span>
+    </div>
+
+    <h4>1. Tentang Aplikasi &amp; Tujuan</h4>
+    <p>Aplikasi Piket Guru v1.0.0 adalah platform otomatisasi kedinasan harian sekolah yang menggantikan pencatatan buku fisik dengan sistem digital berbasis Cloud Firestore, GPS Geofencing, dan kamera swafoto anti-kecurangan. Tujuannya adalah menjamin transparansi kehadiran guru, ketertiban siswa, dan akuntabilitas kearsipan dinas.</p>
+
+    <h4>2. Struktur Peran Pengguna (RBAC)</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Peran (Role)</th>
+          <th>Wewenang Utama</th>
+          <th>Kredensial Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Administrator</strong></td>
+          <td>Konfigurasi sekolah, geofence, master data, backup, buka gembok jurnal.</td>
+          <td>NIP: <code>198503152010011002</code> / PIN: <code>123456</code></td>
+        </tr>
+        <tr>
+          <td><strong>Kepala Sekolah</strong></td>
+          <td>Monitoring eksekutif, verifikasi &amp; pengesahan jurnal piket, tanda tangan laporan.</td>
+          <td>NIP: <code>197605122000032001</code> / PIN: <code>123456</code></td>
+        </tr>
+        <tr>
+          <td><strong>Guru Piket</strong></td>
+          <td>Presensi GPS swafoto, pengisian buku piket harian, pencatatan insiden KBM.</td>
+          <td>NIP: <code>199008212015022003</code> / PIN: <code>123456</code></td>
+        </tr>
+        <tr>
+          <td><strong>Tenaga Kependidikan</strong></td>
+          <td>Pelayanan buku tamu digital gerbang, administrasi siswa terlambat, izin keluar.</td>
+          <td>NIP: <code>198902142014031002</code> / PIN: <code>123456</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>3. Panduan Operasional Presensi GPS</h4>
+    <ol>
+      <li>Pengguna tiba di sekolah (jarak &le; 100 meter dari gerbang sekolah).</li>
+      <li>Buka menu <strong>Presensi Piket</strong> &rarr; Klik tombol hijau <strong>Presensi Masuk</strong>.</li>
+      <li>Ambil swafoto wajah &rarr; Klik <strong>Gunakan Foto Ini</strong> (otomatis terkompresi &lt; 100KB).</li>
+      <li>Saat shift berakhir, klik tombol biru <strong>Presensi Pulang</strong>.</li>
+    </ol>
+
+    <h4>4. Panduan Pengisian &amp; Persetujuan Jurnal Piket</h4>
+    <ol>
+      <li><strong>Drafting:</strong> Guru mengisi 5 parameter: Keamanan, Kebersihan, Kelas/KBM, Fasilitas, dan Siswa.</li>
+      <li><strong>Pengajuan:</strong> Guru menekan tombol <em>Ajukan Jurnal</em> (Status berubah: <code>DIAJUKAN</code>).</li>
+      <li><strong>Verifikasi:</strong> Koordinator Piket memeriksa kelengkapan data lapangan.</li>
+      <li><strong>Pengesahan:</strong> Kepala Sekolah menekan tombol <em>Setujui Jurnal</em> (Status berubah: <code>DISETUJUI</code> &rarr; <code>DIKUNCI</code> permanen).</li>
+    </ol>
+
+    <h4>5. Fasilitas Pendukung Sekolah</h4>
+    <ul>
+      <li><strong>Pusat Komando:</strong> Bel sekolah 3 nada harmonik (Masuk, Istirahat, Pulang) dan sirine bahaya darurat.</li>
+      <li><strong>Mode Kiosk TV:</strong> Layar lobi sekolah otomatis rotasi per 8 detik dengan ticker teks pengumuman.</li>
+      <li><strong>Buku Tamu Digital:</strong> Pencatatan identitas tamu dan tombol <em>Check-Out</em> saat tamu pulang.</li>
+      <li><strong>Siswa Terlambat:</strong> Rekap pembinaan dan penerbitan izin masuk kelas.</li>
+    </ul>
+
+    <h4>6. Keamanan &amp; Integritas Data</h4>
+    <p>PIN diproteksi <em>Salted SHA-256</em> dan lockout 15 menit. Riwayat aktivitas tersimpan permanen pada koleksi <code>auditLogs</code> Firestore yang kebal penghapusan.</p>
+
+    <div style="margin-top: 40px; text-align: right;">
+      <p>Ditetapkan di: Jakarta<br>Pada tanggal: 30 September 2026<br>Kepala Sekolah,</p>
+      <br><br><br>
+      <p><strong>Dr. Hj. Siti Rohmah, M.Pd.</strong><br>NIP. 19760512 200003 2 001</p>
+    </div>
+  </div>
+
+</body>
+</html>

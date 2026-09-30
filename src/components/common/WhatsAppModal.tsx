@@ -22,19 +22,23 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   const [phone, setPhone] = useState(defaultPhone);
   const [message, setMessage] = useState(defaultMessage);
   const [isCopied, setIsCopied] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   React.useEffect(() => {
     setPhone(defaultPhone);
     setMessage(defaultMessage);
+    setValidationError(null);
   }, [defaultPhone, defaultMessage, isOpen]);
 
-  const handleOpenWhatsApp = () => {
-    if (!phone) {
-      alert('Masukkan nomor WhatsApp tujuan terlebih dahulu.');
+  const waLink = phone.trim() ? WhatsAppService.generateWhatsAppLink(phone.trim(), message) : '';
+
+  const handleOpenWhatsApp = (e: React.MouseEvent) => {
+    if (!phone.trim()) {
+      e.preventDefault();
+      setValidationError('Silakan masukkan nomor WhatsApp tujuan (contoh: 081234567890).');
       return;
     }
-    const link = WhatsAppService.generateWhatsAppLink(phone, message);
-    window.open(link, '_blank');
+    setValidationError(null);
     onClose();
   };
 
@@ -47,6 +51,12 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="md">
       <div className="space-y-4">
+        {validationError && (
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-medium">
+            {validationError}
+          </div>
+        )}
+
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
             Nomor WhatsApp Tujuan (Format: 08... atau 628...)
@@ -54,7 +64,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           <input
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => {
+              setPhone(e.target.value);
+              if (validationError) setValidationError(null);
+            }}
             placeholder="081234567890"
             className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
           />
@@ -86,14 +99,27 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           <Button variant="outline" size="sm" onClick={onClose}>
             Batal
           </Button>
-          <Button
-            variant="success"
-            size="sm"
-            leftIcon={<ExternalLink className="w-4 h-4" />}
-            onClick={handleOpenWhatsApp}
-          >
-            Buka WhatsApp Chat
-          </Button>
+          {waLink ? (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={handleOpenWhatsApp}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Buka WhatsApp Chat</span>
+            </a>
+          ) : (
+            <Button
+              variant="success"
+              size="sm"
+              leftIcon={<ExternalLink className="w-4 h-4" />}
+              onClick={handleOpenWhatsApp}
+            >
+              Buka WhatsApp Chat
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

@@ -1,0 +1,251 @@
+{
+  "entities": {
+    "Announcement": {
+      "title": "Announcement",
+      "description": "School duty announcements and broadcast notices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "priority": { "type": "string", "enum": ["NORMAL", "PENTING", "DARURAT"] },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "authorName", "priority", "date", "createdAt"]
+    },
+    "StudentTardiness": {
+      "title": "StudentTardiness",
+      "description": "Student tardiness logs and follow up actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "jam": { "type": "string" },
+        "namaSiswa": { "type": "string" },
+        "kelas": { "type": "string" },
+        "alasan": { "type": "string" },
+        "tindakLanjut": { "type": "string" },
+        "petugasId": { "type": "string" },
+        "petugasName": { "type": "string" },
+        "status": { "type": "string", "enum": ["MASUK_KELAS", "DIPULANGKAN", "BIMBINGAN_BK"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "jam", "namaSiswa", "kelas", "alasan", "status", "petugasName"]
+    },
+    "TeacherSubstitution": {
+      "title": "TeacherSubstitution",
+      "description": "Teacher substitution records for absent teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "guruAsalId": { "type": "string" },
+        "guruAsalName": { "type": "string" },
+        "guruPenggantiId": { "type": "string" },
+        "guruPenggantiName": { "type": "string" },
+        "mataPelajaran": { "type": "string" },
+        "kelas": { "type": "string" },
+        "jamKe": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "status": { "type": "string", "enum": ["TERJADWAL", "BERLANGSUNG", "SELESAI", "DIBATALKAN"] },
+        "tugasDiberikan": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "guruAsalName", "guruPenggantiName", "mataPelajaran", "kelas", "status"]
+    },
+    "StudentPermit": {
+      "title": "StudentPermit",
+      "description": "Student in/out campus permission slips",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nomorSurat": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "namaSiswa": { "type": "string" },
+        "kelas": { "type": "string" },
+        "tipe": { "type": "string", "enum": ["KELUAR_KAMPUS", "MASUK_KEMBALI", "DISPENSASI", "PULANG_CEPAT"] },
+        "alasan": { "type": "string" },
+        "jamKeluar": { "type": "string" },
+        "jamKembali": { "type": "string" },
+        "status": { "type": "string", "enum": ["AKTIF", "SELESAI", "TERLAMBAT_KEMBALI", "DIBATALKAN"] },
+        "petugasId": { "type": "string" },
+        "petugasName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "nomorSurat", "tanggal", "namaSiswa", "kelas", "tipe", "alasan", "status", "petugasName"]
+    },
+    "Visitor": {
+      "title": "Visitor",
+      "description": "Guest and visitor check-in log records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "jamMasuk": { "type": "string" },
+        "jamKeluar": { "type": "string" },
+        "namaTamu": { "type": "string" },
+        "instansi": { "type": "string" },
+        "nomorKontak": { "type": "string" },
+        "tujuanBertemu": { "type": "string" },
+        "keperluan": { "type": "string" },
+        "fotoUrl": { "type": "string" },
+        "nomorKartu": { "type": "string" },
+        "status": { "type": "string", "enum": ["BERKUNJUNG", "SELESAI"] },
+        "petugasId": { "type": "string" },
+        "petugasName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "jamMasuk", "namaTamu", "keperluan", "status", "petugasName"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Teacher duty schedule items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "hari": { "type": "string" },
+        "petugasId": { "type": "string" },
+        "petugasName": { "type": "string" },
+        "ruangId": { "type": "string" },
+        "ruangName": { "type": "string" },
+        "jamMulai": { "type": "string" },
+        "jamSelesai": { "type": "string" },
+        "status": { "type": "string", "enum": ["AKTIF", "NONAKTIF"] }
+      },
+      "required": ["id", "hari", "petugasId", "petugasName", "ruangId", "ruangName", "jamMulai", "jamSelesai", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Geolocated teacher attendance logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "scheduleId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "jam": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "distanceMeter": { "type": "number" },
+        "status": { "type": "string", "enum": ["DALAM_LOKASI", "LUAR_LOKASI", "IZIN", "SAKIT", "ALPA"] },
+        "metode": { "type": "string", "enum": ["MANDIRI_GPS", "MANUAL_KOORDINATOR", "KIOSK_PIN"] },
+        "fotoUrl": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "tanggal", "jam", "status", "metode"]
+    },
+    "DutyBook": {
+      "title": "DutyBook",
+      "description": "Daily duty book journals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "hari": { "type": "string" },
+        "petugasUtamaId": { "type": "string" },
+        "petugasUtamaName": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "MENUNGGU_VERIFIKASI", "TERVERIFIKASI", "DISETUJUI_KEPSEK"] },
+        "catatanUmum": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "hari", "petugasUtamaName", "status"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "Campus incident and emergency reports",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "waktu": { "type": "string" },
+        "lokasi": { "type": "string" },
+        "kategoriId": { "type": "string" },
+        "kategoriName": { "type": "string" },
+        "tingkatKeparahan": { "type": "string", "enum": ["RINGAN", "SEDANG", "BERAT", "KRITIS"] },
+        "uraian": { "type": "string" },
+        "tindakan": { "type": "string" },
+        "status": { "type": "string", "enum": ["MENUNGGU", "PROSES", "SELESAI"] },
+        "pelaporName": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "waktu", "lokasi", "kategoriName", "tingkatKeparahan", "uraian", "status", "pelaporName"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profiles and RBAC role records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "GURU_PIKET", "KOORDINATOR", "KEPALA_SEKOLAH", "OPERATOR"] },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "username", "fullName", "role", "isActive"]
+    },
+    "SchoolSettings": {
+      "title": "SchoolSettings",
+      "description": "School operational settings and coordinates",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "schoolAddress": { "type": "string" },
+        "schoolLatitude": { "type": "number" },
+        "schoolLongitude": { "type": "number" },
+        "radiusMeters": { "type": "number" }
+      },
+      "required": ["schoolName", "schoolLatitude", "schoolLongitude", "radiusMeters"]
+    }
+  },
+  "firestore": {
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "School duty announcements and broadcast notices"
+    },
+    "/studentTardiness/{tardinessId}": {
+      "schema": "StudentTardiness",
+      "description": "Student tardiness logs and follow up actions"
+    },
+    "/substitutions/{substitutionId}": {
+      "schema": "TeacherSubstitution",
+      "description": "Teacher substitution records for absent teachers"
+    },
+    "/studentPermits/{permitId}": {
+      "schema": "StudentPermit",
+      "description": "Student in/out campus permission slips"
+    },
+    "/visitors/{visitorId}": {
+      "schema": "Visitor",
+      "description": "Guest and visitor check-in log records"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Teacher duty schedule items"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Geolocated teacher attendance logs"
+    },
+    "/dutyBooks/{dutyBookId}": {
+      "schema": "DutyBook",
+      "description": "Daily duty book journals"
+    },
+    "/incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Campus incident and emergency reports"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and RBAC role records"
+    },
+    "/settings/{settingId}": {
+      "schema": "SchoolSettings",
+      "description": "School operational settings and coordinates"
+    }
+  }
+}

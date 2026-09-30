@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Integrasi Google Drive - Piket Guru v1.0.0</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.45; color: #000; background: #f1f5f9; padding: 20px; }
+    .page-container { background: #fff; max-width: 210mm; margin: 0 auto; padding: 20mm; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 20px; }
+    .kop-surat h2 { font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+    .kop-surat h1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .kop-surat p { font-size: 9.5pt; font-style: italic; }
+    .doc-title { text-align: center; margin-bottom: 20px; }
+    .doc-title h3 { font-size: 13pt; text-decoration: underline; text-transform: uppercase; margin-bottom: 4px; }
+    .doc-title span { font-size: 10pt; font-weight: bold; }
+    h4 { font-size: 11pt; font-weight: bold; margin: 16px 0 6px 0; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    p, ol, ul { margin-bottom: 10px; text-align: justify; }
+    ol, ul { margin-left: 22px; }
+    li { margin-bottom: 4px; }
+    pre { background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; font-family: monospace; font-size: 9pt; margin-bottom: 12px; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+    .btn-print:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 210mm; margin: 0 auto 10px auto; text-align: right;">
+    <a href="/docs/index.html" style="font-family: sans-serif; color: #475569; text-decoration: none; margin-right: 15px; font-size: 14px;">&larr; Kembali ke Portal Dokumen</a>
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan sebagai PDF</button>
+  </div>
+
+  <div class="page-container">
+    <div class="kop-surat">
+      <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA</h2>
+      <h2>DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+      <h1>SPESIFIKASI INTEGRASI BERKAS &amp; GOOGLE DRIVE</h1>
+      <p>Sistem Piket Guru Digital &bull; Dokumen Manajemen Berkas &bull; Edisi 2026</p>
+    </div>
+
+    <div class="doc-title">
+      <h3>MANAJEMEN PENYIMPANAN MEDIA &amp; CADANGAN GOOGLE DRIVE</h3>
+      <span>STATUS: DOKUMEN RESMI (v1.0.0)</span>
+    </div>
+
+    <h4>1. Status Integrasi API Google Drive Aktual</h4>
+    <p>Berdasarkan audit kode sumber: <em>Tidak ditemukan integrasi OAuth API Google Drive langsung dalam source code &mdash; perlu dikonfirmasi oleh administrator.</em></p>
+    <p>Penyimpanan media gambar (swafoto absensi dan bukti kejadian) pada rilis v1.0.0 ditangani secara internal menggunakan teknologi <strong>Kompresi Kanvas Otomatis</strong> ke dalam format Base64 Data URI yang tersimpan pada dokumen Firestore.</p>
+
+    <h4>2. Penanganan Berkas Media Visual (Canvas Engine)</h4>
+    <ul>
+      <li><strong>Maksimum Ukuran Asli:</strong> 15 Megabyte.</li>
+      <li><strong>Metode Kompresi:</strong> HTML5 Off-Screen Canvas API (Downscale ke maksimal 800px lebar, JPEG quality 0.78).</li>
+      <li><strong>Ukuran Pasca-Kompresi:</strong> 40 KB &ndash; 90 KB (Sangat efisien &amp; kebal galat batas 1MB Firestore).</li>
+    </ul>
+
+    <h4>3. Rekomendasi Struktur Folder Google Drive Sekolah</h4>
+    <p>Untuk menampung berkas cadangan database (<code>.json</code>) dan rekapitulasi laporan dinas (<code>.xls</code>), disarankan menyusun direktori Google Drive institusi sebagai berikut:</p>
+    <pre>
+[Google Drive Resmi Sekolah]
+ └── PIKET_GURU_ARSIP/
+      ├── 01_CADANGAN_DATABASE/
+      │    ├── backup-piket-guru-2026-09-30.json
+      │    └── ...
+      ├── 02_REKAP_LAPORAN_DINAS/
+      │    ├── Rekap_Presensi_September_2026.xls
+      │    └── Rekap_Buku_Piket_September_2026.xls
+      └── 03_DOKUMENTASI_INSIDEN_KHUSUS/
+    </pre>
+
+    <div style="margin-top: 50px; text-align: right;">
+      <p>Ditetapkan di: Jakarta<br>Pada tanggal: 30 September 2026<br>Kepala Sekolah,</p>
+      <br><br><br>
+      <p><strong>Dr. Hj. Siti Rohmah, M.Pd.</strong><br>NIP. 19760512 200003 2 001</p>
+    </div>
+  </div>
+
+</body>
+</html>

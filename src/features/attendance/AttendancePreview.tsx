@@ -139,7 +139,7 @@ export const AttendancePreview: React.FC = () => {
   const handleCheckIn = async () => {
     if (!currentUser) return;
     if (!coords && !geofence) {
-      alert('Mohon perbarui lokasi GPS Anda terlebih dahulu.');
+      setGpsError('Mohon perbarui lokasi GPS Anda terlebih dahulu sebelum melakukan presensi.');
       return;
     }
 
@@ -326,27 +326,27 @@ export const AttendancePreview: React.FC = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
-                      <div>
-                        <span className="text-slate-500 block">Jarak Terkini:</span>
-                        <span className={`font-bold font-mono text-sm ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                      <div className="min-w-0">
+                        <span className="text-slate-500 block truncate">Jarak Terkini:</span>
+                        <span className={`font-bold font-mono text-sm block truncate ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
                           {geofence?.distanceMeters ?? '-'} Meter
                         </span>
                       </div>
-                      <div>
-                        <span className="text-slate-500 block">Akurasi GPS:</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 font-mono text-xs">
+                      <div className="min-w-0">
+                        <span className="text-slate-500 block truncate">Akurasi GPS:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 font-mono text-xs block truncate">
                           ± {coords?.accuracy ? Math.round(coords.accuracy) : 8} Meter
                         </span>
                       </div>
-                      <div>
-                        <span className="text-slate-500 block">Latitude:</span>
-                        <span className="font-mono text-slate-600 dark:text-slate-300 text-[10px]">
+                      <div className="min-w-0">
+                        <span className="text-slate-500 block truncate">Latitude:</span>
+                        <span className="font-mono text-slate-600 dark:text-slate-300 text-[10px] block truncate">
                           {coords?.latitude?.toFixed(6) ?? settings.schoolLat}
                         </span>
                       </div>
-                      <div>
-                        <span className="text-slate-500 block">Longitude:</span>
-                        <span className="font-mono text-slate-600 dark:text-slate-300 text-[10px]">
+                      <div className="min-w-0">
+                        <span className="text-slate-500 block truncate">Longitude:</span>
+                        <span className="font-mono text-slate-600 dark:text-slate-300 text-[10px] block truncate">
                           {coords?.longitude?.toFixed(6) ?? settings.schoolLng}
                         </span>
                       </div>

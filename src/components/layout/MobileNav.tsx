@@ -32,7 +32,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
   ];
 
   const visibleItems = navItems.filter((i) => hasPermission(i.permission));
-  const isMoreActive = ['incidents', 'reports', 'users', 'settings'].includes(activeTab);
+  const primaryTabIds: NavigationTab[] = ['dashboard', 'schedules', 'attendance', 'duty-book'];
+  const isMoreActive = !primaryTabIds.includes(activeTab);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 lg:hidden shadow-lg pb-safe">

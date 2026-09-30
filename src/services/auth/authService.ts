@@ -1,6 +1,8 @@
 import { UserProfile, UserRole } from '../../types';
 import { ROLE_PERMISSIONS } from '../../config/permissions';
-import { hashPinWithSalt } from '../../utils/cryptoUtils';
+import { hashPinWithSalt, generateSalt } from '../../utils/cryptoUtils';
+import { FirestoreService } from '../firebase/firestoreService';
+import { ensureFirebaseAuth } from '../firebase/firebase';
 
 export interface StoredUserCredential {
   userId: string;
@@ -20,8 +22,6 @@ const STORAGE_USERS_KEY = 'piket_guru_users_db_v1';
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-
-// Static seed data with precomputed SHA-256 for default PIN "123456"
 const DEFAULT_SALT = 'e4d7a892b1c3f6e5';
 
 export const SEED_USERS: StoredUserCredential[] = [
@@ -99,6 +99,47 @@ class AuthService {
   public async init() {
     if (this.initialized) return;
 
+    try {
+      await ensureFirebaseAuth();
+    } catch (e) {
+      console.warn('Firebase Auth initialization warning:', e);
+    }
+
+    // Try fetching from Firestore users collection first
+    try {
+      const firestoreUsers = await FirestoreService.getAll<UserProfile>('users');
+      if (firestoreUsers && firestoreUsers.length > 0) {
+        const credentials: StoredUserCredential[] = await Promise.all(
+          firestoreUsers.map(async (u) => {
+            const salt = u.pinSalt || DEFAULT_SALT;
+            const hash =
+              u.pinHash ||
+              (u.pin ? await hashPinWithSalt(u.pin, salt) : await hashPinWithSalt('123456', salt));
+
+            return {
+              userId: u.id,
+              nip: u.nip,
+              fullName: u.fullName,
+              role: u.role,
+              email: u.email,
+              phone: u.phone,
+              pinSalt: salt,
+              pinHash: hash,
+              failedAttempts: 0,
+              lockedUntil: null,
+              isActive: u.isActive !== false,
+            };
+          })
+        );
+        this.users = credentials;
+        this.saveUsers();
+        this.initialized = true;
+        return;
+      }
+    } catch (err) {
+      console.warn('Could not read users from Firestore on boot, checking local cache:', err);
+    }
+
     const stored = localStorage.getItem(STORAGE_USERS_KEY);
     if (stored) {
       try {
@@ -133,8 +174,51 @@ class AuthService {
     return this.users.map(({ pinHash, pinSalt, ...rest }) => rest);
   }
 
-  public async authenticateWithPin(nipOrUserId: string, pin: string): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  public async authenticateWithPin(
+    nipOrUserId: string,
+    pin: string
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     await this.init();
+
+    // Check directly in Firestore for real-time changes
+    try {
+      const firestoreUsers = await FirestoreService.getAll<UserProfile>('users');
+      if (firestoreUsers && firestoreUsers.length > 0) {
+        const target = firestoreUsers.find((u) => u.nip === nipOrUserId || u.id === nipOrUserId);
+        if (target) {
+          const salt = target.pinSalt || DEFAULT_SALT;
+          const hash =
+            target.pinHash ||
+            (target.pin
+              ? await hashPinWithSalt(target.pin, salt)
+              : await hashPinWithSalt('123456', salt));
+
+          const existingIndex = this.users.findIndex((u) => u.userId === target.id);
+          const cred: StoredUserCredential = {
+            userId: target.id,
+            nip: target.nip,
+            fullName: target.fullName,
+            role: target.role,
+            email: target.email,
+            phone: target.phone,
+            pinSalt: salt,
+            pinHash: hash,
+            failedAttempts: existingIndex >= 0 ? this.users[existingIndex].failedAttempts : 0,
+            lockedUntil: existingIndex >= 0 ? this.users[existingIndex].lockedUntil : null,
+            isActive: target.isActive !== false,
+          };
+
+          if (existingIndex >= 0) {
+            this.users[existingIndex] = cred;
+          } else {
+            this.users.push(cred);
+          }
+          this.saveUsers();
+        }
+      }
+    } catch (e) {
+      console.warn('Realtime Firestore user lookup warning, using local state:', e);
+    }
 
     const user = this.users.find(
       (u) => u.nip === nipOrUserId || u.userId === nipOrUserId
@@ -192,13 +276,18 @@ class AuthService {
       phone: user.phone,
       isActive: user.isActive,
       permissions: ROLE_PERMISSIONS[user.role],
+      loginAt: now,
     };
 
     localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(userProfile));
     return { success: true, user: userProfile };
   }
 
-  public async changeUserPin(userId: string, oldPin: string, newPin: string): Promise<{ success: boolean; error?: string }> {
+  public async changeUserPin(
+    userId: string,
+    oldPin: string,
+    newPin: string
+  ): Promise<{ success: boolean; error?: string }> {
     await this.init();
     const user = this.users.find((u) => u.userId === userId);
     if (!user) return { success: false, error: 'Pengguna tidak ditemukan.' };
@@ -212,8 +301,25 @@ class AuthService {
       return { success: false, error: 'PIN baru harus terdiri dari 6 digit angka.' };
     }
 
-    user.pinHash = await hashPinWithSalt(newPin, user.pinSalt);
+    const newSalt = generateSalt();
+    const newHash = await hashPinWithSalt(newPin, newSalt);
+
+    user.pinSalt = newSalt;
+    user.pinHash = newHash;
     this.saveUsers();
+
+    // Also update Firestore
+    try {
+      await FirestoreService.setDocument<UserProfile>('users', userId, {
+        id: userId,
+        pinSalt: newSalt,
+        pinHash: newHash,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Failed to sync new PIN hash to Firestore:', err);
+    }
+
     return { success: true };
   }
 
@@ -221,7 +327,14 @@ class AuthService {
     const session = localStorage.getItem(STORAGE_SESSION_KEY);
     if (!session) return null;
     try {
-      return JSON.parse(session);
+      const parsed: UserProfile = JSON.parse(session);
+      // Validate 24 hours max session duration
+      const now = Date.now();
+      if (parsed.loginAt && now - parsed.loginAt > 24 * 60 * 60 * 1000) {
+        this.clearSession();
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -233,3 +346,4 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+

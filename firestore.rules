@@ -2,97 +2,108 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'ADMIN' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
-      );
-    }
-
-    function isStaffOrTeacher() {
-      return isAuthenticated();
-    }
-
-    // School Settings (Public read for active app configuration, Admin write)
+    // School Settings (Public read for active app configuration & Kiosk display)
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin() || true; // In development/prototype mode
+      allow read, write: if true;
     }
 
-    // Users collection
+    // Users collection (Petugas & Pengguna Piket)
     match /users/{userId} {
-      allow read: if isAuthenticated() || true;
-      allow create, update, delete: if isAdmin() || true;
+      allow read, write: if true;
     }
 
-    // Teachers & Staff
+    // Teachers & Staff Master Data
     match /teachers/{teacherId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAdmin() || true;
+      allow read, write: if true;
     }
 
     match /staff/{staffId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAdmin() || true;
+      allow read, write: if true;
     }
 
-    // Rooms & Categories
+    // Rooms & Incident Categories
     match /rooms/{roomId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAdmin() || true;
+      allow read, write: if true;
     }
 
     match /incidentCategories/{catId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAdmin() || true;
+      allow read, write: if true;
     }
 
-    // Schedules
+    // Duty Schedules (Jadwal Piket Harian & Mingguan)
     match /schedules/{scheduleId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAuthenticated() || true;
+      allow read, write: if true;
     }
 
-    // Attendance
+    // Attendance Records (Presensi GPS & Swafoto)
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated() || true;
-      allow create: if isAuthenticated() || true;
-      allow update, delete: if isAdmin() || true;
+      allow read, write: if true;
     }
 
-    // Duty Books
+    // Duty Books (Jurnal Buku Piket Digital)
     match /dutyBooks/{dutyBookId} {
-      allow read: if isAuthenticated() || true;
-      allow create, update: if isAuthenticated() || true;
-      allow delete: if isAdmin() || true;
+      allow read, write: if true;
     }
 
-    // Incidents & Documents
+    // Incidents & Incident Photos (Laporan Kejadian)
     match /incidents/{incidentId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAuthenticated() || true;
+      allow read, write: if true;
     }
 
     match /documents/{docId} {
-      allow read: if isAuthenticated() || true;
-      allow write: if isAuthenticated() || true;
+      allow read, write: if true;
     }
 
-    // Audit logs & Backups
+    // Announcements & Running Ticker
+    match /announcements/{announcementId} {
+      allow read, write: if true;
+    }
+
+    // Student Tardiness (Siswa Terlambat)
+    match /studentTardiness/{tardinessId} {
+      allow read, write: if true;
+    }
+
+    // Teacher Substitutions (Guru Inval / Pengganti)
+    match /substitutions/{substitutionId} {
+      allow read, write: if true;
+    }
+
+    // Student Permits (Izin Meninggalkan Sekolah)
+    match /studentPermits/{permitId} {
+      allow read, write: if true;
+    }
+
+    // Visitors (Buku Tamu Digital)
+    match /visitors/{visitorId} {
+      allow read, write: if true;
+    }
+
+    // Audit logs (IMMUTABLE FORENSIC AUDIT TRAIL - NO UPDATES OR DELETES EVER ALLOWED)
     match /auditLogs/{logId} {
-      allow read: if isAuthenticated() || true;
-      allow create: if true;
-      allow update, delete: if false; // Immutable audit log
+      allow read, create: if true;
+      allow update, delete: if false;
     }
 
+    // Backups
     match /backups/{backupId} {
-      allow read: if isAdmin() || true;
-      allow write: if isAdmin() || true;
+      allow read, write: if true;
+    }
+
+    // Emergencies & Broadcasts (Pusat Siaga Darurat)
+    match /emergencies/{emergencyId} {
+      allow read, write: if true;
+    }
+
+    match /emergency_history/{historyId} {
+      allow read, write: if true;
+    }
+
+    // Database Snapshots & Disaster Recovery
+    match /database_snapshots/{snapshotId} {
+      allow read, write: if true;
     }
   }
 }
+
+

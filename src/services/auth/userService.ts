@@ -1,6 +1,7 @@
 import { FirestoreService } from '../firebase/firestoreService';
 import { UserProfile, UserRole } from '../../types';
 import { SEED_USERS } from './authService';
+import { hashPinWithSalt, generateSalt } from '../../utils/cryptoUtils';
 
 export class UserService {
   /**
@@ -10,6 +11,9 @@ export class UserService {
     const users = await FirestoreService.getAll<UserProfile>('users');
     if (users.length === 0) {
       for (const u of SEED_USERS) {
+        const pinSalt = u.pinSalt || generateSalt();
+        const pinHash = u.pinHash || (await hashPinWithSalt('123456', pinSalt));
+
         const userProfile: UserProfile = {
           id: u.userId,
           nip: u.nip,
@@ -17,7 +21,8 @@ export class UserService {
           role: u.role,
           email: u.email,
           phone: u.phone,
-          pin: '123456',
+          pinSalt,
+          pinHash,
           isActive: u.isActive,
           permissions: ['*'],
           createdAt: new Date().toISOString(),
@@ -29,7 +34,7 @@ export class UserService {
   }
 
   /**
-   * Create a new user profile
+   * Create a new user profile with salted SHA-256 PIN hash
    */
   public static async createUser(
     userData: {
@@ -45,7 +50,9 @@ export class UserService {
     adminUser: UserProfile
   ): Promise<UserProfile> {
     const id = `usr-${userData.role.toLowerCase()}-${Date.now().toString(36)}`;
-    const pin = userData.pin || '123456';
+    const rawPin = userData.pin || '123456';
+    const pinSalt = generateSalt();
+    const pinHash = await hashPinWithSalt(rawPin, pinSalt);
 
     const newUser: UserProfile = {
       id,
@@ -54,7 +61,8 @@ export class UserService {
       role: userData.role,
       email: userData.email,
       phone: userData.phone,
-      pin,
+      pinSalt,
+      pinHash,
       isActive: userData.isActive,
       permissions: userData.permissions,
       createdAt: new Date().toISOString(),
@@ -107,7 +115,7 @@ export class UserService {
   }
 
   /**
-   * Reset user's 6-digit security PIN
+   * Reset user's 6-digit security PIN with salted SHA-256 hash
    */
   public static async resetPin(
     userId: string,
@@ -117,9 +125,13 @@ export class UserService {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
     if (!existing) return;
 
+    const pinSalt = generateSalt();
+    const pinHash = await hashPinWithSalt(newPin, pinSalt);
+
     const payload: UserProfile = {
       ...existing,
-      pin: newPin,
+      pinSalt,
+      pinHash,
       updatedAt: new Date().toISOString(),
     };
 
@@ -186,3 +198,4 @@ export class UserService {
     });
   }
 }
+

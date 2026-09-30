@@ -67,7 +67,7 @@ export class SubstitutionService {
       userName: user.fullName,
       role: user.role,
       action: 'CREATE',
-      module: 'SETTINGS',
+      module: 'SUBSTITUTIONS',
       recordId: id,
       details: `Mencatat guru berhalangan: ${payload.guruBerhalanganName} (${payload.kelas} - ${payload.mataPelajaran}), Inval: ${payload.guruPenggantiName || 'Belum Ditugaskan'}`,
     });
@@ -104,7 +104,7 @@ export class SubstitutionService {
         userName: user.fullName,
         role: user.role,
         action: 'UPDATE',
-        module: 'SETTINGS',
+        module: 'SUBSTITUTIONS',
         recordId: substitutionId,
         details: `Mengubah status jadwal inval kelas ${existing.kelas} menjadi ${status}`,
       });
@@ -121,7 +121,7 @@ export class SubstitutionService {
       userName: user.fullName,
       role: user.role,
       action: 'DELETE',
-      module: 'SETTINGS',
+      module: 'SUBSTITUTIONS',
       recordId: substitutionId,
       details: `Menghapus catatan guru inval ID: ${substitutionId}`,
     });

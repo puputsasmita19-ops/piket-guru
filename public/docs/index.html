@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumentasi Resmi & Handover PDF - Piket Guru v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 30px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(37, 99, 235, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+    p.subtitle {
+      color: #94a3b8;
+      font-size: 16px;
+    }
+    .tree-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 35px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    .tree-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #38bdf8;
+      margin-bottom: 14px;
+    }
+    pre.tree-view {
+      font-family: 'JetBrains Mono', monospace;
+      color: #cbd5e1;
+      font-size: 15px;
+      line-height: 1.8;
+      background: #090d16;
+      padding: 18px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      border: 1px solid #1e293b;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 640px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .doc-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+    }
+    .doc-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15);
+    }
+    .doc-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .doc-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .doc-desc {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 18px;
+      flex-grow: 1;
+    }
+    .doc-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #2563eb;
+      color: #ffffff;
+      text-decoration: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.15s ease;
+    }
+    .doc-action:hover {
+      background: #1d4ed8;
+    }
+    .doc-action.secondary {
+      background: #334155;
+      color: #f1f5f9;
+    }
+    .doc-action.secondary:hover {
+      background: #475569;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 1px solid #1e293b;
+      color: #64748b;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="badge">PRODUKSI v1.0.0 — DOKUMENTASI RESMI</div>
+      <h1>Piket Guru Digital Sekolah</h1>
+      <p class="subtitle">Paket Dokumen Resmi, Standar Operasional Prosedur (SOP), dan Berita Acara Handover</p>
+    </div>
+
+    <!-- Tree View Card -->
+    <div class="tree-box">
+      <div class="tree-title">Struktur Berkas Dokumen PDF Resmi:</div>
+      <pre class="tree-view">PIKET GURU v1.0.0
+│
+├── 📘 Buku Panduan Pengguna.pdf
+├── 📋 SOP Presensi.pdf
+├── 📋 SOP Buku Piket.pdf
+├── 📋 SOP Backup & Restore.pdf
+├── 🛠️ Panduan Admin.pdf
+├── 🔐 Dokumen RBAC & Security.pdf
+├── 🗄️ Dokumentasi Database.pdf
+├── ☁️ Integrasi Google Drive.pdf
+├── ⚙️ Konfigurasi Produksi.pdf
+├── 📝 Changelog.pdf
+└── 📦 Handover Checklist.pdf</pre>
+    </div>
+
+    <!-- Document Cards Grid -->
+    <div class="grid">
+
+      <!-- 1 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">📘</div>
+          <div class="doc-title">Buku Panduan Pengguna.pdf</div>
+          <div class="doc-desc">Master handbook komprehensif 20 bab mencakup seluruh peran, alur piket, hingga arsitektur sistem.</div>
+        </div>
+        <a href="/docs/Buku_Panduan_Pengguna.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 2 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">📋</div>
+          <div class="doc-title">SOP Presensi.pdf</div>
+          <div class="doc-desc">Prosedur presensi masuk & pulang, validasi radius Geofence GPS 100m, dan swafoto kompresi kanvas.</div>
+        </div>
+        <a href="/docs/SOP_Presensi.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 3 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">📋</div>
+          <div class="doc-title">SOP Buku Piket.pdf</div>
+          <div class="doc-desc">Alur 5 tahapan formal (Draft ➔ Diajukan ➔ Diverifikasi ➔ Disetujui ➔ Dikunci) dan tata cara buka gembok.</div>
+        </div>
+        <a href="/docs/SOP_Buku_Piket.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 4 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">📋</div>
+          <div class="doc-title">SOP Backup & Restore.pdf</div>
+          <div class="doc-desc">SOP pencadangan 1-klik 16 koleksi database Firestore dan pemulihan data bencana (disaster recovery).</div>
+        </div>
+        <a href="/docs/SOP_Backup_Restore.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 5 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">🛠️</div>
+          <div class="doc-title">Panduan Admin.pdf</div>
+          <div class="doc-desc">Tata kelola master data, manajemen akun, jadwal anti-bentrok, audit log forensik, dan pengaturan geofence.</div>
+        </div>
+        <a href="/docs/Panduan_Admin.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 6 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">🔐</div>
+          <div class="doc-title">Dokumen RBAC & Security.pdf</div>
+          <div class="doc-desc">Matriks hak akses 5 peran, enkripsi Salted SHA-256, proteksi brute-force lockout, dan audit log permanen.</div>
+        </div>
+        <a href="/docs/Dokumen_RBAC_Security.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 7 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">🗄️</div>
+          <div class="doc-title">Dokumentasi Database.pdf</div>
+          <div class="doc-desc">Skema detail 16 koleksi Cloud Firestore, tipe data, indeks, dan diagram relasi entitas (ERD).</div>
+        </div>
+        <a href="/docs/Dokumentasi_Database.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 8 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">☁️</div>
+          <div class="doc-title">Integrasi Google Drive.pdf</div>
+          <div class="doc-desc">Spesifikasi penanganan media gambar, kompresi kanvas, serta panduan folder arsip cadangan Google Drive.</div>
+        </div>
+        <a href="/docs/Integrasi_Google_Drive.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 9 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">⚙️</div>
+          <div class="doc-title">Konfigurasi Produksi.pdf</div>
+          <div class="doc-desc">Spesifikasi stack React 19, TypeScript, build script Vite, environment, dan PWA Service Worker.</div>
+        </div>
+        <a href="/docs/Konfigurasi_Produksi.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 10 -->
+      <div class="doc-card">
+        <div>
+          <div class="doc-icon">📝</div>
+          <div class="doc-title">Changelog.pdf</div>
+          <div class="doc-desc">Catatan rilis lengkap v1.0.0, ringkasan fitur baru, perbaikan bug, audit keamanan, dan hasil tes regresi 100%.</div>
+        </div>
+        <a href="/docs/Changelog.html" target="_blank" class="doc-action">
+          🖨️ Buka & Cetak PDF
+        </a>
+      </div>
+
+      <!-- 11 -->
+      <div class="doc-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, #1e293b 0%, #1e3a8a 100%); border-color: #3b82f6;">
+        <div>
+          <div class="doc-icon">📦</div>
+          <div class="doc-title" style="font-size: 19px;">Handover Checklist & Berita Acara.pdf</div>
+          <div class="doc-desc" style="color: #cbd5e1;">Daftar periksa serah terima sistem lengkap dengan kolom pengesahan bertandatangan Kepala Sekolah, Administrator, dan Pengembang.</div>
+        </div>
+        <a href="/docs/Handover_Checklist.html" target="_blank" class="doc-action" style="background: #3b82f6; color: white;">
+          🖨️ Buka & Cetak Lembar Pengesahan PDF
+        </a>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      Sistem Jadwal dan Buku Piket Digital Sekolah &bull; Versi Produksi v1.0.0 &bull; Diterbitkan September 2026
+    </div>
+  </div>
+
+</body>
+</html>

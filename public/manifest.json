@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Piket Guru - Jadwal dan Buku Piket Digital",
+  "short_name": "Piket Guru",
+  "description": "Jadwal dan Buku Piket Digital Sekolah - Presensi GPS, Laporan Kejadian, dan Administrasi Piket Terintegrasi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1d4ed8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

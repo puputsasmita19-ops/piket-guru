@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Panduan Administrator - Piket Guru v1.0.0</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.45; color: #000; background: #f1f5f9; padding: 20px; }
+    .page-container { background: #fff; max-width: 210mm; margin: 0 auto; padding: 20mm; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 20px; }
+    .kop-surat h2 { font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+    .kop-surat h1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .kop-surat p { font-size: 9.5pt; font-style: italic; }
+    .doc-title { text-align: center; margin-bottom: 20px; }
+    .doc-title h3 { font-size: 13pt; text-decoration: underline; text-transform: uppercase; margin-bottom: 4px; }
+    .doc-title span { font-size: 10pt; font-weight: bold; }
+    h4 { font-size: 11pt; font-weight: bold; margin: 16px 0 6px 0; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    p, ol, ul { margin-bottom: 10px; text-align: justify; }
+    ol, ul { margin-left: 22px; }
+    li { margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 10pt; }
+    th, td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+    th { background: #f2f2f2; text-align: center; font-weight: bold; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+    .btn-print:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 210mm; margin: 0 auto 10px auto; text-align: right;">
+    <a href="/docs/index.html" style="font-family: sans-serif; color: #475569; text-decoration: none; margin-right: 15px; font-size: 14px;">&larr; Kembali ke Portal Dokumen</a>
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan sebagai PDF</button>
+  </div>
+
+  <div class="page-container">
+    <div class="kop-surat">
+      <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA</h2>
+      <h2>DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+      <h1>PANDUAN OPERASIONAL ADMINISTRATOR SISTEM</h1>
+      <p>Sistem Piket Guru Digital &bull; Dokumen Tata Kelola IT &bull; Edisi 2026</p>
+    </div>
+
+    <div class="doc-title">
+      <h3>PANDUAN LENGKAP PENGELOLAAN ADMINISTRATOR</h3>
+      <span>STATUS: DOKUMEN RESMI (v1.0.0)</span>
+    </div>
+
+    <h4>1. Kredensial Login Administrator</h4>
+    <p>Akses akun Admin dilakukan menggunakan NIP <code>198503152010011002</code> dan PIN awal <code>123456</code>. Admin disarankan memperbarui PIN melalui menu profil setelah serah terima.</p>
+
+    <h4>2. Tata Kelola Master Data Sekolah</h4>
+    <ul>
+      <li><strong>Master Guru (<code>teachers</code>):</strong> Pengelolaan profil dewan guru, mata pelajaran, pangkat golongan, dan status kepegawaian untuk alokasi jadwal.</li>
+      <li><strong>Master Staf (<code>staff</code>):</strong> Pengelolaan staf tata usaha, pustakawan, dan satuan pengamanan (satpam).</li>
+      <li><strong>Master Ruang &amp; Pos Piket (<code>rooms</code>):</strong> Pendaftaran titik pos jaga (misal: Gerbang Utama, Lobi, Gedung Barat).</li>
+      <li><strong>Kategori Kejadian (<code>incidentCategories</code>):</strong> Klasifikasi bobot pelanggaran siswa atau sarpras (Rendah, Sedang, Tinggi, Kritis).</li>
+    </ul>
+
+    <h4>3. Tata Kelola Akun &amp; Hak Akses (RBAC)</h4>
+    <p>Administrator berwenang penuh mendaftarkan pengguna baru, mereset 6-digit PIN bagi guru yang lupa, serta menonaktifkan status akun jika pegawai mutasi/berhenti.</p>
+
+    <h4>4. Penataan Jadwal Piket &amp; Deteksi Bentrok</h4>
+    <p>Sistem secara otomatis mendeteksi bentrok jadwal (<em>Conflict Detection</em>) sehingga petugas yang sama tidak dapat dialokasikan pada dua pos atau jam yang bertabrakan pada hari yang sama.</p>
+
+    <h4>5. Pembukaan Gembok Arsip (Emergency Unlock)</h4>
+    <p>Jurnal harian yang telah disetujui Kepala Sekolah berstatus <code>DIKUNCI</code>. Administrator dapat membuka kembali jurnal ke status <code>DRAFT</code> dengan kewajiban mengisi alasan pembukaan yang tercatat pada log audit.</p>
+
+    <h4>6. Konfigurasi Geofence &amp; Titik Sekolah</h4>
+    <p>Admin dapat memperbarui titik koordinat Latitude/Longitude sekolah serta radius toleransi (standar: 100 meter) melalui menu <em>Pengaturan Profil &amp; GPS</em>.</p>
+
+    <h4>7. Pencadangan Rutin &amp; Audit Forensik</h4>
+    <p>Admin bertanggung jawab mengunduh berkas cadangan database mingguan dan memantau riwayat aktivitas pengguna pada menu <em>Audit Log Forensik</em>.</p>
+
+    <div style="margin-top: 40px; text-align: right;">
+      <p>Ditetapkan di: Jakarta<br>Pada tanggal: 30 September 2026<br>Kepala Sekolah,</p>
+      <br><br><br>
+      <p><strong>Dr. Hj. Siti Rohmah, M.Pd.</strong><br>NIP. 19760512 200003 2 001</p>
+    </div>
+  </div>
+
+</body>
+</html>

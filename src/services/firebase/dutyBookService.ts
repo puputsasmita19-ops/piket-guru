@@ -128,11 +128,10 @@ export class DutyBookService {
     reason: string
   ): Promise<void> {
     const now = new Date().toISOString();
+    const { lockedAt, lockedBy, ...rest } = dutyBook;
     const updated: DutyBookRecord = {
-      ...dutyBook,
+      ...rest,
       status: 'DRAFT',
-      lockedAt: undefined,
-      lockedBy: undefined,
       updatedAt: now,
       updatedBy: user.fullName,
     };

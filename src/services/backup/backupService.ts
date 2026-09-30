@@ -29,6 +29,11 @@ export interface BackupPayload {
     incidents: any[];
     settings: any[];
     auditLogs: any[];
+    announcements?: any[];
+    studentTardiness?: any[];
+    substitutions?: any[];
+    studentPermits?: any[];
+    visitors?: any[];
   };
 }
 
@@ -49,6 +54,11 @@ export class BackupService {
       incidents,
       settingsList,
       auditLogs,
+      announcements,
+      studentTardiness,
+      substitutions,
+      studentPermits,
+      visitors,
     ] = await Promise.all([
       FirestoreService.getAll('users'),
       FirestoreService.getAll('teachers'),
@@ -61,6 +71,11 @@ export class BackupService {
       FirestoreService.getAll('incidents'),
       FirestoreService.getAll('settings'),
       FirestoreService.getAll('auditLogs'),
+      FirestoreService.getAll('announcements'),
+      FirestoreService.getAll('studentTardiness'),
+      FirestoreService.getAll('substitutions'),
+      FirestoreService.getAll('studentPermits'),
+      FirestoreService.getAll('visitors'),
     ]);
 
     const schoolSetting: any = settingsList.find((s: any) => s.id === 'school_config') || {};
@@ -76,7 +91,12 @@ export class BackupService {
       dutyBooks.length +
       incidents.length +
       settingsList.length +
-      auditLogs.length;
+      auditLogs.length +
+      announcements.length +
+      studentTardiness.length +
+      substitutions.length +
+      studentPermits.length +
+      visitors.length;
 
     const payload: BackupPayload = {
       version: '1.0.0',
@@ -91,7 +111,7 @@ export class BackupService {
       metadata: {
         schoolName: schoolSetting.schoolName || 'SMA Negeri 1 Prestasi Bangsa',
         npsn: schoolSetting.npsn || '20109988',
-        totalCollections: 11,
+        totalCollections: 16,
         totalRecords,
       },
       data: {
@@ -106,6 +126,11 @@ export class BackupService {
         incidents,
         settings: settingsList,
         auditLogs,
+        announcements,
+        studentTardiness,
+        substitutions,
+        studentPermits,
+        visitors,
       },
     };
 
