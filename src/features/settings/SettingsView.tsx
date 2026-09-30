@@ -1,38 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import {
   Settings,
-  School,
   MapPin,
-  Database,
-  History,
   Download,
   Upload,
-  RefreshCw,
   Save,
   CheckCircle2,
   AlertTriangle,
-  Shield,
-  Clock,
-  Trash2,
   Search,
-  Filter,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
-import { Modal } from '../../components/common/Modal';
 import { RestoreConfirmModal } from './RestoreConfirmModal';
+import { ThemeSettingsCard } from './ThemeSettingsCard';
+import { AuditLogsTable } from './AuditLogsTable';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
-import { SchoolSettings, UserProfile } from '../../types';
+import { SchoolSettings } from '../../types';
 import { AuditLogRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 
-type SettingsTab = 'school' | 'backup' | 'audit';
+type SettingsTab = 'school' | 'theme' | 'backup' | 'audit';
 
 export const SettingsView: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -49,8 +40,8 @@ export const SettingsView: React.FC = () => {
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(DEFAULT_SCHOOL_SETTINGS.allowedRadiusMeters);
-  const [startHour, setStartHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours.start);
-  const [endHour, setEndHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours.end);
+  const [startHour, setStartHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.start || '06:30');
+  const [endHour, setEndHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.end || '15:30');
 
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -227,12 +218,12 @@ export const SettingsView: React.FC = () => {
             Pengaturan Sistem & Database
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Konfigurasi profil instansi, Geofence GPS presensi, arsip cadangan (backup & restore), dan jejak audit
+            Konfigurasi profil instansi, tema tampilan, Geofence GPS presensi, arsip cadangan, dan jejak audit
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('school')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -242,6 +233,16 @@ export const SettingsView: React.FC = () => {
             }`}
           >
             Profil & GPS
+          </button>
+          <button
+            onClick={() => setActiveTab('theme')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'theme'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Tema Tampilan
           </button>
           <button
             onClick={() => setActiveTab('backup')}
@@ -272,6 +273,9 @@ export const SettingsView: React.FC = () => {
           <span className="font-bold">{saveSuccessBanner}</span>
         </div>
       )}
+
+      {/* TAB: THEME PREFERENCES */}
+      {activeTab === 'theme' && <ThemeSettingsCard />}
 
       {/* TAB 1: SCHOOL PROFILE & GEOFENCE */}
       {activeTab === 'school' && (
@@ -578,54 +582,7 @@ export const SettingsView: React.FC = () => {
               subtitle="Pencatatan rekam jejak aktivitas pengguna demi akuntabilitas dan transparansi sistem"
             />
             <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
-                  <tr>
-                    <th className="p-4">Waktu</th>
-                    <th className="p-4">Pengguna</th>
-                    <th className="p-4">Modul</th>
-                    <th className="p-4">Aksi</th>
-                    <th className="p-4">Rincian Perubahan / Aktivitas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredAuditLogs.slice(0, 50).map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="p-4 font-mono text-slate-500 whitespace-nowrap text-[11px]">
-                        {formatIndonesianDate(log.timestamp)} <span className="text-slate-400">{log.timestamp.split('T')[1]?.substring(0, 8)}</span>
-                      </td>
-                      <td className="p-4 font-bold text-slate-900 dark:text-white">
-                        <div>{log.userName}</div>
-                        <span className="text-[10px] text-slate-400 font-mono font-normal">[{log.role}]</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono font-bold text-[10px]">
-                          {log.module}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <Badge
-                          variant={
-                            log.action === 'CREATE'
-                              ? 'success'
-                              : log.action === 'DELETE'
-                              ? 'danger'
-                              : log.action === 'UPDATE' || log.action === 'STATUS_CHANGE'
-                              ? 'warning'
-                              : 'info'
-                          }
-                          size="sm"
-                        >
-                          {log.action}
-                        </Badge>
-                      </td>
-                      <td className="p-4 text-slate-700 dark:text-slate-300 max-w-md truncate">
-                        {log.details}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <AuditLogsTable logs={filteredAuditLogs} />
             </CardContent>
           </Card>
         </div>

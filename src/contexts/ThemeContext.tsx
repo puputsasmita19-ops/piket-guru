@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useLayoutEffect } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -10,42 +10,75 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const THEME_STORAGE_KEY = 'piket_guru_theme';
+
+const getInitialTheme = (): Theme => {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark' || saved === 'system') {
+      return saved;
+    }
+  } catch (e) {
+    console.warn('Unable to read theme from localStorage', e);
+  }
+  return 'system';
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem('piket_guru_theme');
-    return (saved as Theme) || 'light';
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const initial = getInitialTheme();
+    if (initial === 'dark') return true;
+    if (initial === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  const [isDark, setIsDark] = useState<boolean>(false);
-
-  useEffect(() => {
+  // Apply theme to documentElement synchronously before paint to avoid flash
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    const applyTheme = () => {
-      let resolvedDark = false;
+    const computeIsDark = () => {
       if (theme === 'system') {
-        resolvedDark = mediaQuery.matches;
-      } else {
-        resolvedDark = theme === 'dark';
+        return mediaQuery.matches;
       }
+      return theme === 'dark';
+    };
 
-      setIsDark(resolvedDark);
-      if (resolvedDark) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
+    const resolved = computeIsDark();
+    setIsDark(resolved);
+
+    if (resolved) {
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+    }
+
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (e) {
+      console.warn('Unable to save theme to localStorage', e);
+    }
+
+    const handleChange = () => {
+      if (theme === 'system') {
+        const darkNow = mediaQuery.matches;
+        setIsDark(darkNow);
+        if (darkNow) {
+          root.classList.add('dark');
+          root.style.colorScheme = 'dark';
+        } else {
+          root.classList.remove('dark');
+          root.style.colorScheme = 'light';
+        }
       }
     };
 
-    applyTheme();
-    localStorage.setItem('piket_guru_theme', theme);
-
-    const listener = () => {
-      if (theme === 'system') applyTheme();
-    };
-    mediaQuery.addEventListener('change', listener);
-    return () => mediaQuery.removeEventListener('change', listener);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => {
