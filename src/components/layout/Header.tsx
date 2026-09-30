@@ -75,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const { activeTab, subView } = useNavigation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
+  const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || APP_NAME);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -146,8 +147,13 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
       'settings',
       'school_config',
       (config) => {
-        if (config && config.schoolName) {
-          setSchoolName(config.schoolName);
+        if (config) {
+          if (config.schoolName) {
+            setSchoolName(config.schoolName);
+          }
+          if (config.appName) {
+            setAppName(config.appName);
+          }
         }
       }
     );
@@ -175,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-base sm:text-lg">
-                    {APP_NAME}
+                    {appName}
                   </span>
                   <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                     v1.0.1

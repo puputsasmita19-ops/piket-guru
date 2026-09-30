@@ -13,6 +13,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { authService, StoredUserCredential } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, ROLE_LABELS } from '../../config/constants';
 import { Badge } from '../../components/common/Badge';
+import { SchoolSettings } from '../../types';
+import { FirestoreService } from '../../services/firebase/firestoreService';
 
 export const LoginPage: React.FC = () => {
   const { loginWithPin, isLoading } = useAuth();
@@ -21,6 +23,37 @@ export const LoginPage: React.FC = () => {
   const [pin, setPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Dynamic School & App Branding Settings
+  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
+    try {
+      const cached = localStorage.getItem('piket_guru_school_config');
+      if (cached) {
+        return { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(cached) };
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_SCHOOL_SETTINGS;
+  });
+
+  useEffect(() => {
+    const unsub = FirestoreService.subscribeToDocument<SchoolSettings>(
+      'settings',
+      'school_config',
+      (config) => {
+        if (config) {
+          setSchoolSettings((prev) => ({ ...prev, ...config }));
+          try {
+            localStorage.setItem('piket_guru_school_config', JSON.stringify(config));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    );
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -99,9 +132,15 @@ export const LoginPage: React.FC = () => {
             <School className="w-8 h-8" />
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-white">{APP_NAME}</h1>
-            <p className="text-xs text-blue-400 font-semibold">{APP_SUBTITLE}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{DEFAULT_SCHOOL_SETTINGS.schoolName}</p>
+            <h1 className="text-2xl font-black tracking-tight text-white">
+              {schoolSettings.appName || APP_NAME}
+            </h1>
+            <p className="text-xs text-blue-400 font-semibold">
+              {schoolSettings.appSubtitle || APP_SUBTITLE}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {schoolSettings.schoolName || DEFAULT_SCHOOL_SETTINGS.schoolName}
+            </p>
           </div>
         </div>
 
@@ -208,10 +247,18 @@ export const LoginPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Security Footer Notice */}
-        <div className="pt-2 text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5 border-t border-slate-800/80">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Otentikasi Aman • Enkripsi Salted SHA-256</span>
+        {/* Security & Creator Footer Notice */}
+        <div className="pt-2 text-center text-[11px] text-slate-500 flex flex-col items-center justify-center gap-1.5 border-t border-slate-800/80">
+          <div className="flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Otentikasi Aman • Enkripsi Salted SHA-256</span>
+          </div>
+          {schoolSettings.appCreator ? (
+            <div className="text-[10px] text-slate-400 flex items-center justify-center gap-1">
+              <span>Dikembangkan oleh:</span>
+              <span className="font-semibold text-slate-300">{schoolSettings.appCreator}</span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -95,6 +95,9 @@ export interface SchoolSettings {
   schoolName: string;
   npsn: string;
   address: string;
+  appName?: string;
+  appSubtitle?: string;
+  appCreator?: string;
   schoolLat: number;
   schoolLng: number;
   allowedRadiusMeters: number;

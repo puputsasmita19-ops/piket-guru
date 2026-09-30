@@ -46,6 +46,13 @@ export const SettingsView: React.FC = () => {
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [npsn, setNpsn] = useState(DEFAULT_SCHOOL_SETTINGS.npsn);
   const [address, setAddress] = useState(DEFAULT_SCHOOL_SETTINGS.address);
+  const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || 'PIKET GURU');
+  const [appSubtitle, setAppSubtitle] = useState(
+    DEFAULT_SCHOOL_SETTINGS.appSubtitle || 'Jadwal & Buku Piket Digital Sekolah'
+  );
+  const [appCreator, setAppCreator] = useState(
+    DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'
+  );
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(
@@ -76,6 +83,9 @@ export const SettingsView: React.FC = () => {
         setSchoolName(data.schoolName);
         setNpsn(data.npsn);
         setAddress(data.address);
+        if (data.appName) setAppName(data.appName);
+        if (data.appSubtitle) setAppSubtitle(data.appSubtitle);
+        if (data.appCreator) setAppCreator(data.appCreator);
         setSchoolLat(data.schoolLat);
         setSchoolLng(data.schoolLng);
         setAllowedRadiusMeters(data.allowedRadiusMeters);
@@ -115,6 +125,9 @@ export const SettingsView: React.FC = () => {
         schoolName,
         npsn,
         address,
+        appName: appName.trim() || 'PIKET GURU',
+        appSubtitle: appSubtitle.trim() || 'Jadwal & Buku Piket Digital Sekolah',
+        appCreator: appCreator.trim(),
         schoolLat,
         schoolLng,
         allowedRadiusMeters,
@@ -130,6 +143,11 @@ export const SettingsView: React.FC = () => {
 
       await FirestoreService.setDocument('settings', 'school_config', updated);
       setSettings(updated);
+      try {
+        localStorage.setItem('piket_guru_school_config', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
 
       await FirestoreService.logAudit({
         userId: currentUser.id,
@@ -137,10 +155,10 @@ export const SettingsView: React.FC = () => {
         role: currentUser.role,
         action: 'UPDATE',
         module: 'SETTINGS',
-        details: `Memperbarui konfigurasi sekolah & batas geofence (${allowedRadiusMeters}m)`,
+        details: `Memperbarui konfigurasi sekolah, branding login & geofence (${allowedRadiusMeters}m)`,
       });
 
-      setSaveSuccessBanner('Pengaturan profil sekolah & koordinat GPS berhasil disimpan!');
+      setSaveSuccessBanner('Pengaturan profil sekolah, identitas login, & koordinat GPS berhasil disimpan!');
       setTimeout(() => setSaveSuccessBanner(null), 4000);
     } finally {
       setIsSavingSchool(false);
@@ -373,6 +391,75 @@ export const SettingsView: React.FC = () => {
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card Kustomisasi Tampilan Halaman Login & Identitas Aplikasi */}
+          <Card>
+            <CardHeader
+              title="Kustomisasi Tampilan Halaman Login & Identitas Aplikasi"
+              subtitle="Sesuaikan nama aplikasi, keterangan/subtitle, dan nama pembuat yang tampil di halaman login sistem"
+            />
+            <CardContent className="p-5 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Nama Aplikasi di Halaman Login</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Default: PIKET GURU</span>
+                  </label>
+                  <input
+                    disabled={!isAdmin}
+                    value={appName}
+                    onChange={(e) => setAppName(e.target.value)}
+                    placeholder="Contoh: PIKET GURU"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Nama Pembuat / Pengembang Aplikasi</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Tampil di footer login</span>
+                  </label>
+                  <input
+                    disabled={!isAdmin}
+                    value={appCreator}
+                    onChange={(e) => setAppCreator(e.target.value)}
+                    placeholder="Contoh: Tim IT Sekolah / Nama Pembuat"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>Keterangan / Subtitle Aplikasi di Halaman Login</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Default: Jadwal & Buku Piket Digital Sekolah</span>
+                </label>
+                <input
+                  disabled={!isAdmin}
+                  value={appSubtitle}
+                  onChange={(e) => setAppSubtitle(e.target.value)}
+                  placeholder="Contoh: Jadwal & Buku Piket Digital Sekolah"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-1.5 shadow-inner">
+                <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                  Pratinjau Tampilan Header & Footer Login:
+                </div>
+                <div className="text-lg font-black text-white tracking-tight">{appName || 'PIKET GURU'}</div>
+                <div className="text-xs text-blue-400 font-semibold">{appSubtitle || 'Jadwal & Buku Piket Digital Sekolah'}</div>
+                <div className="text-[11px] text-slate-400">{schoolName || 'Nama Sekolah'}</div>
+                {appCreator && (
+                  <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-800/80 mt-2 flex items-center justify-center gap-1">
+                    <span>Dikembangkan oleh:</span>
+                    <span className="text-slate-200 font-semibold">{appCreator}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
