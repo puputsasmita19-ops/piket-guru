@@ -12,7 +12,7 @@ export function formatIndonesianDate(dateString?: string | Date): string {
   }).format(date);
 }
 
-export function formatTime(timeString?: string | Date): string {
+export function formatTime(timeString?: string | Date, includeSeconds = false): string {
   if (!timeString) return '-';
   if (typeof timeString === 'string' && timeString.length === 5 && timeString.includes(':')) {
     return `${timeString} WIB`;
@@ -23,8 +23,13 @@ export function formatTime(timeString?: string | Date): string {
   return `${new Intl.DateTimeFormat('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
+    second: includeSeconds ? '2-digit' : undefined,
     hour12: false,
   }).format(date)} WIB`;
+}
+
+export function formatTimeWithSeconds(dateString?: string | Date): string {
+  return formatTime(dateString, true);
 }
 
 export function getCurrentDayName(): string {

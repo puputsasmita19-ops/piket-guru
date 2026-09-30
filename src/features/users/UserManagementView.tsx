@@ -13,6 +13,7 @@ import {
   Mail,
   Filter,
   AlertTriangle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -20,6 +21,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { UserFormModal } from './UserFormModal';
 import { ResetPinModal } from './ResetPinModal';
+import { BulkImportModal } from '../master/BulkImportModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { UserService } from '../../services/auth/userService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -39,6 +41,8 @@ export const UserManagementView: React.FC = () => {
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const [isResetPinOpen, setIsResetPinOpen] = useState(false);
   const [targetPinUser, setTargetPinUser] = useState<UserProfile | null>(null);
@@ -223,17 +227,27 @@ export const UserManagementView: React.FC = () => {
               </select>
 
               {isAdmin && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<UserPlus className="w-4 h-4" />}
-                  onClick={() => {
-                    setEditingUser(null);
-                    setIsFormModalOpen(true);
-                  }}
-                >
-                  + Tambah Pengguna
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+                    onClick={() => setIsBulkImportOpen(true)}
+                  >
+                    Import Massal (.CSV)
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<UserPlus className="w-4 h-4" />}
+                    onClick={() => {
+                      setEditingUser(null);
+                      setIsFormModalOpen(true);
+                    }}
+                  >
+                    + Tambah Pengguna
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -431,6 +445,12 @@ export const UserManagementView: React.FC = () => {
           </div>
         </div>
       </Modal>
+      {/* BULK IMPORT MODAL */}
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        defaultType="USERS_TEACHERS"
+      />
     </div>
   );
 };

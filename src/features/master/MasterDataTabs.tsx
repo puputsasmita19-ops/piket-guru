@@ -32,6 +32,7 @@ import {
   AuditLogRecord,
 } from '../../types/master.types';
 import { StudentService } from '../../services/firebase/studentService';
+import { BulkImportModal, ImportType } from './BulkImportModal';
 import { UserRole } from '../../types';
 import { ROLE_LABELS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
@@ -51,6 +52,17 @@ export const MasterDataTabs: React.FC = () => {
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
+
+  // Bulk Import state
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkImportType, setBulkImportType] = useState<ImportType>('USERS_TEACHERS');
+
+  // Custom Employment Status state (CR-004)
+  const [teacherStatusMode, setTeacherStatusMode] = useState<string>('PNS');
+  const [customTeacherStatus, setCustomTeacherStatus] = useState<string>('');
+
+  const [staffStatusMode, setStaffStatusMode] = useState<string>('PTT');
+  const [customStaffStatus, setCustomStaffStatus] = useState<string>('');
 
   // Modals state
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
@@ -110,11 +122,57 @@ export const MasterDataTabs: React.FC = () => {
     };
   }, []);
 
+  // Modal Openers with custom status support (CR-004)
+  const handleOpenAddTeacher = () => {
+    setEditingTeacher(null);
+    setTeacherStatusMode('PNS');
+    setCustomTeacherStatus('');
+    setIsTeacherModalOpen(true);
+  };
+
+  const handleOpenEditTeacher = (t: TeacherRecord) => {
+    setEditingTeacher(t);
+    const known = ['PNS', 'PPPK', 'GTT', 'HONORER'];
+    if (known.includes(t.statusKepegawaian)) {
+      setTeacherStatusMode(t.statusKepegawaian);
+      setCustomTeacherStatus('');
+    } else {
+      setTeacherStatusMode('LAINNYA');
+      setCustomTeacherStatus(t.statusKepegawaian || '');
+    }
+    setIsTeacherModalOpen(true);
+  };
+
+  const handleOpenAddStaff = () => {
+    setEditingStaff(null);
+    setStaffStatusMode('PTT');
+    setCustomStaffStatus('');
+    setIsStaffModalOpen(true);
+  };
+
+  const handleOpenEditStaff = (s: StaffRecord) => {
+    setEditingStaff(s);
+    const known = ['PNS', 'PPPK', 'PTT', 'HONORER'];
+    if (known.includes(s.statusKepegawaian)) {
+      setStaffStatusMode(s.statusKepegawaian);
+      setCustomStaffStatus('');
+    } else {
+      setStaffStatusMode('LAINNYA');
+      setCustomStaffStatus(s.statusKepegawaian || '');
+    }
+    setIsStaffModalOpen(true);
+  };
+
   // --- CRUD TEACHERS ---
   const handleSaveTeacher = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const formData = new FormData(form);
+
+    const finalStatus =
+      teacherStatusMode === 'LAINNYA'
+        ? customTeacherStatus.trim() || 'Lain-lain'
+        : teacherStatusMode;
 
     const id = editingTeacher ? editingTeacher.id : `tch-${Date.now()}`;
     const payload: TeacherRecord = {
@@ -123,7 +181,7 @@ export const MasterDataTabs: React.FC = () => {
       fullName: formData.get('fullName') as string,
       mataPelajaran: formData.get('mataPelajaran') as string,
       pangkatGolongan: formData.get('pangkatGolongan') as string,
-      statusKepegawaian: formData.get('statusKepegawaian') as any,
+      statusKepegawaian: finalStatus,
       phone: formData.get('phone') as string,
       email: formData.get('email') as string,
       createdAt: editingTeacher ? editingTeacher.createdAt : new Date().toISOString(),
@@ -140,7 +198,7 @@ export const MasterDataTabs: React.FC = () => {
       action: editingTeacher ? 'UPDATE' : 'CREATE',
       module: 'TEACHERS',
       recordId: id,
-      details: `${editingTeacher ? 'Memperbarui' : 'Menambahkan'} data guru: ${payload.fullName} (${payload.nip})`,
+      details: `${editingTeacher ? 'Memperbarui' : 'Menambahkan'} data guru: ${payload.fullName} (${payload.nip}) [${finalStatus}]`,
     });
 
     setIsTeacherModalOpen(false);
@@ -189,6 +247,11 @@ export const MasterDataTabs: React.FC = () => {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    const finalStatus =
+      staffStatusMode === 'LAINNYA'
+        ? customStaffStatus.trim() || 'Lain-lain'
+        : staffStatusMode;
+
     const id = editingStaff ? editingStaff.id : `stf-${Date.now()}`;
     const payload: StaffRecord = {
       id,
@@ -196,7 +259,7 @@ export const MasterDataTabs: React.FC = () => {
       fullName: formData.get('fullName') as string,
       divisi: formData.get('divisi') as any,
       jabatan: formData.get('jabatan') as string,
-      statusKepegawaian: formData.get('statusKepegawaian') as any,
+      statusKepegawaian: finalStatus,
       phone: (formData.get('phone') as string) || '-',
       createdAt: editingStaff ? editingStaff.createdAt : new Date().toISOString(),
       createdBy: editingStaff ? editingStaff.createdBy : currentUser?.fullName || 'ADMIN',
@@ -212,7 +275,7 @@ export const MasterDataTabs: React.FC = () => {
       action: editingStaff ? 'UPDATE' : 'CREATE',
       module: 'STAFF',
       recordId: id,
-      details: `${editingStaff ? 'Memperbarui' : 'Menambahkan'} data staf: ${payload.fullName} (${payload.divisi})`,
+      details: `${editingStaff ? 'Memperbarui' : 'Menambahkan'} data staf: ${payload.fullName} (${payload.divisi}) [${finalStatus}]`,
     });
 
     setIsStaffModalOpen(false);
@@ -325,17 +388,27 @@ export const MasterDataTabs: React.FC = () => {
         </div>
 
         {activeTab === 'teachers' && (
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => {
-              setEditingTeacher(null);
-              setIsTeacherModalOpen(true);
-            }}
-          >
-            + Tambah Guru
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+              onClick={() => {
+                setBulkImportType('USERS_TEACHERS');
+                setIsBulkImportOpen(true);
+              }}
+            >
+              Import Guru (.CSV)
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={handleOpenAddTeacher}
+            >
+              + Tambah Guru
+            </Button>
+          </div>
         )}
 
         {activeTab === 'staff' && (
@@ -343,27 +416,37 @@ export const MasterDataTabs: React.FC = () => {
             variant="primary"
             size="sm"
             leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => {
-              setEditingStaff(null);
-              setIsStaffModalOpen(true);
-            }}
+            onClick={handleOpenAddStaff}
           >
             + Tambah Staf
           </Button>
         )}
 
         {activeTab === 'students' && (
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => {
-              setEditingStudent(null);
-              setIsStudentModalOpen(true);
-            }}
-          >
-            + Tambah Siswa
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+              onClick={() => {
+                setBulkImportType('STUDENTS');
+                setIsBulkImportOpen(true);
+              }}
+            >
+              Import Siswa (.CSV)
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setEditingStudent(null);
+                setIsStudentModalOpen(true);
+              }}
+            >
+              + Tambah Siswa
+            </Button>
+          </div>
         )}
 
         {activeTab === 'rooms' && (
@@ -395,8 +478,8 @@ export const MasterDataTabs: React.FC = () => {
         )}
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-slate-200 dark:border-slate-800">
+      {/* Tabs Navigation (CR-006: full width, no truncation, aligned tabs) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin border-b border-slate-200 dark:border-slate-800 w-full">
         {[
           { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
           { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: staffList.length },
@@ -414,13 +497,13 @@ export const MasterDataTabs: React.FC = () => {
                 setActiveTab(tab.id as MasterTab);
                 setSearchQuery('');
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 border-b-2 font-semibold text-xs transition-all whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 isActive
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-950/30 rounded-t-xl'
                   : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span>{tab.label}</span>
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
@@ -483,10 +566,7 @@ export const MasterDataTabs: React.FC = () => {
                         size="sm"
                         className="text-xs"
                         leftIcon={<Edit2 className="w-3.5 h-3.5" />}
-                        onClick={() => {
-                          setEditingTeacher(t);
-                          setIsTeacherModalOpen(true);
-                        }}
+                        onClick={() => handleOpenEditTeacher(t)}
                       >
                         Edit
                       </Button>
@@ -536,10 +616,7 @@ export const MasterDataTabs: React.FC = () => {
                         size="sm"
                         className="text-xs"
                         leftIcon={<Edit2 className="w-3.5 h-3.5" />}
-                        onClick={() => {
-                          setEditingStaff(s);
-                          setIsStaffModalOpen(true);
-                        }}
+                        onClick={() => handleOpenEditStaff(s)}
                       >
                         Edit
                       </Button>
@@ -734,18 +811,18 @@ export const MasterDataTabs: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: AUDIT LOGS */}
+      {/* TAB 5: AUDIT LOGS (CR-005: Scroll model) */}
       {activeTab === 'audit' && (
         <Card>
           <CardHeader
             title="Jejak Audit Aktivitas Sistem"
-            subtitle="Pencatatan real-time aksi pengguna, perubahan data, dan keamanan"
+            subtitle={`Pencatatan real-time aksi pengguna, perubahan data, dan keamanan (${auditLogs.length} Entri)`}
           />
           <CardContent className="p-0">
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin">
               {auditLogs.length > 0 ? (
                 auditLogs.map((log) => (
-                  <div key={log.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div key={log.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <Badge
@@ -827,16 +904,17 @@ export const MasterDataTabs: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status Kepegawaian</label>
               <select
-                name="statusKepegawaian"
-                defaultValue={editingTeacher?.statusKepegawaian || 'PNS'}
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                value={teacherStatusMode}
+                onChange={(e) => setTeacherStatusMode(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
               >
                 <option value="PNS">PNS</option>
                 <option value="PPPK">PPPK</option>
                 <option value="GTT">GTT</option>
                 <option value="HONORER">Honorer</option>
+                <option value="LAINNYA">Lain-lain (Kustom)</option>
               </select>
             </div>
             <div className="space-y-1 sm:col-span-2">
@@ -849,6 +927,23 @@ export const MasterDataTabs: React.FC = () => {
               />
             </div>
           </div>
+
+          {teacherStatusMode === 'LAINNYA' && (
+            <div className="p-3 bg-blue-50/60 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-900 space-y-1.5 animate-in fade-in duration-150">
+              <label className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                <span>Status Kepegawaian Khusus / Lainnya</span>
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-normal">(isi sesuai data guru)</span>
+              </label>
+              <input
+                required
+                type="text"
+                value={customTeacherStatus}
+                onChange={(e) => setCustomTeacherStatus(e.target.value)}
+                placeholder="Contoh: Guru Tetap Yayasan (GTY), Guru Kontrak, Magang, dll."
+                className="w-full p-2.5 rounded-lg border border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Email Sekolah</label>
@@ -1003,14 +1098,15 @@ export const MasterDataTabs: React.FC = () => {
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status Kepegawaian</label>
               <select
-                name="statusKepegawaian"
-                defaultValue={editingStaff?.statusKepegawaian || 'PTT'}
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                value={staffStatusMode}
+                onChange={(e) => setStaffStatusMode(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
               >
                 <option value="PNS">PNS</option>
                 <option value="PPPK">PPPK</option>
                 <option value="PTT">PTT</option>
                 <option value="HONORER">Honorer</option>
+                <option value="LAINNYA">Lain-lain (Kustom)</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -1023,6 +1119,23 @@ export const MasterDataTabs: React.FC = () => {
               />
             </div>
           </div>
+
+          {staffStatusMode === 'LAINNYA' && (
+            <div className="p-3 bg-purple-50/60 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-900 space-y-1.5 animate-in fade-in duration-150">
+              <label className="text-xs font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                <span>Status Kepegawaian Staf Khusus / Lainnya</span>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-normal">(isi sesuai data staf)</span>
+              </label>
+              <input
+                required
+                type="text"
+                value={customStaffStatus}
+                onChange={(e) => setCustomStaffStatus(e.target.value)}
+                placeholder="Contoh: Pegawai Yayasan, PKWT, Tenaga Ahli, dll."
+                className="w-full p-2.5 rounded-lg border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Button type="button" variant="outline" size="sm" onClick={() => setIsStaffModalOpen(false)}>
@@ -1211,6 +1324,12 @@ export const MasterDataTabs: React.FC = () => {
           </div>
         </div>
       </Modal>
+      {/* BULK IMPORT MODAL */}
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        defaultType={bulkImportType}
+      />
     </div>
   );
 };

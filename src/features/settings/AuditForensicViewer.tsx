@@ -182,58 +182,60 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
           title={`Jejak Audit Forensik & Rekam Jejak Sistem (${filteredLogs.length})`}
           subtitle="Pencatatan real-time terhadap seluruh penambahan, pengubahan, penghapusan, dan aksi darurat"
         />
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
-              <tr>
-                <th className="p-4 w-36">Waktu Kejadian</th>
-                <th className="p-4">Pengguna</th>
-                <th className="p-4">Modul</th>
-                <th className="p-4">Aksi</th>
-                <th className="p-4">Rincian Perubahan</th>
-                <th className="p-4 text-center w-16">Detail</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredLogs.slice(0, 100).map((log) => (
-                <tr
-                  key={log.id}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <td className="p-4 font-mono text-slate-500 whitespace-nowrap text-[11px]">
-                    <div>{formatIndonesianDate(log.timestamp)}</div>
-                    <span className="text-slate-400">
-                      {log.timestamp.includes('T') ? log.timestamp.split('T')[1]?.substring(0, 8) : ''} WIB
-                    </span>
-                  </td>
-                  <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                    <div>{log.userName}</div>
-                    <span className="text-[10px] text-slate-400 font-mono font-normal">
-                      [{log.role}]
-                    </span>
-                  </td>
-                  <td className="p-4 whitespace-nowrap">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono font-bold text-[10px] text-slate-700 dark:text-slate-300">
-                      {log.module}
-                    </span>
-                  </td>
-                  <td className="p-4 whitespace-nowrap">{getActionBadge(log.action)}</td>
-                  <td className="p-4 text-slate-700 dark:text-slate-300 max-w-sm sm:max-w-md truncate">
-                    {log.details}
-                  </td>
-                  <td className="p-4 text-center">
-                    <button
-                      onClick={() => setInspectingLog(log)}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 transition cursor-pointer"
-                      title="Lihat Raw Metadata"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </td>
+        <CardContent className="p-0">
+          <div className="max-h-[580px] overflow-y-auto overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
+                <tr>
+                  <th className="p-4 w-36 whitespace-nowrap">Waktu Kejadian</th>
+                  <th className="p-4 whitespace-nowrap">Pengguna</th>
+                  <th className="p-4 whitespace-nowrap">Modul</th>
+                  <th className="p-4 whitespace-nowrap">Aksi</th>
+                  <th className="p-4 whitespace-nowrap">Rincian Perubahan</th>
+                  <th className="p-4 text-center w-16 whitespace-nowrap">Detail</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredLogs.slice(0, 100).map((log) => (
+                  <tr
+                    key={log.id}
+                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="p-4 font-mono text-slate-500 whitespace-nowrap text-[11px]">
+                      <div>{formatIndonesianDate(log.timestamp)}</div>
+                      <span className="text-slate-400">
+                        {log.timestamp.includes('T') ? log.timestamp.split('T')[1]?.substring(0, 8) : ''} WIB
+                      </span>
+                    </td>
+                    <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <div>{log.userName}</div>
+                      <span className="text-[10px] text-slate-400 font-mono font-normal">
+                        [{log.role}]
+                      </span>
+                    </td>
+                    <td className="p-4 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono font-bold text-[10px] text-slate-700 dark:text-slate-300">
+                        {log.module}
+                      </span>
+                    </td>
+                    <td className="p-4 whitespace-nowrap">{getActionBadge(log.action)}</td>
+                    <td className="p-4 text-slate-700 dark:text-slate-300 max-w-sm sm:max-w-md truncate">
+                      {log.details}
+                    </td>
+                    <td className="p-4 text-center">
+                      <button
+                        onClick={() => setInspectingLog(log)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                        title="Lihat Raw Metadata"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 

@@ -14,7 +14,7 @@ export interface TeacherRecord extends BaseRecord {
   fullName: string;
   mataPelajaran: string;
   pangkatGolongan: string;
-  statusKepegawaian: 'PNS' | 'PPPK' | 'GTT' | 'HONORER';
+  statusKepegawaian: 'PNS' | 'PPPK' | 'GTT' | 'HONORER' | 'LAINNYA' | string;
   phone: string;
   email: string;
 }
@@ -25,7 +25,7 @@ export interface StaffRecord extends BaseRecord {
   fullName: string;
   divisi: 'Tata Usaha' | 'Keamanan/Satpam' | 'Kebersihan' | 'Sarpras' | 'Perpustakaan' | 'Laboratorium';
   jabatan: string;
-  statusKepegawaian: 'PNS' | 'PPPK' | 'PTT' | 'HONORER';
+  statusKepegawaian: 'PNS' | 'PPPK' | 'PTT' | 'HONORER' | 'LAINNYA' | string;
   phone: string;
 }
 

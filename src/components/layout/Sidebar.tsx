@@ -169,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         {/* Sidebar Footer Info */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Piket Guru v1.0</span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">Piket Guru v1.0.1</span>
             <p className="mt-0.5">Sistem Manajemen Presensi & Buku Piket Digital</p>
           </div>
         </div>

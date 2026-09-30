@@ -20,8 +20,9 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigation } from '../../contexts/NavigationContext';
 import { APP_NAME, DEFAULT_SCHOOL_SETTINGS, ROLE_LABELS } from '../../config/constants';
-import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTimeWithSeconds } from '../../utils/dateUtils';
 import { Badge } from '../common/Badge';
 import { ProfileModal } from '../../features/auth/ProfileModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -71,12 +72,20 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const { theme, setTheme, isDark } = useTheme();
   const { currentUser, logout } = useAuth();
+  const { activeTab, subView } = useNavigation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  // Automatically close notifications and menus whenever user navigates or activeTab/subView changes
+  useEffect(() => {
+    setShowNotifications(false);
+    setShowThemeMenu(false);
+    setShowUserMenu(false);
+  }, [activeTab, subView]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
@@ -185,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
               {formatIndonesianDate(currentTime)}
             </div>
             <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-bold tracking-wide">
-              {formatTime(currentTime)}
+              {formatTimeWithSeconds(currentTime)}
             </div>
           </div>
 
