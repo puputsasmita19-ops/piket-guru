@@ -6,6 +6,7 @@ import {
   Clock,
   MapPin,
   User,
+  Users,
   Edit2,
   Trash2,
   Sparkles,
@@ -54,6 +55,7 @@ export const SchedulePreview: React.FC = () => {
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isInitialMultiPerson, setIsInitialMultiPerson] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
   const [deleteConfirmSchedule, setDeleteConfirmSchedule] = useState<ScheduleItem | null>(null);
@@ -127,6 +129,21 @@ export const SchedulePreview: React.FC = () => {
       module: 'SCHEDULES',
       recordId: scheduleData.id,
       details: `${editingSchedule ? 'Memperbarui' : 'Menambahkan'} jadwal piket: ${scheduleData.petugasName} (${scheduleData.hari} di ${scheduleData.ruangName})`,
+    });
+  };
+
+  // Save Multiple Schedules at once
+  const handleSaveMultipleSchedules = async (schedulesList: ScheduleItem[]) => {
+    for (const sch of schedulesList) {
+      await FirestoreService.setDocument('schedules', sch.id, sch);
+    }
+    await FirestoreService.logAudit({
+      userId: currentUser?.id || 'usr-admin',
+      userName: currentUser?.fullName || 'Admin',
+      role: currentUser?.role || 'ADMIN',
+      action: 'CREATE',
+      module: 'SCHEDULES',
+      details: `Menambahkan ${schedulesList.length} jadwal piket bersamaan (${schedulesList[0]?.hari || ''} di ${schedulesList[0]?.ruangName || ''})`,
     });
   };
 
@@ -213,11 +230,24 @@ export const SchedulePreview: React.FC = () => {
               Generate Otomatis
             </Button>
             <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Users className="w-4 h-4" />}
+              onClick={() => {
+                setEditingSchedule(null);
+                setIsInitialMultiPerson(true);
+                setIsFormModalOpen(true);
+              }}
+            >
+              + Jadwal Multi-Petugas
+            </Button>
+            <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
               onClick={() => {
                 setEditingSchedule(null);
+                setIsInitialMultiPerson(false);
                 setIsFormModalOpen(true);
               }}
             >
@@ -505,13 +535,16 @@ export const SchedulePreview: React.FC = () => {
         onClose={() => {
           setIsFormModalOpen(false);
           setEditingSchedule(null);
+          setIsInitialMultiPerson(false);
         }}
         onSave={handleSaveSchedule}
+        onSaveMultiple={handleSaveMultipleSchedules}
         editingSchedule={editingSchedule}
         teachers={teachers}
         rooms={rooms}
         allSchedules={schedules}
         defaultDay={selectedDay}
+        initialMultiPerson={isInitialMultiPerson}
       />
 
       {/* RECURRING SCHEDULE GENERATOR MODAL */}

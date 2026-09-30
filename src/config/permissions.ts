@@ -170,8 +170,30 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
   ],
 };
 
+export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
+  manage_schedules: ['schedule.view', 'schedule.create', 'schedule.update', 'schedule.delete'],
+  input_duty_book: ['dutybook.view', 'dutybook.create', 'dutybook.update'],
+  verify_duty_book: ['dutybook.verify'],
+  approve_duty_book: ['dutybook.verify', 'dutybook.unlock'],
+  report_incidents: ['incident.view', 'incident.create', 'incident.update', 'student_tardy.view', 'student_tardy.create', 'student_permits.view', 'student_permits.create'],
+  view_reports: ['reports.view'],
+  export_data: ['reports.export'],
+  manage_master_data: ['users.view', 'users.create', 'users.update'],
+  system_settings: ['settings.view', 'settings.update', 'backup.view', 'backup.create'],
+};
+
 export function checkUserPermission(userPermissions: string[] | undefined, requiredPermission: PermissionKey): boolean {
   if (!userPermissions || userPermissions.length === 0) return false;
   if (userPermissions.includes('*')) return true;
-  return userPermissions.includes(requiredPermission);
+  if (userPermissions.includes(requiredPermission)) return true;
+
+  // Check alias mappings configured from Admin UI
+  for (const perm of userPermissions) {
+    const mapped = PERMISSION_ALIAS_MAP[perm];
+    if (mapped && mapped.includes(requiredPermission)) {
+      return true;
+    }
+  }
+
+  return false;
 }

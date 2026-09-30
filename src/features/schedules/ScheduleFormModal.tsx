@@ -5,34 +5,40 @@ import { ScheduleItem, DayOfWeek, ScheduleStatus } from '../../types';
 import { TeacherRecord, RoomRecord } from '../../types/master.types';
 import { ScheduleService } from '../../services/firebase/scheduleService';
 import { DAYS_LIST } from '../../config/constants';
-import { AlertTriangle, Clock, MapPin, User, Calendar } from 'lucide-react';
+import { AlertTriangle, Clock, MapPin, User, Calendar, Users, CheckSquare, Square } from 'lucide-react';
 
 interface ScheduleFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (schedule: ScheduleItem) => Promise<void>;
+  onSaveMultiple?: (schedules: ScheduleItem[]) => Promise<void>;
   editingSchedule: ScheduleItem | null;
   teachers: TeacherRecord[];
   rooms: RoomRecord[];
   allSchedules: ScheduleItem[];
   defaultDay: DayOfWeek;
+  initialMultiPerson?: boolean;
 }
 
 export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onSaveMultiple,
   editingSchedule,
   teachers,
   rooms,
   allSchedules,
   defaultDay,
+  initialMultiPerson = false,
 }) => {
   const [hari, setHari] = useState<DayOfWeek>(defaultDay);
   const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
   const [jamMulai, setJamMulai] = useState<string>('06:30');
   const [jamSelesai, setJamSelesai] = useState<string>('15:30');
   const [petugasId, setPetugasId] = useState<string>('');
+  const [isMultiPerson, setIsMultiPerson] = useState<boolean>(initialMultiPerson);
+  const [selectedPetugasIds, setSelectedPetugasIds] = useState<string[]>([]);
   const [ruangId, setRuangId] = useState<string>('');
   const [status, setStatus] = useState<ScheduleStatus>('TERJADWAL');
   const [keterangan, setKeterangan] = useState<string>('');
@@ -41,29 +47,55 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
 
   useEffect(() => {
     if (editingSchedule) {
+      setIsMultiPerson(false);
       setHari(editingSchedule.hari);
       setTanggal(editingSchedule.tanggal);
       setJamMulai(editingSchedule.jamMulai);
       setJamSelesai(editingSchedule.jamSelesai);
       setPetugasId(editingSchedule.petugasId);
+      setSelectedPetugasIds([editingSchedule.petugasId]);
       setRuangId(editingSchedule.ruangId);
       setStatus(editingSchedule.status);
       setKeterangan(editingSchedule.keterangan || '');
     } else {
+      setIsMultiPerson(!!initialMultiPerson);
       setHari(defaultDay);
       setTanggal(new Date().toISOString().split('T')[0]);
       setJamMulai('06:30');
       setJamSelesai('15:30');
       setPetugasId(teachers[0]?.id || '');
+      setSelectedPetugasIds(teachers[0]?.id ? [teachers[0].id] : []);
       setRuangId(rooms[0]?.id || '');
       setStatus('TERJADWAL');
       setKeterangan('');
     }
-  }, [editingSchedule, defaultDay, teachers, rooms, isOpen]);
+  }, [editingSchedule, defaultDay, teachers, rooms, isOpen, initialMultiPerson]);
+
+  const toggleTeacherSelect = (id: string) => {
+    if (selectedPetugasIds.includes(id)) {
+      setSelectedPetugasIds(selectedPetugasIds.filter((tId) => tId !== id));
+    } else {
+      setSelectedPetugasIds([...selectedPetugasIds, id]);
+    }
+  };
+
+  const handleSelectAllTeachers = () => {
+    if (selectedPetugasIds.length === teachers.length) {
+      setSelectedPetugasIds([]);
+    } else {
+      setSelectedPetugasIds(teachers.map((t) => t.id));
+    }
+  };
 
   // Live Conflict Checking
   useEffect(() => {
-    if (!petugasId || !ruangId || !hari || !jamMulai || !jamSelesai) {
+    if ((!isMultiPerson && !petugasId) || !ruangId || !hari || !jamMulai || !jamSelesai) {
+      setConflictWarning(null);
+      return;
+    }
+
+    const checkId = isMultiPerson ? (selectedPetugasIds[0] || '') : petugasId;
+    if (!checkId) {
       setConflictWarning(null);
       return;
     }
@@ -75,7 +107,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
         tanggal,
         jamMulai,
         jamSelesai,
-        petugasId,
+        petugasId: checkId,
         ruangId,
       },
       allSchedules
@@ -86,33 +118,62 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
     } else {
       setConflictWarning(null);
     }
-  }, [hari, tanggal, jamMulai, jamSelesai, petugasId, ruangId, editingSchedule, allSchedules]);
+  }, [hari, tanggal, jamMulai, jamSelesai, petugasId, isMultiPerson, selectedPetugasIds, ruangId, editingSchedule, allSchedules]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!petugasId || !ruangId) return;
+    if (!ruangId) return;
 
-    const teacher = teachers.find((t) => t.id === petugasId);
     const room = rooms.find((r) => r.id === ruangId);
-
-    const scheduleData: ScheduleItem = {
-      id: editingSchedule ? editingSchedule.id : `sch-${Date.now()}`,
-      hari,
-      tanggal,
-      jamMulai,
-      jamSelesai,
-      petugasId,
-      petugasName: teacher ? teacher.fullName : 'Petugas Guru',
-      petugasRole: 'GURU',
-      ruangId,
-      ruangName: room ? room.name : 'Pos Piket',
-      status,
-      keterangan,
-    };
-
     setIsSubmitting(true);
+
     try {
-      await onSave(scheduleData);
+      if (!editingSchedule && isMultiPerson) {
+        if (selectedPetugasIds.length === 0) return;
+        const schedulesToCreate: ScheduleItem[] = selectedPetugasIds.map((tId, idx) => {
+          const teacher = teachers.find((t) => t.id === tId);
+          return {
+            id: `sch-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+            hari,
+            tanggal,
+            jamMulai,
+            jamSelesai,
+            petugasId: tId,
+            petugasName: teacher ? teacher.fullName : 'Petugas Guru',
+            petugasRole: 'GURU',
+            ruangId,
+            ruangName: room ? room.name : 'Pos Piket',
+            status,
+            keterangan: keterangan || 'Jadwal Penugasan Bersama',
+          };
+        });
+
+        if (onSaveMultiple) {
+          await onSaveMultiple(schedulesToCreate);
+        } else {
+          for (const s of schedulesToCreate) {
+            await onSave(s);
+          }
+        }
+      } else {
+        if (!petugasId) return;
+        const teacher = teachers.find((t) => t.id === petugasId);
+        const scheduleData: ScheduleItem = {
+          id: editingSchedule ? editingSchedule.id : `sch-${Date.now()}`,
+          hari,
+          tanggal,
+          jamMulai,
+          jamSelesai,
+          petugasId,
+          petugasName: teacher ? teacher.fullName : 'Petugas Guru',
+          petugasRole: 'GURU',
+          ruangId,
+          ruangName: room ? room.name : 'Pos Piket',
+          status,
+          keterangan,
+        };
+        await onSave(scheduleData);
+      }
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -167,24 +228,98 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
           </div>
         </div>
 
-        {/* Petugas Picker */}
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5 text-blue-500" />
-            <span>Pilih Guru / Petugas Piket</span>
-          </label>
-          <select
-            value={petugasId}
-            onChange={(e) => setPetugasId(e.target.value)}
-            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium"
-          >
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.fullName} (NIP: {t.nip} • {t.mataPelajaran})
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Mode Selector for New Schedule */}
+        {!editingSchedule && (
+          <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setIsMultiPerson(false)}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                !isMultiPerson
+                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              Satu Petugas
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMultiPerson(true)}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                isMultiPerson
+                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Multi-Petugas (Banyak Guru Sekaligus)
+            </button>
+          </div>
+        )}
+
+        {/* Petugas Picker (Single vs Multi) */}
+        {!isMultiPerson ? (
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-blue-500" />
+              <span>Pilih Guru / Petugas Piket</span>
+            </label>
+            <select
+              value={petugasId}
+              onChange={(e) => setPetugasId(e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium"
+            >
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.fullName} (NIP: {t.nip} • {t.mataPelajaran})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="space-y-2 p-3 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Pilih Guru Bertugas ({selectedPetugasIds.length} terpilih)</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleSelectAllTeachers}
+                className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                {selectedPetugasIds.length === teachers.length ? 'Batal Semua' : 'Pilih Semua'}
+              </button>
+            </div>
+            <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+              {teachers.map((t) => {
+                const isChecked = selectedPetugasIds.includes(t.id);
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => toggleTeacherSelect(t.id)}
+                    className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                      isChecked
+                        ? 'bg-blue-100/70 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100 font-semibold'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isChecked ? (
+                        <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <span className="truncate">{t.fullName}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">{t.mataPelajaran}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Ruangan / Pos Picker */}
         <div className="space-y-1">

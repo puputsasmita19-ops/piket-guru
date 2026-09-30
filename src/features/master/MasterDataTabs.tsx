@@ -26,15 +26,17 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   TeacherRecord,
   StaffRecord,
+  StudentRecord,
   RoomRecord,
   IncidentCategoryRecord,
   AuditLogRecord,
 } from '../../types/master.types';
+import { StudentService } from '../../services/firebase/studentService';
 import { UserRole } from '../../types';
 import { ROLE_LABELS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 
-type MasterTab = 'teachers' | 'staff' | 'rooms' | 'categories' | 'audit';
+type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'audit';
 
 export const MasterDataTabs: React.FC = () => {
   const { currentUser } = useAuth();
@@ -45,6 +47,7 @@ export const MasterDataTabs: React.FC = () => {
   // States for Collections
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staffList, setStaffList] = useState<StaffRecord[]>([]);
+  const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
@@ -58,6 +61,9 @@ export const MasterDataTabs: React.FC = () => {
 
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
+
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
 
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<IncidentCategoryRecord | null>(null);
@@ -81,6 +87,9 @@ export const MasterDataTabs: React.FC = () => {
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', (data) => {
       setStaffList(data);
     });
+    const unsubStudents = FirestoreService.subscribeToCollection<StudentRecord>('students', (data) => {
+      setStudents(data);
+    });
     const unsubRooms = FirestoreService.subscribeToCollection<RoomRecord>('rooms', (data) => {
       setRooms(data);
     });
@@ -94,6 +103,7 @@ export const MasterDataTabs: React.FC = () => {
     return () => {
       unsubTeachers();
       unsubStaff();
+      unsubStudents();
       unsubRooms();
       unsubCats();
       unsubAudit();
@@ -173,6 +183,114 @@ export const MasterDataTabs: React.FC = () => {
     setEditingRoom(null);
   };
 
+  // --- CRUD STAFF ---
+  const handleSaveStaff = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    const id = editingStaff ? editingStaff.id : `stf-${Date.now()}`;
+    const payload: StaffRecord = {
+      id,
+      nip: (formData.get('nip') as string) || '-',
+      fullName: formData.get('fullName') as string,
+      divisi: formData.get('divisi') as any,
+      jabatan: formData.get('jabatan') as string,
+      statusKepegawaian: formData.get('statusKepegawaian') as any,
+      phone: (formData.get('phone') as string) || '-',
+      createdAt: editingStaff ? editingStaff.createdAt : new Date().toISOString(),
+      createdBy: editingStaff ? editingStaff.createdBy : currentUser?.fullName || 'ADMIN',
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser?.fullName || 'ADMIN',
+    };
+
+    await FirestoreService.setDocument('staff', id, payload);
+    await FirestoreService.logAudit({
+      userId: currentUser?.id || 'usr-admin',
+      userName: currentUser?.fullName || 'Admin',
+      role: currentUser?.role || 'ADMIN',
+      action: editingStaff ? 'UPDATE' : 'CREATE',
+      module: 'STAFF',
+      recordId: id,
+      details: `${editingStaff ? 'Memperbarui' : 'Menambahkan'} data staf: ${payload.fullName} (${payload.divisi})`,
+    });
+
+    setIsStaffModalOpen(false);
+    setEditingStaff(null);
+  };
+
+  // --- CRUD STUDENTS ---
+  const handleSaveStudent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    const id = editingStudent ? editingStudent.id : `std-${Date.now()}`;
+    const payload: StudentRecord = {
+      id,
+      nisn: (formData.get('nisn') as string) || '-',
+      nama: formData.get('nama') as string,
+      kelas: formData.get('kelas') as string,
+      jenisKelamin: (formData.get('jenisKelamin') as 'L' | 'P') || 'L',
+      noHpOrangTua: (formData.get('noHpOrangTua') as string) || '-',
+      alamat: (formData.get('alamat') as string) || '',
+      isActive: true,
+      createdAt: editingStudent ? editingStudent.createdAt : new Date().toISOString(),
+      createdBy: editingStudent ? editingStudent.createdBy : currentUser?.fullName || 'ADMIN',
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser?.fullName || 'ADMIN',
+    };
+
+    await FirestoreService.setDocument('students', id, payload);
+    await FirestoreService.logAudit({
+      userId: currentUser?.id || 'usr-admin',
+      userName: currentUser?.fullName || 'Admin',
+      role: currentUser?.role || 'ADMIN',
+      action: editingStudent ? 'UPDATE' : 'CREATE',
+      module: 'STUDENTS' as any,
+      recordId: id,
+      details: `${editingStudent ? 'Memperbarui' : 'Menambahkan'} data siswa: ${payload.nama} (${payload.kelas})`,
+    });
+
+    setIsStudentModalOpen(false);
+    setEditingStudent(null);
+  };
+
+  // --- CRUD CATEGORIES ---
+  const handleSaveCategory = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    const id = editingCat ? editingCat.id : `cat-${Date.now()}`;
+    const payload: IncidentCategoryRecord = {
+      id,
+      code: (formData.get('code') as string) || 'CAT',
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+      severity: formData.get('severity') as any,
+      isActive: true,
+      createdAt: editingCat ? editingCat.createdAt : new Date().toISOString(),
+      createdBy: editingCat ? editingCat.createdBy : currentUser?.fullName || 'ADMIN',
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser?.fullName || 'ADMIN',
+    };
+
+    await FirestoreService.setDocument('incidentCategories', id, payload);
+    await FirestoreService.logAudit({
+      userId: currentUser?.id || 'usr-admin',
+      userName: currentUser?.fullName || 'Admin',
+      role: currentUser?.role || 'ADMIN',
+      action: editingCat ? 'UPDATE' : 'CREATE',
+      module: 'INCIDENTS',
+      recordId: id,
+      details: `${editingCat ? 'Memperbarui' : 'Menambahkan'} kategori insiden: ${payload.name} (${payload.severity})`,
+    });
+
+    setIsCatModalOpen(false);
+    setEditingCat(null);
+  };
+
   // --- DELETE HANDLER ---
   const handleConfirmDelete = async () => {
     if (!deleteConfirm) return;
@@ -220,6 +338,34 @@ export const MasterDataTabs: React.FC = () => {
           </Button>
         )}
 
+        {activeTab === 'staff' && (
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setEditingStaff(null);
+              setIsStaffModalOpen(true);
+            }}
+          >
+            + Tambah Staf
+          </Button>
+        )}
+
+        {activeTab === 'students' && (
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setEditingStudent(null);
+              setIsStudentModalOpen(true);
+            }}
+          >
+            + Tambah Siswa
+          </Button>
+        )}
+
         {activeTab === 'rooms' && (
           <Button
             variant="primary"
@@ -233,6 +379,20 @@ export const MasterDataTabs: React.FC = () => {
             + Tambah Ruangan / Pos
           </Button>
         )}
+
+        {activeTab === 'categories' && (
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setEditingCat(null);
+              setIsCatModalOpen(true);
+            }}
+          >
+            + Tambah Kategori
+          </Button>
+        )}
       </div>
 
       {/* Tabs Navigation */}
@@ -240,6 +400,7 @@ export const MasterDataTabs: React.FC = () => {
         {[
           { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
           { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: staffList.length },
+          { id: 'students', label: 'Data Siswa', icon: Users, count: students.length },
           { id: 'rooms', label: 'Ruangan & Pos Piket', icon: Building2, count: rooms.length },
           { id: 'categories', label: 'Kategori Kejadian', icon: Tag, count: categories.length },
           { id: 'audit', label: 'Audit Log Sistem', icon: History, count: auditLogs.length },
@@ -370,9 +531,110 @@ export const MasterDataTabs: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2 self-end sm:self-center">
                       <Badge variant="neutral" size="sm">{s.statusKepegawaian}</Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                        onClick={() => {
+                          setEditingStaff(s);
+                          setIsStaffModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                        onClick={() => setDeleteConfirm({ collection: 'staff', id: s.id, name: s.fullName })}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB: STUDENTS */}
+      {activeTab === 'students' && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {students
+                .filter(
+                  (st) =>
+                    st.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    st.nisn.includes(searchQuery) ||
+                    st.kelas.toLowerCase().includes(searchQuery.toLowerCase())
+                )
+                .map((st) => (
+                  <div
+                    key={st.id}
+                    className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                  >
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                        {st.nama.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>{st.nama}</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
+                            {st.kelas}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                          NISN: {st.nisn} • Gender: {st.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                        </div>
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
+                          📞 No HP Ortu: {st.noHpOrangTua || '-'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                        onClick={() => {
+                          setEditingStudent(st);
+                          setIsStudentModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                        onClick={() => setDeleteConfirm({ collection: 'students', id: st.id, name: st.nama })}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              {students.length === 0 && (
+                <div className="p-8 text-center text-slate-400 space-y-3">
+                  <p>Belum ada data siswa di database sekolah.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await StudentService.bootstrapIfEmpty();
+                      const list = await StudentService.getAllStudents();
+                      setStudents(list);
+                    }}
+                  >
+                    Muat Data Siswa Awal (Seed)
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -444,6 +706,28 @@ export const MasterDataTabs: React.FC = () => {
                 </div>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">{c.name}</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{c.description}</p>
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setEditingCat(c);
+                      setIsCatModalOpen(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                    onClick={() => setDeleteConfirm({ collection: 'incidentCategories', id: c.id, name: c.name })}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -653,6 +937,250 @@ export const MasterDataTabs: React.FC = () => {
             </Button>
             <Button type="submit" variant="primary" size="sm">
               Simpan Ruangan
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* STAFF MODAL */}
+      <Modal
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+        title={editingStaff ? 'Ubah Data Staf / Tenaga Kependidikan' : 'Tambah Tenaga Kependidikan'}
+      >
+        <form onSubmit={handleSaveStaff} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">NIP / No. Identitas</label>
+              <input
+                name="nip"
+                defaultValue={editingStaff?.nip !== '-' ? editingStaff?.nip : ''}
+                placeholder="NIP atau tanda (-)"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Lengkap & Gelar</label>
+              <input
+                required
+                name="fullName"
+                defaultValue={editingStaff?.fullName}
+                placeholder="Contoh: Rahmat Santoso, S.Kom."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Divisi Kerja</label>
+              <select
+                name="divisi"
+                defaultValue={editingStaff?.divisi || 'Tata Usaha'}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              >
+                <option value="Tata Usaha">Tata Usaha</option>
+                <option value="Keamanan/Satpam">Keamanan/Satpam</option>
+                <option value="Kebersihan">Kebersihan</option>
+                <option value="Sarpras">Sarpras</option>
+                <option value="Perpustakaan">Perpustakaan</option>
+                <option value="Laboratorium">Laboratorium</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Jabatan / Tugas</label>
+              <input
+                required
+                name="jabatan"
+                defaultValue={editingStaff?.jabatan || 'Staf Tata Usaha'}
+                placeholder="Contoh: Koordinator Keamanan"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status Kepegawaian</label>
+              <select
+                name="statusKepegawaian"
+                defaultValue={editingStaff?.statusKepegawaian || 'PTT'}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              >
+                <option value="PNS">PNS</option>
+                <option value="PPPK">PPPK</option>
+                <option value="PTT">PTT</option>
+                <option value="HONORER">Honorer</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">No. WhatsApp / HP</label>
+              <input
+                name="phone"
+                defaultValue={editingStaff?.phone !== '-' ? editingStaff?.phone : ''}
+                placeholder="0812..."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsStaffModalOpen(false)}>
+              Batal
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              Simpan Data Staf
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* STUDENT MODAL */}
+      <Modal
+        isOpen={isStudentModalOpen}
+        onClose={() => setIsStudentModalOpen(false)}
+        title={editingStudent ? 'Ubah Data Siswa' : 'Tambah Siswa Baru'}
+      >
+        <form onSubmit={handleSaveStudent} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">NISN Siswa</label>
+              <input
+                required
+                name="nisn"
+                defaultValue={editingStudent?.nisn}
+                placeholder="10 digit NISN"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Lengkap Siswa</label>
+              <input
+                required
+                name="nama"
+                defaultValue={editingStudent?.nama}
+                placeholder="Contoh: Muhammad Rizky Pratama"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Kelas / Rombel</label>
+              <input
+                required
+                name="kelas"
+                defaultValue={editingStudent?.kelas || 'X MIPA 1'}
+                placeholder="Contoh: X MIPA 1"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Jenis Kelamin</label>
+              <select
+                name="jenisKelamin"
+                defaultValue={editingStudent?.jenisKelamin || 'L'}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              >
+                <option value="L">Laki-laki (L)</option>
+                <option value="P">Perempuan (P)</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">No. HP Orang Tua / Wali</label>
+              <input
+                name="noHpOrangTua"
+                defaultValue={editingStudent?.noHpOrangTua !== '-' ? editingStudent?.noHpOrangTua : ''}
+                placeholder="0812..."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Alamat Rumah (Opsional)</label>
+            <input
+              name="alamat"
+              defaultValue={editingStudent?.alamat}
+              placeholder="Alamat domisili siswa..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsStudentModalOpen(false)}>
+              Batal
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              Simpan Data Siswa
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* CATEGORY MODAL */}
+      <Modal
+        isOpen={isCatModalOpen}
+        onClose={() => setIsCatModalOpen(false)}
+        title={editingCat ? 'Ubah Kategori Kejadian' : 'Tambah Kategori Kejadian'}
+      >
+        <form onSubmit={handleSaveCategory} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Kode Kategori</label>
+              <input
+                required
+                name="code"
+                defaultValue={editingCat?.code}
+                placeholder="Contoh: CAT-DISIPLIN"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Kategori</label>
+              <input
+                required
+                name="name"
+                defaultValue={editingCat?.name}
+                placeholder="Contoh: Pelanggaran Tata Tertib"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Tingkat Keparahan (Severity)</label>
+            <select
+              name="severity"
+              defaultValue={editingCat?.severity || 'SEDANG'}
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
+            >
+              <option value="RENDAH">RENDAH (Catatan Pembinaan Ringan)</option>
+              <option value="SEDANG">SEDANG (Perlu Penanganan Piket & Guru BK)</option>
+              <option value="TINGGI">TINGGI (Perlu Pemanggilan Orang Tua / Pimpinan)</option>
+              <option value="KRITIS">KRITIS (Bahaya Fisik / Darurat Sekolah)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Uraian / Deskripsi</label>
+            <textarea
+              required
+              rows={3}
+              name="description"
+              defaultValue={editingCat?.description}
+              placeholder="Deskripsi jenis insiden dan cakupan kategori..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsCatModalOpen(false)}>
+              Batal
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              Simpan Kategori
             </Button>
           </div>
         </form>

@@ -52,6 +52,10 @@ export const SettingsView: React.FC = () => {
   );
   const [startHour, setStartHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.start || '06:30');
   const [endHour, setEndHour] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.end || '15:30');
+  const [checkInStart, setCheckInStart] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkInStart || '06:00');
+  const [checkInEnd, setCheckInEnd] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkInEnd || '07:30');
+  const [checkOutStart, setCheckOutStart] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkOutStart || '14:30');
+  const [checkOutEnd, setCheckOutEnd] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkOutEnd || '17:00');
 
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -76,6 +80,10 @@ export const SettingsView: React.FC = () => {
         setAllowedRadiusMeters(data.allowedRadiusMeters);
         setStartHour(data.workHours?.start || '06:30');
         setEndHour(data.workHours?.end || '15:30');
+        setCheckInStart(data.workHours?.checkInStart || '06:00');
+        setCheckInEnd(data.workHours?.checkInEnd || '07:30');
+        setCheckOutStart(data.workHours?.checkOutStart || '14:30');
+        setCheckOutEnd(data.workHours?.checkOutEnd || '17:00');
       }
     });
 
@@ -112,6 +120,10 @@ export const SettingsView: React.FC = () => {
         workHours: {
           start: startHour,
           end: endHour,
+          checkInStart,
+          checkInEnd,
+          checkOutStart,
+          checkOutEnd,
         },
       };
 
@@ -429,32 +441,105 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Work hours */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Jam Masuk Shift Pagi (WIB)
-                  </label>
-                  <input
-                    type="time"
-                    disabled={!isAdmin}
-                    value={startHour}
-                    onChange={(e) => setStartHour(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                  />
+              {/* Work hours & Shift Windows */}
+              <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                  Konfigurasi Jam Shift & Batas Presensi Masuk / Pulang
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Jam Selesai Shift Sore (WIB)
-                  </label>
-                  <input
-                    type="time"
-                    disabled={!isAdmin}
-                    value={endHour}
-                    onChange={(e) => setEndHour(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                  />
+                {/* Shift Check-in Window */}
+                <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 space-y-2">
+                  <span className="text-[11px] font-bold text-blue-800 dark:text-blue-300 block">
+                    1. Rentang Jam Masuk Presensi (Awal s/d Batas Akhir)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Jam Awal Buka Presensi Masuk (WIB)
+                      </label>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={checkInStart}
+                        onChange={(e) => setCheckInStart(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Jam Akhir Batas Presensi Masuk (WIB)
+                      </label>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={checkInEnd}
+                        onChange={(e) => setCheckInEnd(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shift Check-out Window */}
+                <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+                  <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300 block">
+                    2. Rentang Jam Pulang Presensi (Awal s/d Batas Akhir)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Jam Awal Buka Presensi Pulang (WIB)
+                      </label>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={checkOutStart}
+                        onChange={(e) => setCheckOutStart(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Jam Akhir Batas Presensi Pulang (WIB)
+                      </label>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={checkOutEnd}
+                        onChange={(e) => setCheckOutEnd(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shift Operational Range */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Jam Mulai Tugas Shift (WIB)
+                    </label>
+                    <input
+                      type="time"
+                      disabled={!isAdmin}
+                      value={startHour}
+                      onChange={(e) => setStartHour(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Jam Selesai Tugas Shift (WIB)
+                    </label>
+                    <input
+                      type="time"
+                      disabled={!isAdmin}
+                      value={endHour}
+                      onChange={(e) => setEndHour(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 

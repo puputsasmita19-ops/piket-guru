@@ -3,7 +3,9 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
 import { StudentTardyRecord, TardyReason, DisciplineAction, TardyStatus } from '../../types/studentTardy.types';
+import { StudentRecord } from '../../types/master.types';
 import { StudentTardyService } from '../../services/firebase/studentTardyService';
+import { StudentService } from '../../services/firebase/studentService';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatTime } from '../../utils/dateUtils';
 import {
@@ -15,6 +17,8 @@ import {
   Trash2,
   Phone,
   ShieldAlert,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 
 interface StudentTardyFormModalProps {
@@ -50,8 +54,26 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
   const [catatanPetugas, setCatatanPetugas] = useState('');
 
+  const [studentDirectory, setStudentDirectory] = useState<StudentRecord[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    StudentService.bootstrapIfEmpty().then(() => {
+      StudentService.getAllStudents().then((data) => setStudentDirectory(data));
+    });
+  }, []);
+
+  const handleSelectStudentFromDirectory = (std: StudentRecord) => {
+    setNamaSiswa(std.nama);
+    setNisn(std.nisn);
+    if (CLASS_LIST.includes(std.kelas)) {
+      setKelas(std.kelas);
+    }
+    if (std.noHpOrangTua) {
+      setNoHpOrangTua(std.noHpOrangTua);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -140,18 +162,41 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
           {/* Row 1: Nama Siswa & Kelas */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-blue-500" />
-                <span>Nama Lengkap Siswa</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Nama Lengkap Siswa</span>
+                </label>
+                {studentDirectory.length > 0 && (
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    {studentDirectory.length} Siswa di Database
+                  </span>
+                )}
+              </div>
               <input
                 required
+                list="tardy-students-datalist"
                 value={namaSiswa}
-                onChange={(e) => setNamaSiswa(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNamaSiswa(val);
+                  const matched = studentDirectory.find((s) => s.nama.toLowerCase() === val.toLowerCase());
+                  if (matched) {
+                    handleSelectStudentFromDirectory(matched);
+                  }
+                }}
                 onBlur={handleNameBlur}
-                placeholder="Contoh: Dimas Aditya"
+                placeholder="Ketik nama atau pilih siswa..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
               />
+              <datalist id="tardy-students-datalist">
+                {studentDirectory.map((s) => (
+                  <option key={s.id} value={s.nama}>
+                    {s.kelas} • NISN: {s.nisn}
+                  </option>
+                ))}
+              </datalist>
             </div>
 
             <div className="space-y-1">

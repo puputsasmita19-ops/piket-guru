@@ -13,6 +13,7 @@ export interface StoredUserCredential {
   phone: string;
   pinSalt: string;
   pinHash: string;
+  permissions?: string[];
   failedAttempts: number;
   lockedUntil: number | null; // timestamp ms
   isActive: boolean;
@@ -203,6 +204,7 @@ class AuthService {
             phone: target.phone,
             pinSalt: salt,
             pinHash: hash,
+            permissions: target.permissions,
             failedAttempts: existingIndex >= 0 ? this.users[existingIndex].failedAttempts : 0,
             lockedUntil: existingIndex >= 0 ? this.users[existingIndex].lockedUntil : null,
             isActive: target.isActive !== false,
@@ -275,7 +277,7 @@ class AuthService {
       email: user.email,
       phone: user.phone,
       isActive: user.isActive,
-      permissions: ROLE_PERMISSIONS[user.role],
+      permissions: user.permissions && user.permissions.length > 0 ? user.permissions : ROLE_PERMISSIONS[user.role],
       loginAt: now,
     };
 

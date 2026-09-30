@@ -22,6 +22,38 @@
 
 # PIKET GURU CHANGELOG
 
+## v1.0.1 (Stable Patch & Bug Fix Release) — 2026-09-30
+
+### Fixed
+* **BUG-001 (Pusat Notifikasi & Bel Sekolah)**:
+  - Menambahkan fitur interaktif "Tandai Semua Dibaca" dan penandaan individual per butir notifikasi.
+  - Menambahkan tombol pratinjau "Uji Nada Bel Sekolah" langsung dari dropdown notifikasi.
+* **BUG-002 (Jadwal Multi-Petugas)**:
+  - Menambahkan tombol aksi langsung `+ Jadwal Multi-Petugas` pada bilah utama Jadwal Piket.
+  - Memungkinkan alokasi banyak guru sekaligus pada hari yang sama dengan antarmuka checklist guru terpadu dan bulk saving Firestore.
+* **BUG-003 (Responsivitas GPS Presensi)**:
+  - Mengoptimasi `LocationService.getCurrentPosition` dengan progressive fallback 2000ms dan cache koordinat terakhir akurat.
+  - Mengeliminasi jeda panjang saat memperbarui koordinat GPS presensi masuk.
+* **BUG-004 (Database Siswa Terintegrasi)**:
+  - Menampilkan tab `Data Siswa` secara penuh pada Master Data (NISN, Nama, Kelas, Gender, Kontak Ortu, Alamat, Status).
+  - Menyediakan modal Tambah & Edit Siswa serta fitur auto-fill instan pada Formulir Siswa Terlambat dan Izin Keluar Sekolah.
+* **BUG-005 (Pengaturan Izin & Hak Akses Spesifik Admin)**:
+  - Memperbaiki persistensi izin khusus akun pada `StoredUserCredential` di Firestore dan modul otentikasi.
+  - Menambahkan `PERMISSION_ALIAS_MAP` pada `checkUserPermission` sehingga konfigurasi hak akses granular oleh admin berfungsi 100%.
+* **BUG-006 (Fitur Edit & Hapus Tenaga Kependidikan)**:
+  - Menambahkan tombol Edit dan Hapus pada setiap baris data staf di tab Tenaga Kependidikan.
+  - Menyediakan modal edit data staf lengkap dengan pencatatan jejak audit.
+* **BUG-007 (Fitur Edit & Hapus Kategori Kejadian)**:
+  - Menambahkan tombol Edit dan Hapus pada kartu Kategori Kejadian.
+  - Menyediakan modal edit kategori insiden lengkap dengan tingkat keparahan (severity).
+* **BUG-008 (Rentang Jam Awal & Akhir Shift Masuk/Pulang)**:
+  - Menambahkan konfigurasi rentang presensi masuk (Jam Awal Buka & Jam Akhir Batas Masuk) dan rentang presensi pulang (Jam Awal & Jam Akhir) pada `SchoolSettings.workHours`.
+* **BUG-009 (Akses Menu Saat Offline)**:
+  - Memperbarui Service Worker (`sw.js`) dengan strategi runtime asset caching dan fallback SPA route offline.
+  - Menambahkan indikator visual status jaringan Realtime Online / Offline (Lokal) pada Header aplikasi.
+
+---
+
 ## v1.0.0 (Production Release) — 2026-09-30
 
 ### Added

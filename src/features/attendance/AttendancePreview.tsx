@@ -85,11 +85,11 @@ export const AttendancePreview: React.FC = () => {
   }, []);
 
   // 2. Fetch live GPS position on mount
-  const refreshGpsLocation = async () => {
+  const refreshGpsLocation = async (isManual = false) => {
     setIsLocating(true);
     setGpsError(null);
     try {
-      const position = await LocationService.getCurrentPosition();
+      const position = await LocationService.getCurrentPosition(isManual);
       setCoords(position);
 
       const geo = LocationService.evaluateGeofence(
@@ -101,6 +101,10 @@ export const AttendancePreview: React.FC = () => {
         settings.allowedRadiusMeters
       );
       setGeofence(geo);
+      if (isManual) {
+        setFeedbackSuccess('Koordinat GPS berhasil disinkronisasi ulang!');
+        setTimeout(() => setFeedbackSuccess(null), 3000);
+      }
     } catch (err: any) {
       console.warn('GPS detection error:', err);
       setGpsError(err.message || 'Gagal membaca koordinat GPS.');
@@ -313,7 +317,7 @@ export const AttendancePreview: React.FC = () => {
                       className="text-xs self-start sm:self-center"
                       isLoading={isLocating}
                       leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-                      onClick={refreshGpsLocation}
+                      onClick={() => refreshGpsLocation(true)}
                     >
                       Perbarui Koordinat GPS
                     </Button>

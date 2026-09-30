@@ -76,19 +76,41 @@ export class LocationService {
     };
   }
 
+  private static lastKnownPosition: LocationCoordinates | null = null;
+
   /**
-   * Retrieves current position using browser Geolocation API with high accuracy
+   * Retrieves current position using browser Geolocation API with fast responsive progressive fallback
    */
-  public static getCurrentPosition(): Promise<LocationCoordinates> {
+  public static getCurrentPosition(forceFresh: boolean = false): Promise<LocationCoordinates> {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
+        if (this.lastKnownPosition) {
+          resolve(this.lastKnownPosition);
+          return;
+        }
         reject(new Error('Perangkat atau browser Anda tidak mendukung Geolocation GPS.'));
         return;
       }
 
+      // If not forced and we have a recent position (< 15 seconds), return immediately
+      if (!forceFresh && this.lastKnownPosition && (Date.now() - this.lastKnownPosition.timestamp < 15000)) {
+        resolve(this.lastKnownPosition);
+        return;
+      }
+
+      let isResolved = false;
+
+      const finishSuccess = (coords: LocationCoordinates) => {
+        if (isResolved) return;
+        isResolved = true;
+        this.lastKnownPosition = coords;
+        resolve(coords);
+      };
+
+      // Fast high accuracy attempt (2000ms timeout)
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          resolve({
+          finishSuccess({
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             accuracy: pos.coords.accuracy,
@@ -97,25 +119,52 @@ export class LocationService {
             timestamp: pos.timestamp,
           });
         },
-        (error) => {
-          let msg = 'Gagal mendeteksi lokasi GPS.';
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              msg = 'Izin lokasi GPS ditolak oleh browser/perangkat. Mohon izinkan akses lokasi.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              msg = 'Informasi lokasi GPS tidak tersedia pada perangkat Anda saat ini.';
-              break;
-            case error.TIMEOUT:
-              msg = 'Waktu permintaan lokasi GPS habis (Timeout). Pastikan GPS aktif.';
-              break;
-          }
-          reject(new Error(msg));
+        () => {
+          // Fallback to standard/network accuracy with fast 2000ms timeout
+          navigator.geolocation.getCurrentPosition(
+            (fallbackPos) => {
+              finishSuccess({
+                latitude: fallbackPos.coords.latitude,
+                longitude: fallbackPos.coords.longitude,
+                accuracy: fallbackPos.coords.accuracy,
+                altitude: fallbackPos.coords.altitude,
+                speed: fallbackPos.coords.speed,
+                timestamp: fallbackPos.timestamp,
+              });
+            },
+            (finalError) => {
+              if (isResolved) return;
+              if (this.lastKnownPosition) {
+                // If we have an existing recent reading, use it
+                finishSuccess(this.lastKnownPosition);
+                return;
+              }
+              isResolved = true;
+              let msg = 'Gagal mendeteksi lokasi GPS.';
+              switch (finalError.code) {
+                case finalError.PERMISSION_DENIED:
+                  msg = 'Izin lokasi GPS ditolak oleh browser/perangkat. Mohon izinkan akses lokasi.';
+                  break;
+                case finalError.POSITION_UNAVAILABLE:
+                  msg = 'Informasi lokasi GPS tidak tersedia pada perangkat Anda saat ini.';
+                  break;
+                case finalError.TIMEOUT:
+                  msg = 'Waktu permintaan lokasi GPS habis (Timeout). Pastikan GPS aktif.';
+                  break;
+              }
+              reject(new Error(msg));
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 2000,
+              maximumAge: forceFresh ? 0 : 10000,
+            }
+          );
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
+          timeout: 2000,
+          maximumAge: forceFresh ? 0 : 5000,
         }
       );
     });

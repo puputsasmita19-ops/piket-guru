@@ -4,6 +4,7 @@ import {
   Moon,
   Monitor,
   Wifi,
+  WifiOff,
   ShieldCheck,
   User,
   ChevronDown,
@@ -14,6 +15,8 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  Volume2,
+  Check,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,11 +25,48 @@ import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 import { Badge } from '../common/Badge';
 import { ProfileModal } from '../../features/auth/ProfileModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
+import { SchoolBellService } from '../../services/audio/bellService';
 import { SchoolSettings } from '../../types';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
 }
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  description: string;
+  category: 'BELL' | 'SECURITY' | 'BACKUP';
+  time: string;
+  isRead: boolean;
+}
+
+const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'notif-1',
+    title: 'Bel Sekolah Digital Siaga',
+    description: 'Jadwal bel masuk, jeda istirahat, dan kepulangan aktif tersinkronisasi.',
+    category: 'BELL',
+    time: 'Hari ini',
+    isRead: false,
+  },
+  {
+    id: 'notif-2',
+    title: 'Geofence & Keamanan Siber',
+    description: 'Radius kehadiran guru terkunci; seluruh aksi tercatat pada audit trail.',
+    category: 'SECURITY',
+    time: 'Hari ini',
+    isRead: false,
+  },
+  {
+    id: 'notif-3',
+    title: 'Snapshot & Pemulihan Bencana',
+    description: 'Titik cadangan siap digunakan untuk 1-click disaster recovery.',
+    category: 'BACKUP',
+    time: 'Hari ini',
+    isRead: false,
+  },
+];
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const { theme, setTheme, isDark } = useTheme();
@@ -36,6 +76,55 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('piket_notifications_list');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {}
+    return DEFAULT_NOTIFICATIONS;
+  });
+
+  const hasUnreadNotif = notifications.some((n) => !n.isRead);
+
+  // Sync online/offline network status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const saveNotifications = (items: NotificationItem[]) => {
+    setNotifications(items);
+    try {
+      localStorage.setItem('piket_notifications_list', JSON.stringify(items));
+    } catch {}
+  };
+
+  const handleMarkNotificationsAsRead = () => {
+    const updated = notifications.map((n) => ({ ...n, isRead: true }));
+    saveNotifications(updated);
+  };
+
+  const handleToggleSingleNotifRead = (id: string) => {
+    const updated = notifications.map((n) =>
+      n.id === id ? { ...n, isRead: !n.isRead } : n
+    );
+    saveNotifications(updated);
+  };
+
+  const handleTestSchoolBell = () => {
+    SchoolBellService.playSchoolBell();
+  };
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
@@ -80,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                     {APP_NAME}
                   </span>
                   <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                    v1.0
+                    v1.0.1
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[160px] sm:max-w-xs">
@@ -102,11 +191,17 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
 
           {/* Right Side: Network Status, Notifications, Theme Switcher & User Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Status Online Realtime Indicator */}
+            {/* Status Online/Offline Indicator */}
             <div className="hidden sm:flex items-center">
-              <Badge variant="success" size="sm" icon={<Wifi className="w-3 h-3" />}>
-                Online
-              </Badge>
+              {isOnline ? (
+                <Badge variant="success" size="sm" icon={<Wifi className="w-3 h-3" />}>
+                  Online
+                </Badge>
+              ) : (
+                <Badge variant="warning" size="sm" icon={<WifiOff className="w-3 h-3" />}>
+                  Offline (Lokal)
+                </Badge>
+              )}
             </div>
 
             {/* Notification Bell Dropdown */}
@@ -117,7 +212,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 title="Pusat Notifikasi & Bel Sekolah"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-white dark:ring-slate-900" />
+                {hasUnreadNotif && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+                )}
               </button>
 
               {showNotifications && (
@@ -126,47 +223,82 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                     className="fixed inset-0 z-40"
                     onClick={() => setShowNotifications(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-3 z-50 animate-in fade-in duration-100 text-xs">
+                  <div className="absolute right-0 mt-2 w-72 sm:w-88 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-3 z-50 animate-in fade-in duration-100 text-xs">
                     <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
                       <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         <Bell className="w-3.5 h-3.5 text-blue-600" />
                         Pusat Siaran & Notifikasi
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full">
-                        Sistem Aktif
-                      </span>
+                      {hasUnreadNotif ? (
+                        <button
+                          onClick={handleMarkNotificationsAsRead}
+                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full"
+                          title="Tandai seluruh notifikasi sudah dibaca"
+                        >
+                          <CheckCircle2 className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                          Tandai Semua Dibaca
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          Semua Dibaca
+                        </span>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80">
-                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
-                          <Clock className="w-3 h-3 text-blue-500" />
-                          Bel Sekolah Digital Siaga
-                        </div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          Jadwal bel masuk, jeda istirahat, dan kepulangan aktif tersinkronisasi.
-                        </p>
+                    {/* Bell school quick test action */}
+                    <div className="mb-2 p-2 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900/50 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                        <span className="font-semibold text-[11px] text-slate-800 dark:text-slate-200">
+                          Uji Nada Bel Sekolah
+                        </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleTestSchoolBell}
+                        className="px-2 py-1 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Volume2 className="w-2.5 h-2.5" />
+                        Putar Bel
+                      </button>
+                    </div>
 
-                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80">
-                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
-                          <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                          Geofence & Keamanan Siber
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+                      {notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={`p-2.5 rounded-xl border transition-all ${
+                            notif.isRead
+                              ? 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/60 text-slate-500'
+                              : 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-900/60 shadow-xs'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
+                              {notif.category === 'BELL' && <Clock className="w-3 h-3 text-blue-500 shrink-0" />}
+                              {notif.category === 'SECURITY' && <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />}
+                              {notif.category === 'BACKUP' && <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />}
+                              <span>{notif.title}</span>
+                              {!notif.isRead && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSingleNotifRead(notif.id)}
+                              className="text-[10px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-0.5 cursor-pointer"
+                              title={notif.isRead ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}
+                            >
+                              <Check className="w-3 h-3" />
+                              {notif.isRead ? 'Batal' : 'Baca'}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                            {notif.description}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          Radius kehadiran guru terkunci; seluruh aksi tercatat pada audit trail.
-                        </p>
-                      </div>
-
-                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80">
-                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
-                          <Sparkles className="w-3 h-3 text-amber-500" />
-                          Snapshot & Pemulihan Bencana
-                        </div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          Titik cadangan siap digunakan untuk 1-click disaster recovery.
-                        </p>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </>

@@ -13,6 +13,10 @@ export const DEFAULT_SCHOOL_SETTINGS = {
   workHours: {
     start: '06:30',
     end: '15:30',
+    checkInStart: '06:00',
+    checkInEnd: '07:30',
+    checkOutStart: '14:30',
+    checkOutEnd: '17:00',
   },
 };
 

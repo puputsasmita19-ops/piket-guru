@@ -101,6 +101,10 @@ export interface SchoolSettings {
   workHours: {
     start: string;
     end: string;
+    checkInStart?: string;
+    checkInEnd?: string;
+    checkOutStart?: string;
+    checkOutEnd?: string;
   };
 }
 

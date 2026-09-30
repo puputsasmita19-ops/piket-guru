@@ -38,6 +38,16 @@ export interface RoomRecord extends BaseRecord {
   isActive: boolean;
 }
 
+export interface StudentRecord extends BaseRecord {
+  nisn: string;
+  nama: string;
+  kelas: string;
+  jenisKelamin: 'L' | 'P';
+  noHpOrangTua: string;
+  alamat?: string;
+  isActive: boolean;
+}
+
 export interface IncidentCategoryRecord extends BaseRecord {
   code: string;
   name: string;
