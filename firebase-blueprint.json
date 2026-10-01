@@ -17,6 +17,22 @@
       },
       "required": ["id", "title", "content", "authorName", "priority", "date", "createdAt"]
     },
+    "Student": {
+      "title": "Student",
+      "description": "Student master records and details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nisn": { "type": "string" },
+        "nama": { "type": "string" },
+        "kelas": { "type": "string" },
+        "jenisKelamin": { "type": "string", "enum": ["L", "P"] },
+        "noHpOrangTua": { "type": "string" },
+        "alamat": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "nisn", "nama", "kelas", "jenisKelamin"]
+    },
     "StudentTardiness": {
       "title": "StudentTardiness",
       "description": "Student tardiness logs and follow up actions",
@@ -210,6 +226,10 @@
     "/studentTardiness/{tardinessId}": {
       "schema": "StudentTardiness",
       "description": "Student tardiness logs and follow up actions"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Student master records and details"
     },
     "/substitutions/{substitutionId}": {
       "schema": "TeacherSubstitution",

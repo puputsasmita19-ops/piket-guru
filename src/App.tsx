@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
 import { Layout } from './components/layout/Layout';
+import { MobileExitConfirmModal } from './components/common/MobileExitConfirmModal';
 import { LoginPage } from './features/auth/LoginPage';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { CommandCenterPreview } from './features/command-center/CommandCenterPreview';
@@ -29,6 +30,41 @@ import { PERMISSIONS } from './config/permissions';
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const { activeTab, setActiveTab } = useNavigation();
+
+  useEffect(() => {
+    // Matikan popup context menu / copy paste saat user menekan lama (long press) di perangkat mobile
+    const handleContextMenu = (e: MouseEvent | TouchEvent) => {
+      const isMobile =
+        'ontouchstart' in window ||
+        (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+        window.innerWidth < 1024;
+      if (isMobile) {
+        e.preventDefault();
+      }
+    };
+
+    const handleCopy = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+      }
+      const isMobile =
+        'ontouchstart' in window ||
+        (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+        window.innerWidth < 1024;
+      if (isMobile) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('copy', handleCopy);
+
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('copy', handleCopy);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -136,7 +172,12 @@ const AppContent: React.FC = () => {
     }
   };
 
-  return <Layout>{renderActiveView()}</Layout>;
+  return (
+    <Layout>
+      {renderActiveView()}
+      <MobileExitConfirmModal />
+    </Layout>
+  );
 };
 
 export default function App() {

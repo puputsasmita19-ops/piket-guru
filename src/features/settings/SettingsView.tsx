@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
   MapPin,
@@ -14,6 +14,16 @@ import {
   Palette,
   FileText,
   History,
+  Image as ImageIcon,
+  Trash2,
+  Calendar,
+  Wand2,
+  Copy,
+  Clock,
+  Sliders,
+  ChevronRight,
+  Sun,
+  Layers,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -27,11 +37,13 @@ import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
 import { useAuth } from '../../contexts/AuthContext';
-import { SchoolSettings, UserProfile } from '../../types';
+import { SchoolSettings, UserProfile, DayOfWeek, DayShiftDetail } from '../../types';
 import { AuditLogRecord } from '../../types/master.types';
-import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
+import { DEFAULT_SCHOOL_SETTINGS, DEFAULT_DAILY_SCHEDULES } from '../../config/constants';
 
 type SettingsTab = 'school' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
+
+const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
 export const SettingsView: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -53,6 +65,7 @@ export const SettingsView: React.FC = () => {
   const [appCreator, setAppCreator] = useState(
     DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'
   );
+  const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(
@@ -64,6 +77,17 @@ export const SettingsView: React.FC = () => {
   const [checkInEnd, setCheckInEnd] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkInEnd || '07:30');
   const [checkOutStart, setCheckOutStart] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkOutStart || '14:30');
   const [checkOutEnd, setCheckOutEnd] = useState(DEFAULT_SCHOOL_SETTINGS.workHours?.checkOutEnd || '17:00');
+  const [activeDays, setActiveDays] = useState<DayOfWeek[]>(
+    DEFAULT_SCHOOL_SETTINGS.workHours?.activeDays || ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU']
+  );
+
+  // Per-day Shift & Attendance configuration state (CR-AUTOMATED-DAILY-SHIFT)
+  const [dailySchedules, setDailySchedules] = useState<Record<DayOfWeek, DayShiftDetail>>(
+    (DEFAULT_SCHOOL_SETTINGS.workHours?.dailySchedules as Record<DayOfWeek, DayShiftDetail>) || DEFAULT_DAILY_SCHEDULES
+  );
+  const [selectedDayConfig, setSelectedDayConfig] = useState<DayOfWeek>('SENIN');
+
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -86,6 +110,7 @@ export const SettingsView: React.FC = () => {
         if (data.appName) setAppName(data.appName);
         if (data.appSubtitle) setAppSubtitle(data.appSubtitle);
         if (data.appCreator) setAppCreator(data.appCreator);
+        if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
         setSchoolLat(data.schoolLat);
         setSchoolLng(data.schoolLng);
         setAllowedRadiusMeters(data.allowedRadiusMeters);
@@ -95,6 +120,25 @@ export const SettingsView: React.FC = () => {
         setCheckInEnd(data.workHours?.checkInEnd || '07:30');
         setCheckOutStart(data.workHours?.checkOutStart || '14:30');
         setCheckOutEnd(data.workHours?.checkOutEnd || '17:00');
+        if (data.workHours?.activeDays) setActiveDays(data.workHours.activeDays);
+
+        if (data.workHours?.dailySchedules) {
+          setDailySchedules(data.workHours.dailySchedules as Record<DayOfWeek, DayShiftDetail>);
+        } else if (data.workHours) {
+          const generated: Record<DayOfWeek, DayShiftDetail> = { ...DEFAULT_DAILY_SCHEDULES };
+          ALL_OPERATIONAL_DAYS.forEach((d) => {
+            generated[d] = {
+              start: data.workHours?.start || '06:30',
+              end: d === 'JUMAT' ? '11:45' : (data.workHours?.end || '15:30'),
+              checkInStart: data.workHours?.checkInStart || '06:00',
+              checkInEnd: data.workHours?.checkInEnd || '07:30',
+              checkOutStart: d === 'JUMAT' ? '11:30' : (data.workHours?.checkOutStart || '14:30'),
+              checkOutEnd: data.workHours?.checkOutEnd || '17:00',
+              isActive: data.workHours?.activeDays ? data.workHours.activeDays.includes(d) : d !== 'MINGGU',
+            };
+          });
+          setDailySchedules(generated);
+        }
       }
     });
 
@@ -114,6 +158,136 @@ export const SettingsView: React.FC = () => {
     };
   }, []);
 
+  // 1. Terapkan jam input utama ke seluruh hari operasional aktif
+  const handleApplyCurrentHoursToAllActiveDays = () => {
+    const updated: Record<DayOfWeek, DayShiftDetail> = { ...dailySchedules };
+    ALL_OPERATIONAL_DAYS.forEach((d) => {
+      const isDayActive = activeDays.includes(d);
+      updated[d] = {
+        start: startHour,
+        end: endHour,
+        checkInStart,
+        checkInEnd,
+        checkOutStart,
+        checkOutEnd,
+        isActive: isDayActive,
+      };
+    });
+    setDailySchedules(updated);
+    setSaveSuccessBanner('Jam shift & rentang presensi saat ini berhasil diterapkan otomatis ke seluruh hari!');
+    setTimeout(() => setSaveSuccessBanner(null), 4000);
+  };
+
+  // 2. Preset Otomatis Standar Sekolah Nasional (Jumat pulang awal)
+  const handleApplySchoolStandardPreset = () => {
+    const standardDays: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+    setActiveDays(standardDays);
+    const updated: Record<DayOfWeek, DayShiftDetail> = { ...DEFAULT_DAILY_SCHEDULES };
+    setDailySchedules(updated);
+    setStartHour(updated.SENIN.start);
+    setEndHour(updated.SENIN.end);
+    setCheckInStart(updated.SENIN.checkInStart);
+    setCheckInEnd(updated.SENIN.checkInEnd);
+    setCheckOutStart(updated.SENIN.checkOutStart);
+    setCheckOutEnd(updated.SENIN.checkOutEnd);
+    setSaveSuccessBanner('Preset Standar Sekolah berhasil diterapkan (Senin-Kamis normal, Jumat pulang awal, Sabtu fleksibel)!');
+    setTimeout(() => setSaveSuccessBanner(null), 4000);
+  };
+
+  // 3. Preset Otomatis 5 Hari (Full Day School: Senin - Jumat)
+  const handleApplyFullDayPreset = () => {
+    const fdsDays: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT'];
+    setActiveDays(fdsDays);
+    const updated: Record<DayOfWeek, DayShiftDetail> = { ...dailySchedules };
+    ALL_OPERATIONAL_DAYS.forEach((d) => {
+      const isFds = fdsDays.includes(d);
+      updated[d] = {
+        start: '06:30',
+        end: d === 'JUMAT' ? '15:00' : '16:00',
+        checkInStart: '06:00',
+        checkInEnd: '07:00',
+        checkOutStart: d === 'JUMAT' ? '14:30' : '15:30',
+        checkOutEnd: '17:30',
+        isActive: isFds,
+      };
+    });
+    setDailySchedules(updated);
+    setStartHour('06:30');
+    setEndHour('16:00');
+    setCheckInStart('06:00');
+    setCheckInEnd('07:00');
+    setCheckOutStart('15:30');
+    setCheckOutEnd('17:30');
+    setSaveSuccessBanner('Preset 5 Hari Kerja (Full Day School: Sen-Jum) berhasil diterapkan otomatis!');
+    setTimeout(() => setSaveSuccessBanner(null), 4000);
+  };
+
+  // Update specific day shift field
+  const handleUpdateDaySchedule = (day: DayOfWeek, field: keyof DayShiftDetail, value: any) => {
+    setDailySchedules((prev) => {
+      const current = prev[day] || {
+        start: startHour,
+        end: endHour,
+        checkInStart,
+        checkInEnd,
+        checkOutStart,
+        checkOutEnd,
+        isActive: activeDays.includes(day),
+      };
+      const updatedDay = { ...current, [field]: value };
+      
+      // if field is isActive, also synchronize activeDays list
+      if (field === 'isActive') {
+        if (value) {
+          if (!activeDays.includes(day)) setActiveDays([...activeDays, day]);
+        } else {
+          setActiveDays(activeDays.filter((d) => d !== day));
+        }
+      }
+      return {
+        ...prev,
+        [day]: updatedDay,
+      };
+    });
+  };
+
+  // Copy schedule from one day to all other active days
+  const handleCopyDayScheduleToAll = (sourceDay: DayOfWeek) => {
+    const src = dailySchedules[sourceDay];
+    if (!src) return;
+    const updated: Record<DayOfWeek, DayShiftDetail> = { ...dailySchedules };
+    ALL_OPERATIONAL_DAYS.forEach((d) => {
+      if (d !== sourceDay && activeDays.includes(d)) {
+        updated[d] = {
+          ...src,
+          isActive: true,
+        };
+      }
+    });
+    setDailySchedules(updated);
+    setSaveSuccessBanner(`Jadwal & jam presensi hari ${sourceDay} berhasil disalin ke seluruh hari aktif!`);
+    setTimeout(() => setSaveSuccessBanner(null), 4000);
+  };
+
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran file logo maksimal 2MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const res = event.target?.result as string;
+      if (res) {
+        setLogoUrl(res);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // --- SAVE SCHOOL PROFILE & GPS ---
   const handleSaveSchoolSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +302,7 @@ export const SettingsView: React.FC = () => {
         appName: appName.trim() || 'PIKET GURU',
         appSubtitle: appSubtitle.trim() || 'Jadwal & Buku Piket Digital Sekolah',
         appCreator: appCreator.trim(),
+        logoUrl: logoUrl.trim(),
         schoolLat,
         schoolLng,
         allowedRadiusMeters,
@@ -138,6 +313,8 @@ export const SettingsView: React.FC = () => {
           checkInEnd,
           checkOutStart,
           checkOutEnd,
+          activeDays,
+          dailySchedules,
         },
       };
 
@@ -155,10 +332,10 @@ export const SettingsView: React.FC = () => {
         role: currentUser.role,
         action: 'UPDATE',
         module: 'SETTINGS',
-        details: `Memperbarui konfigurasi sekolah, branding login & geofence (${allowedRadiusMeters}m)`,
+        details: `Memperbarui konfigurasi sekolah, logo, jadwal hari operasional (${activeDays.join(', ')}), branding login & geofence (${allowedRadiusMeters}m)`,
       });
 
-      setSaveSuccessBanner('Pengaturan profil sekolah, identitas login, & koordinat GPS berhasil disimpan!');
+      setSaveSuccessBanner('Pengaturan profil sekolah, logo, jam kerja/hari shift, & koordinat GPS berhasil disimpan!');
       setTimeout(() => setSaveSuccessBanner(null), 4000);
     } finally {
       setIsSavingSchool(false);
@@ -446,11 +623,99 @@ export const SettingsView: React.FC = () => {
                 />
               </div>
 
+              {/* Logo Management */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-blue-500" />
+                      <span>Logo Resmi Sekolah / Aplikasi</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Tampil pada halaman login, bilah atas (header), kop buku piket, dan laporan
+                    </p>
+                  </div>
+
+                  {logoUrl && isAdmin && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-rose-600 hover:text-rose-700 text-xs self-start sm:self-auto cursor-pointer"
+                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                      onClick={() => setLogoUrl('')}
+                    >
+                      Hapus / Reset Logo
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {/* Current Logo / Placeholder */}
+                  <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 p-1 flex items-center justify-center shrink-0 shadow-xs">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-contain rounded-xl" />
+                    ) : (
+                      <div className="text-center text-slate-400">
+                        <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
+                        <span className="text-[9px] block">Default</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload & URL input */}
+                  <div className="flex-1 w-full space-y-2">
+                    <input
+                      type="file"
+                      ref={logoFileInputRef}
+                      onChange={handleLogoFileUpload}
+                      accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp"
+                      className="hidden"
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!isAdmin}
+                        leftIcon={<Upload className="w-3.5 h-3.5 text-blue-500" />}
+                        onClick={() => logoFileInputRef.current?.click()}
+                        className="text-xs cursor-pointer"
+                      >
+                        Unggah Gambar Logo
+                      </Button>
+                      <span className="text-[10px] text-slate-400">Format: PNG, JPG, WebP, SVG (Maks. 2MB)</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <input
+                        type="url"
+                        disabled={!isAdmin}
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="Atau tempel URL gambar logo eksternal (https://...)"
+                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Live Preview Box */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-1.5 shadow-inner">
                 <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
                   Pratinjau Tampilan Header & Footer Login:
                 </div>
+                {logoUrl ? (
+                  <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center mx-auto shadow-md">
+                    <img src={logoUrl} alt="Logo" className="w-full h-full object-contain rounded-lg" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white mx-auto shadow-md">
+                    <ImageIcon className="w-5 h-5" />
+                  </div>
+                )}
                 <div className="text-lg font-black text-white tracking-tight">{appName || 'PIKET GURU'}</div>
                 <div className="text-xs text-blue-400 font-semibold">{appSubtitle || 'Jadwal & Buku Piket Digital Sekolah'}</div>
                 <div className="text-[11px] text-slate-400">{schoolName || 'Nama Sekolah'}</div>
@@ -533,105 +798,370 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Work hours & Shift Windows */}
+              {/* Work hours & Shift Windows with Automatic Per-Day Settings */}
               <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                  Konfigurasi Jam Shift & Batas Presensi Masuk / Pulang
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Konfigurasi Jam Shift & Batas Presensi Masuk / Pulang (WIB)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Atur jam tugas piket dan rentang presensi GPS secara seragam atau khusus per hari otomatis
+                    </p>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleApplyCurrentHoursToAllActiveDays}
+                        title="Salin dan terapkan jam input utama saat ini ke seluruh hari aktif"
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-[10px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Wand2 className="w-3 h-3 text-blue-600" />
+                        <span>Setel Otomatis ke Semua Hari</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplySchoolStandardPreset}
+                        title="Terapkan preset standar sekolah (Senin-Kamis normal, Jumat pulang awal, Sabtu fleksibel)"
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Sliders className="w-3 h-3 text-emerald-600" />
+                        <span>Preset Standar Nasional</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyFullDayPreset}
+                        title="Terapkan preset 5 hari kerja (Senin - Jumat Full Day)"
+                        className="px-2.5 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-[10px] font-bold text-purple-700 dark:text-purple-300 hover:bg-purple-100 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Layers className="w-3 h-3 text-purple-600" />
+                        <span>Preset 5 Hari (FDS)</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Shift Check-in Window */}
-                <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 space-y-2">
-                  <span className="text-[11px] font-bold text-blue-800 dark:text-blue-300 block">
-                    1. Rentang Jam Masuk Presensi (Awal s/d Batas Akhir)
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                        Jam Awal Buka Presensi Masuk (WIB)
-                      </label>
-                      <input
-                        type="time"
-                        disabled={!isAdmin}
-                        value={checkInStart}
-                        onChange={(e) => setCheckInStart(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                      />
+                {/* Hari Operasional Shift & Presensi Piket */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                        <span>Hari Operasional Shift & Presensi Piket</span>
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Tentukan hari pelaksanaan tugas piket guru (klik tombol hari untuk aktif/libur)
+                      </span>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                        Jam Akhir Batas Presensi Masuk (WIB)
-                      </label>
-                      <input
-                        type="time"
-                        disabled={!isAdmin}
-                        value={checkInEnd}
-                        onChange={(e) => setCheckInEnd(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                      />
-                    </div>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const senJum: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT'];
+                            setActiveDays(senJum);
+                            const updated = { ...dailySchedules };
+                            ALL_OPERATIONAL_DAYS.forEach((d) => {
+                              if (updated[d]) updated[d].isActive = senJum.includes(d);
+                            });
+                            setDailySchedules(updated);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          5 Hari (Sen-Jum)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const senSab: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+                            setActiveDays(senSab);
+                            const updated = { ...dailySchedules };
+                            ALL_OPERATIONAL_DAYS.forEach((d) => {
+                              if (updated[d]) updated[d].isActive = senSab.includes(d);
+                            });
+                            setDailySchedules(updated);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          6 Hari (Sen-Sab)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveDays(ALL_OPERATIONAL_DAYS);
+                            const updated = { ...dailySchedules };
+                            ALL_OPERATIONAL_DAYS.forEach((d) => {
+                              if (updated[d]) updated[d].isActive = true;
+                            });
+                            setDailySchedules(updated);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          Semua Hari
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-1">
+                    {ALL_OPERATIONAL_DAYS.map((day) => {
+                      const isSelected = activeDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          disabled={!isAdmin}
+                          onClick={() => {
+                            if (isSelected) {
+                              if (activeDays.length > 1) {
+                                const next = activeDays.filter((d) => d !== day);
+                                setActiveDays(next);
+                                handleUpdateDaySchedule(day, 'isActive', false);
+                              }
+                            } else {
+                              const next = [...activeDays, day];
+                              setActiveDays(next);
+                              handleUpdateDaySchedule(day, 'isActive', true);
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer disabled:cursor-not-allowed ${
+                            isSelected
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-500/30'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
+                          }`}
+                        >
+                          <span>{day}</span>
+                          <span className="text-[9px] font-normal opacity-90">
+                            {isSelected ? '✓ Aktif' : 'Libur'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Shift Check-out Window */}
-                <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
-                  <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300 block">
-                    2. Rentang Jam Pulang Presensi (Awal s/d Batas Akhir)
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                        Jam Awal Buka Presensi Pulang (WIB)
-                      </label>
-                      <input
-                        type="time"
-                        disabled={!isAdmin}
-                        value={checkOutStart}
-                        onChange={(e) => setCheckOutStart(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                      />
+                {/* Day-by-Day Automatic Schedule Configuration Panel */}
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                          Rincian Pengaturan Shift Disetiap Harinya
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Pilih hari di bawah untuk mengatur jam khusus hari tersebut (contoh: Jumat pulang jam 11:45)
+                        </p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                        Jam Akhir Batas Presensi Pulang (WIB)
-                      </label>
-                      <input
-                        type="time"
-                        disabled={!isAdmin}
-                        value={checkOutEnd}
-                        onChange={(e) => setCheckOutEnd(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                {/* Shift Operational Range */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Jam Mulai Tugas Shift (WIB)
-                    </label>
-                    <input
-                      type="time"
-                      disabled={!isAdmin}
-                      value={startHour}
-                      onChange={(e) => setStartHour(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                    />
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyDayScheduleToAll(selectedDayConfig)}
+                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin Jam {selectedDayConfig} ke Semua Hari Aktif</span>
+                      </button>
+                    )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Jam Selesai Tugas Shift (WIB)
-                    </label>
-                    <input
-                      type="time"
-                      disabled={!isAdmin}
-                      value={endHour}
-                      onChange={(e) => setEndHour(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                    />
+                  {/* Day Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {ALL_OPERATIONAL_DAYS.map((d) => {
+                      const isActive = activeDays.includes(d);
+                      const isCurrentTab = selectedDayConfig === d;
+                      const daySched = dailySchedules[d];
+
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setSelectedDayConfig(d)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isCurrentTab
+                              ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          <span>{d}</span>
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              isActive ? (isCurrentTab ? 'bg-white' : 'bg-emerald-500') : 'bg-slate-400'
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
                   </div>
+
+                  {/* Active Selected Day Configuration Form */}
+                  {(() => {
+                    const currentDayDetail = dailySchedules[selectedDayConfig] || {
+                      start: startHour,
+                      end: endHour,
+                      checkInStart,
+                      checkInEnd,
+                      checkOutStart,
+                      checkOutEnd,
+                      isActive: activeDays.includes(selectedDayConfig),
+                    };
+                    const isDayActive = activeDays.includes(selectedDayConfig);
+
+                    return (
+                      <div className="space-y-4 pt-1">
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              Status Hari {selectedDayConfig}:
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isDayActive
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}
+                            >
+                              {isDayActive ? 'Aktif Tugas Piket' : 'Libur Sekolah'}
+                            </span>
+                          </div>
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextState = !isDayActive;
+                                if (nextState) {
+                                  setActiveDays([...activeDays, selectedDayConfig]);
+                                } else {
+                                  if (activeDays.length > 1) {
+                                    setActiveDays(activeDays.filter((d) => d !== selectedDayConfig));
+                                  }
+                                }
+                                handleUpdateDaySchedule(selectedDayConfig, 'isActive', nextState);
+                              }}
+                              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                            >
+                              {isDayActive ? 'Jadikan Hari Libur' : 'Aktifkan Hari Ini'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Shift Times for Selected Day */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Jam Mulai Tugas Shift - {selectedDayConfig} (WIB)
+                            </label>
+                            <input
+                              type="time"
+                              disabled={!isAdmin}
+                              value={currentDayDetail.start}
+                              onChange={(e) =>
+                                handleUpdateDaySchedule(selectedDayConfig, 'start', e.target.value)
+                              }
+                              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Jam Selesai Tugas Shift - {selectedDayConfig} (WIB)
+                            </label>
+                            <input
+                              type="time"
+                              disabled={!isAdmin}
+                              value={currentDayDetail.end}
+                              onChange={(e) =>
+                                handleUpdateDaySchedule(selectedDayConfig, 'end', e.target.value)
+                              }
+                              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Check-in range for Selected Day */}
+                        <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 space-y-2">
+                          <span className="text-[11px] font-bold text-blue-800 dark:text-blue-300 block">
+                            Rentang Presensi Masuk Hari {selectedDayConfig} (Awal Buka s/d Batas Akhir)
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                Jam Awal Buka Presensi Masuk (WIB)
+                              </label>
+                              <input
+                                type="time"
+                                disabled={!isAdmin}
+                                value={currentDayDetail.checkInStart}
+                                onChange={(e) =>
+                                  handleUpdateDaySchedule(selectedDayConfig, 'checkInStart', e.target.value)
+                                }
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                Jam Akhir Batas Presensi Masuk (WIB)
+                              </label>
+                              <input
+                                type="time"
+                                disabled={!isAdmin}
+                                value={currentDayDetail.checkInEnd}
+                                onChange={(e) =>
+                                  handleUpdateDaySchedule(selectedDayConfig, 'checkInEnd', e.target.value)
+                                }
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Check-out range for Selected Day */}
+                        <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+                          <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300 block">
+                            Rentang Presensi Pulang Hari {selectedDayConfig} (Awal Buka s/d Batas Akhir)
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                Jam Awal Buka Presensi Pulang (WIB)
+                              </label>
+                              <input
+                                type="time"
+                                disabled={!isAdmin}
+                                value={currentDayDetail.checkOutStart}
+                                onChange={(e) =>
+                                  handleUpdateDaySchedule(selectedDayConfig, 'checkOutStart', e.target.value)
+                                }
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                Jam Akhir Batas Presensi Pulang (WIB)
+                              </label>
+                              <input
+                                type="time"
+                                disabled={!isAdmin}
+                                value={currentDayDetail.checkOutEnd}
+                                onChange={(e) =>
+                                  handleUpdateDaySchedule(selectedDayConfig, 'checkOutEnd', e.target.value)
+                                }
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

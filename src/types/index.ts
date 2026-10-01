@@ -18,7 +18,7 @@ export interface UserProfile {
   updatedAt?: string;
 }
 
-export type DayOfWeek = 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT' | 'SABTU';
+export type DayOfWeek = 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT' | 'SABTU' | 'MINGGU';
 
 export type ScheduleStatus = 'TERJADWAL' | 'BERJALAN' | 'SELESAI' | 'DIGANTIKAN' | 'DIBATALKAN';
 
@@ -90,6 +90,18 @@ export interface IncidentItem {
   status: IncidentStatus;
 }
 
+export interface DayShiftDetail {
+  isActive: boolean;
+  start: string;         // Jam Mulai Tugas Shift
+  end: string;           // Jam Selesai Tugas Shift
+  checkInStart: string;  // Jam Awal Buka Presensi Masuk
+  checkInEnd: string;    // Jam Akhir Batas Presensi Masuk
+  checkOutStart: string; // Jam Awal Buka Presensi Pulang
+  checkOutEnd: string;   // Jam Akhir Batas Presensi Pulang
+}
+
+export type DailyScheduleMap = Partial<Record<DayOfWeek, DayShiftDetail>>;
+
 export interface SchoolSettings {
   id?: string;
   schoolName: string;
@@ -98,6 +110,7 @@ export interface SchoolSettings {
   appName?: string;
   appSubtitle?: string;
   appCreator?: string;
+  logoUrl?: string;
   schoolLat: number;
   schoolLng: number;
   allowedRadiusMeters: number;
@@ -108,6 +121,8 @@ export interface SchoolSettings {
     checkInEnd?: string;
     checkOutStart?: string;
     checkOutEnd?: string;
+    activeDays?: DayOfWeek[];
+    dailySchedules?: DailyScheduleMap;
   };
 }
 

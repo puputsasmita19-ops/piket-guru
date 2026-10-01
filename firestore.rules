@@ -12,12 +12,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Teachers & Staff Master Data
+    // Teachers, Staff, & Students Master Data
     match /teachers/{teacherId} {
       allow read, write: if true;
     }
 
     match /staff/{staffId} {
+      allow read, write: if true;
+    }
+
+    match /students/{studentId} {
       allow read, write: if true;
     }
 

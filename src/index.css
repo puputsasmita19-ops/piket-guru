@@ -12,3 +12,20 @@
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* CHANGE REQUEST: Matikan fitur copy paste & callout ketika user menekan tombol lama */
+* {
+  -webkit-touch-callout: none !important; /* Disable iOS long-press callout menu (Copy, Share, Look Up) */
+  -webkit-user-select: none !important;   /* Disable mobile Safari / iOS text selection */
+  -khtml-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;           /* Disable text selection highlight */
+}
+
+/* Allow text input and textarea editing for normal typing without copy-paste callout */
+input, textarea {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}

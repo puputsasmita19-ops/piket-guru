@@ -76,6 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || APP_NAME);
+  const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -154,6 +155,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           if (config.appName) {
             setAppName(config.appName);
           }
+          if (config.logoUrl !== undefined) {
+            setLogoUrl(config.logoUrl);
+          }
         }
       }
     );
@@ -175,9 +179,15 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-bold text-lg">
-                P
-              </div>
+              {logoUrl ? (
+                <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 p-0.5 flex items-center justify-center shadow-md shadow-blue-500/20 border border-slate-200 dark:border-slate-700 shrink-0">
+                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain rounded-lg" />
+                </div>
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-bold text-lg shrink-0">
+                  P
+                </div>
+              )}
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-base sm:text-lg">

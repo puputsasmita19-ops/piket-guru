@@ -128,16 +128,28 @@ export const KioskPreview: React.FC = () => {
       <Card>
         <CardHeader
           title="Pratinjau Langsung Tampilan TV Lobi (Interactive Preview)"
-          subtitle="Tekan tombol 'Buka Mode TV Layar Penuh' untuk tampilan proyektor / monitor publik"
+          subtitle="Tekan tombol 'Buka Layar Penuh' di bilah atas atau sudut monitor untuk proyektor / TV"
+          action={
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Maximize className="w-3.5 h-3.5" />}
+              onClick={() => setIsKioskOpen(true)}
+              className="shadow-sm"
+            >
+              Buka Layar Penuh
+            </Button>
+          }
         />
         <CardContent className="p-6">
           <div
             onClick={() => setIsKioskOpen(true)}
-            className="relative w-full aspect-[16/9] max-h-[400px] rounded-3xl overflow-hidden bg-slate-950 border-4 border-slate-800 shadow-2xl p-6 flex flex-col justify-between cursor-pointer group"
+            className="relative w-full aspect-[16/9] max-h-[400px] rounded-3xl overflow-hidden bg-slate-950 border-4 border-slate-800 shadow-2xl p-6 flex flex-col justify-between cursor-pointer group hover:border-blue-600/50 transition-colors"
           >
-            <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-              <div className="px-5 py-2.5 rounded-2xl bg-blue-600 text-white font-bold text-xs shadow-xl flex items-center gap-2 transform group-hover:scale-105 transition-transform">
-                <Maximize className="w-4 h-4" /> Klik untuk Buka Mode TV Layar Penuh
+            {/* Ergonomic Fullscreen Launch Pill (Positioned in Corner, not blocking center) */}
+            <div className="absolute bottom-4 right-4 z-20">
+              <div className="px-3.5 py-1.5 rounded-xl bg-blue-600/95 hover:bg-blue-500 text-white font-bold text-xs shadow-xl backdrop-blur-md flex items-center gap-1.5 transition-transform group-hover:scale-105 border border-blue-400/40">
+                <Maximize className="w-3.5 h-3.5" /> Buka TV Layar Penuh
               </div>
             </div>
 

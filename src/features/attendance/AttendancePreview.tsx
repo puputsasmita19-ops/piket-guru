@@ -358,6 +358,44 @@ export const AttendancePreview: React.FC = () => {
                   )}
                 </div>
 
+                {/* Today's Shift & Window Indicator */}
+                {(() => {
+                  const todayShiftConfig = (settings.workHours?.dailySchedules as any)?.[todayName] || {
+                    start: settings.workHours?.start || '06:30',
+                    end: settings.workHours?.end || '15:30',
+                    checkInStart: settings.workHours?.checkInStart || '06:00',
+                    checkInEnd: settings.workHours?.checkInEnd || '07:30',
+                    checkOutStart: settings.workHours?.checkOutStart || '14:30',
+                    checkOutEnd: settings.workHours?.checkOutEnd || '17:00',
+                    isActive: true,
+                  };
+
+                  return (
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                        <div>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">
+                            Jadwal Shift Hari Ini ({todayName}):
+                          </span>
+                          <span className="text-slate-600 dark:text-slate-400 ml-1 font-semibold">
+                            {todayShiftConfig.start} - {todayShiftConfig.end} WIB
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
+                        <span>
+                          Masuk: <strong className="text-blue-600 dark:text-blue-400">{todayShiftConfig.checkInStart} - {todayShiftConfig.checkInEnd}</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Pulang: <strong className="text-indigo-600 dark:text-indigo-400">{todayShiftConfig.checkOutStart} - {todayShiftConfig.checkOutEnd}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Shift Selector */}
                 {todayUserSchedules.length > 0 ? (
                   <div className="space-y-1.5">
