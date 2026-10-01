@@ -56,7 +56,15 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setActiveTabState(tab);
     setSubView(null);
     if (typeof window !== 'undefined') {
-      window.location.hash = `#${tab}`;
+      try {
+        window.history.replaceState(
+          { ...window.history.state, tab },
+          document.title,
+          `#${tab}`
+        );
+      } catch {
+        window.location.hash = `#${tab}`;
+      }
     }
   };
 

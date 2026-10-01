@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
-import { LogOut, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { LogOut, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 /**
@@ -21,28 +21,29 @@ const isMobileDevice = (): boolean => {
 export const MobileExitConfirmModal: React.FC = () => {
   const { isAuthenticated, logout, currentUser } = useAuth();
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const isGuardActiveRef = useRef(false);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    // CR-USER: Fitur tombol kembali HANYA untuk versi mobile device, jangan diterapkan di versi desktop
-    if (!isMobileDevice()) {
+    if (!isAuthenticated || !isMobileDevice()) {
+      isGuardActiveRef.current = false;
       return;
     }
 
-    // Push initial history state to capture back button on mobile
-    try {
-      window.history.pushState({ appExitGuard: true }, document.title, window.location.href);
-    } catch {
-      // ignore
+    // Set up the history guard once when user is authenticated on mobile
+    if (!isGuardActiveRef.current) {
+      try {
+        window.history.pushState({ appExitGuard: true }, document.title, window.location.href);
+        isGuardActiveRef.current = true;
+      } catch {
+        // ignore
+      }
     }
 
     const handlePopState = () => {
-      // If user resized to desktop or not on mobile, ignore
-      if (!isMobileDevice()) return;
+      if (!isMobileDevice() || !isAuthenticated) return;
 
-      // User pressed back button on mobile device
-      // Prevent exiting by restoring the state
+      // User pressed the device back button on mobile
+      // Re-push guard state to stay on current screen
       try {
         window.history.pushState({ appExitGuard: true }, document.title, window.location.href);
       } catch {
@@ -66,10 +67,11 @@ export const MobileExitConfirmModal: React.FC = () => {
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
+    isGuardActiveRef.current = false;
     await logout();
   };
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !isMobileDevice()) return null;
 
   return (
     <Modal
@@ -121,3 +123,4 @@ export const MobileExitConfirmModal: React.FC = () => {
     </Modal>
   );
 };
+
