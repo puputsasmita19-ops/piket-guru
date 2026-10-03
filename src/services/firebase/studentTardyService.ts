@@ -4,10 +4,18 @@ import { UserProfile } from '../../types';
 
 export class StudentTardyService {
   /**
-   * Seed default tardy records if collection is empty
+   * Automatic demo student tardiness seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<StudentTardyRecord>('studentTardiness');
+    // No-op in operational mode: empty database remains clean for official student tardiness
+    return;
+  }
+
+  /**
+   * Explicit demo student tardiness seeder for development/testing environments
+   */
+  public static async seedDemoTardiness(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<StudentTardyRecord>('studentTardiness');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -30,6 +38,8 @@ export class StudentTardyService {
           catatanPetugas: 'Telah menyelesaikan literasi dan diberikan slip izin masuk kelas jam ke-2.',
           petugasPiketName: 'Drs. H. Ahmad Fauzi, M.Pd.',
           petugasPiketId: 'usr-admin-01',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -53,6 +63,8 @@ export class StudentTardyService {
           catatanPetugas: 'Terlambat ke-3 kali bulan ini, surat panggilan orang tua disiapkan oleh BK.',
           petugasPiketName: 'Drs. H. Ahmad Fauzi, M.Pd.',
           petugasPiketId: 'usr-admin-01',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -96,6 +108,8 @@ export class StudentTardyService {
     const payload: StudentTardyRecord = {
       ...data,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: now,
       createdBy: user.fullName,
       updatedAt: now,

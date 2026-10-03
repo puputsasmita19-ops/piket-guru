@@ -1,6 +1,8 @@
+import { BaseEntityMetadata } from './index';
+
 export type AnnouncementPriority = 'INFO' | 'PENTING' | 'DARURAT';
 
-export interface AnnouncementRecord {
+export interface AnnouncementRecord extends BaseEntityMetadata {
   id: string;
   title: string;
   content: string;

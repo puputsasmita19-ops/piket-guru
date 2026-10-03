@@ -120,7 +120,7 @@ export const SnapshotManagerCard: React.FC = () => {
       <Card>
         <CardHeader
           title="Snapshot Basis Data & Point-in-Time Disaster Recovery"
-          subtitle="Pembuatan titik pemulihan instan untuk melindungi seluruh 16 modul operasional dari kesalahan manusia atau kerusakan data"
+          subtitle="Pembuatan titik pemulihan instan untuk melindungi seluruh 17 modul operasional dari kesalahan manusia atau kerusakan data"
           action={
             isAdmin && (
               <Button
@@ -261,7 +261,7 @@ export const SnapshotManagerCard: React.FC = () => {
           </div>
 
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Snapshot akan mengunci seluruh record dari 16 koleksi saat ini ke dalam basis data cloud untuk kesiapan pemulihan darurat seketika.
+            Snapshot akan mengunci seluruh record dari 17 koleksi saat ini ke dalam basis data cloud untuk kesiapan pemulihan darurat seketika.
           </p>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">

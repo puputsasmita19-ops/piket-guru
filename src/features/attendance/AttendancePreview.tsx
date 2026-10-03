@@ -165,6 +165,8 @@ export const AttendancePreview: React.FC = () => {
       distance: geofence?.distanceMeters || 0,
       status: attStatus,
       photoUrl: capturedPhoto || undefined,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
     };
 
     setIsSubmitting(true);

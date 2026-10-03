@@ -1,3 +1,5 @@
+import { BaseEntityMetadata } from './index';
+
 export type AbsenceReason =
   | 'SAKIT'
   | 'DINAS_LUAR'
@@ -12,7 +14,7 @@ export type SubstitutionStatus =
   | 'SEDANG_BERLANGSUNG'
   | 'SELESAI_INVAL';
 
-export interface TeacherSubstitutionRecord {
+export interface TeacherSubstitutionRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   guruBerhalanganId: string;

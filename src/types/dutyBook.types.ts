@@ -1,4 +1,4 @@
-import { DutyBookStatus } from './index';
+import { DutyBookStatus, BaseEntityMetadata } from './index';
 
 export interface DutyBookSection {
   kondisiKeamanan: string;
@@ -11,7 +11,7 @@ export interface DutyBookSection {
   tindakLanjut?: string;
 }
 
-export interface DutyBookRecord extends DutyBookSection {
+export interface DutyBookRecord extends DutyBookSection, BaseEntityMetadata {
   id: string;
   scheduleId: string;
   tanggal: string; // YYYY-MM-DD

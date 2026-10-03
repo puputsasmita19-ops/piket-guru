@@ -1,6 +1,6 @@
-import { UserRole } from './index';
+import { UserRole, BaseEntityMetadata } from './index';
 
-export interface BaseRecord {
+export interface BaseRecord extends BaseEntityMetadata {
   id: string;
   createdAt: string;
   createdBy: string;
@@ -100,4 +100,5 @@ export interface AuditLogRecord {
   details: string;
   timestamp: string;
   ipAddress?: string;
+  metadata?: Record<string, any>;
 }

@@ -42,9 +42,15 @@ export interface CloudSnapshotRecord {
   collectionsSummary: Record<string, number>;
   createdBy: string;
   createdByName: string;
-  status: 'READY' | 'RESTORED' | 'ARCHIVED';
+  status: 'BUILDING' | 'READY' | 'FAILED' | 'RESTORED' | 'ARCHIVED';
   hashFingerprint: string;
+  digestAlgorithm?: string;
+  digestProvenance?: string;
+  isChunked?: boolean;
+  totalChunks?: number;
+  rawPayloadStr?: string;
   dataPayload?: any;
+  error?: string;
 }
 
 export interface SchoolBellScheduleItem {

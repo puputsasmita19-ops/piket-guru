@@ -59,10 +59,18 @@ export class ScheduleService {
   }
 
   /**
-   * Seed default schedules if empty
+   * Automatic demo schedule seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(teachers: TeacherRecord[], rooms: RoomRecord[]): Promise<void> {
-    const existing = await FirestoreService.getAll<ScheduleItem>('schedules');
+    // No-op in operational mode: empty database remains clean for official school schedules
+    return;
+  }
+
+  /**
+   * Explicit demo schedules seeder for development/testing environments
+   */
+  public static async seedDemoSchedules(teachers: TeacherRecord[], rooms: RoomRecord[]): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<ScheduleItem>('schedules');
     if (existing.length === 0 && teachers.length > 0 && rooms.length > 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -80,6 +88,8 @@ export class ScheduleService {
           ruangName: rooms[0]?.name || 'Pos Utama & Gerbang Depan',
           status: 'BERJALAN',
           keterangan: 'Piket Gerbang Pagi & Penerimaan Tamu',
+          dataSource: 'SEED',
+          isDemo: true,
         },
         {
           id: 'sch-002',
@@ -94,6 +104,8 @@ export class ScheduleService {
           ruangName: rooms[1]?.name || 'Gedung A (Lantai 1 - Kelas X)',
           status: 'BERJALAN',
           keterangan: 'Pengawasan KBM Kelas X & Koridor Depan',
+          dataSource: 'SEED',
+          isDemo: true,
         },
         {
           id: 'sch-003',
@@ -108,6 +120,8 @@ export class ScheduleService {
           ruangName: rooms[2]?.name || 'Gedung B (Lab & Perpustakaan)',
           status: 'BERJALAN',
           keterangan: 'Monitoring Lab Komputer dan Perpustakaan',
+          dataSource: 'SEED',
+          isDemo: true,
         },
         {
           id: 'sch-004',
@@ -121,6 +135,8 @@ export class ScheduleService {
           ruangId: rooms[1]?.id || 'room-02',
           ruangName: rooms[1]?.name || 'Gedung A (Lantai 1 - Kelas X)',
           status: 'TERJADWAL',
+          dataSource: 'SEED',
+          isDemo: true,
         },
         {
           id: 'sch-005',
@@ -134,6 +150,8 @@ export class ScheduleService {
           ruangId: rooms[0]?.id || 'room-01',
           ruangName: rooms[0]?.name || 'Pos Utama & Gerbang Depan',
           status: 'TERJADWAL',
+          dataSource: 'SEED',
+          isDemo: true,
         },
       ];
 

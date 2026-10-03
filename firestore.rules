@@ -2,112 +2,345 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // School Settings (Public read for active app configuration & Kiosk display)
+    // -------------------------------------------------------------
+    // SECURITY & IDENTITY CORE HELPERS
+    // -------------------------------------------------------------
+
+    // Helper: Validates that the request has a valid, authenticated Firebase token
+    function hasAuthToken() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Helper: Retrieves current user document from Firestore (Server-authoritative state)
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Helper: Checks if the user document exists in Firestore
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    // Helper: Validates that the account is legitimate, active, and session is not revoked
+    // Closes SEC-06 and satisfies TAHAP 2C session revocation & account lifecycle policy
+    function isValidActiveUser() {
+      return hasAuthToken() &&
+        userExists(request.auth.uid) &&
+        getUserData(request.auth.uid).isActive == true &&
+        // Activation Gate: User must not be pending activation
+        (!('requiresActivation' in getUserData(request.auth.uid)) || getUserData(request.auth.uid).requiresActivation != true) &&
+        // Session Revocation: Token auth_time must be strictly > sessionRevokedAtSeconds
+        (
+          !('sessionRevokedAtSeconds' in getUserData(request.auth.uid)) ||
+          request.auth.token.auth_time > getUserData(request.auth.uid).sessionRevokedAtSeconds
+        );
+    }
+
+    // Helper: Validates user ownership of a document
+    function isOwner(userId) {
+      return isValidActiveUser() && request.auth.uid == userId;
+    }
+
+    // Helper: Server-authoritative role determination (document role takes absolute precedence)
+    // Avoids stale custom claims overriding recent demotions or role changes
+    function getCurrentRole() {
+      return isValidActiveUser() ? getUserData(request.auth.uid).role : 'NONE';
+    }
+
+    function isAdmin() {
+      return isValidActiveUser() && getCurrentRole() == 'ADMIN';
+    }
+
+    function isKepalaSekolah() {
+      return isValidActiveUser() && getCurrentRole() == 'KEPALA_SEKOLAH';
+    }
+
+    function isStaff() {
+      return isValidActiveUser() &&
+        getCurrentRole() in ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'];
+    }
+
+    // Helper: Hard block on credential fields in user profiles
+    function hasNoCredentials(data) {
+      return !data.keys().hasAny(['pin', 'pinHash', 'pinSalt', 'scryptHash', 'hashedPin', 'password', 'token', 'secret', 'credential', 'authSecret', 'privateKey']);
+    }
+
+    // -------------------------------------------------------------
+    // 1. SETTINGS & CONFIGURATION
+    // -------------------------------------------------------------
     match /settings/{settingId} {
-      allow read, write: if true;
+      // Public kiosk and login branding only have access to public_config
+      // Sensitive internal settings (geofence, radius, admin config, school_config) require valid active user
+      allow read: if isValidActiveUser() || settingId == 'public_config';
+      allow write: if isAdmin();
     }
 
-    // Users collection (Petugas & Pengguna Piket)
+    // -------------------------------------------------------------
+    // 2. USERS COLLECTION (Petugas, Guru, Admin Profiles)
+    // -------------------------------------------------------------
     match /users/{userId} {
-      allow read, write: if true;
+      // Unauthenticated reads strictly forbidden
+      allow read: if isValidActiveUser();
+
+      // Creation only by Admin, without credential fields, ID matching
+      allow create: if isAdmin() &&
+        hasNoCredentials(request.resource.data) &&
+        request.resource.data.id == userId;
+
+      // Update:
+      // Case A: Admin update (with protection against demoting or deactivating the primary system admin and enforcing monotonic session markers)
+      // Case B: User self-update on safe profile fields only (cannot change role, permissions, isActive, nip, or revocation timestamp)
+      allow update: if (
+        isAdmin() &&
+        hasNoCredentials(request.resource.data) &&
+        // Primary admin protection against accidental self-lockout or role demotion
+        (
+          !(resource.data.role == 'ADMIN' && userId == 'usr-admin-01') ||
+          (request.resource.data.role == 'ADMIN' && request.resource.data.isActive == true)
+        ) &&
+        // Monotonic sessionRevokedAtSeconds enforcement:
+        // Marker cannot be deleted or replaced with an omitted value, and must be >= existing marker
+        (
+          !('sessionRevokedAtSeconds' in resource.data) ||
+          (
+            ('sessionRevokedAtSeconds' in request.resource.data) &&
+            request.resource.data.sessionRevokedAtSeconds is int &&
+            request.resource.data.sessionRevokedAtSeconds >= resource.data.sessionRevokedAtSeconds
+          )
+        )
+      ) || (
+        isOwner(userId) &&
+        hasNoCredentials(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'phone', 'email', 'avatarUrl', 'updatedAt'
+        ])
+      );
+
+      // Deletion: Admin only, strictly forbidding deletion of active system admin
+      allow delete: if isAdmin() &&
+        request.auth.uid != userId &&
+        resource.data.role != 'ADMIN';
     }
 
-    // Teachers, Staff, & Students Master Data
+    // -------------------------------------------------------------
+    // 3. PRIVATE CREDENTIAL STORE (user_credentials)
+    // -------------------------------------------------------------
+    // DENIED TO ALL CLIENT SDKs (INCLUDING ADMIN CLIENTS).
+    // Accessible strictly by backend Admin SDK.
+    match /user_credentials/{userId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------
+    // 4. DUTY BOOKS (Jurnal Buku Piket Digital)
+    // Granular ownership, locked state enforcement, state machine, and verifier roles
+    // -------------------------------------------------------------
+    match /dutyBooks/{dutyBookId} {
+      allow read: if isValidActiveUser();
+
+      // Create: Staff assigned to the duty book as petugas; initial status must be DRAFT
+      allow create: if isStaff() &&
+        request.resource.data.petugasId == request.auth.uid &&
+        request.resource.data.status == 'DRAFT';
+
+      // Update:
+      // State transitions:
+      // - DRAFT -> DIAJUKAN (by assigned petugas)
+      // - DIAJUKAN -> DIVERIFIKASI (by Kepala Sekolah or Admin)
+      // - DIVERIFIKASI -> DISETUJUI / DIKUNCI (by Kepala Sekolah or Admin)
+      // - Locked (DISETUJUI / DIKUNCI) -> DRAFT unlock (by Admin only)
+      allow update: if (
+        // Admin actions: can perform verification, approval, or unlock
+        isAdmin()
+      ) || (
+        // Verifier actions (Kepala Sekolah):
+        // Cannot unlock if currently locked (DISETUJUI or DIKUNCI)
+        // Cannot alter ownership (petugasId) or basic log contents
+        isKepalaSekolah() &&
+        !resource.data.status.matches('DISETUJUI|DIKUNCI') &&
+        request.resource.data.petugasId == resource.data.petugasId &&
+        (
+          (resource.data.status == 'DIAJUKAN' && request.resource.data.status in ['DIVERIFIKASI', 'DISETUJUI', 'DIKUNCI']) ||
+          (resource.data.status == 'DIVERIFIKASI' && request.resource.data.status in ['DISETUJUI', 'DIKUNCI'])
+        ) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'catatanVerifikasi', 'verifiedAt', 'verifiedBy', 'updatedAt'
+        ])
+      ) || (
+        // Owner actions (Assigned staff)
+        isOwner(resource.data.petugasId) &&
+        request.resource.data.petugasId == resource.data.petugasId &&
+        // Cannot modify if currently verified or locked
+        !resource.data.status.matches('DIVERIFIKASI|DISETUJUI|DIKUNCI') &&
+        // Owner cannot self-verify or self-approve
+        request.resource.data.status in ['DRAFT', 'DIAJUKAN'] &&
+        // Allowlist of editable fields
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'jamMulai', 'jamSelesai', 'kondisiKeamanan', 'kondisiKebersihan',
+          'kondisiKelas', 'kondisiFasilitas', 'kondisiSiswa', 'catatanPiket',
+          'status', 'updatedAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 5. INCIDENTS (Laporan Kejadian Khusus)
+    // Reporter ownership and administrative resolution
+    // -------------------------------------------------------------
+    match /incidents/{incidentId} {
+      allow read: if isValidActiveUser();
+
+      allow create: if isStaff() &&
+        request.resource.data.pelaporId == request.auth.uid &&
+        request.resource.data.status == 'DILAPORKAN';
+
+      // Update:
+      // Reporter can edit report details (cannot reassign pelaporId or self-resolve to SELESAI)
+      // Admin or Kepala Sekolah can escalate, change status, or resolve
+      allow update: if (
+        isAdmin() || isKepalaSekolah()
+      ) || (
+        isOwner(resource.data.pelaporId) &&
+        request.resource.data.pelaporId == resource.data.pelaporId &&
+        resource.data.status != 'SELESAI' &&
+        request.resource.data.status != 'SELESAI' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'uraian', 'tindakanAwal', 'lokasi', 'kategori', 'waktu', 'updatedAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 6. ATTENDANCE RECORDS (Presensi GPS & Swafoto Petugas)
+    // Self-presence creation only; modification/deletion restricted to Admin
+    // -------------------------------------------------------------
+    match /attendance/{attendanceId} {
+      allow read: if isValidActiveUser();
+      allow create: if isStaff() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 7. OPERATIONAL MASTER DATA (Teachers, Staff, Students, Rooms, Categories)
+    // -------------------------------------------------------------
     match /teachers/{teacherId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
     }
 
     match /staff/{staffId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
     }
 
     match /students/{studentId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
     }
 
-    // Rooms & Incident Categories
     match /rooms/{roomId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
     }
 
     match /incidentCategories/{catId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
     }
 
-    // Duty Schedules (Jadwal Piket Harian & Mingguan)
+    // -------------------------------------------------------------
+    // 8. SCHEDULES & ANNOUNCEMENTS (Public Kiosk Exception Documented)
+    // -------------------------------------------------------------
+    // Public read allowed for school signage displays
     match /schedules/{scheduleId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Attendance Records (Presensi GPS & Swafoto)
-    match /attendance/{attendanceId} {
-      allow read, write: if true;
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Duty Books (Jurnal Buku Piket Digital)
-    match /dutyBooks/{dutyBookId} {
-      allow read, write: if true;
+    // -------------------------------------------------------------
+    // 9. STUDENT PERMITS, TARDINESS, SUBSTITUTIONS, VISITORS
+    // -------------------------------------------------------------
+    match /studentTardiness/{tardinessId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
-    // Incidents & Incident Photos (Laporan Kejadian)
-    match /incidents/{incidentId} {
-      allow read, write: if true;
+    match /substitutions/{substitutionId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /studentPermits/{permitId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /visitors/{visitorId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     match /documents/{docId} {
-      allow read, write: if true;
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
-    // Announcements & Running Ticker
-    match /announcements/{announcementId} {
-      allow read, write: if true;
-    }
-
-    // Student Tardiness (Siswa Terlambat)
-    match /studentTardiness/{tardinessId} {
-      allow read, write: if true;
-    }
-
-    // Teacher Substitutions (Guru Inval / Pengganti)
-    match /substitutions/{substitutionId} {
-      allow read, write: if true;
-    }
-
-    // Student Permits (Izin Meninggalkan Sekolah)
-    match /studentPermits/{permitId} {
-      allow read, write: if true;
-    }
-
-    // Visitors (Buku Tamu Digital)
-    match /visitors/{visitorId} {
-      allow read, write: if true;
-    }
-
-    // Audit logs (IMMUTABLE FORENSIC AUDIT TRAIL - NO UPDATES OR DELETES EVER ALLOWED)
+    // -------------------------------------------------------------
+    // 10. FORENSIC AUDIT TRAIL (auditLogs)
+    // Append-only provenance; strictly immutable against update & delete
+    // -------------------------------------------------------------
     match /auditLogs/{logId} {
-      allow read, create: if true;
+      allow read: if isStaff();
+      allow create: if isValidActiveUser() && (
+        !request.resource.data.keys().hasAny(['userId']) ||
+        request.resource.data.userId == request.auth.uid
+      );
       allow update, delete: if false;
     }
 
-    // Backups
+    // -------------------------------------------------------------
+    // 11. BACKUPS, EMERGENCIES, & SNAPSHOTS
+    // -------------------------------------------------------------
     match /backups/{backupId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Emergencies & Broadcasts (Pusat Siaga Darurat)
+    match /database_snapshots/{snapshotId} {
+      allow read, write: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /database_snapshots_chunks/{chunkId} {
+      allow read, write: if isAdmin();
+    }
+
     match /emergencies/{emergencyId} {
-      allow read, write: if true;
+      allow read: if true; // Public safety broadcast exception
+      allow write: if isStaff();
     }
 
     match /emergency_history/{historyId} {
-      allow read, write: if true;
-    }
-
-    // Database Snapshots & Disaster Recovery
-    match /database_snapshots/{snapshotId} {
-      allow read, write: if true;
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isAdmin();
     }
   }
 }
-
-

@@ -110,7 +110,7 @@ export const UserManagementView: React.FC = () => {
     role: UserRole;
     email: string;
     phone: string;
-    pin?: string;
+    initialPin?: string;
     permissions: string[];
     isActive: boolean;
   }) => {

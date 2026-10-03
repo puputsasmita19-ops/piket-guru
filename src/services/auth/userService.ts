@@ -1,40 +1,38 @@
 import { FirestoreService } from '../firebase/firestoreService';
 import { UserProfile, UserRole } from '../../types';
-import { SEED_USERS } from './authService';
-import { hashPinWithSalt, generateSalt } from '../../utils/cryptoUtils';
+import { authService } from './authService';
 
 export class UserService {
   /**
-   * Bootstrap seed users into Firestore if collection is empty
+   * Bootstrap system administrator account if the users collection is completely empty.
+   * Credential is NOT stored in users document.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const users = await FirestoreService.getAll<UserProfile>('users');
-    if (users.length === 0) {
-      for (const u of SEED_USERS) {
-        const pinSalt = u.pinSalt || generateSalt();
-        const pinHash = u.pinHash || (await hashPinWithSalt('123456', pinSalt));
-
-        const userProfile: UserProfile = {
-          id: u.userId,
-          nip: u.nip,
-          fullName: u.fullName,
-          role: u.role,
-          email: u.email,
-          phone: u.phone,
-          pinSalt,
-          pinHash,
-          isActive: u.isActive,
-          permissions: ['*'],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await FirestoreService.setDocument('users', userProfile.id, userProfile);
-      }
+    const allUsers = await FirestoreService.getAllRaw<UserProfile>('users');
+    if (allUsers.length === 0) {
+      const bootstrapAdmin: UserProfile = {
+        id: 'usr-admin-01',
+        nip: '198503152010011002',
+        fullName: 'Administrator Sistem',
+        role: 'ADMIN',
+        email: 'admin@sekolah.sch.id',
+        phone: '081234567890',
+        isActive: true,
+        permissions: ['*'],
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await FirestoreService.setDocument('users', bootstrapAdmin.id, bootstrapAdmin);
     }
   }
 
   /**
-   * Create a new user profile with salted SHA-256 PIN hash
+   * Create a new user profile.
+   * Eliminates shared default PINs (e.g. 123456).
+   * If initialPin is provided, sets credential via authenticated backend API.
+   * If no initial PIN or backend setup fails, user is explicitly created with requiresActivation: true.
    */
   public static async createUser(
     userData: {
@@ -43,33 +41,45 @@ export class UserService {
       role: UserRole;
       email: string;
       phone: string;
-      pin?: string;
+      initialPin?: string;
       permissions: string[];
       isActive: boolean;
     },
     adminUser: UserProfile
   ): Promise<UserProfile> {
     const id = `usr-${userData.role.toLowerCase()}-${Date.now().toString(36)}`;
-    const rawPin = userData.pin || '123456';
-    const pinSalt = generateSalt();
-    const pinHash = await hashPinWithSalt(rawPin, pinSalt);
+    const hasInitialPin = !!userData.initialPin && /^\d{6}$/.test(userData.initialPin.trim());
 
     const newUser: UserProfile = {
       id,
-      nip: userData.nip,
-      fullName: userData.fullName,
+      nip: userData.nip.trim(),
+      fullName: userData.fullName.trim(),
       role: userData.role,
-      email: userData.email,
-      phone: userData.phone,
-      pinSalt,
-      pinHash,
-      isActive: userData.isActive,
-      permissions: userData.permissions,
+      email: (userData.email || '').trim(),
+      phone: (userData.phone || '').trim(),
+      isActive: userData.isActive !== false,
+      permissions: userData.permissions || [],
+      requiresActivation: !hasInitialPin,
+      sessionRevokedAtSeconds: Math.floor(Date.now() / 1000),
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
+    // Save profile to users collection (NO CREDENTIALS EVER)
     await FirestoreService.setDocument('users', id, newUser);
+
+    // Save initial credential to private store via authenticated backend API
+    if (hasInitialPin) {
+      const res = await authService.resetUserPin(id, userData.initialPin!.trim());
+      if (!res.success) {
+        // Fallback: If credential setup failed, mark user as requiring activation
+        console.warn(`[USER_SERVICE] Initial PIN setup failed for ${id}: ${res.error}. Marked for activation.`);
+        newUser.requiresActivation = true;
+        await FirestoreService.setDocument('users', id, { ...newUser, requiresActivation: true });
+      }
+    }
 
     await FirestoreService.logAudit({
       userId: adminUser.id,
@@ -78,14 +88,19 @@ export class UserService {
       action: 'CREATE',
       module: 'USERS',
       recordId: id,
-      details: `Menambahkan pengguna baru: ${newUser.fullName} (${newUser.nip}) sebagai ${newUser.role}`,
+      details: `Menambahkan pengguna baru: ${newUser.fullName} (${newUser.nip}) sebagai ${newUser.role}${
+        newUser.requiresActivation ? ' [Perlu Aktivasi PIN]' : ''
+      }`,
     });
 
     return newUser;
   }
 
   /**
-   * Update existing user profile
+   * Update existing user profile using strict field allowlist.
+   * Enforces session revocation on role changes or deactivation.
+   * Credentials (PIN/hash/salt) are completely stripped and excluded.
+   * (Closes SEC-05, R4-06)
    */
   public static async updateUser(
     userId: string,
@@ -95,13 +110,43 @@ export class UserService {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
     if (!existing) return;
 
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const roleChanged = updates.role && updates.role !== existing.role;
+    const statusChanged = updates.isActive !== undefined && updates.isActive !== existing.isActive;
+
+    let effectiveRevocation = existing.sessionRevokedAtSeconds || 0;
+    if (roleChanged || statusChanged) {
+      effectiveRevocation = Math.max(effectiveRevocation, nowSeconds);
+    }
+
+    // Strict allowlist: only non-sensitive profile metadata
     const payload: UserProfile = {
-      ...existing,
-      ...updates,
+      id: existing.id,
+      nip: updates.nip ? updates.nip.trim() : existing.nip,
+      fullName: updates.fullName ? updates.fullName.trim() : existing.fullName,
+      role: updates.role || existing.role,
+      email: updates.email !== undefined ? updates.email.trim() : existing.email,
+      phone: updates.phone !== undefined ? updates.phone.trim() : existing.phone,
+      avatarUrl: updates.avatarUrl !== undefined ? updates.avatarUrl : existing.avatarUrl,
+      isActive: updates.isActive !== undefined ? updates.isActive : existing.isActive,
+      permissions: updates.permissions || existing.permissions,
+      requiresActivation: updates.requiresActivation !== undefined ? updates.requiresActivation : existing.requiresActivation,
+      sessionRevokedAtSeconds: effectiveRevocation,
+      dataSource: existing.dataSource || 'PRODUCTION',
+      isDemo: existing.isDemo || false,
+      createdAt: existing.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await FirestoreService.setDocument('users', userId, payload);
+    // Guaranteed removal of any legacy residual credential fields
+    delete (payload as any).pin;
+    delete (payload as any).pinHash;
+    delete (payload as any).pinSalt;
+    delete (payload as any).scryptHash;
+    delete (payload as any).password;
+    delete (payload as any).token;
+
+    await FirestoreService.setDocument('users', userId, payload, { purgeLegacyCredentials: true });
 
     await FirestoreService.logAudit({
       userId: adminUser.id,
@@ -110,32 +155,26 @@ export class UserService {
       action: 'UPDATE',
       module: 'USERS',
       recordId: userId,
-      details: `Memperbarui data pengguna: ${payload.fullName} (${payload.nip})`,
+      details: `Memperbarui data profil pengguna: ${payload.fullName} (${payload.nip})${
+        roleChanged ? ` [Perubahan Role: ${existing.role} -> ${payload.role}]` : ''
+      }`,
     });
   }
 
   /**
-   * Reset user's 6-digit security PIN with salted SHA-256 hash
+   * Reset user's 6-digit security PIN via authenticated backend service.
+   * Security state (revocation marker, hash writing) is solely managed by backend.
+   * Never overwrites backend security markers with stale frontend profiles.
    */
   public static async resetPin(
     userId: string,
     newPin: string,
     adminUser: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getById<UserProfile>('users', userId);
-    if (!existing) return;
-
-    const pinSalt = generateSalt();
-    const pinHash = await hashPinWithSalt(newPin, pinSalt);
-
-    const payload: UserProfile = {
-      ...existing,
-      pinSalt,
-      pinHash,
-      updatedAt: new Date().toISOString(),
-    };
-
-    await FirestoreService.setDocument('users', userId, payload);
+    const res = await authService.resetUserPin(userId, newPin);
+    if (!res.success) {
+      throw new Error(res.error || 'Gagal mereset PIN melalui server.');
+    }
 
     await FirestoreService.logAudit({
       userId: adminUser.id,
@@ -144,44 +183,56 @@ export class UserService {
       action: 'UPDATE',
       module: 'USERS',
       recordId: userId,
-      details: `Melakukan Reset PIN Keamanan untuk pengguna: ${existing.fullName} (${existing.nip})`,
+      details: `Melakukan Reset PIN Keamanan untuk pengguna ID: ${userId}`,
     });
   }
 
   /**
-   * Toggle active/inactive status
+   * Toggle active/inactive status with monotonic session revocation
+   * Reactivating an account requires activation so old tokens cannot be revived.
    */
   public static async toggleActiveStatus(
     userId: string,
-    isActive: boolean,
+    newStatus: boolean,
     adminUser: UserProfile
   ): Promise<void> {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
     if (!existing) return;
 
-    const payload: UserProfile = {
-      ...existing,
-      isActive,
-      updatedAt: new Date().toISOString(),
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const existingRevoked = existing.sessionRevokedAtSeconds || 0;
+    const effectiveRevocation = Math.max(existingRevoked, nowSeconds);
+
+    const updates: Partial<UserProfile> = {
+      isActive: newStatus,
+      sessionRevokedAtSeconds: effectiveRevocation,
     };
 
-    await FirestoreService.setDocument('users', userId, payload);
+    if (newStatus) {
+      // Reactivation requires activation so previous tokens are completely invalid
+      updates.requiresActivation = true;
+    }
+
+    await this.updateUser(userId, updates, adminUser);
 
     await FirestoreService.logAudit({
       userId: adminUser.id,
       userName: adminUser.fullName,
       role: adminUser.role,
-      action: 'STATUS_CHANGE',
+      action: 'UPDATE',
       module: 'USERS',
       recordId: userId,
-      details: `Mengubah status akun ${existing.fullName} menjadi ${isActive ? 'AKTIF' : 'NONAKTIF'}`,
+      details: `Mengubah status akun ${existing.fullName} menjadi ${newStatus ? 'AKTIF (Perlu Aktivasi)' : 'NONAKTIF'}`,
     });
   }
 
   /**
-   * Delete user
+   * Delete user and advance revocation timestamp
    */
-  public static async deleteUser(userId: string, adminUser: UserProfile): Promise<void> {
+  public static async deleteUser(
+    userId: string,
+    adminUser: UserProfile
+  ): Promise<void> {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
     if (!existing) return;
 
@@ -198,4 +249,3 @@ export class UserService {
     });
   }
 }
-

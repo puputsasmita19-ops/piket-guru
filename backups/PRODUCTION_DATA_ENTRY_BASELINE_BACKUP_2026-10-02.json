@@ -1,0 +1,724 @@
+{
+  "version": "1.0.1",
+  "app": "PIKET_GURU_DIGITAL",
+  "timestamp": "2026-10-02T06:59:40.080Z",
+  "createdBy": {
+    "id": "usr-admin-01",
+    "fullName": "Administrator Sistem",
+    "nip": "198503152010011002",
+    "role": "ADMIN"
+  },
+  "metadata": {
+    "schoolName": "SMK dr. SOEBANDI",
+    "npsn": "20109988",
+    "totalCollections": 17,
+    "totalRecords": 54
+  },
+  "data": {
+    "users": [
+      {
+        "id": "usr-admin-01",
+        "dataSource": "PRODUCTION",
+        "role": "ADMIN",
+        "updatedAt": "2026-10-02T02:30:10.497Z",
+        "nip": "198503152010011002",
+        "fullName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "email": "ahmad.fauzi@sekolah.sch.id",
+        "phone": "081234567890",
+        "createdAt": "2026-09-29T16:41:41.789Z",
+        "permissions": [
+          "*"
+        ],
+        "isDemo": false,
+        "pin": "123456",
+        "isActive": true
+      }
+    ],
+    "teachers": [],
+    "staff": [],
+    "rooms": [],
+    "incidentCategories": [
+      {
+        "id": "cat-01",
+        "description": "Pelanggaran tata tertib, keterlambatan, perkelahian, atau insiden siswa.",
+        "isActive": true,
+        "isDemo": false,
+        "updatedBy": "SYSTEM",
+        "updatedAt": "2026-10-02T02:30:10.852Z",
+        "createdAt": "2026-09-29T16:53:06.173Z",
+        "dataSource": "PRODUCTION",
+        "code": "SISWA",
+        "createdBy": "SYSTEM",
+        "severity": "SEDANG",
+        "name": "Kesiswaan & Perilaku"
+      },
+      {
+        "id": "cat-02",
+        "isActive": true,
+        "isDemo": false,
+        "dataSource": "PRODUCTION",
+        "createdAt": "2026-09-29T16:53:06.173Z",
+        "updatedAt": "2026-10-02T02:30:10.915Z",
+        "updatedBy": "SYSTEM",
+        "name": "Kesehatan & Medis",
+        "description": "Siswa atau guru sakit, pingsan, cedera saat olahraga/upacara.",
+        "createdBy": "SYSTEM",
+        "severity": "TINGGI",
+        "code": "KESEHATAN"
+      },
+      {
+        "id": "cat-03",
+        "description": "Kerusakan meja/kursi, proyektor, kran air, lampu, atau fasilitas umum.",
+        "code": "FASILITAS",
+        "isActive": true,
+        "name": "Sarana & Prasarana",
+        "createdBy": "SYSTEM",
+        "dataSource": "PRODUCTION",
+        "severity": "SEDANG",
+        "isDemo": false,
+        "createdAt": "2026-09-29T16:53:06.173Z",
+        "updatedBy": "SYSTEM",
+        "updatedAt": "2026-10-02T02:30:10.971Z"
+      },
+      {
+        "id": "cat-04",
+        "isActive": true,
+        "createdBy": "SYSTEM",
+        "updatedAt": "2026-10-02T02:30:11.027Z",
+        "updatedBy": "SYSTEM",
+        "createdAt": "2026-09-29T16:53:06.173Z",
+        "name": "Keamanan & Ketertiban",
+        "code": "KEAMANAN",
+        "isDemo": false,
+        "severity": "KRITIS",
+        "dataSource": "PRODUCTION",
+        "description": "Tamu mencurigakan, kehilangan barang, pencurian, atau gangguan keamanan."
+      },
+      {
+        "id": "cat-05",
+        "updatedBy": "SYSTEM",
+        "updatedAt": "2026-10-02T02:30:11.051Z",
+        "isDemo": false,
+        "createdAt": "2026-09-29T16:53:06.173Z",
+        "name": "Kebersihan Lingkungan",
+        "code": "KEBERSIHAN",
+        "severity": "RENDAH",
+        "dataSource": "PRODUCTION",
+        "isActive": true,
+        "description": "Sampah menumpuk, saluran tersumbat, toilet kotor.",
+        "createdBy": "SYSTEM"
+      }
+    ],
+    "schedules": [],
+    "attendance": [],
+    "dutyBooks": [],
+    "incidents": [],
+    "settings": [
+      {
+        "id": "school_config",
+        "workHours": {
+          "checkOutEnd": "17:00",
+          "checkInStart": "06:00",
+          "end": "15:30",
+          "dailySchedules": {
+            "SABTU": {
+              "checkInStart": "06:00",
+              "checkOutEnd": "17:00",
+              "start": "06:30",
+              "checkInEnd": "07:30",
+              "checkOutStart": "14:30",
+              "isActive": true,
+              "end": "15:30"
+            },
+            "SENIN": {
+              "checkInEnd": "07:30",
+              "checkOutStart": "14:30",
+              "start": "06:30",
+              "end": "15:30",
+              "checkOutEnd": "17:00",
+              "checkInStart": "06:00",
+              "isActive": true
+            },
+            "SELASA": {
+              "checkInStart": "06:00",
+              "isActive": true,
+              "start": "06:30",
+              "checkOutEnd": "17:00",
+              "end": "15:30",
+              "checkInEnd": "07:30",
+              "checkOutStart": "14:30"
+            },
+            "KAMIS": {
+              "checkInEnd": "07:30",
+              "start": "06:30",
+              "isActive": true,
+              "checkOutEnd": "17:00",
+              "checkOutStart": "14:30",
+              "end": "15:30",
+              "checkInStart": "06:00"
+            },
+            "RABU": {
+              "checkOutEnd": "17:00",
+              "isActive": true,
+              "start": "06:30",
+              "checkInEnd": "07:30",
+              "checkInStart": "06:00",
+              "end": "15:30",
+              "checkOutStart": "14:30"
+            },
+            "MINGGU": {
+              "end": "15:30",
+              "isActive": false,
+              "checkOutStart": "14:30",
+              "start": "06:30",
+              "checkInEnd": "07:30",
+              "checkInStart": "06:00",
+              "checkOutEnd": "17:00"
+            },
+            "JUMAT": {
+              "checkInEnd": "07:30",
+              "end": "11:45",
+              "checkOutStart": "11:30",
+              "start": "06:30",
+              "checkOutEnd": "17:00",
+              "isActive": true,
+              "checkInStart": "06:00"
+            }
+          },
+          "checkOutStart": "14:30",
+          "checkInEnd": "07:30",
+          "activeDays": [
+            "SENIN",
+            "SELASA",
+            "RABU",
+            "KAMIS",
+            "JUMAT",
+            "SABTU"
+          ],
+          "start": "06:30"
+        },
+        "schoolName": "SMK dr. SOEBANDI",
+        "updatedAt": "2026-10-01T10:02:12.632Z",
+        "logoUrl": "",
+        "appCreator": "Tim Pengembang Sistem Piket",
+        "appName": "PIKET GURU",
+        "appSubtitle": "Jadwal & Buku Piket Digital Sekolah",
+        "address": "Jl. Pendidikan No. 45, Kompleks Edukasi, Jakarta",
+        "allowedRadiusMeters": 50,
+        "npsn": "20109988",
+        "schoolLng": 113.711466,
+        "schoolLat": -8.196882
+      }
+    ],
+    "auditLogs": [
+      {
+        "id": "audit-1790731086942-19pdx",
+        "action": "UPDATE",
+        "recordId": "book-2026-09-29-01",
+        "userId": "usr-guru-02",
+        "module": "DUTY_BOOK",
+        "timestamp": "2026-09-30T01:18:06.942Z",
+        "userName": "Budi Santoso, M.Kom.",
+        "details": "Menyimpan draft buku piket harian tanggal 2026-09-29",
+        "role": "GURU"
+      },
+      {
+        "id": "audit-1790740485454-kjpom",
+        "details": "Membuat full backup database (31 dokumen data)",
+        "action": "BACKUP",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T03:54:45.454Z",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "module": "SETTINGS"
+      },
+      {
+        "id": "audit-1790740994623-6uuxy",
+        "timestamp": "2026-09-30T04:03:14.623Z",
+        "recordId": "att-2026-09-30-usr-admin-01",
+        "details": "Presensi Masuk Tugas Piket (AKURASI_RENDAH) - Jarak: 791074m",
+        "action": "ATTENDANCE",
+        "userId": "usr-admin-01",
+        "module": "ATTENDANCE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN"
+      },
+      {
+        "id": "audit-1790743463729-a55u5",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "CREATE",
+        "details": "Menerbitkan surat izin keluar gerbang untuk siswa: Edi (X MIPA 1) - Alasan: SAKIT_PULANG",
+        "role": "ADMIN",
+        "recordId": "pmt-2026-09-30-munmf7p0",
+        "timestamp": "2026-09-30T04:44:23.729Z"
+      },
+      {
+        "id": "audit-1790745883918-tu2qk",
+        "userId": "usr-admin-01",
+        "timestamp": "2026-09-30T05:24:43.918Z",
+        "module": "SETTINGS",
+        "details": "Membuat full backup database (40 dokumen data)",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "BACKUP",
+        "role": "ADMIN"
+      },
+      {
+        "id": "audit-1790753927260-187ao",
+        "userId": "usr-admin-01",
+        "recordId": "ann-2026-09-30-01",
+        "module": "SETTINGS",
+        "action": "DELETE",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-01",
+        "timestamp": "2026-09-30T07:38:47.260Z"
+      },
+      {
+        "id": "audit-1790753975962-26c0l",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "DELETE",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "timestamp": "2026-09-30T07:39:35.962Z",
+        "recordId": "ann-2026-09-30-02",
+        "role": "ADMIN",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-02"
+      },
+      {
+        "id": "audit-1790754013735-e33cq",
+        "timestamp": "2026-09-30T07:40:13.735Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-02",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "recordId": "ann-2026-09-30-02",
+        "module": "SETTINGS",
+        "action": "DELETE"
+      },
+      {
+        "id": "audit-1790754013792-7971s",
+        "action": "DELETE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-01",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "timestamp": "2026-09-30T07:40:13.792Z",
+        "recordId": "ann-2026-09-30-01"
+      },
+      {
+        "id": "audit-1790754760711-0iubv",
+        "userId": "usr-admin-01",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "module": "SETTINGS",
+        "timestamp": "2026-09-30T07:52:40.711Z",
+        "details": "Memperbarui konfigurasi sekolah & batas geofence (50m)",
+        "role": "ADMIN",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790761987023-903ue",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-01",
+        "recordId": "ann-2026-09-30-01",
+        "role": "ADMIN",
+        "action": "DELETE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T09:53:07.023Z",
+        "userId": "usr-admin-01",
+        "module": "SETTINGS"
+      },
+      {
+        "id": "audit-1790761987842-xzj7h",
+        "role": "ADMIN",
+        "timestamp": "2026-09-30T09:53:07.842Z",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "action": "DELETE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Menghapus pengumuman ID: ann-2026-09-30-02",
+        "recordId": "ann-2026-09-30-02"
+      },
+      {
+        "id": "audit-1790762095915-bvcmm",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "module": "SCHEDULES",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "details": "Menjalankan generator otomatis membuat 25 alokasi jadwal piket mingguan.",
+        "timestamp": "2026-09-30T09:54:55.915Z",
+        "action": "CREATE"
+      },
+      {
+        "id": "audit-1790762112387-lhg7w",
+        "details": "Menghapus jadwal piket: Budi Santoso, M.Kom. (RABU)",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "DELETE",
+        "timestamp": "2026-09-30T09:55:12.387Z",
+        "recordId": "sch-rec-1790762092883-56n8",
+        "module": "SCHEDULES",
+        "userId": "usr-admin-01"
+      },
+      {
+        "id": "audit-1790762117913-6palf",
+        "action": "DELETE",
+        "recordId": "sch-rec-1790762092883-7suf",
+        "details": "Menghapus jadwal piket: Siti Nurhaliza, S.Pd. (RABU)",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "module": "SCHEDULES",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T09:55:17.913Z"
+      },
+      {
+        "id": "audit-1790762130124-7u6ca",
+        "recordId": "sch-rec-1790762092883-cn4k",
+        "details": "Menghapus jadwal piket: Siti Nurhaliza, S.Pd. (RABU)",
+        "timestamp": "2026-09-30T09:55:30.125Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "userId": "usr-admin-01",
+        "module": "SCHEDULES",
+        "role": "ADMIN",
+        "action": "DELETE"
+      },
+      {
+        "id": "audit-1790762133054-nptnz",
+        "userId": "usr-admin-01",
+        "module": "SCHEDULES",
+        "recordId": "sch-rec-1790762092883-gyq8",
+        "action": "DELETE",
+        "details": "Menghapus jadwal piket: Budi Santoso, M.Kom. (RABU)",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T09:55:33.054Z",
+        "role": "ADMIN"
+      },
+      {
+        "id": "audit-1790762135992-m9kbd",
+        "timestamp": "2026-09-30T09:55:35.992Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "DELETE",
+        "module": "SCHEDULES",
+        "userId": "usr-admin-01",
+        "details": "Menghapus jadwal piket: Drs. H. Ahmad Fauzi, M.Pd. (RABU)",
+        "role": "ADMIN",
+        "recordId": "sch-rec-1790762092883-w3oy"
+      },
+      {
+        "id": "audit-1790762401322-92sro",
+        "timestamp": "2026-09-30T10:00:01.322Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN",
+        "details": "Check-out tamu: Ibu Ratna Dewi (Keluar pukul 17.00 WIB WIB)",
+        "userId": "usr-admin-01",
+        "module": "VISITORS",
+        "recordId": "vis-2026-09-30-02",
+        "action": "STATUS_CHANGE"
+      },
+      {
+        "id": "audit-1790775190741-pg8te",
+        "recordId": "trd-2026-09-30-02",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "module": "TARDINESS",
+        "details": "Siswa terlambat Rendi Pangestu (X IPS 2) selesai pembinaan & diizinkan masuk kelas",
+        "userId": "usr-admin-01",
+        "action": "STATUS_CHANGE",
+        "timestamp": "2026-09-30T13:33:10.741Z"
+      },
+      {
+        "id": "audit-1790775333762-i4cp2",
+        "userId": "usr-admin-01",
+        "module": "REPORTS",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Mengekspor data rekapitulasi kehadiran guru piket ke CSV/Excel periode 2026-09-01 s.d 2026-09-30",
+        "role": "ADMIN",
+        "action": "EXPORT",
+        "timestamp": "2026-09-30T13:35:33.762Z"
+      },
+      {
+        "id": "audit-1790775344585-3ojwq",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "module": "REPORTS",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "details": "Mengekspor data rekapitulasi kehadiran guru piket ke CSV/Excel periode 2026-09-01 s.d 2026-09-30",
+        "timestamp": "2026-09-30T13:35:44.585Z",
+        "action": "EXPORT"
+      },
+      {
+        "id": "audit-1790775492858-dq6mr",
+        "action": "UPDATE",
+        "recordId": "usr-kepsek-01",
+        "timestamp": "2026-09-30T13:38:12.858Z",
+        "userId": "usr-admin-01",
+        "module": "USERS",
+        "role": "ADMIN",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd."
+      },
+      {
+        "id": "audit-1790775554795-u3ffa",
+        "timestamp": "2026-09-30T13:39:14.795Z",
+        "recordId": "usr-kepsek-01",
+        "module": "USERS",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790775688006-f4ulb",
+        "action": "UPDATE",
+        "role": "ADMIN",
+        "module": "USERS",
+        "recordId": "usr-kepsek-01",
+        "userId": "usr-admin-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "timestamp": "2026-09-30T13:41:28.006Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd."
+      },
+      {
+        "id": "audit-1790775748546-leooy",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "action": "UPDATE",
+        "timestamp": "2026-09-30T13:42:28.546Z",
+        "module": "USERS",
+        "userId": "usr-admin-01",
+        "recordId": "usr-kepsek-01"
+      },
+      {
+        "id": "audit-1790775929290-9cq7n",
+        "action": "UPDATE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T13:45:29.290Z",
+        "userId": "usr-admin-01",
+        "module": "USERS",
+        "recordId": "usr-kepsek-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "role": "ADMIN"
+      },
+      {
+        "id": "audit-1790775959048-y5no8",
+        "action": "UPDATE",
+        "recordId": "usr-kepsek-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "userId": "usr-admin-01",
+        "module": "USERS",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T13:45:59.048Z"
+      },
+      {
+        "id": "audit-1790776069571-k96gt",
+        "action": "UPDATE",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Memperbarui konfigurasi sekolah & batas geofence (50m)",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "timestamp": "2026-09-30T13:47:49.571Z"
+      },
+      {
+        "id": "audit-1790776146072-c3be5",
+        "action": "ATTENDANCE",
+        "userId": "usr-admin-01",
+        "module": "ATTENDANCE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T13:49:06.072Z",
+        "details": "Presensi Pulang Tugas Piket berhasil dicatat.",
+        "role": "ADMIN",
+        "recordId": "att-2026-09-30-usr-admin-01"
+      },
+      {
+        "id": "audit-1790781323223-r2qr4",
+        "action": "UPDATE",
+        "timestamp": "2026-09-30T15:15:23.223Z",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN",
+        "module": "USERS",
+        "userId": "usr-admin-01",
+        "recordId": "usr-kepsek-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)"
+      },
+      {
+        "id": "audit-1790784253467-g5ir6",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T16:04:13.467Z",
+        "action": "UPDATE",
+        "module": "USERS",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "recordId": "usr-kepsek-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)"
+      },
+      {
+        "id": "audit-1790784286211-ewlm7",
+        "recordId": "usr-kepsek-01",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)",
+        "module": "USERS",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "timestamp": "2026-09-30T16:04:46.211Z",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790785025246-zcek5",
+        "module": "SETTINGS",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T16:17:05.246Z",
+        "details": "Memperbarui konfigurasi sekolah & batas geofence (50m)",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790786740719-t8ehi",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "action": "UPDATE",
+        "module": "SETTINGS",
+        "userId": "usr-admin-01",
+        "details": "Memperbarui konfigurasi sekolah, branding login & geofence (50m)",
+        "timestamp": "2026-09-30T16:45:40.719Z"
+      },
+      {
+        "id": "audit-1790787285628-mkfb0",
+        "userId": "usr-admin-01",
+        "module": "USERS",
+        "action": "UPDATE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Memperbarui data pengguna: Siti Nurhaliza, S.Pd. (199008212015022003)",
+        "role": "ADMIN",
+        "timestamp": "2026-09-30T16:54:45.628Z",
+        "recordId": "usr-guru-01"
+      },
+      {
+        "id": "audit-1790787300054-0m1du",
+        "action": "UPDATE",
+        "recordId": "usr-guru-02",
+        "details": "Memperbarui data pengguna: Budi Santoso, M.Kom. (198711042012011005)",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "module": "USERS",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T16:55:00.054Z"
+      },
+      {
+        "id": "audit-1790787319575-gti0r",
+        "recordId": "usr-kepsek-01",
+        "action": "UPDATE",
+        "timestamp": "2026-09-30T16:55:19.575Z",
+        "module": "USERS",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Memperbarui data pengguna: Dr. Hj. Siti Rohmah, M.Pd. (197605122000032001)"
+      },
+      {
+        "id": "audit-1790787333166-st2lv",
+        "userId": "usr-admin-01",
+        "recordId": "usr-tendik-01",
+        "module": "USERS",
+        "action": "UPDATE",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Memperbarui data pengguna: Mulyadi, S.AP. (198902142014031002)",
+        "timestamp": "2026-09-30T16:55:33.166Z"
+      },
+      {
+        "id": "audit-1790787502224-9ylf4",
+        "userId": "usr-admin-01",
+        "timestamp": "2026-09-30T16:58:22.224Z",
+        "module": "USERS",
+        "action": "UPDATE",
+        "role": "ADMIN",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "details": "Memperbarui data pengguna: Siti Nurhaliza, S.Pd. (199008212015022003)",
+        "recordId": "usr-guru-01"
+      },
+      {
+        "id": "audit-1790787607933-uuvcu",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-09-30T17:00:07.933Z",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "details": "Memperbarui data pengguna: Siti Nurhaliza, S.Pd. (199008212015022003)",
+        "recordId": "usr-guru-01",
+        "module": "USERS",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790840916609-ab289",
+        "userId": "usr-admin-01",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-10-01T07:48:36.609Z",
+        "module": "REPORTS",
+        "role": "ADMIN",
+        "action": "EXPORT",
+        "details": "Mengekspor data rekapitulasi kehadiran guru piket ke CSV/Excel periode 2026-09-01 s.d 2026-09-30"
+      },
+      {
+        "id": "audit-1790848933142-cw52t",
+        "module": "SETTINGS",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "userId": "usr-admin-01",
+        "role": "ADMIN",
+        "timestamp": "2026-10-01T10:02:13.142Z",
+        "details": "Memperbarui konfigurasi sekolah, logo, jadwal hari operasional (SENIN, SELASA, RABU, KAMIS, JUMAT, SABTU), branding login & geofence (50m)",
+        "action": "UPDATE"
+      },
+      {
+        "id": "audit-1790903670872-efxnb",
+        "action": "BACKUP",
+        "details": "Membuat full backup database (104 dokumen data)",
+        "timestamp": "2026-10-02T01:14:30.872Z",
+        "role": "ADMIN",
+        "userId": "usr-admin-01",
+        "module": "SETTINGS",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd."
+      },
+      {
+        "id": "audit-1790908212850-purge",
+        "details": "Pembersihan 61 record dummy/seed selesai. Database operasional sekolah kini murni data produksi.",
+        "timestamp": "2026-10-02T02:30:12.850Z",
+        "userId": "usr-admin-01",
+        "module": "SYSTEM",
+        "action": "PURGE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "role": "ADMIN"
+      },
+      {
+        "id": "audit-1790922320632-authorized-purge",
+        "details": "Authorized purge completed: 61 seed/dummy records successfully removed. Operational database baseline verified clean.",
+        "action": "PURGE",
+        "userName": "Drs. H. Ahmad Fauzi, M.Pd.",
+        "timestamp": "2026-10-02T06:25:20.632Z",
+        "role": "ADMIN",
+        "module": "PRODUCTION_CLEANUP",
+        "userId": "usr-admin-01"
+      },
+      {
+        "id": "audit-1790923265656-3p46h",
+        "userId": "usr-admin-01",
+        "module": "SETTINGS",
+        "action": "BACKUP",
+        "timestamp": "2026-10-02T06:41:05.656Z",
+        "role": "ADMIN",
+        "details": "Membuat full backup database (53 dokumen data)",
+        "userName": "Administrator Sistem"
+      }
+    ],
+    "announcements": [],
+    "studentTardiness": [],
+    "substitutions": [],
+    "studentPermits": [],
+    "visitors": [],
+    "students": []
+  }
+}

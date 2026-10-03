@@ -1197,10 +1197,46 @@ export const SettingsView: React.FC = () => {
       {/* TAB 5: BACKUP & RESTORE JSON */}
       {activeTab === 'backup' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Status Pemisahan Data Produksi & Seed (PIKET GURU v1.0.1) */}
+          <div className="md:col-span-2">
+            <Card>
+              <CardHeader
+                title="Status Pemisahan Data & Integritas Sistem (PIKET GURU v1.0.1)"
+                subtitle="Pemisahan data operasional (production) dan data contoh (seed/dummy) aktif di level data access layer"
+              />
+              <CardContent className="p-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1">
+                    <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">DATA MODE</span>
+                    <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-1.5">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                      <span>PRODUCTION</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">Seluruh modul administrasi hanya membaca data operasional sah.</p>
+                  </div>
+                  <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 space-y-1">
+                    <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400">DATA OPERASIONAL RESMI</span>
+                    <div className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                      Tersaring Otomatis
+                    </div>
+                    <p className="text-[11px] text-slate-500">Dashboard, Presensi, Buku Piket, dan Ekspor 100% data riil.</p>
+                  </div>
+                  <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
+                    <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">STATUS SEED / DUMMY</span>
+                    <div className="text-lg font-bold text-amber-900 dark:text-amber-100">
+                      Terisolasi Aman
+                    </div>
+                    <p className="text-[11px] text-slate-500">Data seed tersimpan aman tanpa mencemari rekapitulasi sekolah.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader
               title="Cadangkan Seluruh Database (Backup JSON)"
-              subtitle="Ekspor seluruh 16 koleksi Firestore ke satu berkas arsip terstruktur"
+              subtitle="Ekspor seluruh 17 koleksi resmi Firestore ke satu berkas arsip terstruktur"
             />
             <CardContent className="p-5 space-y-4">
               <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-200 text-xs leading-relaxed">

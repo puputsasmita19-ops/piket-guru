@@ -4,10 +4,18 @@ import { UserProfile } from '../../types';
 
 export class SubstitutionService {
   /**
-   * Seed default substitution records if collection is empty
+   * Automatic demo substitution seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<TeacherSubstitutionRecord>('substitutions');
+    // No-op in operational mode: empty database remains clean for official substitutions
+    return;
+  }
+
+  /**
+   * Explicit demo substitutions seeder for development/testing environments
+   */
+  public static async seedDemoSubstitutions(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<TeacherSubstitutionRecord>('substitutions');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -29,6 +37,8 @@ export class SubstitutionService {
           catatanPiket: 'Tugas telah dikoordinasikan dengan Ketua Kelas XI MIPA 1.',
           petugasPiketName: 'Drs. H. Ahmad Fauzi, M.Pd.',
           petugasPiketId: 'usr-admin-01',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -55,6 +65,8 @@ export class SubstitutionService {
     const payload: TeacherSubstitutionRecord = {
       ...data,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: now,
       createdBy: user.fullName,
       updatedAt: now,

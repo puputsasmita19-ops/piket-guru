@@ -5,10 +5,18 @@ import { formatTime } from '../../utils/dateUtils';
 
 export class VisitorService {
   /**
-   * Seed default visitor records if collection is empty
+   * Automatic demo visitor seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<VisitorRecord>('visitors');
+    // No-op in operational mode: empty database remains clean for official school visitors
+    return;
+  }
+
+  /**
+   * Explicit demo visitors seeder for development/testing environments
+   */
+  public static async seedDemoVisitors(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<VisitorRecord>('visitors');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -30,6 +38,8 @@ export class VisitorService {
           catatanPetugas: 'Tamu telah melapor dan selesai bertemu Kepala Sekolah.',
           petugasPiketName: 'Drs. H. Ahmad Fauzi, M.Pd.',
           petugasPiketId: 'usr-admin-01',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -51,6 +61,8 @@ export class VisitorService {
           catatanPetugas: 'Sedang berada di Ruang Pertemuan Guru Lantai 1.',
           petugasPiketName: 'Drs. H. Ahmad Fauzi, M.Pd.',
           petugasPiketId: 'usr-admin-01',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -77,6 +89,8 @@ export class VisitorService {
     const payload: VisitorRecord = {
       ...data,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: now,
       createdBy: user.fullName,
       updatedAt: now,

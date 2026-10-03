@@ -1,4 +1,4 @@
-import { ScheduleItem, AttendanceRecord } from '../../types';
+import { ScheduleItem, AttendanceRecord, isOperationalRecord } from '../../types';
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { IncidentRecord } from '../../types/incident.types';
 import { TeacherRecord, IncidentCategoryRecord } from '../../types/master.types';
@@ -74,11 +74,14 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): TeacherAttendanceSummary[] {
-    const filteredAttendance = attendance.filter(
+    const operationalTeachers = teachers.filter(isOperationalRecord);
+    const operationalAttendance = attendance.filter(isOperationalRecord);
+
+    const filteredAttendance = operationalAttendance.filter(
       (a) => a.tanggal >= startDate && a.tanggal <= endDate
     );
 
-    return teachers.map((teacher) => {
+    return operationalTeachers.map((teacher) => {
       // Find all attendances for this teacher
       const teacherAtts = filteredAttendance.filter(
         (a) => a.userId === teacher.id || a.userName.includes(teacher.fullName.split(' ')[0])
@@ -114,7 +117,8 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): IncidentCategorySummary[] {
-    const filtered = incidents.filter((i) => i.tanggal >= startDate && i.tanggal <= endDate);
+    const operationalIncidents = incidents.filter(isOperationalRecord);
+    const filtered = operationalIncidents.filter((i) => i.tanggal >= startDate && i.tanggal <= endDate);
 
     return categories.map((cat) => {
       const catIncidents = filtered.filter((i) => i.kategori === cat.code);
@@ -137,7 +141,8 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): StudentTardySummary {
-    const filtered = records.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
+    const operationalRecords = records.filter(isOperationalRecord);
+    const filtered = operationalRecords.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
     const totalTardy = filtered.length;
     const repeatOffenders = filtered.filter((r) => (r.frekuensiBulanIni || 1) > 1).length;
     const totalPoints = filtered.reduce((acc, curr) => acc + (curr.poinPelanggaran || 0), 0);
@@ -175,7 +180,8 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): StudentPermitSummary {
-    const filtered = records.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
+    const operationalRecords = records.filter(isOperationalRecord);
+    const filtered = operationalRecords.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
     const totalPermits = filtered.length;
     const currentlyOut = filtered.filter((r) => r.status === 'SEDANG_KELUAR').length;
     const returned = filtered.filter((r) => r.status === 'SUDAH_KEMBALI').length;
@@ -209,7 +215,8 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): SubstitutionSummary {
-    const filtered = records.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
+    const operationalRecords = records.filter(isOperationalRecord);
+    const filtered = operationalRecords.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
     const totalSubstitutions = filtered.length;
     const completed = filtered.filter((r) => r.status === 'SELESAI_INVAL').length;
     const inProgress = filtered.filter((r) => r.status === 'SEDANG_BERLANGSUNG').length;
@@ -248,7 +255,8 @@ export class ReportService {
     startDate: string,
     endDate: string
   ): VisitorSummary {
-    const filtered = records.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
+    const operationalRecords = records.filter(isOperationalRecord);
+    const filtered = operationalRecords.filter((r) => r.tanggal >= startDate && r.tanggal <= endDate);
     const totalVisitors = filtered.length;
     const currentlyVisiting = filtered.filter((r) => r.status === 'SEDANG_BERKUNJUNG').length;
     const completed = filtered.filter((r) => r.status === 'SELESAI').length;

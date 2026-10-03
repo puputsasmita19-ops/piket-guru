@@ -5,10 +5,18 @@ import { formatTime } from '../../utils/dateUtils';
 
 export class StudentPermitService {
   /**
-   * Seed default student permit records if collection is empty
+   * Automatic demo student permit seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<StudentPermitRecord>('studentPermits');
+    // No-op in operational mode: empty database remains clean for official student permits
+    return;
+  }
+
+  /**
+   * Explicit demo student permits seeder for development/testing environments
+   */
+  public static async seedDemoPermits(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<StudentPermitRecord>('studentPermits');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -30,6 +38,8 @@ export class StudentPermitService {
           petugasPiketId: 'usr-admin-01',
           status: 'SELESAI_PULANG',
           catatanPetugas: 'Siswa telah dijemput orang tua di pos piket gerbang depan.',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -52,6 +62,8 @@ export class StudentPermitService {
           petugasPiketId: 'usr-admin-01',
           status: 'SEDANG_KELUAR',
           catatanPetugas: 'Dispensasi resmi surat tugas No. 421/108/SMA/2026',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -78,6 +90,8 @@ export class StudentPermitService {
     const payload: StudentPermitRecord = {
       ...data,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: now,
       createdBy: user.fullName,
       updatedAt: now,

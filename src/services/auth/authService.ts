@@ -1,336 +1,315 @@
-import { UserProfile, UserRole } from '../../types';
+import { UserProfile } from '../../types';
 import { ROLE_PERMISSIONS } from '../../config/permissions';
-import { hashPinWithSalt, generateSalt } from '../../utils/cryptoUtils';
-import { FirestoreService } from '../firebase/firestoreService';
-import { ensureFirebaseAuth } from '../firebase/firebase';
+import { auth } from '../firebase/firebase';
+import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 
-export interface StoredUserCredential {
+const STORAGE_SESSION_KEY = 'piket_guru_active_session';
+
+export interface UserSummaryItem {
+  id: string;
   userId: string;
   nip: string;
   fullName: string;
-  role: UserRole;
-  email: string;
-  phone: string;
-  pinSalt: string;
-  pinHash: string;
-  permissions?: string[];
-  failedAttempts: number;
-  lockedUntil: number | null; // timestamp ms
+  role: UserProfile['role'];
+  email?: string;
+  phone?: string;
   isActive: boolean;
+  avatarUrl?: string;
 }
 
-const STORAGE_USERS_KEY = 'piket_guru_users_db_v1';
-const STORAGE_SESSION_KEY = 'piket_guru_active_session';
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-const DEFAULT_SALT = 'e4d7a892b1c3f6e5';
-
-export const SEED_USERS: StoredUserCredential[] = [
-  {
-    userId: 'usr-admin-01',
-    nip: '198503152010011002',
-    fullName: 'Drs. H. Ahmad Fauzi, M.Pd.',
-    role: 'ADMIN',
-    email: 'ahmad.fauzi@sekolah.sch.id',
-    phone: '081234567890',
-    pinSalt: DEFAULT_SALT,
-    pinHash: '', // computed on initialize
-    failedAttempts: 0,
-    lockedUntil: null,
-    isActive: true,
-  },
-  {
-    userId: 'usr-kepsek-01',
-    nip: '197605122000032001',
-    fullName: 'Dr. Hj. Siti Rohmah, M.Pd.',
-    role: 'KEPALA_SEKOLAH',
-    email: 'kepsek@sekolah.sch.id',
-    phone: '081298765432',
-    pinSalt: DEFAULT_SALT,
-    pinHash: '',
-    failedAttempts: 0,
-    lockedUntil: null,
-    isActive: true,
-  },
-  {
-    userId: 'usr-guru-01',
-    nip: '199008212015022003',
-    fullName: 'Siti Nurhaliza, S.Pd.',
-    role: 'GURU',
-    email: 'siti.nurhaliza@sekolah.sch.id',
-    phone: '081345678901',
-    pinSalt: DEFAULT_SALT,
-    pinHash: '',
-    failedAttempts: 0,
-    lockedUntil: null,
-    isActive: true,
-  },
-  {
-    userId: 'usr-guru-02',
-    nip: '198711042012011005',
-    fullName: 'Budi Santoso, M.Kom.',
-    role: 'GURU',
-    email: 'budi.santoso@sekolah.sch.id',
-    phone: '081456789012',
-    pinSalt: DEFAULT_SALT,
-    pinHash: '',
-    failedAttempts: 0,
-    lockedUntil: null,
-    isActive: true,
-  },
-  {
-    userId: 'usr-tendik-01',
-    nip: '198902142014031002',
-    fullName: 'Mulyadi, S.AP.',
-    role: 'TENAGA_KEPENDIDIKAN',
-    email: 'mulyadi.tu@sekolah.sch.id',
-    phone: '081567890123',
-    pinSalt: DEFAULT_SALT,
-    pinHash: '',
-    failedAttempts: 0,
-    lockedUntil: null,
-    isActive: true,
-  },
-];
+export interface AuthResult {
+  success: boolean;
+  user?: UserProfile;
+  error?: string;
+  dependencyBlocker?: {
+    code: string;
+    message: string;
+    targetUid: string;
+    requiredRole: string;
+    requiredApi?: string;
+    targetProjectId?: string;
+    remediation?: string;
+  };
+}
 
 class AuthService {
-  private users: StoredUserCredential[] = [];
+  private usersList: UserSummaryItem[] = [];
   private initialized = false;
+  private currentFirebaseUser: User | null = null;
 
-  public async init() {
+  constructor() {
+    if (typeof window !== 'undefined' && auth) {
+      onAuthStateChanged(auth, (user) => {
+        this.currentFirebaseUser = user;
+      });
+    }
+  }
+
+  /**
+   * Initializes auth service and purges any legacy plaintext/hash credential caches
+   */
+  public async init(): Promise<void> {
     if (this.initialized) return;
 
-    try {
-      await ensureFirebaseAuth();
-    } catch (e) {
-      console.warn('Firebase Auth initialization warning:', e);
-    }
-
-    // Try fetching from Firestore users collection first
-    try {
-      const firestoreUsers = await FirestoreService.getAll<UserProfile>('users');
-      if (firestoreUsers && firestoreUsers.length > 0) {
-        const credentials: StoredUserCredential[] = await Promise.all(
-          firestoreUsers.map(async (u) => {
-            const salt = u.pinSalt || DEFAULT_SALT;
-            const hash =
-              u.pinHash ||
-              (u.pin ? await hashPinWithSalt(u.pin, salt) : await hashPinWithSalt('123456', salt));
-
-            return {
-              userId: u.id,
-              nip: u.nip,
-              fullName: u.fullName,
-              role: u.role,
-              email: u.email,
-              phone: u.phone,
-              pinSalt: salt,
-              pinHash: hash,
-              failedAttempts: 0,
-              lockedUntil: null,
-              isActive: u.isActive !== false,
-            };
-          })
-        );
-        this.users = credentials;
-        this.saveUsers();
-        this.initialized = true;
-        return;
-      }
-    } catch (err) {
-      console.warn('Could not read users from Firestore on boot, checking local cache:', err);
-    }
-
-    const stored = localStorage.getItem(STORAGE_USERS_KEY);
-    if (stored) {
+    // Purge legacy client credential caches (SEC-07 mitigation)
+    if (typeof localStorage !== 'undefined') {
       try {
-        this.users = JSON.parse(stored);
+        localStorage.removeItem('piket_guru_users_db_v1');
+        localStorage.removeItem('piket_guru_session_token');
+        // Clean legacy pin field from cached firestore users
+        const cachedUsers = localStorage.getItem('piket_firestore_users');
+        if (cachedUsers) {
+          try {
+            const parsed = JSON.parse(cachedUsers);
+            if (Array.isArray(parsed)) {
+              const sanitized = parsed.map(({ pin, pinHash, pinSalt, password, ...rest }: any) => rest);
+              localStorage.setItem('piket_firestore_users', JSON.stringify(sanitized));
+            }
+          } catch {
+            localStorage.removeItem('piket_firestore_users');
+          }
+        }
       } catch {
-        await this.resetToDefaults();
+        // ignore
       }
-    } else {
-      await this.resetToDefaults();
     }
+
+    await this.refreshUsersList();
     this.initialized = true;
   }
 
-  private async resetToDefaults() {
-    const defaultPin = '123456';
-    const computedUsers = await Promise.all(
-      SEED_USERS.map(async (u) => {
-        const hash = await hashPinWithSalt(defaultPin, u.pinSalt);
-        return { ...u, pinHash: hash };
-      })
-    );
-    this.users = computedUsers;
-    this.saveUsers();
-  }
-
-  private saveUsers() {
-    localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(this.users));
-  }
-
-  public async getUsersList(): Promise<Array<Omit<StoredUserCredential, 'pinHash' | 'pinSalt'>>> {
-    await this.init();
-    return this.users.map(({ pinHash, pinSalt, ...rest }) => rest);
-  }
-
-  public async authenticateWithPin(
-    nipOrUserId: string,
-    pin: string
-  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
-    await this.init();
-
-    // Check directly in Firestore for real-time changes
+  /**
+   * Fetches sanitized users list from backend API endpoint (/api/auth/users-summary).
+   * Does NOT query Firestore client-side, enforcing zero unauthenticated client access (SEC-06).
+   */
+  public async refreshUsersList(): Promise<UserSummaryItem[]> {
     try {
-      const firestoreUsers = await FirestoreService.getAll<UserProfile>('users');
-      if (firestoreUsers && firestoreUsers.length > 0) {
-        const target = firestoreUsers.find((u) => u.nip === nipOrUserId || u.id === nipOrUserId);
-        if (target) {
-          const salt = target.pinSalt || DEFAULT_SALT;
-          const hash =
-            target.pinHash ||
-            (target.pin
-              ? await hashPinWithSalt(target.pin, salt)
-              : await hashPinWithSalt('123456', salt));
-
-          const existingIndex = this.users.findIndex((u) => u.userId === target.id);
-          const cred: StoredUserCredential = {
-            userId: target.id,
-            nip: target.nip,
-            fullName: target.fullName,
-            role: target.role,
-            email: target.email,
-            phone: target.phone,
-            pinSalt: salt,
-            pinHash: hash,
-            permissions: target.permissions,
-            failedAttempts: existingIndex >= 0 ? this.users[existingIndex].failedAttempts : 0,
-            lockedUntil: existingIndex >= 0 ? this.users[existingIndex].lockedUntil : null,
-            isActive: target.isActive !== false,
-          };
-
-          if (existingIndex >= 0) {
-            this.users[existingIndex] = cred;
-          } else {
-            this.users.push(cred);
-          }
-          this.saveUsers();
-        }
+      const res = await fetch('/api/auth/users-summary');
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-    } catch (e) {
-      console.warn('Realtime Firestore user lookup warning, using local state:', e);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        this.usersList = data.users.map((u: any) => ({
+          id: u.id,
+          userId: u.id,
+          nip: u.nip,
+          fullName: u.fullName,
+          role: u.role,
+          isActive: u.isActive !== false,
+          avatarUrl: u.avatarUrl,
+        }));
+        return this.usersList;
+      }
+      return [];
+    } catch (err) {
+      console.warn('[AUTH] Could not fetch users summary from backend API:', err);
+      return [];
     }
+  }
 
-    const user = this.users.find(
-      (u) => u.nip === nipOrUserId || u.userId === nipOrUserId
-    );
-
-    if (!user) {
-      return { success: false, error: 'Pengguna dengan NIP tersebut tidak ditemukan.' };
+  public async getUsersList(): Promise<UserSummaryItem[]> {
+    await this.init();
+    if (this.usersList.length === 0) {
+      await this.refreshUsersList();
     }
+    return this.usersList;
+  }
 
-    if (!user.isActive) {
-      return { success: false, error: 'Akun Anda dinonaktifkan oleh administrator.' };
-    }
+  /**
+   * Authenticates user via server-side verification:
+   * PIN -> Backend scrypt verification -> Firebase Custom Token -> Frontend signInWithCustomToken -> Firebase ID token.
+   * Closes SEC-01, SEC-06, SEC-07, and SEC-08.
+   */
+  public async authenticateWithPin(nip: string, pin: string): Promise<AuthResult> {
+    await this.init();
 
-    // Check lockouts
-    const now = Date.now();
-    if (user.lockedUntil && user.lockedUntil > now) {
-      const remainingMin = Math.ceil((user.lockedUntil - now) / 60000);
-      return {
-        success: false,
-        error: `Akun terkunci sementara karena 5x salah PIN. Coba lagi dalam ${remainingMin} menit.`,
-      };
-    }
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nip: nip.trim(), pin: pin.trim() }),
+      });
 
-    // Verify PIN
-    const computedHash = await hashPinWithSalt(pin, user.pinSalt);
-    if (computedHash !== user.pinHash) {
-      user.failedAttempts = (user.failedAttempts || 0) + 1;
-      if (user.failedAttempts >= MAX_ATTEMPTS) {
-        user.lockedUntil = now + LOCKOUT_DURATION_MS;
-        this.saveUsers();
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
         return {
           success: false,
-          error: `PIN Salah! Akun telah terkunci selama 15 menit karena ${MAX_ATTEMPTS}x percobaan gagal.`,
+          error: data.error || 'NIP atau PIN tidak sesuai.',
+          dependencyBlocker: data.dependencyBlocker,
         };
       }
-      this.saveUsers();
-      const sisa = MAX_ATTEMPTS - user.failedAttempts;
+
+      // R21-02: Require valid customToken from server; failure to mint or sign in must reject before caching
+      if (!data.customToken || typeof data.customToken !== 'string' || data.customToken.trim() === '') {
+        return {
+          success: false,
+          error: 'Autentikasi gagal: Sesi token Firebase tidak tersedia dari server.',
+        };
+      }
+
+      try {
+        const userCredential = await signInWithCustomToken(auth, data.customToken);
+        this.currentFirebaseUser = userCredential.user;
+      } catch (fbAuthErr: any) {
+        console.error('[AUTH] signInWithCustomToken failed on client:', fbAuthErr);
+        return {
+          success: false,
+          error: `Gagal menyelesaikan autentikasi Firebase: ${fbAuthErr.message}`,
+        };
+      }
+
+      const userProfile: UserProfile = {
+        ...data.user,
+        permissions:
+          data.user.permissions && data.user.permissions.length > 0
+            ? data.user.permissions
+            : ROLE_PERMISSIONS[data.user.role as keyof typeof ROLE_PERMISSIONS] || [],
+        loginAt: Date.now(),
+      };
+
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(userProfile));
+        } catch {
+          // ignore
+        }
+      }
+
+      return { success: true, user: userProfile };
+    } catch (err: any) {
+      console.error('Authentication network error:', err);
       return {
         success: false,
-        error: `PIN Salah! Sisa percobaan: ${sisa} kali.`,
+        error: 'Tidak dapat terhubung ke server autentikasi. Pastikan koneksi server aktif.',
       };
     }
-
-    // Success -> Reset failed attempts
-    user.failedAttempts = 0;
-    user.lockedUntil = null;
-    this.saveUsers();
-
-    const userProfile: UserProfile = {
-      id: user.userId,
-      nip: user.nip,
-      fullName: user.fullName,
-      role: user.role,
-      email: user.email,
-      phone: user.phone,
-      isActive: user.isActive,
-      permissions: user.permissions && user.permissions.length > 0 ? user.permissions : ROLE_PERMISSIONS[user.role],
-      loginAt: now,
-    };
-
-    localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(userProfile));
-    return { success: true, user: userProfile };
   }
 
+  /**
+   * Helper to retrieve current Firebase ID token for Authorization headers
+   */
+  public async getIdToken(): Promise<string> {
+    if (auth && auth.currentUser) {
+      try {
+        return await auth.currentUser.getIdToken();
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Re-authenticates sensitive admin action (e.g. database rollback).
+   * Verifies against server-side adaptive hash with Bearer authorization.
+   */
+  public async verifyAdminPin(userId: string, pin: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/verify-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, pin }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'PIN Keamanan salah.' };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: 'Gagal menghubungi server verifikasi PIN.' };
+    }
+  }
+
+  /**
+   * Changes user's PIN via secure backend endpoint with Bearer authorization
+   */
   public async changeUserPin(
     userId: string,
     oldPin: string,
     newPin: string
-  ): Promise<{ success: boolean; error?: string }> {
-    await this.init();
-    const user = this.users.find((u) => u.userId === userId);
-    if (!user) return { success: false, error: 'Pengguna tidak ditemukan.' };
-
-    const oldHash = await hashPinWithSalt(oldPin, user.pinSalt);
-    if (oldHash !== user.pinHash) {
-      return { success: false, error: 'PIN lama yang Anda masukkan salah.' };
-    }
-
-    if (newPin.length < 6 || !/^\d+$/.test(newPin)) {
-      return { success: false, error: 'PIN baru harus terdiri dari 6 digit angka.' };
-    }
-
-    const newSalt = generateSalt();
-    const newHash = await hashPinWithSalt(newPin, newSalt);
-
-    user.pinSalt = newSalt;
-    user.pinHash = newHash;
-    this.saveUsers();
-
-    // Also update Firestore
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    refreshRevocation?: { status: 'REVOKED' | 'PENDING_RETRY'; attempts: number; error?: string };
+  }> {
     try {
-      await FirestoreService.setDocument<UserProfile>('users', userId, {
-        id: userId,
-        pinSalt: newSalt,
-        pinHash: newHash,
-        updatedAt: new Date().toISOString(),
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/change-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, oldPin, newPin }),
       });
-    } catch (err) {
-      console.warn('Failed to sync new PIN hash to Firestore:', err);
-    }
 
-    return { success: true };
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Gagal mengubah PIN.' };
+      }
+
+      return {
+        success: true,
+        refreshRevocation: data.refreshRevocation,
+      };
+    } catch (err: any) {
+      return { success: false, error: 'Terjadi kesalahan jaringan saat mengubah PIN.' };
+    }
   }
 
+  /**
+   * Admin-initiated PIN reset via secure backend endpoint with Bearer authorization
+   */
+  public async resetUserPin(
+    targetUserId: string,
+    newPin: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    refreshRevocation?: { status: 'REVOKED' | 'PENDING_RETRY'; attempts: number; error?: string };
+  }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/reset-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUserId, newPin }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Gagal mereset PIN pengguna.' };
+      }
+
+      return {
+        success: true,
+        refreshRevocation: data.refreshRevocation,
+      };
+    } catch (err: any) {
+      return { success: false, error: 'Terjadi kesalahan jaringan saat mereset PIN.' };
+    }
+  }
+
+  /**
+   * Retrieves active session from secure storage (expires after 24h)
+   */
   public getSavedSession(): UserProfile | null {
+    if (typeof localStorage === 'undefined') return null;
     const session = localStorage.getItem(STORAGE_SESSION_KEY);
     if (!session) return null;
     try {
       const parsed: UserProfile = JSON.parse(session);
-      // Validate 24 hours max session duration
       const now = Date.now();
       if (parsed.loginAt && now - parsed.loginAt > 24 * 60 * 60 * 1000) {
         this.clearSession();
@@ -342,10 +321,28 @@ class AuthService {
     }
   }
 
-  public clearSession(): void {
-    localStorage.removeItem(STORAGE_SESSION_KEY);
+  /**
+   * Clears session, signs out from Firebase Auth, and purges local storage
+   */
+  public async clearSession(): Promise<void> {
+    try {
+      if (auth) {
+        await signOut(auth);
+      }
+    } catch (err) {
+      console.warn('[AUTH] Error during signOut:', err);
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_SESSION_KEY);
+        localStorage.removeItem('piket_guru_session_token');
+        localStorage.removeItem('piket_guru_users_db_v1');
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 
 export const authService = new AuthService();
-

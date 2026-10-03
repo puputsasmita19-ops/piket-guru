@@ -1,3 +1,5 @@
+import { BaseEntityMetadata } from './index';
+
 export type TardyReason =
   | 'BANGUN_KESIANGAN'
   | 'MACET_LALULINTAS'
@@ -16,7 +18,7 @@ export type DisciplineAction =
 
 export type TardyStatus = 'DALAM_PEMBINAAN' | 'SELESAI_MASUK_KELAS' | 'PEMANGGILAN_ORTU';
 
-export interface StudentTardyRecord {
+export interface StudentTardyRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamDatang: string; // HH:mm WIB

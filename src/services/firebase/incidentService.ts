@@ -4,10 +4,18 @@ import { UserProfile } from '../../types';
 
 export class IncidentService {
   /**
-   * Seed default incidents if collection is empty
+   * Automatic demo incident seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<IncidentRecord>('incidents');
+    // No-op in operational mode: empty database remains clean for official school incident reports
+    return;
+  }
+
+  /**
+   * Explicit demo incidents seeder for development/testing environments
+   */
+  public static async seedDemoIncidents(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<IncidentRecord>('incidents');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -26,6 +34,8 @@ export class IncidentService {
           tindakLanjut: 'Diserahkan kepada Guru BK untuk pencatatan poin pelanggaran dan pembinaan disiplin.',
           penanggungJawab: 'Drs. H. Ahmad Fauzi, M.Pd.',
           status: 'PENANGANAN',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -48,6 +58,8 @@ export class IncidentService {
           resolvedAt: new Date().toISOString(),
           resolvedBy: 'Siti Nurhaliza, S.Pd.',
           resolutionNote: 'Siswi dijemput orang tua pukul 10.30 WIB dalam keadaan sadar dan sehat.',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Siti Nurhaliza, S.Pd.',
           updatedAt: new Date().toISOString(),
@@ -67,6 +79,8 @@ export class IncidentService {
           tindakLanjut: 'Sudah dilaporkan ke bagian Sarpras (Pak Mulyadi) untuk penggantian kran baru.',
           penanggungJawab: 'Budi Santoso, M.Kom.',
           status: 'PENANGANAN',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Budi Santoso, M.Kom.',
           updatedAt: new Date().toISOString(),
@@ -93,6 +107,8 @@ export class IncidentService {
     const payload: IncidentRecord = {
       ...record,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       updatedAt: new Date().toISOString(),
       updatedBy: user.fullName,
       createdAt: record.createdAt || new Date().toISOString(),

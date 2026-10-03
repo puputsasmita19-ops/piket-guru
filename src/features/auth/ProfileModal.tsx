@@ -41,7 +41,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     try {
       const res = await changePin(oldPin, newPin);
       if (res.success) {
-        setSuccessMsg('PIN Anda berhasil diubah.');
+        if (res.refreshRevocation?.status === 'PENDING_RETRY') {
+          setSuccessMsg('PIN Anda berhasil diubah dan penanda keamanan akun telah aktif. Pencabutan token sesi eksternal berstatus PENDING_RETRY.');
+        } else {
+          setSuccessMsg('PIN Anda berhasil diubah.');
+        }
         setOldPin('');
         setNewPin('');
         setConfirmPin('');

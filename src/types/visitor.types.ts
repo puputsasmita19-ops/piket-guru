@@ -1,8 +1,10 @@
+import { BaseEntityMetadata } from './index';
+
 export type VisitorStatus = 'SEDANG_BERKUNJUNG' | 'SELESAI' | 'DITOLAK';
 
 export type VisitorCategory = 'ORANG_TUA' | 'DINAS_INSTANSI' | 'VENDOR_MITRA' | 'ALUMNI' | 'UMUM';
 
-export interface VisitorRecord {
+export interface VisitorRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamMasuk: string; // HH:mm WIB

@@ -13,16 +13,16 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { authService, StoredUserCredential } from '../../services/auth/authService';
+import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, ROLE_LABELS } from '../../config/constants';
 import { Badge } from '../../components/common/Badge';
 import { SchoolSettings } from '../../types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithPin, isLoading } = useAuth();
+  const { loginWithPin, loginWithGoogle, isLoading } = useAuth();
   const { theme, setTheme, isDark } = useTheme();
-  const [usersList, setUsersList] = useState<Array<Omit<StoredUserCredential, 'pinHash' | 'pinSalt'>>>([]);
+  const [usersList, setUsersList] = useState<UserSummaryItem[]>([]);
   const [selectedNip, setSelectedNip] = useState<string>('');
   const [pin, setPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -42,21 +42,21 @@ export const LoginPage: React.FC = () => {
   });
 
   useEffect(() => {
-    const unsub = FirestoreService.subscribeToDocument<SchoolSettings>(
-      'settings',
-      'school_config',
-      (config) => {
-        if (config) {
-          setSchoolSettings((prev) => ({ ...prev, ...config }));
+    fetch('/api/auth/public-config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.config) {
+          setSchoolSettings((prev) => ({ ...prev, ...data.config }));
           try {
-            localStorage.setItem('piket_guru_school_config', JSON.stringify(config));
+            localStorage.setItem('piket_guru_school_config', JSON.stringify(data.config));
           } catch {
             // ignore
           }
         }
-      }
-    );
-    return () => unsub();
+      })
+      .catch((err) => {
+        console.warn('Could not fetch public config:', err);
+      });
   }, []);
 
   useEffect(() => {
@@ -69,6 +69,19 @@ export const LoginPage: React.FC = () => {
     };
     fetchUsers();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      const res = await loginWithGoogle();
+      if (!res.success) {
+        setErrorMessage(res.error || 'Gagal masuk dengan Google.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handlePinInput = (num: string) => {
     if (pin.length < 6) {
@@ -180,23 +193,60 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Google Authentication for Super Admin / Administrator */}
+        <div className="space-y-3">
+          <button
+            type="button"
+            disabled={isSubmitting || isLoading}
+            onClick={handleGoogleLogin}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-[0.99] text-slate-800 dark:text-white font-semibold text-xs shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-50"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            <span>Masuk dengan Google (Akun Administrator)</span>
+          </button>
+
+          <div className="relative flex py-1 items-center">
+            <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+            <span className="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-400">Atau Masuk dengan PIN Piket</span>
+            <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+          </div>
+        </div>
+
         {/* User Account Selection */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-            <span>Pilih Pengguna / Petugas Piket:</span>
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">Default PIN: 123456</span>
+            <span>{usersList.length > 0 ? 'Pilih Pengguna / Petugas Piket:' : 'Masukkan NIP Pengguna:'}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">PIN 6-Digit Terdaftar</span>
           </label>
-          <select
-            value={selectedNip}
-            onChange={(e) => handleQuickSelect(e.target.value)}
-            className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer transition-colors"
-          >
-            {usersList.map((u) => (
-              <option key={u.userId} value={u.nip} className="text-slate-900 dark:text-white bg-white dark:bg-slate-800">
-                {u.fullName} ({ROLE_LABELS[u.role]})
-              </option>
-            ))}
-          </select>
+          {usersList.length > 0 ? (
+            <select
+              value={selectedNip}
+              onChange={(e) => handleQuickSelect(e.target.value)}
+              className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer transition-colors"
+            >
+              {usersList.map((u) => (
+                <option key={u.userId} value={u.nip} className="text-slate-900 dark:text-white bg-white dark:bg-slate-800">
+                  {u.fullName} ({ROLE_LABELS[u.role]})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={selectedNip}
+              onChange={(e) => {
+                setSelectedNip(e.target.value);
+                setErrorMessage('');
+              }}
+              placeholder="Contoh: 198503152010011002"
+              className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+            />
+          )}
         </div>
 
         {/* Selected User Badge */}

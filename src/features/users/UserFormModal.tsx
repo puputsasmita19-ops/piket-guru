@@ -24,7 +24,7 @@ interface UserFormModalProps {
     role: UserRole;
     email: string;
     phone: string;
-    pin?: string;
+    initialPin?: string;
     permissions: string[];
     isActive: boolean;
   }) => Promise<void>;
@@ -54,10 +54,11 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [role, setRole] = useState<UserRole>('GURU');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [pin, setPin] = useState('123456');
+  const [pin, setPin] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (editingUser) {
@@ -66,17 +67,19 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setRole(editingUser.role);
       setEmail(editingUser.email || '');
       setPhone(editingUser.phone || '');
-      setPin(editingUser.pin || '123456');
+      setPin('');
       setIsActive(editingUser.isActive !== false);
       setPermissions(editingUser.permissions || []);
+      setErrorMsg(null);
     } else {
       setNip('');
       setFullName('');
       setRole('GURU');
       setEmail('');
       setPhone('');
-      setPin('123456');
+      setPin('');
       setIsActive(true);
+      setErrorMsg(null);
       applyDefaultPermissionsForRole('GURU');
     }
   }, [editingUser, isOpen]);
@@ -110,7 +113,15 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingUser) {
+      if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+        setErrorMsg('PIN Keamanan baru harus tepat 6 digit angka numerik.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
+    setErrorMsg(null);
     try {
       await onSave({
         id: editingUser?.id,
@@ -119,11 +130,13 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
         role,
         email,
         phone,
-        pin,
+        initialPin: !editingUser ? pin : undefined,
         permissions,
         isActive,
       });
       onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menyimpan profil pengguna.');
     } finally {
       setIsSubmitting(false);
     }
@@ -137,6 +150,11 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       maxWidth="xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+            {errorMsg}
+          </div>
+        )}
         {/* Row 1: NIP & Nama */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -193,9 +211,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               <input
                 type="password"
                 maxLength={6}
+                required
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
+                placeholder="••••••"
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono text-center tracking-widest"
               />
             </div>

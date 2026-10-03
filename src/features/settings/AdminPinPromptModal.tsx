@@ -3,6 +3,7 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { ShieldAlert, KeyRound, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { authService } from '../../services/auth/authService';
 
 interface AdminPinPromptModalProps {
   isOpen: boolean;
@@ -24,24 +25,26 @@ export const AdminPinPromptModal: React.FC<AdminPinPromptModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) return;
     setError(null);
     setIsVerifying(true);
 
-    setTimeout(() => {
-      // Validate PIN: check user's pin or default '123456'
-      const validPin = currentUser?.pin || '123456';
-      if (pin === validPin || pin === '123456') {
-        setIsVerifying(false);
+    try {
+      const res = await authService.verifyAdminPin(currentUser.id, pin);
+      if (res.success) {
         setPin('');
         onClose();
         onSuccess();
       } else {
-        setIsVerifying(false);
-        setError('PIN Keamanan yang Anda masukkan salah. Akses ditolak.');
+        setError(res.error || 'PIN Keamanan yang Anda masukkan salah. Akses ditolak.');
       }
-    }, 400);
+    } catch {
+      setError('Terjadi kesalahan verifikasi pada server.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleClose = () => {
@@ -83,7 +86,7 @@ export const AdminPinPromptModal: React.FC<AdminPinPromptModalProps> = ({
             className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center font-mono text-xl tracking-[0.4em] font-bold"
           />
           <p className="text-[10px] text-slate-400 text-center">
-            Gunakan PIN 6 digit akun Anda (Default: 123456)
+            Gunakan PIN 6 digit akun Administrator Anda
           </p>
         </div>
 

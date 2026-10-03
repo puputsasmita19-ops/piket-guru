@@ -4,10 +4,18 @@ import { DutyBookStatus, UserProfile } from '../../types';
 
 export class DutyBookService {
   /**
-   * Seed default duty books if empty
+   * Automatic demo duty book seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<DutyBookRecord>('dutyBooks');
+    // No-op in operational mode: empty database remains clean for official duty books
+    return;
+  }
+
+  /**
+   * Explicit demo duty book seeder for development/testing environments
+   */
+  public static async seedDemoDutyBook(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<DutyBookRecord>('dutyBooks');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -32,6 +40,8 @@ export class DutyBookService {
           catatanPiket: 'Secara umum kegiatan operasional dan ketertiban sekolah hari ini berjalan sesuai SOP.',
           tindakLanjut: 'Perketat pengawasan area belakang parkir saat jam istirahat kedua.',
           status: 'DRAFT',
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
           updatedAt: new Date().toISOString(),
@@ -58,6 +68,8 @@ export class DutyBookService {
     const payload: DutyBookRecord = {
       ...record,
       id,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       updatedAt: new Date().toISOString(),
       updatedBy: user.fullName,
       createdAt: record.createdAt || new Date().toISOString(),

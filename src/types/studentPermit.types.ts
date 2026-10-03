@@ -1,3 +1,5 @@
+import { BaseEntityMetadata } from './index';
+
 export type StudentPermitType =
   | 'SAKIT_PULANG'
   | 'URUSAN_KELUARGA'
@@ -7,7 +9,7 @@ export type StudentPermitType =
 
 export type StudentPermitStatus = 'SEDANG_KELUAR' | 'SUDAH_KEMBALI' | 'SELESAI_PULANG';
 
-export interface StudentPermitRecord {
+export interface StudentPermitRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamKeluar: string; // HH:mm WIB

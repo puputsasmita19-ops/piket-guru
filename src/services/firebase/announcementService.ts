@@ -4,10 +4,18 @@ import { UserProfile } from '../../types';
 
 export class AnnouncementService {
   /**
-   * Seed default announcements if collection is empty
+   * Automatic demo announcement seeding is disabled in production to protect data integrity.
    */
   public static async bootstrapIfEmpty(): Promise<void> {
-    const existing = await FirestoreService.getAll<AnnouncementRecord>('announcements');
+    // No-op in operational mode: empty database remains clean for official school announcements
+    return;
+  }
+
+  /**
+   * Explicit demo announcements seeder for development/testing environments
+   */
+  public static async seedDemoAnnouncements(): Promise<void> {
+    const existing = await FirestoreService.getAllRaw<AnnouncementRecord>('announcements');
     if (existing.length === 0) {
       const todayISO = new Date().toISOString().split('T')[0];
 
@@ -22,6 +30,8 @@ export class AnnouncementService {
           date: todayISO,
           targetRole: 'SEMUA',
           isActive: true,
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Dr. Hj. Siti Rohmah, M.Pd.',
         },
@@ -35,6 +45,8 @@ export class AnnouncementService {
           date: todayISO,
           targetRole: 'SEMUA',
           isActive: true,
+          dataSource: 'SEED',
+          isDemo: true,
           createdAt: new Date().toISOString(),
           createdBy: 'Drs. H. Ahmad Fauzi, M.Pd.',
         },
@@ -73,6 +85,8 @@ export class AnnouncementService {
       date: todayISO,
       targetRole: data.targetRole || 'SEMUA',
       isActive: true,
+      dataSource: 'PRODUCTION',
+      isDemo: false,
       createdAt: new Date().toISOString(),
       createdBy: user.fullName,
     };

@@ -128,7 +128,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;
   const attendancePercentage = todaySchedules.length > 0
     ? Math.round((presentCount / todaySchedules.length) * 100)
-    : 100;
+    : 0;
 
   // Handler for WhatsApp Reminder to Teacher
   const handleSendWaReminder = (schedule: ScheduleItem) => {

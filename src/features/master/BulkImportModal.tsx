@@ -296,8 +296,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               role: row.role,
               email: row.email,
               phone: row.phone,
-              pinSalt,
-              pinHash,
               isActive: true,
               permissions,
               createdAt: new Date().toISOString(),

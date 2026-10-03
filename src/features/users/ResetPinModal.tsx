@@ -17,7 +17,7 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
   user,
   onReset,
 }) => {
-  const [newPin, setNewPin] = useState('123456');
+  const [newPin, setNewPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -25,7 +25,7 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPin.length !== 6 || !/^\d+$/.test(newPin)) {
+    if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
       setErrorMsg('PIN Keamanan harus tepat 6 digit angka.');
       return;
     }
@@ -62,7 +62,7 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
 
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Masukkan PIN Baru (6 Digit Angka):
+            Masukkan PIN Baru (Tepat 6 Digit Angka):
           </label>
           <input
             type="password"
@@ -73,10 +73,10 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
               const val = e.target.value.replace(/\D/g, '');
               setNewPin(val);
             }}
-            placeholder="123456"
+            placeholder="••••••"
             className="w-full p-2.5 text-center tracking-widest text-lg font-mono rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
-          <p className="text-[11px] text-slate-400">Default standar sistem: <strong>123456</strong></p>
+          <p className="text-[11px] text-slate-400">Wajib 6 digit angka numerik unik tanpa pola berulang.</p>
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">

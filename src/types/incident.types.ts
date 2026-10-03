@@ -1,3 +1,5 @@
+import { BaseEntityMetadata } from './index';
+
 export type IncidentSeverity = 'RENDAH' | 'SEDANG' | 'TINGGI' | 'KRITIS';
 export type IncidentStatus = 'BARU' | 'INVESTIGASI' | 'PENANGANAN' | 'SELESAI';
 
@@ -8,7 +10,7 @@ export interface IncidentPhoto {
   uploadedAt: string;
 }
 
-export interface IncidentRecord {
+export interface IncidentRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   waktu: string;   // HH:mm WIB
