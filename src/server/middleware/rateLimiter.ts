@@ -1190,6 +1190,11 @@ export function getClientIp(req: Request, trustedHops: number = 1): string {
     return req.ip;
   }
 
+  const rawRealIp = req.headers ? (req.headers['x-real-ip'] as string) : undefined;
+  if (typeof rawRealIp === 'string' && rawRealIp.trim() && rawRealIp.trim() !== '::1' && rawRealIp.trim() !== '127.0.0.1') {
+    return rawRealIp.trim();
+  }
+
   if (trustedHops > 0) {
     const rawForwarded = req.headers ? req.headers['x-forwarded-for'] : undefined;
     if (typeof rawForwarded === 'string') {
