@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin';
+import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { CredentialStore } from '../services/credentialStore';
-import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter';
-import { UserProfile } from '../../types';
+import { CredentialStore } from '../services/credentialStore.js';
+import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
+import { UserProfile } from '../../types/index.js';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 export const authRouter = Router();

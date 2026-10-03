@@ -1,5 +1,5 @@
-import { hashPinAdaptive, verifyPinAdaptive } from '../crypto/adaptiveHash';
-import { adminDb } from '../firebaseAdmin';
+import { hashPinAdaptive, verifyPinAdaptive } from '../crypto/adaptiveHash.js';
+import { adminDb } from '../firebaseAdmin.js';
 
 export interface UserCredentialRecord {
   userId: string;

@@ -2,7 +2,7 @@ import express, { Express } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { authRouter } from './routes/authRoutes';
+import { authRouter } from './routes/authRoutes.js';
 
 dotenv.config();
 
@@ -39,7 +39,7 @@ export function createApp(): Express {
 
   // Health check endpoint with rate limiter readiness check (R11-01)
   app.get('/api/health', async (req, res) => {
-    const { getAuthRateLimiterReadiness } = await import('./middleware/rateLimiter');
+    const { getAuthRateLimiterReadiness } = await import('./middleware/rateLimiter.js');
     const authReadiness = await getAuthRateLimiterReadiness();
     const isOk = authReadiness.status === 'HEALTHY';
 

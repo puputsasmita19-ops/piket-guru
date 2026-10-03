@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { adminDb } from '../firebaseAdmin';
+import { adminDb } from '../firebaseAdmin.js';
 
 export interface AttemptRecord {
   count: number;

@@ -1,9 +1,9 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
 import * as fs from 'fs';
 import * as path from 'path';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 let adminApp: App;
 let adminAuth: Auth;
