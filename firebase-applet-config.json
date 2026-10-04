@@ -1,12 +1,12 @@
 {
-  "projectId": "strange-legacy-pxfhk",
-  "appId": "1:1014257447647:web:3daa6dcd1b3def18feef6a",
-  "apiKey": "AIzaSyBlccRXHjWBzmAcGydwqfalTmxnJcz0xEM",
-  "authDomain": "strange-legacy-pxfhk.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-piketguru-efa7ce79-970b-4e62-9504-5111ca090192",
-  "storageBucket": "strange-legacy-pxfhk.firebasestorage.app",
-  "messagingSenderId": "1014257447647",
+  "projectId": "piket-guru-3a1ae",
+  "appId": "1:622494701263:web:9e33074b1425de51b289ba",
+  "apiKey": "AIzaSyA_TYNtKV7-G20_Iw3tRPZPlIG0MedvX2c",
+  "authDomain": "piket-guru-3a1ae.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "piket-guru-3a1ae.firebasestorage.app",
+  "messagingSenderId": "622494701263",
   "measurementId": "",
-  "oAuthClientId": "1014257447647-pe91q43ps0shdl9igl2nirsrp8gsbnh9.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
