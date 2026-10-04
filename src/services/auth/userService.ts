@@ -12,7 +12,9 @@ export class UserService {
     if (allUsers.length === 0) {
       const bootstrapAdmin: UserProfile = {
         id: 'usr-admin-01',
+        loginId: 'ADMIN-001',
         nip: '198503152010011002',
+        nuptk: '',
         fullName: 'Administrator Sistem',
         role: 'ADMIN',
         email: 'admin@sekolah.sch.id',
@@ -29,16 +31,18 @@ export class UserService {
   }
 
   /**
-   * Create a new user profile.
+   * Create a new user profile with atomic loginId uniqueness enforcement via backend.
    * Eliminates shared default PINs (e.g. 123456).
    * If initialPin is provided, sets credential via authenticated backend API.
    * If no initial PIN or backend setup fails, user is explicitly created with requiresActivation: true.
    */
   public static async createUser(
     userData: {
-      nip: string;
+      loginId: string;
       fullName: string;
       role: UserRole;
+      nip?: string;
+      nuptk?: string;
       email: string;
       phone: string;
       initialPin?: string;
@@ -47,12 +51,44 @@ export class UserService {
     },
     adminUser: UserProfile
   ): Promise<UserProfile> {
+    const normalizedLoginId = (userData.loginId || '').trim().toUpperCase();
+
+    // 1. Primary path: Call authenticated backend API for atomic uniqueness enforcement in transaction
+    const apiRes = await authService.createUserProfile({
+      ...userData,
+      loginId: normalizedLoginId,
+      nip: userData.nip ? userData.nip.trim() : '',
+      nuptk: userData.nuptk ? userData.nuptk.trim() : '',
+    });
+
+    if (apiRes.success && apiRes.user) {
+      await FirestoreService.logAudit({
+        userId: adminUser.id,
+        userName: adminUser.fullName,
+        role: adminUser.role,
+        action: 'CREATE',
+        module: 'USERS',
+        recordId: apiRes.user.id,
+        details: `Menambahkan pengguna baru: ${apiRes.user.fullName} (ID Login: ${apiRes.user.loginId || '-'}) sebagai ${apiRes.user.role}${
+          apiRes.user.requiresActivation ? ' [Perlu Aktivasi PIN]' : ''
+        }`,
+      });
+      return apiRes.user;
+    }
+
+    if (apiRes.code === 'DUPLICATE_LOGIN_ID') {
+      throw new Error(apiRes.error || `ID Login '${normalizedLoginId}' sudah digunakan oleh akun lain.`);
+    }
+
+    // 2. Direct Firestore fallback (e.g. in test or offline environment)
     const id = `usr-${userData.role.toLowerCase()}-${Date.now().toString(36)}`;
     const hasInitialPin = !!userData.initialPin && /^\d{6}$/.test(userData.initialPin.trim());
 
     const newUser: UserProfile = {
       id,
-      nip: userData.nip.trim(),
+      loginId: normalizedLoginId,
+      nip: userData.nip ? userData.nip.trim() : '',
+      nuptk: userData.nuptk ? userData.nuptk.trim() : '',
       fullName: userData.fullName.trim(),
       role: userData.role,
       email: (userData.email || '').trim(),
@@ -74,7 +110,6 @@ export class UserService {
     if (hasInitialPin) {
       const res = await authService.resetUserPin(id, userData.initialPin!.trim());
       if (!res.success) {
-        // Fallback: If credential setup failed, mark user as requiring activation
         console.warn(`[USER_SERVICE] Initial PIN setup failed for ${id}: ${res.error}. Marked for activation.`);
         newUser.requiresActivation = true;
         await FirestoreService.setDocument('users', id, { ...newUser, requiresActivation: true });
@@ -88,7 +123,7 @@ export class UserService {
       action: 'CREATE',
       module: 'USERS',
       recordId: id,
-      details: `Menambahkan pengguna baru: ${newUser.fullName} (${newUser.nip}) sebagai ${newUser.role}${
+      details: `Menambahkan pengguna baru: ${newUser.fullName} (ID Login: ${newUser.loginId || '-'}) sebagai ${newUser.role}${
         newUser.requiresActivation ? ' [Perlu Aktivasi PIN]' : ''
       }`,
     });
@@ -110,6 +145,14 @@ export class UserService {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
     if (!existing) return;
 
+    // If loginId is being changed, verify uniqueness via backend API
+    if (updates.loginId && updates.loginId.trim().toUpperCase() !== (existing.loginId || '').trim().toUpperCase()) {
+      const apiRes = await authService.updateUserProfile(userId, updates);
+      if (!apiRes.success && apiRes.code === 'DUPLICATE_LOGIN_ID') {
+        throw new Error(apiRes.error || `ID Login '${updates.loginId}' sudah digunakan oleh akun lain.`);
+      }
+    }
+
     const nowSeconds = Math.floor(Date.now() / 1000);
     const roleChanged = updates.role && updates.role !== existing.role;
     const statusChanged = updates.isActive !== undefined && updates.isActive !== existing.isActive;
@@ -122,7 +165,9 @@ export class UserService {
     // Strict allowlist: only non-sensitive profile metadata
     const payload: UserProfile = {
       id: existing.id,
-      nip: updates.nip ? updates.nip.trim() : existing.nip,
+      loginId: updates.loginId !== undefined ? updates.loginId.trim().toUpperCase() : existing.loginId,
+      nip: updates.nip !== undefined ? updates.nip.trim() : existing.nip,
+      nuptk: updates.nuptk !== undefined ? updates.nuptk.trim() : existing.nuptk,
       fullName: updates.fullName ? updates.fullName.trim() : existing.fullName,
       role: updates.role || existing.role,
       email: updates.email !== undefined ? updates.email.trim() : existing.email,

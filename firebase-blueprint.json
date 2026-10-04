@@ -195,14 +195,27 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "username": { "type": "string" },
+        "loginId": { "type": "string" },
+        "nip": { "type": "string" },
+        "nuptk": { "type": "string" },
         "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["ADMIN", "GURU_PIKET", "KOORDINATOR", "KEPALA_SEKOLAH", "OPERATOR"] },
+        "role": { "type": "string", "enum": ["ADMIN", "KEPALA_SEKOLAH", "GURU", "TENAGA_KEPENDIDIKAN", "SATPAM"] },
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "isActive": { "type": "boolean" }
       },
-      "required": ["id", "username", "fullName", "role", "isActive"]
+      "required": ["id", "fullName", "role", "isActive"]
+    },
+    "LoginIdReservation": {
+      "title": "LoginIdReservation",
+      "description": "Atomic uniqueness reservation mapping loginId to userId",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "loginId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "loginId", "createdAt"]
     },
     "SchoolSettings": {
       "title": "SchoolSettings",
@@ -262,6 +275,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles and RBAC role records"
+    },
+    "/login_ids/{loginId}": {
+      "schema": "LoginIdReservation",
+      "description": "Server-authoritative loginId reservations for atomic uniqueness"
     },
     "/settings/{settingId}": {
       "schema": "SchoolSettings",

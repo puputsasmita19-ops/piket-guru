@@ -30,6 +30,7 @@ interface BulkImportModalProps {
 }
 
 interface ParsedUserRow {
+  loginId?: string;
   nip: string;
   fullName: string;
   role: UserRole;
@@ -289,8 +290,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               permissions = ['report_incidents'];
             }
 
+            const assignedLoginId = row.loginId
+              ? row.loginId.trim().toUpperCase()
+              : `${row.role === 'ADMIN' ? 'ADMIN' : row.role === 'GURU' ? 'GURU' : 'STAFF'}-${(row.nip ? row.nip.slice(-4) : (i + 1).toString().padStart(3, '0')).toUpperCase()}`;
+
             const newUser: UserProfile = {
               id: userId,
+              loginId: assignedLoginId,
               nip: row.nip,
               fullName: row.fullName,
               role: row.role,

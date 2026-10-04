@@ -8,8 +8,9 @@ export interface BackupManifest {
   environment: string;
   createdBy: {
     id: string;
+    loginId?: string;
     fullName: string;
-    nip: string;
+    nip?: string;
     role: string;
   };
   metadata: {
@@ -49,6 +50,7 @@ export interface BackupPayload extends BackupManifest {
 
 export const FORBIDDEN_COLLECTIONS = new Set([
   'user_credentials',
+  'login_ids',
   'database_snapshots',
   'database_snapshots_chunks',
   'secrets',
@@ -243,7 +245,9 @@ export class BackupService {
       const clean = stripCredentialsDeep(u);
       return {
         id: clean.id,
+        loginId: clean.loginId ? String(clean.loginId).trim().toUpperCase() : undefined,
         nip: clean.nip || '',
+        nuptk: clean.nuptk ? String(clean.nuptk).trim() : undefined,
         fullName: clean.fullName || '',
         role: clean.role || 'GURU',
         email: clean.email || '',
@@ -298,8 +302,9 @@ export class BackupService {
       environment: 'PRODUCTION',
       createdBy: {
         id: adminUser.id,
+        loginId: adminUser.loginId || '',
         fullName: adminUser.fullName,
-        nip: adminUser.nip,
+        nip: adminUser.nip || '',
         role: adminUser.role,
       },
       metadata: {
@@ -429,6 +434,24 @@ export class BackupService {
 
         // Exhaustive per-collection schema validation (R5-03, R6-04)
         if (col === 'users') {
+          if (item.loginId !== undefined && (typeof item.loginId !== 'string' || item.loginId.trim().length === 0)) {
+            return {
+              isValid: false,
+              error: `Record #${i} dalam koleksi 'users' (${item.id}) memiliki loginId bukan string yang valid.`,
+            };
+          }
+          if (item.nip !== undefined && typeof item.nip !== 'string') {
+            return {
+              isValid: false,
+              error: `Record #${i} dalam koleksi 'users' (${item.id}) memiliki nip bukan string.`,
+            };
+          }
+          if (item.nuptk !== undefined && typeof item.nuptk !== 'string') {
+            return {
+              isValid: false,
+              error: `Record #${i} dalam koleksi 'users' (${item.id}) memiliki nuptk bukan string.`,
+            };
+          }
           if (item.role !== undefined) {
             if (typeof item.role !== 'string') {
               return {
@@ -596,6 +619,15 @@ export class BackupService {
             }
 
             sanitizedUsersCount++;
+            if (safeItem.loginId) {
+              safeItem.loginId = String(safeItem.loginId).trim().toUpperCase();
+            }
+            if (safeItem.nip) {
+              safeItem.nip = String(safeItem.nip).trim();
+            }
+            if (safeItem.nuptk) {
+              safeItem.nuptk = String(safeItem.nuptk).trim();
+            }
           }
 
           // Write document with purgeLegacyCredentials to remove any old credentials via deleteField()

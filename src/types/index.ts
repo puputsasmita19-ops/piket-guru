@@ -29,7 +29,9 @@ export const isSeedRecord = (item: any): boolean => {
 
 export interface UserProfile extends BaseEntityMetadata {
   id: string;
-  nip: string;
+  loginId?: string;
+  nip?: string;
+  nuptk?: string;
   fullName: string;
   role: UserRole;
   email: string;

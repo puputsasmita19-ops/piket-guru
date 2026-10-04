@@ -1314,10 +1314,31 @@ export class AuthRateLimiter {
    * active request lease renewal heartbeat (R10-02, R11-02, R12-02, R13-02), and fail-closed store check
    */
   public static async loginMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const nip = (req.body?.nip || '').trim();
+    const rawIdentifier = (req.body?.identifier || req.body?.loginId || req.body?.nip || '').trim();
     const ip = getClientIp(req);
-    const idKey = toAccountIdKey(nip || 'anon');
     const ipKey = toIpKey(ip);
+
+    let targetAccountId = rawIdentifier;
+    if (rawIdentifier && adminDb) {
+      try {
+        const normalized = rawIdentifier.trim().toUpperCase();
+        const [loginIdSnap, nipSnap] = await Promise.all([
+          adminDb.collection('users').where('loginId', '==', normalized).limit(2).get(),
+          adminDb.collection('users').where('nip', '==', rawIdentifier).limit(2).get(),
+        ]);
+        const matchedUids = new Set<string>();
+        loginIdSnap.docs.forEach((d) => matchedUids.add(d.id));
+        nipSnap.docs.forEach((d) => matchedUids.add(d.id));
+        if (matchedUids.size === 1) {
+          targetAccountId = Array.from(matchedUids)[0];
+          (req as any).resolvedUserId = targetAccountId;
+        }
+      } catch {
+        // Fall back to rawIdentifier if lookup fails
+      }
+    }
+
+    const idKey = toAccountIdKey(targetAccountId || 'anon');
 
     try {
       // 1. Check IP lockout
@@ -1332,18 +1353,34 @@ export class AuthRateLimiter {
         return;
       }
 
-      // 2. Check NIP lockout
-      if (nip) {
-        const nipLock = await activeStoreDriver.isLocked(idKey);
-        if (nipLock.locked) {
-          res.status(429).json({
-            success: false,
-            error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${nipLock.remainingSeconds} detik.`,
-            code: 'ACCOUNT_LOCKED',
-            remainingSeconds: nipLock.remainingSeconds,
-          });
-          return;
+      // 2. Check Account / Alias lockout
+      let isAccountLocked = false;
+      let remainingLockSeconds: number | undefined;
+
+      if (targetAccountId) {
+        const targetLock = await activeStoreDriver.isLocked(toAccountIdKey(targetAccountId));
+        if (targetLock.locked) {
+          isAccountLocked = true;
+          remainingLockSeconds = targetLock.remainingSeconds;
         }
+      }
+
+      if (!isAccountLocked && rawIdentifier && rawIdentifier !== targetAccountId) {
+        const rawLock = await activeStoreDriver.isLocked(toAccountIdKey(rawIdentifier));
+        if (rawLock.locked) {
+          isAccountLocked = true;
+          remainingLockSeconds = rawLock.remainingSeconds;
+        }
+      }
+
+      if (isAccountLocked) {
+        res.status(429).json({
+          success: false,
+          error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${remainingLockSeconds} detik.`,
+          code: 'ACCOUNT_LOCKED',
+          remainingSeconds: remainingLockSeconds,
+        });
+        return;
       }
 
       // 3. Acquire Token-Based In-Flight Lease

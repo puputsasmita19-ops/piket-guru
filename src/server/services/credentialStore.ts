@@ -3,6 +3,7 @@ import { adminDb } from '../firebaseAdmin.js';
 
 export interface UserCredentialRecord {
   userId: string;
+  loginId?: string;
   nip: string;
   scryptHash: string;
   createdAt: string;
@@ -31,7 +32,7 @@ export class CredentialStore {
    * Enforces 6-digit numeric constraint, verifies write consistency by reading back,
    * and propagates any database errors immediately.
    */
-  public static async setCredential(userId: string, nip: string, pin: string): Promise<void> {
+  public static async setCredential(userId: string, nip: string, pin: string, loginId?: string): Promise<void> {
     if (!pin || typeof pin !== 'string' || !/^\d{6}$/.test(pin.trim())) {
       throw new Error('PIN must be exactly 6 numeric digits');
     }
@@ -40,6 +41,7 @@ export class CredentialStore {
     const now = new Date().toISOString();
     const record: UserCredentialRecord = {
       userId,
+      loginId: loginId ? loginId.trim().toUpperCase() : '',
       nip: nip ? nip.trim() : '',
       scryptHash,
       updatedAt: now,

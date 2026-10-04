@@ -123,11 +123,14 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------
-    // 3. PRIVATE CREDENTIAL STORE (user_credentials)
+    // 3. PRIVATE CREDENTIAL STORE & LOGIN ID RESERVATIONS
     // -------------------------------------------------------------
     // DENIED TO ALL CLIENT SDKs (INCLUDING ADMIN CLIENTS).
     // Accessible strictly by backend Admin SDK.
     match /user_credentials/{userId} {
+      allow read, write: if false;
+    }
+    match /login_ids/{loginId} {
       allow read, write: if false;
     }
 

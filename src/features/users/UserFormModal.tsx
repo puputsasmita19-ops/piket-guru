@@ -19,7 +19,9 @@ interface UserFormModalProps {
   onClose: () => void;
   onSave: (data: {
     id?: string;
-    nip: string;
+    loginId: string;
+    nip?: string;
+    nuptk?: string;
     fullName: string;
     role: UserRole;
     email: string;
@@ -49,7 +51,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   onSave,
   editingUser,
 }) => {
+  const [loginId, setLoginId] = useState('');
   const [nip, setNip] = useState('');
+  const [nuptk, setNuptk] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('GURU');
   const [email, setEmail] = useState('');
@@ -62,7 +66,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   useEffect(() => {
     if (editingUser) {
-      setNip(editingUser.nip);
+      setLoginId(editingUser.loginId || '');
+      setNip(editingUser.nip || '');
+      setNuptk(editingUser.nuptk || '');
       setFullName(editingUser.fullName);
       setRole(editingUser.role);
       setEmail(editingUser.email || '');
@@ -72,7 +78,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setPermissions(editingUser.permissions || []);
       setErrorMsg(null);
     } else {
+      setLoginId('');
       setNip('');
+      setNuptk('');
       setFullName('');
       setRole('GURU');
       setEmail('');
@@ -113,6 +121,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loginId.trim()) {
+      setErrorMsg('ID Login / Kode Pegawai wajib diisi.');
+      return;
+    }
     if (!editingUser) {
       if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
         setErrorMsg('PIN Keamanan baru harus tepat 6 digit angka numerik.');
@@ -125,7 +137,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     try {
       await onSave({
         id: editingUser?.id,
-        nip,
+        loginId: loginId.trim().toUpperCase(),
+        nip: nip.trim(),
+        nuptk: nuptk.trim(),
         fullName,
         role,
         email,
@@ -155,24 +169,25 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             {errorMsg}
           </div>
         )}
-        {/* Row 1: NIP & Nama */}
+        {/* Row 1: ID Login / Kode Pegawai (Wajib) & Nama Lengkap */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              NIP / NUPTK / No. Induk
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>ID Login / Kode Pegawai <span className="text-rose-500">*</span></span>
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Unik & Wajib</span>
             </label>
             <input
               required
-              value={nip}
-              onChange={(e) => setNip(e.target.value)}
-              placeholder="Contoh: 198503152010011002"
-              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value.toUpperCase())}
+              placeholder="Contoh: ADMIN-001, GURU-001, STAFF-001"
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold tracking-wider focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
             />
           </div>
 
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              Nama Lengkap & Gelar
+              Nama Lengkap & Gelar <span className="text-rose-500">*</span>
             </label>
             <input
               required
@@ -180,6 +195,35 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Row 2: NIP (Opsional) & NUPTK (Opsional) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>NIP (Nomor Induk Pegawai)</span>
+              <span className="text-[10px] text-slate-400 font-normal">Opsional</span>
+            </label>
+            <input
+              value={nip}
+              onChange={(e) => setNip(e.target.value)}
+              placeholder="Contoh: 198503152010011002 (Kosongkan jika belum ada)"
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>NUPTK</span>
+              <span className="text-[10px] text-slate-400 font-normal">Opsional</span>
+            </label>
+            <input
+              value={nuptk}
+              onChange={(e) => setNuptk(e.target.value)}
+              placeholder="Contoh: 1234567890123456 (Kosongkan jika belum ada)"
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
         </div>

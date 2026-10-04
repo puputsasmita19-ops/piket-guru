@@ -9,12 +9,39 @@ import firebaseConfig from '../../../firebase-applet-config.json' with { type: '
 export const authRouter = Router();
 
 /**
+ * Normalizes a loginId / employee code consistently:
+ * Trims whitespace, standardizes to uppercase.
+ */
+export function normalizeLoginId(raw: string): string {
+  return (raw || '').trim().toUpperCase();
+}
+
+/**
+ * Validates loginId format (3-50 chars, alphanumeric, hyphens, underscores, dots)
+ */
+export function validateLoginId(loginId: string): { valid: boolean; error?: string } {
+  if (!loginId || typeof loginId !== 'string') {
+    return { valid: false, error: 'ID Login / Kode Pegawai wajib diisi.' };
+  }
+  const normalized = normalizeLoginId(loginId);
+  if (normalized.length < 3 || normalized.length > 50) {
+    return { valid: false, error: 'ID Login / Kode Pegawai harus berukuran antara 3 sampai 50 karakter.' };
+  }
+  if (!/^[A-Z0-9_.-]+$/.test(normalized)) {
+    return { valid: false, error: 'ID Login / Kode Pegawai hanya boleh memuat huruf, angka, tanda minus (-), underscore (_), atau titik (.).' };
+  }
+  return { valid: true };
+}
+
+/**
  * Sanitizes a UserProfile object to ensure NO credential fields are ever returned to the client
  */
 export function sanitizeUserProfile(u: any): UserProfile {
   return {
     id: u.id,
+    loginId: u.loginId ? normalizeLoginId(u.loginId) : '',
     nip: u.nip || '',
+    nuptk: u.nuptk || '',
     fullName: u.fullName || '',
     role: u.role || 'GURU',
     email: u.email || '',
@@ -270,7 +297,9 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
         const data = d.data();
         return {
           id: d.id,
+          loginId: data.loginId ? normalizeLoginId(data.loginId) : '',
           nip: data.nip || '',
+          nuptk: data.nuptk || '',
           fullName: data.fullName || '',
           role: data.role || 'GURU',
           avatarUrl: data.avatarUrl || null,
@@ -379,23 +408,25 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/login
- * Verifies NIP and PIN on server-side using OWASP adaptive scrypt and rate limiting.
+ * Verifies ID Login / NIP and PIN on server-side using OWASP adaptive scrypt and rate limiting.
+ * Supports loginId and legacy NIP. Rejects ambiguous identities clearly.
  * Returns a cryptographically signed Firebase Custom Token for client signInWithCustomToken.
  */
 authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, res: Response) => {
-  const { nip, pin } = req.body || {};
+  const rawIdentifier = (req.body?.identifier || req.body?.loginId || req.body?.nip || '').trim();
+  const pin = (req.body?.pin || '').trim();
   const ip = getClientIp(req);
 
-  if (!nip || !pin) {
+  if (!rawIdentifier || !pin) {
     res.status(400).json({
       success: false,
-      error: 'NIP dan PIN wajib diisi.',
+      error: 'ID Login / NIP dan PIN wajib diisi.',
     });
     return;
   }
 
   // Strict 6-digit PIN format policy (REV-02 & REV-03)
-  if (typeof pin !== 'string' || !/^\d{6}$/.test(pin.trim())) {
+  if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) {
     res.status(400).json({
       success: false,
       error: 'PIN harus berupa tepat 6 digit angka numerik.',
@@ -424,21 +455,24 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
   }
 
   try {
-    // 1. Find user by NIP strictly via Admin SDK (R21-01: zero fallback list)
-    let userData: any = null;
-    let userId: string = '';
+    // 1. Find user by loginId, legacy NIP, or document ID
+    const normalized = normalizeLoginId(rawIdentifier);
+    let matchedDocs = new Map<string, FirebaseFirestore.DocumentSnapshot>();
 
     try {
-      const snap = await adminDb.collection('users').where('nip', '==', nip.trim()).limit(1).get();
-      if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        userData = userDoc.data() as any;
-        userId = userDoc.id;
+      const [byLoginId, byNip, byId] = await Promise.all([
+        adminDb.collection('users').where('loginId', '==', normalized).get(),
+        adminDb.collection('users').where('nip', '==', rawIdentifier).get(),
+        adminDb.collection('users').doc(rawIdentifier).get().catch(() => null),
+      ]);
+
+      byLoginId.docs.forEach((d) => matchedDocs.set(d.id, d));
+      byNip.docs.forEach((d) => matchedDocs.set(d.id, d));
+      if (byId && byId.exists) {
+        matchedDocs.set(byId.id, byId);
       }
     } catch (dbErr: any) {
-      if (isResponseClosed(res)) {
-        return;
-      }
+      if (isResponseClosed(res)) return;
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) {
           res.status(503).json({
@@ -468,8 +502,20 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       return;
     }
 
-    if (!userData) {
-      const failInfo = await AuthRateLimiter.recordFailure(nip.trim(), ip);
+    // Handle ambiguous matches: reject clearly, NEVER pick the first account (Requirement 4)
+    if (matchedDocs.size > 1) {
+      await AuthRateLimiter.recordFailure(rawIdentifier, ip);
+      res.status(409).json({
+        success: false,
+        error: 'Identitas login ambigu: ditemukan lebih dari satu akun yang cocok. Harap gunakan ID Login unik Anda.',
+        code: 'AMBIGUOUS_LOGIN_IDENTITY',
+      });
+      return;
+    }
+
+    // Handle no matching user
+    if (matchedDocs.size === 0) {
+      const failInfo = await AuthRateLimiter.recordFailure(rawIdentifier, ip);
       if (isRequestAborted(req) || isResponseClosed(res)) {
         if (!isResponseClosed(res)) {
           res.status(503).json({
@@ -482,10 +528,26 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       }
       res.status(401).json({
         success: false,
-        error: 'NIP atau PIN keamanan tidak sesuai.',
+        error: 'ID Login/NIP atau PIN keamanan tidak sesuai.',
         remainingAttempts: failInfo.remainingAttempts,
         isLocked: failInfo.locked,
         remainingSeconds: failInfo.lockoutSeconds,
+      });
+      return;
+    }
+
+    const userDoc = Array.from(matchedDocs.values())[0];
+    const userId = userDoc.id;
+    const userData = userDoc.data() as any;
+
+    // Check account-level lockout: all aliases share this unified account check (Requirement 5)
+    const accountLock = await AuthRateLimiter.isLocked(userId);
+    if (accountLock.locked) {
+      res.status(429).json({
+        success: false,
+        error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${accountLock.remainingSeconds} detik.`,
+        code: 'ACCOUNT_LOCKED',
+        remainingSeconds: accountLock.remainingSeconds,
       });
       return;
     }
@@ -508,14 +570,12 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       return;
     }
 
-    // 2. Check private credential store strictly via adaptive scrypt (R21-01: zero plaintext / default PIN fallback)
+    // 2. Check private credential store strictly via adaptive scrypt
     let isValid = false;
     try {
-      isValid = await CredentialStore.verifyCredential(userId, pin.trim());
+      isValid = await CredentialStore.verifyCredential(userId, pin);
     } catch (credErr: any) {
-      if (isResponseClosed(res)) {
-        return;
-      }
+      if (isResponseClosed(res)) return;
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) {
           res.status(503).json({
@@ -546,7 +606,18 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     }
 
     if (!isValid) {
-      const failInfo = await AuthRateLimiter.recordFailure(nip.trim(), ip);
+      // Record failure for the canonical userId AND rawIdentifier so all aliases accumulate (Requirement 5)
+      const failInfo = await AuthRateLimiter.recordFailure(userId, ip);
+      if (rawIdentifier !== userId) {
+        await AuthRateLimiter.recordFailure(rawIdentifier, ip);
+      }
+      if (userData.loginId && userData.loginId !== rawIdentifier && userData.loginId !== userId) {
+        await AuthRateLimiter.recordFailure(userData.loginId, ip);
+      }
+      if (userData.nip && userData.nip !== rawIdentifier && userData.nip !== userId) {
+        await AuthRateLimiter.recordFailure(userData.nip, ip);
+      }
+
       if (isRequestAborted(req) || isResponseClosed(res)) {
         if (!isResponseClosed(res)) {
           res.status(503).json({
@@ -559,7 +630,7 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       }
       res.status(401).json({
         success: false,
-        error: 'NIP atau PIN keamanan tidak sesuai.',
+        error: 'ID Login/NIP atau PIN keamanan tidak sesuai.',
         remainingAttempts: failInfo.remainingAttempts,
         isLocked: failInfo.locked,
         remainingSeconds: failInfo.lockoutSeconds,
@@ -567,8 +638,17 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       return;
     }
 
-    // 3. Reset rate limiter on success
-    await AuthRateLimiter.recordSuccess(nip.trim(), ip);
+    // 3. Reset rate limiter on success for canonical userId and all known aliases
+    await AuthRateLimiter.recordLoginSuccess(userId, ip);
+    if (rawIdentifier !== userId) {
+      await AuthRateLimiter.recordLoginSuccess(rawIdentifier, ip);
+    }
+    if (userData.loginId) {
+      await AuthRateLimiter.recordLoginSuccess(userData.loginId, ip);
+    }
+    if (userData.nip) {
+      await AuthRateLimiter.recordLoginSuccess(userData.nip, ip);
+    }
 
     if (isRequestAborted(req)) {
       if (!res.headersSent) {
@@ -584,12 +664,13 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     // 4. Generate clean sanitized profile
     const safeUser = sanitizeUserProfile({ id: userId, ...userData });
 
-    // 5. Mint Firebase Custom Token with role custom claims (R21-02: controlled failure on signer error)
+    // 5. Mint Firebase Custom Token with role custom claims
     let customToken: string | null = null;
     try {
       const developerClaims = {
         role: safeUser.role,
-        nip: safeUser.nip,
+        nip: safeUser.nip || '',
+        loginId: safeUser.loginId || '',
       };
 
       if (!isRequestAborted(req)) {
@@ -644,6 +725,226 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       success: false,
       error: 'Terjadi kesalahan sistem saat memproses autentikasi.',
     });
+  }
+});
+
+/**
+ * POST /api/auth/create-user
+ * Atomic user profile creation with backend-enforced unique loginId (Requirement 1, CR-IDENTITAS-LOGIN-002).
+ * Enforces uniqueness atomically via a dedicated login_ids reservation document inside a Firestore transaction.
+ */
+authRouter.post('/create-user', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  const { loginId, fullName, role, nip, nuptk, email, phone, initialPin, permissions, isActive } = req.body || {};
+
+  if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+    res.status(400).json({ success: false, error: 'Nama Lengkap wajib diisi.' });
+    return;
+  }
+
+  const loginIdValidation = validateLoginId(loginId);
+  if (!loginIdValidation.valid) {
+    res.status(400).json({ success: false, error: loginIdValidation.error });
+    return;
+  }
+  const normalizedLoginId = normalizeLoginId(loginId);
+
+  const validRoles = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'];
+  if (!role || !validRoles.includes(role)) {
+    res.status(400).json({ success: false, error: `Peran (role) '${role}' tidak valid.` });
+    return;
+  }
+
+  if (initialPin && (!/^\d{6}$/.test(String(initialPin).trim()))) {
+    res.status(400).json({ success: false, error: 'PIN Awal harus berupa tepat 6 digit angka numerik.' });
+    return;
+  }
+
+  if (!adminDb) {
+    res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
+    return;
+  }
+
+  try {
+    const userId = (req.body?.id && typeof req.body.id === 'string' && req.body.id.trim())
+      ? req.body.id.trim()
+      : `usr-${role.toLowerCase()}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const hasInitialPin = Boolean(initialPin && /^\d{6}$/.test(String(initialPin).trim()));
+
+    // Atomic transaction for reservation & uniqueness enforcement
+    await adminDb.runTransaction(async (transaction) => {
+      const reservationRef = adminDb.collection('login_ids').doc(normalizedLoginId);
+      const reservationSnap = await transaction.get(reservationRef);
+      if (reservationSnap.exists) {
+        const resData = reservationSnap.data();
+        if (resData?.userId !== userId) {
+          throw new Error(`DUPLICATE_LOGIN_ID: ID Login '${normalizedLoginId}' sudah digunakan oleh akun lain.`);
+        }
+      }
+
+      // Check if user doc already exists with this userId
+      const userRef = adminDb.collection('users').doc(userId);
+      const userSnap = await transaction.get(userRef);
+      if (userSnap.exists) {
+        throw new Error(`USER_EXISTS: Akun dengan ID '${userId}' sudah ada.`);
+      }
+
+      const now = new Date().toISOString();
+      const userRecord: any = {
+        id: userId,
+        loginId: normalizedLoginId,
+        nip: (nip || '').trim(),
+        nuptk: (nuptk || '').trim(),
+        fullName: fullName.trim(),
+        role,
+        email: (email || '').trim(),
+        phone: (phone || '').trim(),
+        isActive: isActive !== false,
+        permissions: Array.isArray(permissions) ? permissions : [],
+        requiresActivation: !hasInitialPin,
+        sessionRevokedAtSeconds: Math.floor(Date.now() / 1000),
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Set user profile
+      transaction.set(userRef, userRecord);
+
+      // Set atomic loginId reservation
+      transaction.set(reservationRef, {
+        loginId: normalizedLoginId,
+        userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    // Save initial credential if provided
+    if (hasInitialPin) {
+      await CredentialStore.setCredential(userId, (nip || '').trim(), String(initialPin).trim(), normalizedLoginId);
+    }
+
+    const createdSnap = await adminDb.collection('users').doc(userId).get();
+    const createdData = createdSnap.data() || {};
+    const safeUser = sanitizeUserProfile({ id: userId, ...createdData });
+
+    res.json({
+      success: true,
+      user: safeUser,
+      message: 'Pengguna berhasil didaftarkan.',
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('DUPLICATE_LOGIN_ID')) {
+      res.status(409).json({
+        success: false,
+        error: err.message.replace('DUPLICATE_LOGIN_ID: ', ''),
+        code: 'DUPLICATE_LOGIN_ID',
+      });
+      return;
+    }
+    console.error('[AUTH_ROUTES] Create user error:', err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Terjadi kesalahan sistem saat membuat pengguna.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/update-user
+ * Atomic user profile update with loginId uniqueness verification.
+ */
+authRouter.post('/update-user', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  const { userId, updates } = req.body || {};
+  if (!userId || !updates || typeof updates !== 'object') {
+    res.status(400).json({ success: false, error: 'User ID dan data pembaruan wajib disertakan.' });
+    return;
+  }
+
+  if (!adminDb) {
+    res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
+    return;
+  }
+
+  try {
+    const userRef = adminDb.collection('users').doc(userId);
+    const existingSnap = await userRef.get();
+    if (!existingSnap.exists) {
+      res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+    const existingData = existingSnap.data() || {};
+
+    let newNormalizedLoginId: string | null = null;
+    if (updates.loginId !== undefined && updates.loginId !== null && updates.loginId !== '') {
+      const validation = validateLoginId(updates.loginId);
+      if (!validation.valid) {
+        res.status(400).json({ success: false, error: validation.error });
+        return;
+      }
+      newNormalizedLoginId = normalizeLoginId(updates.loginId);
+    }
+
+    const oldLoginId = existingData.loginId ? normalizeLoginId(existingData.loginId) : null;
+    const loginIdChanged = newNormalizedLoginId !== null && newNormalizedLoginId !== oldLoginId;
+
+    await adminDb.runTransaction(async (transaction) => {
+      if (loginIdChanged && newNormalizedLoginId) {
+        const newResRef = adminDb.collection('login_ids').doc(newNormalizedLoginId);
+        const newResSnap = await transaction.get(newResRef);
+        if (newResSnap.exists && newResSnap.data()?.userId !== userId) {
+          throw new Error(`DUPLICATE_LOGIN_ID: ID Login '${newNormalizedLoginId}' sudah digunakan oleh akun lain.`);
+        }
+
+        transaction.set(newResRef, {
+          loginId: newNormalizedLoginId,
+          userId,
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (oldLoginId) {
+          const oldResRef = adminDb.collection('login_ids').doc(oldLoginId);
+          transaction.delete(oldResRef);
+        }
+      }
+
+      const payloadToUpdate: any = {
+        updatedAt: new Date().toISOString(),
+      };
+      if (newNormalizedLoginId !== null) payloadToUpdate.loginId = newNormalizedLoginId;
+      if (updates.nip !== undefined) payloadToUpdate.nip = (updates.nip || '').trim();
+      if (updates.nuptk !== undefined) payloadToUpdate.nuptk = (updates.nuptk || '').trim();
+      if (updates.fullName !== undefined) payloadToUpdate.fullName = updates.fullName.trim();
+      if (updates.role !== undefined) payloadToUpdate.role = updates.role;
+      if (updates.email !== undefined) payloadToUpdate.email = (updates.email || '').trim();
+      if (updates.phone !== undefined) payloadToUpdate.phone = (updates.phone || '').trim();
+      if (updates.avatarUrl !== undefined) payloadToUpdate.avatarUrl = updates.avatarUrl;
+      if (updates.isActive !== undefined) payloadToUpdate.isActive = updates.isActive;
+      if (updates.permissions !== undefined) payloadToUpdate.permissions = updates.permissions;
+      if (updates.sessionRevokedAtSeconds !== undefined) payloadToUpdate.sessionRevokedAtSeconds = updates.sessionRevokedAtSeconds;
+      if (updates.requiresActivation !== undefined) payloadToUpdate.requiresActivation = updates.requiresActivation;
+
+      transaction.update(userRef, payloadToUpdate);
+    });
+
+    const updatedSnap = await userRef.get();
+    res.json({
+      success: true,
+      user: sanitizeUserProfile({ id: userId, ...updatedSnap.data() }),
+      message: 'Data pengguna berhasil diperbarui.',
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('DUPLICATE_LOGIN_ID')) {
+      res.status(409).json({
+        success: false,
+        error: err.message.replace('DUPLICATE_LOGIN_ID: ', ''),
+        code: 'DUPLICATE_LOGIN_ID',
+      });
+      return;
+    }
+    console.error('[AUTH_ROUTES] Update user error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Gagal memperbarui pengguna.' });
   }
 });
 
@@ -814,14 +1115,16 @@ export async function executePinChangeTransaction(
       throw new Error('TRANSACTION_CANCELLED_REQUEST_ABORTED');
     }
 
-    const existingRevocation = userSnap.data()?.sessionRevokedAtSeconds || 0;
+    const existingData = userSnap.data() || {};
+    const existingRevocation = existingData.sessionRevokedAtSeconds || 0;
     effectiveRevocation = Math.max(existingRevocation, nowSeconds);
 
     transaction.set(
       credRef,
       {
         userId,
-        nip: userNip,
+        loginId: existingData.loginId ? normalizeLoginId(existingData.loginId) : '',
+        nip: userNip || '',
         scryptHash: newHash,
         updatedAt: new Date().toISOString(),
       },
@@ -1040,8 +1343,10 @@ authRouter.post(
       // Revoke refresh tokens with retry & transparent reporting (R6-03)
       const refreshRevocation = await revokeRefreshTokensWithRetry(targetUserId);
 
-      // Clear any rate limiter lockout for target user
-      await AuthRateLimiter.recordLoginSuccess(targetData.nip, ip);
+      // Clear any rate limiter lockout for target user across all identifiers
+      await AuthRateLimiter.recordLoginSuccess(targetUserId, ip);
+      if (targetData.loginId) await AuthRateLimiter.recordLoginSuccess(targetData.loginId, ip);
+      if (targetData.nip) await AuthRateLimiter.recordLoginSuccess(targetData.nip, ip);
       await AuthRateLimiter.recordActionSuccess('verifyPin', targetUserId, ip);
       await AuthRateLimiter.recordActionSuccess('changePin', targetUserId, ip);
       await AuthRateLimiter.recordActionSuccess('resetPin', targetUserId, ip);

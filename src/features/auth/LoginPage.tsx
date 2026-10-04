@@ -23,7 +23,7 @@ export const LoginPage: React.FC = () => {
   const { loginWithPin, loginWithGoogle, isLoading } = useAuth();
   const { theme, setTheme, isDark } = useTheme();
   const [usersList, setUsersList] = useState<UserSummaryItem[]>([]);
-  const [selectedNip, setSelectedNip] = useState<string>('');
+  const [selectedIdentifier, setSelectedIdentifier] = useState<string>('');
   const [pin, setPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -64,7 +64,7 @@ export const LoginPage: React.FC = () => {
       const users = await authService.getUsersList();
       setUsersList(users);
       if (users.length > 0) {
-        setSelectedNip(users[0].nip);
+        setSelectedIdentifier(users[0].loginId || users[0].nip || users[0].id);
       }
     };
     fetchUsers();
@@ -100,15 +100,15 @@ export const LoginPage: React.FC = () => {
     setErrorMessage('');
   };
 
-  const handleQuickSelect = (nip: string) => {
-    setSelectedNip(nip);
+  const handleQuickSelect = (identifier: string) => {
+    setSelectedIdentifier(identifier);
     setPin('');
     setErrorMessage('');
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedNip) {
+    if (!selectedIdentifier) {
       setErrorMessage('Pilih akun pengguna terlebih dahulu.');
       return;
     }
@@ -120,7 +120,7 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      const res = await loginWithPin(selectedNip, pin);
+      const res = await loginWithPin(selectedIdentifier, pin);
       if (!res.success) {
         setErrorMessage(res.error || 'Autentikasi gagal.');
         setPin('');
@@ -132,12 +132,18 @@ export const LoginPage: React.FC = () => {
 
   // Auto submit when 6 digits are typed
   useEffect(() => {
-    if (pin.length === 6 && selectedNip && !isSubmitting) {
+    if (pin.length === 6 && selectedIdentifier && !isSubmitting) {
       handleSubmit();
     }
   }, [pin]);
 
-  const selectedUser = usersList.find((u) => u.nip === selectedNip);
+  const selectedUser = usersList.find(
+    (u) =>
+      (u.loginId && u.loginId === selectedIdentifier) ||
+      u.nip === selectedIdentifier ||
+      u.id === selectedIdentifier ||
+      u.userId === selectedIdentifier
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col justify-center items-center p-4 selection:bg-blue-500 selection:text-white transition-colors duration-200 relative">
@@ -220,30 +226,33 @@ export const LoginPage: React.FC = () => {
         {/* User Account Selection */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-            <span>{usersList.length > 0 ? 'Pilih Pengguna / Petugas Piket:' : 'Masukkan NIP Pengguna:'}</span>
+            <span>{usersList.length > 0 ? 'Pilih Pengguna / Petugas Piket:' : 'ID Login / NIP Pengguna:'}</span>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">PIN 6-Digit Terdaftar</span>
           </label>
           {usersList.length > 0 ? (
             <select
-              value={selectedNip}
+              value={selectedIdentifier}
               onChange={(e) => handleQuickSelect(e.target.value)}
               className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer transition-colors"
             >
-              {usersList.map((u) => (
-                <option key={u.userId} value={u.nip} className="text-slate-900 dark:text-white bg-white dark:bg-slate-800">
-                  {u.fullName} ({ROLE_LABELS[u.role]})
-                </option>
-              ))}
+              {usersList.map((u) => {
+                const identifierValue = u.loginId || u.nip || u.id;
+                return (
+                  <option key={u.userId} value={identifierValue} className="text-slate-900 dark:text-white bg-white dark:bg-slate-800">
+                    {u.fullName} {u.loginId ? `[${u.loginId}]` : u.nip ? `(NIP: ${u.nip})` : ''} - ({ROLE_LABELS[u.role]})
+                  </option>
+                );
+              })}
             </select>
           ) : (
             <input
               type="text"
-              value={selectedNip}
+              value={selectedIdentifier}
               onChange={(e) => {
-                setSelectedNip(e.target.value);
+                setSelectedIdentifier(e.target.value);
                 setErrorMessage('');
               }}
-              placeholder="Contoh: 198503152010011002"
+              placeholder="Contoh: ADMIN-001, GURU-001, atau NIP"
               className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
             />
           )}
@@ -258,7 +267,12 @@ export const LoginPage: React.FC = () => {
               </div>
               <div className="truncate max-w-[200px]">
                 <div className="text-slate-900 dark:text-white font-bold truncate">{selectedUser.fullName}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">NIP: {selectedUser.nip}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  {selectedUser.loginId ? `ID: ${selectedUser.loginId}` : ''}
+                  {selectedUser.loginId && selectedUser.nip ? ' • ' : ''}
+                  {selectedUser.nip ? `NIP: ${selectedUser.nip}` : ''}
+                  {!selectedUser.loginId && !selectedUser.nip ? `UID: ${selectedUser.id}` : ''}
+                </div>
               </div>
             </div>
             <Badge variant="primary" size="sm">

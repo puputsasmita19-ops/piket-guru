@@ -105,7 +105,9 @@ export const UserManagementView: React.FC = () => {
   // Save User (Guru / Tendik)
   const handleSaveUser = async (data: {
     id?: string;
-    nip: string;
+    loginId: string;
+    nip?: string;
+    nuptk?: string;
     fullName: string;
     role: UserRole;
     email: string;
@@ -241,7 +243,9 @@ export const UserManagementView: React.FC = () => {
       (statusFilter === 'NONAKTIF' && u.isActive === false);
     const matchSearch =
       u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.nip.includes(searchQuery) ||
+      (u.loginId && u.loginId.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (u.nip && u.nip.includes(searchQuery)) ||
+      (u.nuptk && u.nuptk.includes(searchQuery)) ||
       (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return matchRole && matchStatus && matchSearch;
@@ -514,7 +518,7 @@ export const UserManagementView: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
                   <tr>
-                    <th className="p-4">Pengguna & NIP</th>
+                    <th className="p-4">Pengguna & Identitas</th>
                     <th className="p-4">Peran / Role</th>
                     <th className="p-4">Kontak</th>
                     <th className="p-4">Izin Akses</th>
@@ -543,8 +547,16 @@ export const UserManagementView: React.FC = () => {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[11px] font-mono text-slate-500">
-                                NIP. {user.nip}
+                              <div className="text-[11px] font-mono text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                {user.loginId ? (
+                                  <span className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded">
+                                    ID: {user.loginId}
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 dark:text-amber-400 italic">ID Belum Diatur</span>
+                                )}
+                                {user.nip ? <span>• NIP: {user.nip}</span> : null}
+                                {user.nuptk ? <span>• NUPTK: {user.nuptk}</span> : null}
                               </div>
                             </div>
                           </div>

@@ -8,7 +8,9 @@ const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 export interface UserSummaryItem {
   id: string;
   userId: string;
+  loginId?: string;
   nip: string;
+  nuptk?: string;
   fullName: string;
   role: UserProfile['role'];
   email?: string;
@@ -93,7 +95,9 @@ class AuthService {
         this.usersList = data.users.map((u: any) => ({
           id: u.id,
           userId: u.id,
-          nip: u.nip,
+          loginId: u.loginId || '',
+          nip: u.nip || '',
+          nuptk: u.nuptk || '',
           fullName: u.fullName,
           role: u.role,
           isActive: u.isActive !== false,
@@ -121,14 +125,20 @@ class AuthService {
    * PIN -> Backend scrypt verification -> Firebase Custom Token -> Frontend signInWithCustomToken -> Firebase ID token.
    * Closes SEC-01, SEC-06, SEC-07, and SEC-08.
    */
-  public async authenticateWithPin(nip: string, pin: string): Promise<AuthResult> {
+  public async authenticateWithPin(identifier: string, pin: string): Promise<AuthResult> {
     await this.init();
 
     try {
+      const trimmedId = (identifier || '').trim();
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nip: nip.trim(), pin: pin.trim() }),
+        body: JSON.stringify({
+          identifier: trimmedId,
+          loginId: trimmedId,
+          nip: trimmedId,
+          pin: pin.trim(),
+        }),
       });
 
       const data = await response.json();
@@ -136,7 +146,7 @@ class AuthService {
       if (!response.ok || !data.success) {
         return {
           success: false,
-          error: data.error || 'NIP atau PIN tidak sesuai.',
+          error: data.error || 'ID Login/NIP atau PIN tidak sesuai.',
           dependencyBlocker: data.dependencyBlocker,
         };
       }
@@ -298,6 +308,83 @@ class AuthService {
       };
     } catch (err: any) {
       return { success: false, error: 'Terjadi kesalahan jaringan saat mereset PIN.' };
+    }
+  }
+
+  /**
+   * Registers a new user with atomic loginId uniqueness enforcement via backend endpoint
+   */
+  public async createUserProfile(userData: {
+    id?: string;
+    loginId: string;
+    fullName: string;
+    role: UserProfile['role'];
+    nip?: string;
+    nuptk?: string;
+    email?: string;
+    phone?: string;
+    initialPin?: string;
+    permissions?: string[];
+    isActive?: boolean;
+  }): Promise<{ success: boolean; user?: UserProfile; error?: string; code?: string }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || 'Gagal mendaftarkan pengguna baru.',
+          code: data.code,
+        };
+      }
+
+      await this.refreshUsersList();
+      return { success: true, user: data.user };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Terjadi kesalahan jaringan saat mendaftarkan pengguna.' };
+    }
+  }
+
+  /**
+   * Updates user profile with atomic loginId uniqueness check via backend endpoint
+   */
+  public async updateUserProfile(
+    userId: string,
+    updates: Partial<UserProfile>
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string; code?: string }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/update-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, updates }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || 'Gagal memperbarui pengguna.',
+          code: data.code,
+        };
+      }
+
+      await this.refreshUsersList();
+      return { success: true, user: data.user };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Terjadi kesalahan jaringan saat memperbarui pengguna.' };
     }
   }
 
