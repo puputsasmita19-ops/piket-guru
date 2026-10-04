@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { CredentialStore } from '../services/credentialStore.js';
 import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
 import { UserProfile } from '../../types/index.js';
-import firebaseConfig from '../../../firebase-applet-config.json';
+import firebaseConfig from '../../../firebase-applet-config.json' with { type: 'json' };
 
 export const authRouter = Router();
 
