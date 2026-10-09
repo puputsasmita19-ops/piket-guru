@@ -1,10 +1,10 @@
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { DutyBookRecord } from '../../types/dutyBook.types';
+import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { SchoolSettings } from '../../types';
-import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, X, ShieldCheck } from 'lucide-react';
+import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { Printer } from 'lucide-react';
 
 interface DutyBookPrintModalProps {
   isOpen: boolean;
@@ -20,6 +20,9 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
   settings,
 }) => {
   if (!dutyBook) return null;
+
+  const displayStatus = getDutyBookDisplayStatus(dutyBook.status);
+  const pengesahNama = dutyBook.lockedBy || dutyBook.approvedBy || dutyBook.verifiedBy;
 
   const handlePrint = () => {
     window.print();
@@ -72,6 +75,12 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
             <div>
               <span className="font-bold">Pos / Lokasi:</span> {dutyBook.ruangName}
             </div>
+            <div>
+              <span className="font-bold">Status Dokumen:</span> {displayStatus.label}
+            </div>
+            <div>
+              <span className="font-bold">ID Dokumen:</span> {dutyBook.id}
+            </div>
           </div>
 
           {/* 7 JURNAL CONTENT */}
@@ -118,29 +127,29 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
           </div>
 
           {/* TANDA TANGAN (SIGNATURE BLOCK) */}
-          <div className="grid grid-cols-3 gap-4 pt-8 text-center text-[10px]">
+          <div className="grid grid-cols-2 gap-8 pt-8 text-center text-[10px]">
             <div>
-              <p>Petugas Piket,</p>
-              <div className="h-16 flex items-center justify-center italic text-slate-400">
-                [Paraf Digital]
+              <p>Petugas Piket (Penulis),</p>
+              <div className="h-16 flex flex-col items-center justify-center text-slate-500 text-[10px]">
+                {dutyBook.submittedAt ? (
+                  <span>Terkirim: {formatIndonesianDate(dutyBook.submittedAt.split('T')[0])}</span>
+                ) : (
+                  <span>(Draf Belum Terkirim)</span>
+                )}
               </div>
               <p className="font-bold underline">{dutyBook.petugasName}</p>
             </div>
 
             <div>
-              <p>Koordinator Piket,</p>
-              <div className="h-16 flex items-center justify-center italic text-slate-400">
-                {dutyBook.verifiedBy ? `[Diverifikasi: ${dutyBook.verifiedBy.split(' ')[0]}]` : '[Belum Diverifikasi]'}
+              <p>Mengetahui,<br />Kepala Sekolah / Pengesah,</p>
+              <div className="h-16 flex flex-col items-center justify-center text-slate-500 text-[10px]">
+                {pengesahNama ? (
+                  <span>Telah Disahkan & Selesai</span>
+                ) : (
+                  <span>(Belum Disahkan)</span>
+                )}
               </div>
-              <p className="font-bold underline">{dutyBook.verifiedBy || 'Koordinator Piket'}</p>
-            </div>
-
-            <div>
-              <p>Mengetahui,<br />Kepala Sekolah,</p>
-              <div className="h-12 flex items-center justify-center italic text-slate-400">
-                {dutyBook.approvedBy ? `[Disetujui: ${dutyBook.approvedBy.split(' ')[0]}]` : '[Belum Disetujui]'}
-              </div>
-              <p className="font-bold underline">{dutyBook.approvedBy || 'Dr. Hj. Siti Rohmah, M.Pd.'}</p>
+              <p className="font-bold underline">{pengesahNama || '( .......................................... )'}</p>
             </div>
           </div>
         </div>

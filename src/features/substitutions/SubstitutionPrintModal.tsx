@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { TeacherSubstitutionRecord } from '../../types/substitution.types';
+import { TeacherSubstitutionRecord, getSubstitutionReasonDisplay } from '../../types/substitution.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { Printer, FileSpreadsheet } from 'lucide-react';
@@ -74,7 +74,7 @@ export const SubstitutionPrintModal: React.FC<SubstitutionPrintModalProps> = ({
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Alasan Berhalangan:</span>
-              <span className="col-span-2 font-medium">{substitution.alasan.replace('_', ' ')} {substitution.keteranganAlasan ? `(${substitution.keteranganAlasan})` : ''}</span>
+              <span className="col-span-2 font-medium">{getSubstitutionReasonDisplay(substitution)}</span>
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Kelas / Jam Pelajaran:</span>

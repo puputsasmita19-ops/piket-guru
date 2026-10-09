@@ -3,29 +3,25 @@ import {
   BookOpenCheck,
   Plus,
   Search,
-  Filter,
   Lock,
-  Unlock,
-  CheckCircle2,
-  FileCheck2,
   Printer,
   Edit2,
+  FileCheck2,
   Clock,
-  Eye,
   ShieldAlert,
 } from 'lucide-react';
-import { Card, CardHeader, CardContent } from '../../components/common/Card';
+import { Card, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { DutyBookFormModal } from './DutyBookFormModal';
 import { DutyBookPrintModal } from './DutyBookPrintModal';
-import { DutyBookRecord } from '../../types/dutyBook.types';
+import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { DutyBookStatus, ScheduleItem, SchoolSettings } from '../../types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { DutyBookService } from '../../services/firebase/dutyBookService';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, getCurrentDayName } from '../../utils/dateUtils';
+import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
 
 export const DutyBookPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -45,7 +41,7 @@ export const DutyBookPreview: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printDutyBook, setPrintDutyBook] = useState<DutyBookRecord | null>(null);
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = getTodayISODate();
 
   // Load subscriptions
   useEffect(() => {
@@ -73,15 +69,31 @@ export const DutyBookPreview: React.FC = () => {
     };
   }, []);
 
-  const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
-
-  // Save / Update
-  const handleSaveDutyBook = async (record: DutyBookRecord) => {
+  // Save Draft (Guru or Admin)
+  const handleSaveDutyBook = async (record: DutyBookRecord, originalUpdatedAt?: string) => {
     if (!currentUser) return;
-    await DutyBookService.saveDutyBook(record, currentUser);
+    await DutyBookService.saveDraft(record, currentUser, originalUpdatedAt);
   };
 
-  // Advance Status
+  // Submit Journal (Guru or Admin)
+  const handleSubmitJournal = async (record: DutyBookRecord, originalUpdatedAt?: string) => {
+    if (!currentUser) return;
+    await DutyBookService.submitJournal(record, currentUser, originalUpdatedAt);
+  };
+
+  // One-step Sahkan & Selesaikan (Admin or Kepsek)
+  const handleApproveAndComplete = async (record: DutyBookRecord) => {
+    if (!currentUser) return;
+    await DutyBookService.approveAndComplete(record, currentUser);
+  };
+
+  // Kembalikan ke Draft (Admin or Kepsek)
+  const handleRequestRevision = async (record: DutyBookRecord, reason: string) => {
+    if (!currentUser) return;
+    await DutyBookService.requestRevision(record, currentUser, reason);
+  };
+
+  // Advance Status (backwards compatible)
   const handleStatusChange = async (
     record: DutyBookRecord,
     newStatus: DutyBookStatus,
@@ -91,23 +103,41 @@ export const DutyBookPreview: React.FC = () => {
     await DutyBookService.updateWorkflowStatus(record, newStatus, currentUser, note);
   };
 
-  // Unlock
+  // Unlock (Admin only)
   const handleUnlock = async (record: DutyBookRecord, reason: string) => {
     if (!currentUser) return;
     await DutyBookService.unlockDutyBook(record, currentUser, reason);
   };
 
-  // Status Pipeline Data
-  const stages: Array<{ status: DutyBookStatus; label: string; count: number }> = [
-    { status: 'DRAFT', label: '1. Draft', count: dutyBooks.filter((b) => b.status === 'DRAFT').length },
-    { status: 'DIAJUKAN', label: '2. Diajukan', count: dutyBooks.filter((b) => b.status === 'DIAJUKAN').length },
-    { status: 'DIVERIFIKASI', label: '3. Diverifikasi', count: dutyBooks.filter((b) => b.status === 'DIVERIFIKASI').length },
-    { status: 'DISETUJUI', label: '4. Disetujui', count: dutyBooks.filter((b) => b.status === 'DISETUJUI').length },
-    { status: 'DIKUNCI', label: '5. Dikunci', count: dutyBooks.filter((b) => b.status === 'DIKUNCI').length },
+  // Streamlined 3-Stage Pipeline
+  const stages = [
+    {
+      key: 'DRAFT',
+      label: '1. Draft',
+      subtitle: 'Draf Belum Lengkap',
+      count: dutyBooks.filter((b) => b.status === 'DRAFT').length,
+    },
+    {
+      key: 'TERKIRIM',
+      label: '2. Terkirim',
+      subtitle: 'Menunggu Pengesahan',
+      count: dutyBooks.filter((b) => b.status === 'DIAJUKAN' || b.status === 'DIVERIFIKASI').length,
+    },
+    {
+      key: 'SELESAI',
+      label: '3. Selesai',
+      subtitle: 'Arsip Resmi Terkunci',
+      count: dutyBooks.filter((b) => b.status === 'DIKUNCI' || b.status === 'DISETUJUI').length,
+    },
   ];
 
   const filtered = dutyBooks.filter((b) => {
-    const matchStatus = statusFilter === 'SEMUA' || b.status === statusFilter;
+    const displayInfo = getDutyBookDisplayStatus(b.status);
+    const matchStatus =
+      statusFilter === 'SEMUA' ||
+      statusFilter === b.status ||
+      statusFilter === displayInfo.stage;
+
     const matchSearch =
       b.petugasName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.ruangName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -123,11 +153,11 @@ export const DutyBookPreview: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <BookOpenCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <BookOpenCheck className="w-6 h-6 text-[var(--theme-primary)]" />
             Buku Piket Digital
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Jurnal rekapitulasi harian situasi sekolah, ketertiban KBM, dan alur verifikasi resmi
+            Alokasi 3 tahap: Draft &rarr; Terkirim &rarr; Selesai (Arsip resmi terkunci otomatis)
           </p>
         </div>
 
@@ -146,30 +176,32 @@ export const DutyBookPreview: React.FC = () => {
         </div>
       </div>
 
-      {/* Status Pipeline Step Indicator */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5">
+      {/* 3-Stage Pipeline Step Indicator */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
         {stages.map((stage) => {
-          const isSelected = statusFilter === stage.status;
+          const isSelected = statusFilter === stage.key;
           return (
             <button
-              key={stage.status}
-              onClick={() => setStatusFilter(isSelected ? 'SEMUA' : stage.status)}
-              className={`p-2.5 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 ${
+              key={stage.key}
+              onClick={() => setStatusFilter(isSelected ? 'SEMUA' : stage.key)}
+              className={`p-3 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer min-w-0 ${
                 isSelected
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] border-[var(--theme-primary)] shadow-md shadow-[var(--theme-ring)]'
+                  : 'bg-white dark:bg-[var(--theme-card-bg)] border-slate-200 dark:border-[var(--theme-card-border)] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
               }`}
             >
               <div className="flex items-center justify-between gap-1">
-                <span className="text-xs font-bold truncate">{stage.label}</span>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                }`}>
+                <span className="text-sm font-bold truncate">{stage.label}</span>
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-600 dark:text-slate-300'
+                  }`}
+                >
                   {stage.count}
                 </span>
               </div>
-              <div className="text-[10px] opacity-80 mt-1 truncate">
-                {stage.status === 'DIKUNCI' ? 'Arsip Permanen' : 'Proses Verifikasi'}
+              <div className="text-[11px] opacity-80 mt-1 truncate">
+                {stage.subtitle}
               </div>
             </button>
           );
@@ -187,7 +219,7 @@ export const DutyBookPreview: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari tanggal, petugas, atau catatan..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-input-bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
               />
             </div>
 
@@ -195,14 +227,12 @@ export const DutyBookPreview: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
+                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
               >
                 <option value="SEMUA">Semua Status</option>
-                <option value="DRAFT">DRAFT</option>
-                <option value="DIAJUKAN">DIAJUKAN</option>
-                <option value="DIVERIFIKASI">DIVERIFIKASI</option>
-                <option value="DISETUJUI">DISETUJUI</option>
-                <option value="DIKUNCI">DIKUNCI</option>
+                <option value="DRAFT">1. Draft</option>
+                <option value="TERKIRIM">2. Terkirim</option>
+                <option value="SELESAI">3. Selesai</option>
               </select>
             </div>
           </div>
@@ -212,95 +242,99 @@ export const DutyBookPreview: React.FC = () => {
       {/* JURNAL LIST CARDS */}
       <div className="space-y-4">
         {filtered.length > 0 ? (
-          filtered.map((item) => (
-            <Card key={item.id} hoverable className="transition-all">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-slate-900 dark:text-white text-sm">
-                      {item.hari}, {formatIndonesianDate(item.tanggal)}
-                    </span>
-                    <Badge
-                      variant={
-                        item.status === 'DIKUNCI'
-                          ? 'neutral'
-                          : item.status === 'DISETUJUI'
-                          ? 'success'
-                          : item.status === 'DIVERIFIKASI'
-                          ? 'info'
-                          : item.status === 'DIAJUKAN'
-                          ? 'warning'
-                          : 'primary'
-                      }
+          filtered.map((item) => {
+            const displayInfo = getDutyBookDisplayStatus(item.status);
+            return (
+              <Card key={item.id} hoverable className="transition-all">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-slate-900 dark:text-white text-sm">
+                        {item.hari}, {formatIndonesianDate(item.tanggal)}
+                      </span>
+                      <Badge
+                        variant={displayInfo.variant}
+                        size="sm"
+                        icon={displayInfo.stage === 'SELESAI' ? <Lock className="w-3 h-3" /> : undefined}
+                      >
+                        {displayInfo.label}
+                      </Badge>
+                    </div>
+
+                    <div className="text-xs text-slate-500 font-mono">
+                      Shift: {item.jamMulai} - {item.jamSelesai} WIB
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                        Petugas Piket:
+                      </span>
+                      <span className="text-slate-900 dark:text-white font-semibold">
+                        {item.petugasName} ({item.ruangName})
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                        Kesimpulan Piket:
+                      </span>
+                      <p className="text-slate-600 dark:text-slate-300 truncate">
+                        {item.catatanPiket || 'Belum ada catatan kesimpulan.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Metadata Audit Trail */}
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    {item.submittedBy && (
+                      <span>
+                        Terkirim: <strong>{item.submittedBy}</strong>
+                      </span>
+                    )}
+                    {(item.lockedBy || item.approvedBy) && (
+                      <span>
+                        &bull; Disahkan: <strong>{item.lockedBy || item.approvedBy}</strong>
+                      </span>
+                    )}
+                    {item.revisionReason && (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        &bull; Catatan Revisi: <em>{item.revisionReason}</em>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      variant="outline"
                       size="sm"
-                      icon={item.status === 'DIKUNCI' ? <Lock className="w-3 h-3" /> : undefined}
+                      className="text-xs"
+                      leftIcon={<Printer className="w-3.5 h-3.5 text-slate-500" />}
+                      onClick={() => {
+                        setPrintDutyBook(item);
+                        setIsPrintModalOpen(true);
+                      }}
                     >
-                      {item.status}
-                    </Badge>
+                      Pratinjau Cetak
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="text-xs"
+                      leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setActiveDutyBook(item);
+                        setIsFormModalOpen(true);
+                      }}
+                    >
+                      {displayInfo.stage === 'SELESAI' && !isAdmin ? 'Lihat Jurnal' : 'Buka / Edit Jurnal'}
+                    </Button>
                   </div>
-
-                  <div className="text-xs text-slate-500 font-mono">
-                    Shift: {item.jamMulai} - {item.jamSelesai} WIB
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                      Petugas Piket:
-                    </span>
-                    <span className="text-slate-900 dark:text-white font-semibold">
-                      {item.petugasName} ({item.ruangName})
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                      Kesimpulan Piket:
-                    </span>
-                    <p className="text-slate-600 dark:text-slate-300 truncate">
-                      {item.catatanPiket || 'Belum ada catatan kesimpulan.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Verification Meta Tracker */}
-                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  {item.submittedBy && <span>Diajukan: <strong>{item.submittedBy.split(' ')[0]}</strong></span>}
-                  {item.verifiedBy && <span>• Diverifikasi: <strong>{item.verifiedBy.split(' ')[0]}</strong></span>}
-                  {item.approvedBy && <span>• Disetujui: <strong>{item.approvedBy.split(' ')[0]}</strong></span>}
-                  {item.lockedBy && <span>• Dikunci: <strong>{item.lockedBy.split(' ')[0]}</strong></span>}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    leftIcon={<Printer className="w-3.5 h-3.5 text-slate-500" />}
-                    onClick={() => {
-                      setPrintDutyBook(item);
-                      setIsPrintModalOpen(true);
-                    }}
-                  >
-                    Pratinjau Cetak
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="text-xs"
-                    leftIcon={<Edit2 className="w-3.5 h-3.5" />}
-                    onClick={() => {
-                      setActiveDutyBook(item);
-                      setIsFormModalOpen(true);
-                    }}
-                  >
-                    {item.status === 'DIKUNCI' && !isAdmin ? 'Lihat Jurnal' : 'Buka / Edit Jurnal'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         ) : (
           <div className="py-16 text-center text-slate-400 space-y-2">
             <BookOpenCheck className="w-12 h-12 mx-auto opacity-30" />
@@ -320,7 +354,10 @@ export const DutyBookPreview: React.FC = () => {
           setActiveDutyBook(null);
         }}
         onSave={handleSaveDutyBook}
+        onSubmitJournal={handleSubmitJournal}
         onStatusChange={handleStatusChange}
+        onApproveAndComplete={handleApproveAndComplete}
+        onRequestRevision={handleRequestRevision}
         onUnlock={handleUnlock}
         dutyBook={activeDutyBook}
         schedules={schedules}

@@ -73,8 +73,30 @@ async function runEmulatorRulesTests() {
       fullName: 'Guru Piket',
       role: 'GURU',
       isActive: true,
-      permissions: ['dutyBook.create', 'dutyBook.view'],
+      permissions: ['dutyBook.create', 'dutyBook.update', 'dutyBook.view'],
       sessionRevokedAtSeconds: 1000,
+    });
+
+    // Seed Active Guru 2
+    await db.collection('users').doc('usr-guru-02').set({
+      id: 'usr-guru-02',
+      nip: '199002022015042002',
+      fullName: 'Guru Piket 2',
+      role: 'GURU',
+      isActive: true,
+      permissions: ['dutyBook.create', 'dutyBook.update', 'dutyBook.view'],
+      sessionRevokedAtSeconds: 0,
+    });
+
+    // Seed View-Only User (dutyBook.view only)
+    await db.collection('users').doc('usr-viewonly-01').set({
+      id: 'usr-viewonly-01',
+      nip: '199002022015042003',
+      fullName: 'Guru View Only',
+      role: 'GURU',
+      isActive: true,
+      permissions: ['dutyBook.view'],
+      sessionRevokedAtSeconds: 0,
     });
 
     // Seed Pending Activation User
@@ -220,6 +242,323 @@ async function runEmulatorRulesTests() {
     await assertSucceeds(
       adminDb.collection('dutyBooks').doc('db-locked-1').update({
         status: 'DRAFT',
+      })
+    );
+  });
+
+  // 7a. DutyBook Direct Submit (1 step) by Teacher: Create with DIAJUKAN
+  await check('Guru CAN create new dutyBook directly with status DIAJUKAN (Kirim Jurnal 1 langkah)', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertSucceeds(
+      guruDb.collection('dutyBooks').doc('db-direct-diajukan-1').set({
+        petugasId: 'usr-guru-01',
+        status: 'DIAJUKAN',
+        tanggal: '2026-10-06',
+      })
+    );
+  });
+
+  // 7b. DutyBook View-Only User CANNOT create dutyBook
+  await check('View-only user CANNOT create dutyBook (Izin melihat ditolak)', async () => {
+    const viewOnlyDb = testEnv.authenticatedContext('usr-viewonly-01', { auth_time: 1000 }).firestore();
+    await assertFails(
+      viewOnlyDb.collection('dutyBooks').doc('db-viewonly-1').set({
+        petugasId: 'usr-viewonly-01',
+        status: 'DRAFT',
+        tanggal: '2026-10-06',
+      })
+    );
+  });
+
+  // 7c. DutyBook Create for another user is DENIED
+  await check('Guru CANNOT create dutyBook for another user', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertFails(
+      guruDb.collection('dutyBooks').doc('db-other-user-1').set({
+        petugasId: 'usr-guru-02', // Not own ID
+        status: 'DRAFT',
+        tanggal: '2026-10-06',
+      })
+    );
+  });
+
+  // 7d. DutyBook Kepala Sekolah One-step Sahkan & Selesaikan (DIAJUKAN -> DIKUNCI)
+  await check('Kepala Sekolah CAN advance DIAJUKAN to DIKUNCI (Sahkan & Selesaikan)', async () => {
+    const kepsekDb = testEnv.authenticatedContext('usr-kepsek-01', { auth_time: 1000 }).firestore();
+    await assertSucceeds(
+      kepsekDb.collection('dutyBooks').doc('db-direct-diajukan-1').update({
+        status: 'DIKUNCI',
+      })
+    );
+  });
+
+  // 7e. DutyBook Kepala Sekolah Return to Draft (DIAJUKAN -> DRAFT)
+  await check('Kepala Sekolah CAN return DIAJUKAN to DRAFT for revision', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('dutyBooks').doc('db-for-revision-1').set({
+        petugasId: 'usr-guru-01',
+        status: 'DIAJUKAN',
+        tanggal: '2026-10-06',
+      });
+    });
+
+    const kepsekDb = testEnv.authenticatedContext('usr-kepsek-01', { auth_time: 1000 }).firestore();
+    await assertSucceeds(
+      kepsekDb.collection('dutyBooks').doc('db-for-revision-1').update({
+        status: 'DRAFT',
+      })
+    );
+  });
+
+  // 7f. Guru cannot edit once submitted (status DIAJUKAN)
+  await check('Guru CANNOT update dutyBook while in DIAJUKAN status', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('dutyBooks').doc('db-submitted-pending').set({
+        petugasId: 'usr-guru-01',
+        status: 'DIAJUKAN',
+        tanggal: '2026-10-06',
+      });
+    });
+
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertFails(
+      guruDb.collection('dutyBooks').doc('db-submitted-pending').update({
+        catatanPiket: 'Revisi tanpa persetujuan',
+      })
+    );
+  });
+
+  // 7g. Admin CAN create dutyBook with any status during backup restore
+  await check('Admin CAN create dutyBook with any status (jalur restore berwenang)', async () => {
+    const adminDb = testEnv.authenticatedContext('usr-admin-01', { auth_time: 1000 }).firestore();
+    await assertSucceeds(
+      adminDb.collection('dutyBooks').doc('db-restore-diverifikasi').set({
+        petugasId: 'usr-guru-02',
+        status: 'DIVERIFIKASI',
+        tanggal: '2026-09-30',
+      })
+    );
+  });
+
+  // 7h. Batch write atomic: Guru can commit dutyBook + auditLog together without undefined metadata
+  await check('Batch Write: Guru CAN commit dutyBook + auditLog together atomically without undefined metadata', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    const batch = guruDb.batch();
+    const bookRef = guruDb.collection('dutyBooks').doc('db-batch-atom-1');
+    const auditRef = guruDb.collection('auditLogs').doc('audit-batch-atom-1');
+
+    batch.set(bookRef, {
+      id: 'db-batch-atom-1',
+      petugasId: 'usr-guru-01',
+      petugasName: 'Guru Piket 1',
+      status: 'DIAJUKAN',
+      tanggal: '2026-10-06',
+      createdAt: '2026-10-06T08:00:00.000Z',
+    });
+    batch.set(auditRef, {
+      id: 'audit-batch-atom-1',
+      userId: 'usr-guru-01',
+      userName: 'Guru Piket 1',
+      role: 'GURU',
+      action: 'STATUS_CHANGE',
+      module: 'DUTY_BOOK',
+      recordId: 'db-batch-atom-1',
+      details: 'Pengiriman jurnal',
+      timestamp: '2026-10-06T08:00:00.000Z',
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  // 7i. Batch write atomic: Guru can commit dutyBook + auditLog with valid metadata object
+  await check('Batch Write: Guru CAN commit dutyBook + auditLog with valid metadata object', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    const batch = guruDb.batch();
+    const bookRef = guruDb.collection('dutyBooks').doc('db-batch-atom-2');
+    const auditRef = guruDb.collection('auditLogs').doc('audit-batch-atom-2');
+
+    batch.set(bookRef, {
+      id: 'db-batch-atom-2',
+      petugasId: 'usr-guru-01',
+      petugasName: 'Guru Piket 1',
+      status: 'DIAJUKAN',
+      tanggal: '2026-10-06',
+      createdAt: '2026-10-06T08:00:00.000Z',
+    });
+    batch.set(auditRef, {
+      id: 'audit-batch-atom-2',
+      userId: 'usr-guru-01',
+      userName: 'Guru Piket 1',
+      role: 'GURU',
+      action: 'CREATE',
+      module: 'DUTY_BOOK',
+      recordId: 'db-batch-atom-2',
+      details: 'Pengiriman jurnal dengan metadata',
+      timestamp: '2026-10-06T08:00:00.000Z',
+      metadata: {
+        stage: 'TERKIRIM',
+        status: 'DIAJUKAN',
+        tanggal: '2026-10-06',
+      },
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  // 7j. Atomicity check: Batch fails completely if one write fails
+  await check('Atomicity: Batch write rolls back completely if dutyBook operation is unauthorized', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    const batch = guruDb.batch();
+    const bookRef = guruDb.collection('dutyBooks').doc('db-batch-fail-1');
+    const auditRef = guruDb.collection('auditLogs').doc('audit-batch-fail-1');
+
+    // Unauthorized: guru 1 writing as guru 2
+    batch.set(bookRef, {
+      id: 'db-batch-fail-1',
+      petugasId: 'usr-guru-02', // FORBIDDEN!
+      status: 'DIAJUKAN',
+      tanggal: '2026-10-06',
+    });
+    batch.set(auditRef, {
+      id: 'audit-batch-fail-1',
+      userId: 'usr-guru-01',
+      userName: 'Guru Piket 1',
+      role: 'GURU',
+      action: 'CREATE',
+      module: 'DUTY_BOOK',
+      details: 'Mencoba submit akun lain',
+      timestamp: '2026-10-06T08:00:00.000Z',
+    });
+    await assertFails(batch.commit());
+
+    // Verify audit log document was NOT created (no partial write)
+    const adminDb = testEnv.authenticatedContext('usr-admin-01', { auth_time: 1000 }).firestore();
+    const auditDoc = await adminDb.collection('auditLogs').doc('audit-batch-fail-1').get();
+    if (auditDoc.exists) {
+      throw new Error('Audit log was written despite batch failure! Atomicity broken.');
+    }
+  });
+
+  // 7k. Guru can save Draft (create status: 'DRAFT') and then submit the existing Draft (update DRAFT -> DIAJUKAN)
+  await check('Guru CAN save Draft and then submit existing Draft (DRAFT -> DIAJUKAN)', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    const bookRef = guruDb.collection('dutyBooks').doc('db-draft-to-submit-1');
+
+    // 1. Save initial draft
+    await assertSucceeds(
+      bookRef.set({
+        id: 'db-draft-to-submit-1',
+        petugasId: 'usr-guru-01',
+        petugasName: 'Guru Piket 1',
+        status: 'DRAFT',
+        tanggal: '2026-10-06',
+        catatanPiket: 'Draf catatan awal',
+        createdAt: '2026-10-06T07:00:00.000Z',
+        updatedAt: '2026-10-06T07:00:00.000Z',
+      })
+    );
+
+    // 2. Submit existing draft (DRAFT -> DIAJUKAN)
+    await assertSucceeds(
+      bookRef.update({
+        status: 'DIAJUKAN',
+        submittedAt: '2026-10-06T08:00:00.000Z',
+        submittedBy: 'Guru Piket 1',
+        catatanPiket: 'Catatan lengkap disubmit',
+        updatedAt: '2026-10-06T08:00:00.000Z',
+      })
+    );
+  });
+
+  // 7l. Other teacher (Guru 2) cannot submit or modify Guru 1's existing draft
+  await check('Other teacher CANNOT modify or submit existing draft belonging to Guru 1', async () => {
+    const guru2Db = testEnv.authenticatedContext('usr-guru-02', { auth_time: 1001 }).firestore();
+    const bookRef = guru2Db.collection('dutyBooks').doc('db-draft-to-submit-1');
+
+    await assertFails(
+      bookRef.update({
+        catatanPiket: 'Modifikasi oleh guru 2',
+      })
+    );
+  });
+
+  // 7m. Incidents: Authorized Staff / Guru CAN create incident report bound to own pelaporId
+  await check('Guru CAN create incident report bound to own pelaporId (status: BARU)', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertSucceeds(
+      guruDb.collection('incidents').doc('inc-test-01').set({
+        id: 'inc-test-01',
+        tanggal: '2026-10-06',
+        waktu: '09:30',
+        kategori: 'SISWA',
+        kategoriName: 'Kesiswaan',
+        tingkatKeparahan: 'SEDANG',
+        lokasi: 'Lapangan Basket',
+        pihakTerlibat: 'Siswa Kelas X',
+        uraian: 'Kejadian pertengkaran kecil di lapangan',
+        tindakanAwal: 'Dilerai dan dipanggil ke pos piket',
+        pelaporId: 'usr-guru-01',
+        pelaporName: 'Guru Piket 1',
+        penanggungJawab: 'Guru Piket 1',
+        status: 'BARU',
+        createdAt: '2026-10-06T09:30:00.000Z',
+        updatedAt: '2026-10-06T09:30:00.000Z',
+      })
+    );
+  });
+
+  // 7n. Incidents: Guru CANNOT create incident with someone else's pelaporId
+  await check('Guru CANNOT create incident report with someone else pelaporId', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertFails(
+      guruDb.collection('incidents').doc('inc-test-impersonate').set({
+        id: 'inc-test-impersonate',
+        tanggal: '2026-10-06',
+        waktu: '09:30',
+        kategori: 'SISWA',
+        kategoriName: 'Kesiswaan',
+        tingkatKeparahan: 'SEDANG',
+        lokasi: 'Lapangan Basket',
+        pihakTerlibat: 'Siswa Kelas X',
+        uraian: 'Kejadian pelanggaran tata tertib',
+        tindakanAwal: 'Ditegur di tempat',
+        pelaporId: 'usr-guru-02', // FORBIDDEN!
+        pelaporName: 'Guru Piket 2',
+        status: 'BARU',
+        createdAt: '2026-10-06T09:30:00.000Z',
+      })
+    );
+  });
+
+  // 7o. Incidents: Reporter CAN update own incident report details
+  await check('Reporter CAN update own incident report details', async () => {
+    const guruDb = testEnv.authenticatedContext('usr-guru-01', { auth_time: 1001 }).firestore();
+    await assertSucceeds(
+      guruDb.collection('incidents').doc('inc-test-01').update({
+        tindakLanjut: 'Diserahkan ke Guru BK',
+        updatedAt: '2026-10-06T09:40:00.000Z',
+      })
+    );
+  });
+
+  // 7p. Incidents: Other user CANNOT update someone else incident report
+  await check('Other user CANNOT update someone else incident report', async () => {
+    const guru2Db = testEnv.authenticatedContext('usr-guru-02', { auth_time: 1001 }).firestore();
+    await assertFails(
+      guru2Db.collection('incidents').doc('inc-test-01').update({
+        tindakLanjut: 'Diubah oleh guru 2 tanpa izin',
+      })
+    );
+  });
+
+  // 7q. Incidents: Admin or Kepala Sekolah CAN update and resolve any incident
+  await check('Admin or Kepala Sekolah CAN resolve any incident to SELESAI', async () => {
+    const kepsekDb = testEnv.authenticatedContext('usr-kepsek-01', { auth_time: 1000 }).firestore();
+    await assertSucceeds(
+      kepsekDb.collection('incidents').doc('inc-test-01').update({
+        status: 'SELESAI',
+        resolvedAt: '2026-10-06T10:00:00.000Z',
+        resolvedBy: 'Kepala Sekolah',
+        resolutionNote: 'Masalah telah diselesaikan secara kekeluargaan',
+        updatedAt: '2026-10-06T10:00:00.000Z',
       })
     );
   });

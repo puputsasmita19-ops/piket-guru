@@ -5,14 +5,25 @@ import { auth } from '../services/firebase/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
 import { checkUserPermission, PermissionKey } from '../config/permissions';
+import { FirestoreService } from '../services/firebase/firestoreService';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithPin: (nipOrUserId: string, pin: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithPin: (
+    nipOrUserId: string,
+    pin: string
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    remainingAttempts?: number;
+    isLocked?: boolean;
+    remainingSeconds?: number;
+  }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  refreshProfile: () => Promise<void>;
   changePin: (
     oldPin: string,
     newPin: string
@@ -63,7 +74,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const valRes = await validateFirebaseUserProfile(fbUser);
         if (!valRes.success || !valRes.profile) {
           console.warn('[AUTH_CONTEXT] User profile validation failed:', valRes.error);
-          if (isMounted) logout();
+          if (isMounted) {
+            logout();
+            setIsLoading(false);
+          }
           return;
         }
 
@@ -85,6 +99,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribe();
     };
   }, [logout]);
+
+  // Realtime subscription to database-authoritative profile (REV-07, R21-04)
+  // Ensures permissions or role changes by Admin apply immediately to the active session.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const unsub = FirestoreService.subscribeToDocument<UserProfile>('users', currentUser.id, (profile) => {
+      if (profile) {
+        // If account has been deactivated, immediately log out
+        if (profile.isActive === false) {
+          console.warn('[AUTH_CONTEXT] Account has been deactivated by administrator.');
+          logout();
+          return;
+        }
+
+        setCurrentUser((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            ...profile,
+          };
+        });
+      }
+    });
+    return () => unsub();
+  }, [currentUser?.id, logout]);
 
   // Inactivity Auto Logout
   useEffect(() => {
@@ -110,22 +149,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [currentUser, logout]);
 
-  const loginWithPin = async (nipOrUserId: string, pin: string) => {
-    setIsLoading(true);
+  const loginWithPin = async (
+    nipOrUserId: string,
+    pin: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    remainingAttempts?: number;
+    isLocked?: boolean;
+    remainingSeconds?: number;
+  }> => {
     try {
       const res = await authService.authenticateWithPin(nipOrUserId, pin);
       if (res.success && res.user) {
         setCurrentUser(res.user);
         return { success: true };
       }
-      return { success: false, error: res.error || 'Autentikasi gagal.' };
-    } finally {
-      setIsLoading(false);
+      return {
+        success: false,
+        error: res.error || 'Autentikasi gagal.',
+        remainingAttempts: res.remainingAttempts,
+        isLocked: res.isLocked,
+        remainingSeconds: res.remainingSeconds,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Autentikasi gagal.' };
     }
   };
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true);
     try {
       const { GoogleAuthProvider, signInWithPopup, signOut } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
@@ -149,12 +201,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(valRes.profile);
       return { success: true };
     } catch (err: any) {
+      const errorCode = err?.code || '';
+      const errorMessage = err?.message || '';
+
+      // Gracefully handle expected user actions and browser popup restrictions without console.error
+      if (
+        errorCode === 'auth/popup-closed-by-user' ||
+        errorCode === 'auth/cancelled-popup-request' ||
+        errorMessage.includes('auth/popup-closed-by-user') ||
+        errorMessage.includes('popup-closed-by-user')
+      ) {
+        console.info('[AUTH_CONTEXT] Google Sign-In popup ditutup atau dibatalkan oleh pengguna.');
+        return {
+          success: false,
+          error: 'Login dengan Google dibatalkan karena jendela pop-up ditutup.',
+        };
+      }
+
+      if (errorCode === 'auth/popup-blocked' || errorMessage.includes('popup-blocked')) {
+        console.warn('[AUTH_CONTEXT] Google Sign-In popup diblokir oleh peramban.');
+        return {
+          success: false,
+          error: 'Jendela pop-up login Google diblokir oleh peramban Anda. Harap izinkan pop-up untuk situs ini.',
+        };
+      }
+
+      if (errorCode === 'auth/network-request-failed') {
+        console.warn('[AUTH_CONTEXT] Jaringan terputus saat autentikasi Google.');
+        return {
+          success: false,
+          error: 'Gagal terhubung ke layanan Google. Silakan periksa koneksi internet Anda.',
+        };
+      }
+
+      if (errorCode === 'auth/unauthorized-domain') {
+        console.warn('[AUTH_CONTEXT] Domain belum terdaftar di Firebase Auth.');
+        return {
+          success: false,
+          error: 'Domain aplikasi ini belum diizinkan pada konsol Firebase Authentication sekolah.',
+        };
+      }
+
       console.error('[AUTH_CONTEXT] Google Sign-In error:', err);
       return { success: false, error: err.message || 'Gagal masuk dengan Google.' };
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const refreshProfile = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const fresh = await FirestoreService.getByIdStrict<UserProfile>('users', currentUser.id);
+      if (fresh) {
+        if (fresh.isActive === false) {
+          logout();
+          return;
+        }
+        setCurrentUser((prev) => (prev ? { ...prev, ...fresh } : null));
+      }
+    } catch (err) {
+      console.warn('[AUTH_CONTEXT] Could not refresh authoritative profile:', err);
+    }
+  }, [currentUser?.id, logout]);
 
   const changePin = async (oldPin: string, newPin: string) => {
     if (!currentUser) return { success: false, error: 'Sesi tidak valid.' };
@@ -180,6 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithPin,
         loginWithGoogle,
         logout,
+        refreshProfile,
         changePin,
         hasPermission,
         hasRole,

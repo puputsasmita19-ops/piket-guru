@@ -499,6 +499,20 @@ export class BackupService {
               };
             }
           }
+        } else if (col === 'dutyBooks') {
+          const validDutyBookStatuses = new Set(['DRAFT', 'DIAJUKAN', 'DIVERIFIKASI', 'DISETUJUI', 'DIKUNCI']);
+          if (item.status !== undefined && !validDutyBookStatuses.has(item.status)) {
+            return {
+              isValid: false,
+              error: `Record #${i} dalam koleksi 'dutyBooks' (${item.id}) memiliki status '${item.status}' yang tidak valid.`,
+            };
+          }
+          if (item.tanggal !== undefined && typeof item.tanggal !== 'string') {
+            return {
+              isValid: false,
+              error: `Record #${i} dalam koleksi 'dutyBooks' (${item.id}) memiliki tanggal bukan string.`,
+            };
+          }
         } else {
           // General record validation across all restore collections
           if (item.days !== undefined && !Array.isArray(item.days)) {

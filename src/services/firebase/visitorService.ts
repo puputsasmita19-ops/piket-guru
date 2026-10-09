@@ -86,8 +86,13 @@ export class VisitorService {
     const id = `vis-${data.tanggal}-${Date.now().toString(36)}`;
     const now = new Date().toISOString();
 
+    const cleanData = { ...data };
+    if (cleanData.kategori !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    }
+
     const payload: VisitorRecord = {
-      ...data,
+      ...cleanData,
       id,
       dataSource: 'PRODUCTION',
       isDemo: false,
@@ -109,6 +114,60 @@ export class VisitorService {
     });
 
     return payload;
+  }
+
+  /**
+   * Update an existing visitor record (Edit)
+   * Preserves existing ID, createdAt, createdBy, dataSource, isDemo, and visit status.
+   */
+  public static async updateVisitor(
+    data: Partial<VisitorRecord> & { id: string },
+    user: UserProfile
+  ): Promise<VisitorRecord> {
+    const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', data.id);
+    if (!existing) {
+      throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
+    }
+
+    const now = new Date().toISOString();
+    const cleanData = { ...data };
+
+    // If kategori is not LAINNYA, delete keteranganLainnya
+    if (cleanData.kategori && cleanData.kategori !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    } else if (!cleanData.kategori && existing.kategori !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    }
+
+    const updated: VisitorRecord = {
+      ...existing,
+      ...cleanData,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      dataSource: existing.dataSource,
+      isDemo: existing.isDemo,
+      updatedAt: now,
+      updatedBy: user.fullName,
+    };
+
+    // If kategori is changed from LAINNYA to another, ensure keteranganLainnya is completely removed
+    if (updated.kategori !== 'LAINNYA') {
+      delete updated.keteranganLainnya;
+    }
+
+    await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true });
+    await FirestoreService.logAudit({
+      userId: user.id,
+      userName: user.fullName,
+      role: user.role,
+      action: 'UPDATE',
+      module: 'VISITORS',
+      recordId: existing.id,
+      details: `Memperbarui data buku tamu: ${updated.namaTamu} (${updated.instansiAsal}) - Kategori: ${updated.kategori}`,
+    });
+
+    return updated;
   }
 
   /**

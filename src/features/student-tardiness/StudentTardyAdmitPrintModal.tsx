@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { StudentTardyRecord } from '../../types/studentTardy.types';
+import { StudentTardyRecord, getTardyReasonDisplay, getDisciplineActionDisplay } from '../../types/studentTardy.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { Printer, CheckCircle2 } from 'lucide-react';
@@ -80,11 +80,11 @@ export const StudentTardyAdmitPrintModal: React.FC<StudentTardyAdmitPrintModalPr
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Alasan Keterlambatan:</span>
-              <span className="col-span-2 font-medium">{tardy.alasan.replace('_', ' ')} {tardy.keteranganAlasan ? `(${tardy.keteranganAlasan})` : ''}</span>
+              <span className="col-span-2 font-medium">{getTardyReasonDisplay(tardy)}</span>
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Pembinaan yang Dijalani:</span>
-              <span className="col-span-2 font-semibold text-emerald-800">{tardy.pembinaan.replace('_', ' ')}</span>
+              <span className="col-span-2 font-semibold text-emerald-800">{getDisciplineActionDisplay(tardy)}</span>
             </div>
           </div>
 

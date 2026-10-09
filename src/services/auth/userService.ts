@@ -272,25 +272,31 @@ export class UserService {
   }
 
   /**
-   * Delete user and advance revocation timestamp
+   * Delete user profile, credentials, and loginId reservation via backend endpoint (CR-LIFECYCLE-LOGINID).
+   * Prevents client-side direct document deletion that leaves orphan reservations.
    */
   public static async deleteUser(
     userId: string,
     adminUser: UserProfile
-  ): Promise<void> {
+  ): Promise<{ success: boolean; message?: string; partial?: boolean }> {
     const existing = await FirestoreService.getById<UserProfile>('users', userId);
-    if (!existing) return;
+    if (!existing) {
+      throw new Error('Pengguna tidak ditemukan di database.');
+    }
 
-    await FirestoreService.deleteDocument('users', userId);
+    if (userId === adminUser.id) {
+      throw new Error('Anda tidak dapat menghapus akun Anda sendiri.');
+    }
 
-    await FirestoreService.logAudit({
-      userId: adminUser.id,
-      userName: adminUser.fullName,
-      role: adminUser.role,
-      action: 'DELETE',
-      module: 'USERS',
-      recordId: userId,
-      details: `Menghapus akun pengguna: ${existing.fullName} (${existing.nip})`,
-    });
+    const res = await authService.deleteUser(userId);
+    if (!res.success) {
+      throw new Error(res.error || 'Gagal menghapus pengguna melalui backend API.');
+    }
+
+    return {
+      success: true,
+      message: res.message,
+      partial: res.partial,
+    };
   }
 }

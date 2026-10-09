@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
-import { IncidentRecord, IncidentStatus } from '../../types/incident.types';
+import { IncidentRecord, IncidentStatus, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { SchoolSettings } from '../../types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
@@ -63,7 +63,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={`Detail Laporan Insiden: ${incident.kategoriName}`}
+        title={`Detail Laporan Insiden: ${getIncidentCategoryDisplay(incident)}`}
         maxWidth="2xl"
       >
         <div className="space-y-5">
@@ -279,7 +279,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
       <WhatsAppModal
         isOpen={isWaOpen}
         onClose={() => setIsWaOpen(false)}
-        title={`Kirim Notifikasi Kejadian: ${incident.kategoriName}`}
+        title={`Kirim Notifikasi Kejadian: ${getIncidentCategoryDisplay(incident)}`}
         defaultMessage={waMessage}
       />
     </>

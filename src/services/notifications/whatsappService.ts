@@ -1,5 +1,5 @@
 import { ScheduleItem, SchoolSettings } from '../../types';
-import { IncidentRecord } from '../../types/incident.types';
+import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export class WhatsAppService {
@@ -59,7 +59,7 @@ Melalui pesan ini kami menginformasikan catatan kejadian siswa/i:
 📅 *Waktu:* ${formatIndonesianDate(incident.tanggal)} (${incident.waktu} WIB)
 📍 *Lokasi:* ${incident.lokasi}
 👤 *Pihak/Siswa:* ${incident.pihakTerlibat}
-⚠️ *Kategori:* ${incident.kategoriName} (${incident.tingkatKeparahan})
+⚠️ *Kategori:* ${getIncidentCategoryDisplay(incident)} (${incident.tingkatKeparahan})
 
 📝 *Uraian:*
 ${incident.uraian}

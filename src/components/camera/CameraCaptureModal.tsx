@@ -7,25 +7,34 @@ interface CameraCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCapture: (imageDataUrl: string) => void;
+  allowFileUpload?: boolean;
+  // Called before the shutter, so GPS can be refreshed before the photo is taken.
+  prepareCapture?: () => Promise<(canvas: HTMLCanvasElement, capturedAt: number) => string>;
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   isOpen,
   onClose,
   onCapture,
+  allowFileUpload = true,
+  prepareCapture,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const generationRef = useRef(0);
+  const busyRef = useRef(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const startCamera = async (mode: 'user' | 'environment') => {
+    const generation = ++generationRef.current;
     setCameraError(null);
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
 
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
@@ -37,63 +46,87 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         audio: false,
       });
 
-      setStream(newStream);
+      if (generation !== generationRef.current) {
+        newStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = newStream;
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
       }
     } catch (err: any) {
+      if (generation !== generationRef.current) return;
       console.warn('Camera stream error:', err);
       setCameraError(
-        'Kamera tidak dapat diakses (izin diblokir atau kamera tidak ditemukan). Anda dapat menggunakan tombol "Unggah Foto" di bawah.'
+        allowFileUpload
+          ? 'Kamera tidak dapat diakses. Anda dapat menggunakan tombol "Unggah Foto" di bawah.'
+          : 'Kamera tidak dapat diakses. Izinkan kamera pada browser, lalu coba lagi. Swafoto presensi harus diambil langsung dari kamera.'
       );
     }
   };
 
   useEffect(() => {
+    setCaptureError(null);
+    busyRef.current = false;
+    setIsProcessing(false);
     if (isOpen) {
       setCapturedImage(null);
       startCamera(facingMode);
-    } else {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
     }
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      ++generationRef.current;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     };
   }, [isOpen, facingMode]);
 
-  const handleTakeSnapshot = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+  const handleTakeSnapshot = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setIsProcessing(true);
+    setCaptureError(null);
+    const generation = generationRef.current;
+    try {
+      const processor = await prepareCapture?.();
+      if (generation !== generationRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+        throw new Error('Kamera belum siap. Tunggu gambar kamera muncul lalu coba lagi.');
+      }
+      const capturedAt = Date.now();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Foto tidak dapat diproses. Coba gunakan browser lain.');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = processor ? processor(canvas, capturedAt) : canvas.toDataURL('image/jpeg', 0.85);
       setCapturedImage(dataUrl);
+    } catch (error: any) {
+      if (generation === generationRef.current) setCaptureError(error?.message || 'Gagal membuat foto. Silakan ulangi.');
+    } finally {
+      if (generation === generationRef.current) {
+        busyRef.current = false;
+        setIsProcessing(false);
+      }
     }
   };
 
   const handleRetake = () => {
+    setCaptureError(null);
     setCapturedImage(null);
     startCamera(facingMode);
   };
 
   const handleConfirm = () => {
-    if (capturedImage) {
+    if (capturedImage && !busyRef.current) {
       onCapture(capturedImage);
       onClose();
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!allowFileUpload || prepareCapture) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -153,13 +186,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Ambil Foto Selfie Presensi" maxWidth="md">
       <div className="space-y-4">
+        {captureError && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{captureError}</div>}
+        {prepareCapture && <p className="text-xs text-slate-500">Foto akan diberi watermark nama, sekolah, waktu WIB, dan GPS. Tunggu proses GPS selesai sebelum foto diambil.</p>}
         {cameraError && !capturedImage ? (
           <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs space-y-3">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <span>{cameraError}</span>
             </div>
-            <label className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs cursor-pointer hover:bg-blue-700 transition-colors shadow-sm">
+            {allowFileUpload && !prepareCapture ? <label className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] rounded-xl font-bold text-xs cursor-pointer hover:brightness-95 active:brightness-90 transition-colors shadow-sm">
               <Upload className="w-4 h-4" />
               <span>Pilih / Ambil Foto dari Perangkat</span>
               <input
@@ -169,7 +204,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 className="hidden"
                 onChange={handleFileUpload}
               />
-            </label>
+            </label> : <Button size="sm" onClick={() => startCamera(facingMode)}>Coba Kamera Lagi</Button>}
           </div>
         ) : (
           <div className="relative rounded-2xl overflow-hidden bg-black aspect-4/3 flex items-center justify-center shadow-inner border border-slate-800">
@@ -177,7 +212,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <img
                 src={capturedImage}
                 alt="Foto Selfie Presensi"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
               <video
@@ -196,6 +231,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <button
                 type="button"
                 onClick={toggleCamera}
+                disabled={isProcessing}
                 className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs transition-colors cursor-pointer"
                 title="Putar Kamera"
               >
@@ -237,6 +273,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 size="md"
                 leftIcon={<Camera className="w-4 h-4" />}
                 onClick={handleTakeSnapshot}
+                isLoading={isProcessing}
+                loadingText="Menyiapkan GPS dan foto..."
               >
                 Ambil Gambar
               </Button>

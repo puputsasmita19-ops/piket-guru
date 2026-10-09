@@ -4,6 +4,13 @@ import { Button } from '../../components/common/Button';
 import { UserProfile, UserRole } from '../../types';
 import { ROLE_LABELS } from '../../config/constants';
 import {
+  APP_PERMISSION_ITEMS,
+  ROLE_PERMISSIONS,
+  PERMISSIONS,
+  isPermissionItemChecked,
+  togglePermissionItem,
+} from '../../config/permissions';
+import {
   User,
   Shield,
   KeyRound,
@@ -32,18 +39,6 @@ interface UserFormModalProps {
   }) => Promise<void>;
   editingUser: UserProfile | null;
 }
-
-const ALL_PERMISSIONS = [
-  { id: 'manage_schedules', label: 'Kelola & Buat Jadwal Piket', category: 'Jadwal' },
-  { id: 'input_duty_book', label: 'Input & Edit Jurnal Buku Piket', category: 'Buku Piket' },
-  { id: 'verify_duty_book', label: 'Verifikasi Buku Piket (Koordinator)', category: 'Buku Piket' },
-  { id: 'approve_duty_book', label: 'Persetujuan Resmi (Kepala Sekolah)', category: 'Buku Piket' },
-  { id: 'report_incidents', label: 'Input & Tindak Lanjut Insiden', category: 'Kejadian' },
-  { id: 'view_reports', label: 'Lihat Analisis & Rekap Laporan', category: 'Laporan' },
-  { id: 'export_data', label: 'Ekspor Data CSV & Spreadsheet', category: 'Laporan' },
-  { id: 'manage_master_data', label: 'Kelola Master Data & Guru/Staff', category: 'Sistem' },
-  { id: 'system_settings', label: 'Pengaturan Sekolah & Geofence GPS', category: 'Sistem' },
-];
 
 export const UserFormModal: React.FC<UserFormModalProps> = ({
   isOpen,
@@ -94,15 +89,11 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const applyDefaultPermissionsForRole = (targetRole: UserRole) => {
     if (targetRole === 'ADMIN') {
-      setPermissions(ALL_PERMISSIONS.map((p) => p.id));
-    } else if (targetRole === 'KEPALA_SEKOLAH') {
-      setPermissions(['approve_duty_book', 'view_reports', 'export_data', 'report_incidents']);
-    } else if (targetRole === 'GURU') {
-      setPermissions(['input_duty_book', 'report_incidents', 'view_reports']);
-    } else if (targetRole === 'TENAGA_KEPENDIDIKAN') {
-      setPermissions(['input_duty_book', 'report_incidents']);
-    } else if (targetRole === 'SATPAM') {
-      setPermissions(['report_incidents']);
+      setPermissions(['*']);
+    } else {
+      const defaults = ROLE_PERMISSIONS[targetRole] || [];
+      // Crucial: Filter out '*' so GURU and other non-admin roles never receive wildcard '*'
+      setPermissions(defaults.filter((p) => p !== '*'));
     }
   };
 
@@ -112,11 +103,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   };
 
   const togglePermission = (id: string) => {
-    if (permissions.includes(id)) {
-      setPermissions(permissions.filter((p) => p !== id));
-    } else {
-      setPermissions([...permissions, id]);
-    }
+    setPermissions(togglePermissionItem(id, permissions, role));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,6 +122,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
+      // Ensure GURU never receives wildcard '*'
+      const cleanPermissions = role === 'GURU' ? permissions.filter((p) => p !== '*') : permissions;
+
       await onSave({
         id: editingUser?.id,
         loginId: loginId.trim().toUpperCase(),
@@ -145,7 +135,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
         email,
         phone,
         initialPin: !editingUser ? pin : undefined,
-        permissions,
+        permissions: cleanPermissions,
         isActive,
       });
       onClose();
@@ -326,24 +316,36 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-            {ALL_PERMISSIONS.map((perm) => {
-              const isChecked = permissions.includes(perm.id);
+            {APP_PERMISSION_ITEMS.map((perm) => {
+              const isChecked = isPermissionItemChecked(perm.id, permissions);
               return (
                 <button
                   type="button"
                   key={perm.id}
                   onClick={() => togglePermission(perm.id)}
-                  className={`p-2 rounded-xl text-left text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                  className={`p-2.5 rounded-xl text-left text-xs transition-colors flex items-start justify-between gap-2 cursor-pointer ${
                     isChecked
-                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 font-bold'
-                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 font-bold border border-blue-200 dark:border-blue-900'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border border-transparent'
                   }`}
                 >
-                  <span>{perm.label}</span>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {perm.category}
+                      </span>
+                      <span>{perm.label}</span>
+                    </div>
+                    {perm.description && (
+                      <p className="text-[10px] text-slate-500 font-normal leading-tight">
+                        {perm.description}
+                      </p>
+                    )}
+                  </div>
                   {isChecked ? (
-                    <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />
+                    <CheckSquare className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   ) : (
-                    <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                    <Square className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                   )}
                 </button>
               );

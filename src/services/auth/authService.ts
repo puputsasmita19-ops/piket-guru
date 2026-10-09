@@ -23,6 +23,9 @@ export interface AuthResult {
   success: boolean;
   user?: UserProfile;
   error?: string;
+  remainingAttempts?: number;
+  isLocked?: boolean;
+  remainingSeconds?: number;
   dependencyBlocker?: {
     code: string;
     message: string;
@@ -147,6 +150,9 @@ class AuthService {
         return {
           success: false,
           error: data.error || 'ID Login/NIP atau PIN tidak sesuai.',
+          remainingAttempts: data.remainingAttempts,
+          isLocked: data.isLocked,
+          remainingSeconds: data.remainingSeconds,
           dependencyBlocker: data.dependencyBlocker,
         };
       }
@@ -385,6 +391,121 @@ class AuthService {
       return { success: true, user: data.user };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Terjadi kesalahan jaringan saat memperbarui pengguna.' };
+    }
+  }
+
+  /**
+   * Deletes user profile, credentials, and loginId reservation via backend endpoint (CR-LIFECYCLE-LOGINID)
+   */
+  public async deleteUser(
+    userId: string
+  ): Promise<{ success: boolean; message?: string; error?: string; code?: string; partial?: boolean }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || 'Gagal menghapus pengguna dari server.',
+          code: data.code,
+        };
+      }
+
+      await this.refreshUsersList();
+      return {
+        success: true,
+        message: data.message,
+        partial: data.partial,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Terjadi kesalahan jaringan saat menghapus pengguna.' };
+    }
+  }
+
+  /**
+   * Scans orphan loginId reservations (dry run inspection)
+   */
+  public async getOrphanReservations(): Promise<{
+    success: boolean;
+    count: number;
+    orphans: Array<{ loginId: string; userId: string; createdAt?: string; reason: string }>;
+    error?: string;
+  }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/orphan-reservations', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          count: 0,
+          orphans: [],
+          error: data.error || 'Gagal memeriksa reservasi yatim.',
+        };
+      }
+
+      return {
+        success: true,
+        count: data.count || 0,
+        orphans: data.orphans || [],
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        count: 0,
+        orphans: [],
+        error: err?.message || 'Terjadi kesalahan jaringan saat memeriksa reservasi yatim.',
+      };
+    }
+  }
+
+  /**
+   * Atomically releases an orphan loginId reservation
+   */
+  public async cleanOrphanReservation(
+    loginId: string
+  ): Promise<{ success: boolean; message?: string; error?: string; code?: string }> {
+    try {
+      const token = await this.getIdToken();
+      const response = await fetch('/api/auth/clean-orphan-reservation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ loginId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || 'Gagal membersihkan reservasi yatim.',
+          code: data.code,
+        };
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Terjadi kesalahan jaringan saat membersihkan reservasi yatim.' };
     }
   }
 

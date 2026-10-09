@@ -2,29 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
-import { DutyBookRecord } from '../../types/dutyBook.types';
+import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { DutyBookStatus, ScheduleItem } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { PERMISSIONS } from '../../config/permissions';
-import { formatIndonesianDate, getCurrentDayName } from '../../utils/dateUtils';
+import { PERMISSIONS, checkUserPermission } from '../../config/permissions';
+import { formatIndonesianDate, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 import {
   Save,
   Send,
-  CheckCircle2,
   CheckCheck,
   Lock,
   Unlock,
   AlertCircle,
   Sparkles,
   Shield,
-  Trash2,
+  RotateCcw,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface DutyBookFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (record: DutyBookRecord) => Promise<void>;
+  onSave: (record: DutyBookRecord, originalUpdatedAt?: string) => Promise<void>;
+  onSubmitJournal?: (record: DutyBookRecord, originalUpdatedAt?: string) => Promise<void>;
   onStatusChange: (record: DutyBookRecord, newStatus: DutyBookStatus, note?: string) => Promise<void>;
+  onApproveAndComplete?: (record: DutyBookRecord) => Promise<void>;
+  onRequestRevision?: (record: DutyBookRecord, reason: string) => Promise<void>;
   onUnlock?: (record: DutyBookRecord, reason: string) => Promise<void>;
   dutyBook: DutyBookRecord | null;
   schedules: ScheduleItem[];
@@ -34,27 +37,33 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onSubmitJournal,
   onStatusChange,
+  onApproveAndComplete,
+  onRequestRevision,
   onUnlock,
   dutyBook,
   schedules,
 }) => {
-  const { currentUser, hasRole, hasPermission } = useAuth();
+  const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
   const isKepsek = hasRole('KEPALA_SEKOLAH');
-  const canVerify =
-    isAdmin ||
-    isKepsek ||
-    hasPermission(PERMISSIONS.DUTYBOOK_VERIFY) ||
-    (currentUser?.permissions?.includes('verify_duty_book') ?? false) ||
-    (currentUser?.permissions?.includes('*') ?? false);
-  const canApprove =
-    isAdmin ||
-    isKepsek ||
-    (currentUser?.permissions?.includes('approve_duty_book') ?? false) ||
-    (currentUser?.permissions?.includes('*') ?? false);
 
-  const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Authority checks: distinguish viewing from writing
+  const hasWritePermission =
+    isAdmin ||
+    checkUserPermission(currentUser?.permissions, PERMISSIONS.DUTYBOOK_CREATE) ||
+    checkUserPermission(currentUser?.permissions, PERMISSIONS.DUTYBOOK_UPDATE) ||
+    currentUser?.permissions?.includes('input_duty_book') ||
+    currentUser?.permissions?.includes('*');
+
+  const canApproveOrComplete =
+    isAdmin ||
+    isKepsek ||
+    checkUserPermission(currentUser?.permissions, PERMISSIONS.DUTYBOOK_UNLOCK) ||
+    checkUserPermission(currentUser?.permissions, PERMISSIONS.DUTYBOOK_VERIFY);
+
+  const [tanggal, setTanggal] = useState<string>(getTodayISODate());
   const [hari, setHari] = useState<string>(getCurrentDayName());
   const [jamMulai, setJamMulai] = useState<string>('06:30');
   const [jamSelesai, setJamSelesai] = useState<string>('15:30');
@@ -62,133 +71,383 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
   const [petugasName, setPetugasName] = useState<string>('');
   const [ruangName, setRuangName] = useState<string>('');
 
-  // 7 Sections
+  // 5 Mandatory Conditions + 1 Conclusion
   const [kondisiKeamanan, setKondisiKeamanan] = useState<string>('');
   const [kondisiKebersihan, setKondisiKebersihan] = useState<string>('');
   const [kondisiKelas, setKondisiKelas] = useState<string>('');
   const [kondisiFasilitas, setKondisiFasilitas] = useState<string>('');
   const [kondisiSiswa, setKondisiSiswa] = useState<string>('');
-  const [kegiatanKhusus, setKegiatanKhusus] = useState<string>('');
   const [catatanPiket, setCatatanPiket] = useState<string>('');
+
+  // 2 Optional Sections
+  const [kegiatanKhusus, setKegiatanKhusus] = useState<string>('');
   const [tindakLanjut, setTindakLanjut] = useState<string>('');
 
   const [status, setStatus] = useState<DutyBookStatus>('DRAFT');
+  const [originalUpdatedAt, setOriginalUpdatedAt] = useState<string | undefined>(undefined);
+
+  // In-flight state & inline feedback
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [unlockReason, setUnlockReason] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Revision & Unlock dialogs
+  const [showRevisionPrompt, setShowRevisionPrompt] = useState<boolean>(false);
+  const [revisionReason, setRevisionReason] = useState<string>('');
   const [showUnlockPrompt, setShowUnlockPrompt] = useState<boolean>(false);
+  const [unlockReason, setUnlockReason] = useState<string>('');
 
   const isOwner = !dutyBook || dutyBook.petugasId === currentUser?.id || isAdmin;
-  const isLocked = status === 'DIKUNCI';
-  const isReadOnly = (isLocked && !isAdmin) || (!isOwner && status === 'DRAFT');
+  const displayStatus = getDutyBookDisplayStatus(status);
+  const isSelesai = displayStatus.stage === 'SELESAI';
+  const isTerkirim = displayStatus.stage === 'TERKIRIM';
+  const isReadOnly =
+    !hasWritePermission ||
+    (!isOwner && !isAdmin && !canApproveOrComplete) ||
+    isSelesai ||
+    (isTerkirim && !canApproveOrComplete);
 
   useEffect(() => {
+    setErrorMessage(null);
+    setDebugInfo(null);
+    setSuccessMessage(null);
+    setShowRevisionPrompt(false);
+    setShowUnlockPrompt(false);
+    setRevisionReason('');
+    setUnlockReason('');
+
     if (dutyBook) {
       setTanggal(dutyBook.tanggal);
       setHari(dutyBook.hari);
-      setJamMulai(dutyBook.jamMulai);
-      setJamSelesai(dutyBook.jamSelesai);
-      setScheduleId(dutyBook.scheduleId);
-      setPetugasName(dutyBook.petugasName);
-      setRuangName(dutyBook.ruangName);
+      setJamMulai(dutyBook.jamMulai || '06:30');
+      setJamSelesai(dutyBook.jamSelesai || '15:30');
+      setScheduleId(dutyBook.scheduleId || '');
+      setPetugasName(dutyBook.petugasName || '');
+      setRuangName(dutyBook.ruangName || '');
       setKondisiKeamanan(dutyBook.kondisiKeamanan || '');
       setKondisiKebersihan(dutyBook.kondisiKebersihan || '');
       setKondisiKelas(dutyBook.kondisiKelas || '');
       setKondisiFasilitas(dutyBook.kondisiFasilitas || '');
       setKondisiSiswa(dutyBook.kondisiSiswa || '');
-      setKegiatanKhusus(dutyBook.kegiatanKhusus || '');
       setCatatanPiket(dutyBook.catatanPiket || '');
+      setKegiatanKhusus(dutyBook.kegiatanKhusus || '');
       setTindakLanjut(dutyBook.tindakLanjut || '');
       setStatus(dutyBook.status);
+      setOriginalUpdatedAt(dutyBook.updatedAt);
     } else {
-      const todayISO = new Date().toISOString().split('T')[0];
+      const todayISO = getTodayISODate();
       setTanggal(todayISO);
       setHari(getCurrentDayName());
       setJamMulai('06:30');
       setJamSelesai('15:30');
       setScheduleId(schedules[0]?.id || 'sch-general');
-      setPetugasName(currentUser?.fullName || 'Petugas Piket');
-      setRuangName(schedules[0]?.ruangName || 'Gerbang & Area Utama');
+      setPetugasName(currentUser?.fullName || '');
+      setRuangName(schedules[0]?.ruangName || 'Gerbang & Pos Utama');
+      // Do not auto-prefill fake normal statements without confirmation
       setKondisiKeamanan('');
       setKondisiKebersihan('');
       setKondisiKelas('');
       setKondisiFasilitas('');
       setKondisiSiswa('');
-      setKegiatanKhusus('');
       setCatatanPiket('');
+      setKegiatanKhusus('');
       setTindakLanjut('');
       setStatus('DRAFT');
+      setOriginalUpdatedAt(undefined);
     }
   }, [dutyBook, schedules, currentUser, isOpen]);
 
-  // Quick template helpers
-  const applyStandardTemplates = () => {
-    setKondisiKeamanan('Situasi keamanan gerbang dan lingkungan sekolah terpantau kondusif, aman, dan terkendali. Tamu mengisi buku tamu di pos satpam.');
-    setKondisiKebersihan('Seluruh koridor, ruang kelas, toilet, dan halaman bersih dan rapi. Tempat sampah terkelola dengan baik.');
+  // Explicit user action to load standard format if requested
+  const handleApplyStandardTemplates = () => {
+    setKondisiKeamanan('Situasi keamanan gerbang dan lingkungan sekolah terpantau kondusif, aman, dan terkendali. Seluruh tamu melapor di pos piket.');
+    setKondisiKebersihan('Seluruh koridor, ruang kelas, toilet, dan halaman bersih. Pengelolaan sampah berjalan tertib.');
     setKondisiKelas('KBM jam ke-1 s.d ke-8 berjalan tertib. Seluruh guru hadir tepat waktu sesuai jadwal pelajaran.');
-    setKondisiFasilitas('Sarana dan prasarana sekolah (listrik, air, bel, proyektor) berfungsi normal tanpa kendala.');
-    setKondisiSiswa('Kedisiplinan siswa terpantau baik, tidak ada perkelahian atau pelanggaran berat.');
+    setKondisiFasilitas('Sarana dan prasarana sekolah (kelistrikan, air, bel sekolah) berfungsi normal tanpa kendala.');
+    setKondisiSiswa('Kedisiplinan siswa terpantau baik, tidak ada perkelahian atau pelanggaran tata tertib berat.');
     setCatatanPiket('Kegiatan operasional sekolah hari ini berlangsung lancar.');
     setTindakLanjut('Lanjutkan pengawasan ketertiban seragam dan atribut upacara untuk hari esok.');
   };
 
-  const constructPayload = (): DutyBookRecord => {
-    return {
-      id: dutyBook ? dutyBook.id : `book-${tanggal}-${Date.now()}`,
-      scheduleId,
+  const constructPayload = (targetStatus: DutyBookStatus): DutyBookRecord => {
+    const fallbackId = `book-${tanggal}-${dutyBook?.petugasId || currentUser?.id || 'usr-piket'}`;
+    const id = dutyBook ? dutyBook.id : fallbackId;
+    const payload: Record<string, any> = {
+      id,
+      scheduleId: scheduleId || 'sch-general',
       tanggal,
       hari,
       jamMulai,
       jamSelesai,
-      petugasId: dutyBook?.petugasId || currentUser?.id || 'usr-001',
-      petugasName,
+      petugasId: dutyBook?.petugasId || currentUser?.id || 'usr-piket',
+      petugasName: petugasName.trim() || currentUser?.fullName || 'Petugas Piket',
       petugasRole: 'GURU',
-      ruangName,
-      kondisiKeamanan,
-      kondisiKebersihan,
-      kondisiKelas,
-      kondisiFasilitas,
-      kondisiSiswa,
-      kegiatanKhusus,
-      catatanPiket,
-      tindakLanjut,
-      status,
+      ruangName: ruangName.trim() || 'Pos Utama',
+      kondisiKeamanan: kondisiKeamanan.trim(),
+      kondisiKebersihan: kondisiKebersihan.trim(),
+      kondisiKelas: kondisiKelas.trim(),
+      kondisiFasilitas: kondisiFasilitas.trim(),
+      kondisiSiswa: kondisiSiswa.trim(),
+      catatanPiket: catatanPiket.trim(),
+      status: targetStatus,
       createdAt: dutyBook?.createdAt || new Date().toISOString(),
       createdBy: dutyBook?.createdBy || currentUser?.fullName || 'Petugas',
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser?.fullName || 'Petugas',
     };
+    if (kegiatanKhusus.trim()) {
+      payload.kegiatanKhusus = kegiatanKhusus.trim();
+    }
+    if (tindakLanjut.trim()) {
+      payload.tindakLanjut = tindakLanjut.trim();
+    }
+    return payload as DutyBookRecord;
   };
 
-  const handleSaveDraft = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 1. Simpan Draft: guru dapat menyimpan jurnal yang belum lengkap
+  const handleSaveDraft = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!hasWritePermission) {
+      setErrorMessage('Akses ditolak: Anda tidak memiliki izin untuk menyimpan buku piket.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setDebugInfo(null);
     setIsSubmitting(true);
     try {
-      const payload = constructPayload();
-      await onSave(payload);
-      onClose();
+      const payload = constructPayload('DRAFT');
+      await onSave(payload, originalUpdatedAt);
+      setSuccessMessage('Draft jurnal berhasil disimpan!');
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (err: any) {
+      console.warn('[DutyBookForm] Save draft failed:', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      const isPermissionDenied =
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions') ||
+        err.message?.toLowerCase().includes('izin');
+
+      const isSessionExpired =
+        err.code === 'auth/user-token-expired' ||
+        err.message?.includes('SESSION_REVOKED') ||
+        err.message?.includes('auth/id-token-expired');
+
+      if (isSessionExpired) {
+        setErrorMessage('Sesi telah kedaluwarsa. Silakan masuk kembali.');
+      } else if (isPermissionDenied) {
+        setErrorMessage('Tidak memiliki izin menyimpan jurnal.');
+      } else {
+        setErrorMessage(err.message || 'Gagal menyimpan draft buku piket.');
+      }
+      setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleAdvanceStatus = async (nextStatus: DutyBookStatus) => {
+  // 2. Kirim Jurnal: guru menekan "Kirim Jurnal" satu kali tanpa wajib simpan Draft dulu
+  const handleSubmitJournal = async () => {
+    if (isSubmitting) return;
+
+    if (!hasWritePermission) {
+      setErrorMessage('Tidak memiliki izin menyimpan jurnal.');
+      return;
+    }
+
+    // Validate mandatory sections
+    const missing: string[] = [];
+    if (!petugasName.trim()) missing.push('Nama Petugas');
+    if (!ruangName.trim()) missing.push('Pos / Ruang');
+    if (!kondisiKeamanan.trim()) missing.push('Keamanan & Ketertiban');
+    if (!kondisiKebersihan.trim()) missing.push('Kebersihan Lingkungan');
+    if (!kondisiKelas.trim()) missing.push('KBM & Kehadiran Kelas');
+    if (!kondisiFasilitas.trim()) missing.push('Sarana & Prasarana');
+    if (!kondisiSiswa.trim()) missing.push('Kedisiplinan Siswa');
+    if (!catatanPiket.trim()) missing.push('Catatan Kesimpulan Piket');
+
+    if (missing.length > 0) {
+      setErrorMessage(
+        `Bagian wajib belum lengkap: ${missing.join(', ')}. Harap lengkapi sebelum mengirim jurnal.`
+      );
+      return;
+    }
+
+    setErrorMessage(null);
+    setDebugInfo(null);
     setIsSubmitting(true);
     try {
-      const payload = constructPayload();
-      await onStatusChange(payload, nextStatus);
-      onClose();
+      const payload = constructPayload('DIAJUKAN');
+      if (onSubmitJournal) {
+        await onSubmitJournal(payload, originalUpdatedAt);
+      } else {
+        await onStatusChange(payload, 'DIAJUKAN');
+      }
+      setSuccessMessage('Jurnal resmi berhasil dikirim! Menunggu pengesahan.');
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      console.warn('[DutyBookForm] Submit journal failed:', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      const isPermissionDenied =
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions') ||
+        err.message?.toLowerCase().includes('izin');
+
+      const isSessionExpired =
+        err.code === 'auth/user-token-expired' ||
+        err.message?.includes('SESSION_REVOKED') ||
+        err.message?.includes('auth/id-token-expired');
+
+      if (isSessionExpired) {
+        setErrorMessage('Sesi telah kedaluwarsa. Silakan masuk kembali.');
+      } else if (isPermissionDenied) {
+        setErrorMessage('Tidak memiliki izin menyimpan jurnal.');
+      } else {
+        setErrorMessage(err.message || 'Gagal mengirim jurnal buku piket.');
+      }
+      setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // 3. Sahkan & Selesaikan: satu langkah penyelesaian & penguncian otomatis
+  const handleApproveAndComplete = async () => {
+    if (!dutyBook || isSubmitting) return;
+    setErrorMessage(null);
+    setDebugInfo(null);
+    setIsSubmitting(true);
+    try {
+      if (onApproveAndComplete) {
+        await onApproveAndComplete(dutyBook);
+      } else {
+        await onStatusChange(dutyBook, 'DIKUNCI');
+      }
+      setSuccessMessage('Buku piket berhasil disahkan dan selesai (otomatis terkunci)!');
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      console.warn('[DutyBookForm] Approve duty book failed:', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      const isPermissionDenied =
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions') ||
+        err.message?.toLowerCase().includes('izin');
+
+      if (isPermissionDenied) {
+        setErrorMessage('Tidak memiliki izin untuk mengesahkan buku piket. Fitur ini memerlukan wewenang Kepala Sekolah atau Administrator.');
+      } else {
+        setErrorMessage(err.message || 'Gagal mengesahkan buku piket.');
+      }
+      setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Kembalikan ke Draft dengan alasan wajib
+  const handleExecuteRevision = async () => {
+    if (!dutyBook || isSubmitting) return;
+    if (!revisionReason.trim()) {
+      setErrorMessage('Alasan pengembalian jurnal ke draft wajib diisi.');
+      return;
+    }
+    setErrorMessage(null);
+    setDebugInfo(null);
+    setIsSubmitting(true);
+    try {
+      if (onRequestRevision) {
+        await onRequestRevision(dutyBook, revisionReason.trim());
+      } else {
+        await onStatusChange(dutyBook, 'DRAFT', revisionReason.trim());
+      }
+      setShowRevisionPrompt(false);
+      setSuccessMessage('Jurnal berhasil dikembalikan ke status Draft untuk revisi.');
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      console.warn('[DutyBookForm] Request revision failed:', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      const isPermissionDenied =
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions') ||
+        err.message?.toLowerCase().includes('izin');
+
+      if (isPermissionDenied) {
+        setErrorMessage('Tidak memiliki izin untuk meminta revisi buku piket.');
+      } else {
+        setErrorMessage(err.message || 'Gagal mengembalikan jurnal ke draft.');
+      }
+      setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Admin buka kunci jurnal Selesai untuk koreksi dengan alasan wajib
   const handleExecuteUnlock = async () => {
-    if (!dutyBook || !onUnlock || !unlockReason) return;
+    if (!dutyBook || !onUnlock || isSubmitting) return;
+    if (!unlockReason.trim()) {
+      setErrorMessage('Alasan pembukaan kunci untuk koreksi wajib diisi.');
+      return;
+    }
+    setErrorMessage(null);
+    setDebugInfo(null);
     setIsSubmitting(true);
     try {
-      await onUnlock(dutyBook, unlockReason);
+      await onUnlock(dutyBook, unlockReason.trim());
       setShowUnlockPrompt(false);
-      onClose();
+      setSuccessMessage('Kunci arsip dibuka untuk koreksi (status kembali ke Draft).');
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      console.warn('[DutyBookForm] Unlock duty book failed:', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      const isPermissionDenied =
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions') ||
+        err.message?.toLowerCase().includes('izin');
+
+      if (isPermissionDenied) {
+        setErrorMessage('Akses ditolak: Hanya Administrator yang berwenang membuka kunci buku piket berstatus Selesai.');
+      } else {
+        setErrorMessage(err.message || 'Gagal membuka kunci buku piket.');
+      }
+      setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -202,79 +461,127 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSaveDraft} className="space-y-6">
-        {/* Status Pipeline Banner */}
+        {/* Status Pipeline Banner (Simplified 3 Stages) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <Badge
-              variant={
-                status === 'DIKUNCI'
-                  ? 'neutral'
-                  : status === 'DISETUJUI'
-                  ? 'success'
-                  : status === 'DIVERIFIKASI'
-                  ? 'info'
-                  : status === 'DIAJUKAN'
-                  ? 'warning'
-                  : 'primary'
-              }
+              variant={displayStatus.variant}
               size="md"
-              icon={status === 'DIKUNCI' ? <Lock className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
+              icon={isSelesai ? <Lock className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
             >
-              Tahapan: {status}
+              Tahap: {displayStatus.label}
             </Badge>
             <span className="text-xs text-slate-500 font-medium">
-              Petugas: <strong>{petugasName}</strong>
+              Petugas: <strong>{petugasName || currentUser?.fullName || 'Petugas'}</strong>
             </span>
           </div>
 
-          {!isLocked && (
+          {!isSelesai && !isTerkirim && hasWritePermission && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="text-xs"
               leftIcon={<Sparkles className="w-3.5 h-3.5 text-amber-500" />}
-              onClick={applyStandardTemplates}
+              onClick={handleApplyStandardTemplates}
             >
               Isi Format Standar Otomatis
             </Button>
           )}
         </div>
 
-        {/* Locked Warning */}
-        {isLocked && (
+        {/* View-Only Warning */}
+        {!hasWritePermission && (
+          <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+            <span>Mode Hanya Baca: Akun Anda memiliki izin melihat dan tidak dapat mengubah atau mengirim jurnal.</span>
+          </div>
+        )}
+
+        {/* Ownership Notice */}
+        {!isOwner && !isAdmin && hasWritePermission && (
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Mode Pratinjau: Jurnal ini ditugaskan kepada <strong>{petugasName}</strong>.</span>
+          </div>
+        )}
+
+        {/* Terkirim notice for Teacher */}
+        {isTerkirim && !canApproveOrComplete && (
+          <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>Jurnal telah terkirim dan sedang menunggu pengesahan oleh Admin atau Kepala Sekolah.</span>
+          </div>
+        )}
+
+        {/* Selesai / Locked Notice */}
+        {isSelesai && (
           <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Lock className="w-4 h-4 text-slate-500" />
-              <span>Dokumen buku piket ini telah <strong>DIKUNCI</strong> dan bersifat permanen (arsip resmi).</span>
+              <span>Dokumen buku piket ini telah <strong>Disahkan & Selesai</strong> (Arsip resmi terkunci).</span>
             </div>
             {isAdmin && (
               <Button
                 type="button"
-                variant="danger"
+                variant="outline"
                 size="sm"
-                className="text-xs"
+                className="text-xs text-rose-600 border-rose-300 hover:bg-rose-50"
                 leftIcon={<Unlock className="w-3.5 h-3.5" />}
                 onClick={() => setShowUnlockPrompt(true)}
               >
-                Buka Kunci (Admin)
+                Buka Kunci untuk Koreksi
               </Button>
             )}
           </div>
         )}
 
-        {/* Unlock Reason Prompt */}
+        {/* Prompt: Kembalikan ke Draft untuk Revisi */}
+        {showRevisionPrompt && (
+          <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 space-y-3">
+            <h5 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+              Kembalikan Jurnal ke Draft untuk Revisi
+            </h5>
+            <textarea
+              required
+              rows={2}
+              value={revisionReason}
+              onChange={(e) => setRevisionReason(e.target.value)}
+              placeholder="Masukkan alasan pengembalian/catatan revisi yang wajib diperbaiki guru (Wajib)..."
+              className="w-full p-2.5 rounded-xl border border-amber-300 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowRevisionPrompt(false)}>
+                Batal
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={!revisionReason.trim() || isSubmitting}
+                isLoading={isSubmitting}
+                onClick={handleExecuteRevision}
+              >
+                Konfirmasi Kembalikan ke Draft
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Prompt: Buka Kunci Arsip (Admin Only) */}
         {showUnlockPrompt && (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 space-y-3 animate-in fade-in duration-150">
-            <h5 className="text-xs font-bold text-rose-900 dark:text-rose-200">
-              Konfirmasi Pembukaan Kunci Dokumen Arsip
+          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 space-y-3">
+            <h5 className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
+              <Unlock className="w-3.5 h-3.5 text-rose-600" />
+              Buka Kunci Dokumen Selesai untuk Koreksi (Admin)
             </h5>
             <input
               type="text"
               required
               value={unlockReason}
               onChange={(e) => setUnlockReason(e.target.value)}
-              placeholder="Masukkan alasan pembukaan kunci (Wajib untuk audit log)..."
+              placeholder="Masukkan alasan pembukaan kunci (Wajib untuk audit trail)..."
               className="w-full p-2.5 rounded-xl border border-rose-300 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
             />
             <div className="flex justify-end gap-2">
@@ -285,7 +592,8 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
                 type="button"
                 variant="danger"
                 size="sm"
-                disabled={!unlockReason}
+                disabled={!unlockReason.trim() || isSubmitting}
+                isLoading={isSubmitting}
                 onClick={handleExecuteUnlock}
               >
                 Buka Kunci Sekarang
@@ -294,8 +602,39 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
           </div>
         )}
 
-        {/* 7 JURNAL SECTIONS */}
-        <div className="space-y-4">
+        {/* Identity & Shift Fields */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <label className="font-bold text-slate-700 dark:text-slate-300">Petugas Piket</label>
+            <input
+              type="text"
+              disabled={!isAdmin && isReadOnly}
+              value={petugasName}
+              onChange={(e) => setPetugasName(e.target.value)}
+              placeholder="Nama lengkap petugas piket..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-75 disabled:bg-slate-50"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-slate-700 dark:text-slate-300">Pos / Ruangan Piket</label>
+            <input
+              type="text"
+              disabled={isReadOnly}
+              value={ruangName}
+              onChange={(e) => setRuangName(e.target.value)}
+              placeholder="Contoh: Gerbang & Pos Utama..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-75 disabled:bg-slate-50"
+            />
+          </div>
+        </div>
+
+        {/* 5 KONDISI WAJIB */}
+        <div className="space-y-4 pt-1">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 pb-1 border-b border-slate-100 dark:border-slate-800">
+            Kondisi Sekolah & Lingkungan (Wajib Saat Pengiriman)
+          </div>
+
           {/* 1. Keamanan */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
@@ -303,12 +642,11 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               <span className="text-rose-500">*</span>
             </label>
             <textarea
-              required
               rows={2}
               disabled={isReadOnly}
               value={kondisiKeamanan}
               onChange={(e) => setKondisiKeamanan(e.target.value)}
-              placeholder="Catatan gerbang, tamu luar, pos keamanan, ketertiban umum..."
+              placeholder="Catatan pos satpam, buku tamu, ketertiban gerbang, keamanan umum..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
@@ -320,12 +658,11 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               <span className="text-rose-500">*</span>
             </label>
             <textarea
-              required
               rows={2}
               disabled={isReadOnly}
               value={kondisiKebersihan}
               onChange={(e) => setKondisiKebersihan(e.target.value)}
-              placeholder="Kondisi halaman, koridor, toilet, pengelolaan sampah kantin..."
+              placeholder="Halaman, koridor, toilet, area kantin, pengelolaan tempat sampah..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
@@ -337,12 +674,11 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               <span className="text-rose-500">*</span>
             </label>
             <textarea
-              required
               rows={2}
               disabled={isReadOnly}
               value={kondisiKelas}
               onChange={(e) => setKondisiKelas(e.target.value)}
-              placeholder="Kelancaran jam KBM, guru izin/berhalangan hadir, penugasan mandiri..."
+              placeholder="Kelancaran jam pembelajaran, guru berhalangan, kelas kosong/inval..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
@@ -354,12 +690,11 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               <span className="text-rose-500">*</span>
             </label>
             <textarea
-              required
               rows={2}
               disabled={isReadOnly}
               value={kondisiFasilitas}
               onChange={(e) => setKondisiFasilitas(e.target.value)}
-              placeholder="Kondisi kelistrikan, proyektor, kran air, kunci kelas, fasilitas lab..."
+              placeholder="Kelistrikan, bel, proyektor, kran air, kunci ruang, perlengkapan..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
@@ -371,142 +706,150 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
               <span className="text-rose-500">*</span>
             </label>
             <textarea
-              required
               rows={2}
               disabled={isReadOnly}
               value={kondisiSiswa}
               onChange={(e) => setKondisiSiswa(e.target.value)}
-              placeholder="Siswa terlambat, izin keluar gerbang, seragam, kedisiplinan..."
+              placeholder="Siswa terlambat, izin keluar sekolah, ketertiban seragam..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
 
-          {/* 6. Kegiatan Khusus */}
+          {/* Catatan Kesimpulan Piket */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              6. Kegiatan Khusus Sekolah (Opsional)
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <span>Catatan Kesimpulan Piket</span>
+              <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={2}
+              disabled={isReadOnly}
+              value={catatanPiket}
+              onChange={(e) => setCatatanPiket(e.target.value)}
+              placeholder="Kesimpulan keseluruhan situasi piket pada hari ini..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-70 disabled:bg-slate-50"
+            />
+          </div>
+        </div>
+
+        {/* BAGIAN TAMBAHAN (OPSIONAL) */}
+        <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="text-xs font-bold text-slate-600 dark:text-slate-400">
+            Bagian Tambahan (Opsional)
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Kegiatan Khusus Sekolah (Bila ada)
             </label>
             <input
               type="text"
               disabled={isReadOnly}
               value={kegiatanKhusus}
               onChange={(e) => setKegiatanKhusus(e.target.value)}
-              placeholder="Contoh: Upacara Hari Senin, Senam Pagi, Kunjungan Dinas Pengawas..."
+              placeholder="Contoh: Upacara Bendera, Rapat Dinas, Sosialisasi, Kunjungan Tamu..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-70 disabled:bg-slate-50"
             />
           </div>
 
-          {/* 7. Catatan Kesimpulan & Tindak Lanjut */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Catatan Kesimpulan Piket
-              </label>
-              <textarea
-                rows={2}
-                disabled={isReadOnly}
-                value={catatanPiket}
-                onChange={(e) => setCatatanPiket(e.target.value)}
-                placeholder="Kesimpulan umum shift piket hari ini..."
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-70 disabled:bg-slate-50"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Tindak Lanjut / Rekomendasi Esok Hari
-              </label>
-              <textarea
-                rows={2}
-                disabled={isReadOnly}
-                value={tindakLanjut}
-                onChange={(e) => setTindakLanjut(e.target.value)}
-                placeholder="Rekomendasi untuk shift piket esok hari..."
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-70 disabled:bg-slate-50"
-              />
-            </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Rekomendasi Tindak Lanjut Esok Hari (Bila ada)
+            </label>
+            <input
+              type="text"
+              disabled={isReadOnly}
+              value={tindakLanjut}
+              onChange={(e) => setTindakLanjut(e.target.value)}
+              placeholder="Contoh: Koordinasi pengawasan gerbang belakang saat jam istirahat..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs disabled:opacity-70 disabled:bg-slate-50"
+            />
           </div>
         </div>
 
+        {/* INLINE STATUS FEEDBACK (NEAR BUTTONS) */}
+        {errorMessage && (
+          <div role="alert" className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="font-medium">{errorMessage}</span>
+            </div>
+            {debugInfo && (
+              <p className="text-[11px] text-rose-600/80 dark:text-rose-400/80 font-mono pl-6">
+                Rincian Diagnostik: {debugInfo}
+              </p>
+            )}
+          </div>
+        )}
+
+        {successMessage && (
+          <div role="status" className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
         {/* WORKFLOW ACTIONS */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
             Tutup
           </Button>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Draft Save */}
-            {!isLocked && isOwner && (
+            {/* Guru / Petugas Action: Simpan Draft */}
+            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
               <Button
-                type="submit"
+                type="button"
                 variant="outline"
                 size="sm"
                 isLoading={isSubmitting}
                 leftIcon={<Save className="w-3.5 h-3.5" />}
+                onClick={() => handleSaveDraft()}
               >
                 Simpan Draft
               </Button>
             )}
 
-            {/* Advance to DIAJUKAN */}
-            {status === 'DRAFT' && isOwner && (
+            {/* Guru / Petugas Action: Kirim Jurnal (Satu Klik Langsung) */}
+            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
               <Button
                 type="button"
                 variant="primary"
                 size="sm"
                 isLoading={isSubmitting}
                 leftIcon={<Send className="w-3.5 h-3.5" />}
-                onClick={() => handleAdvanceStatus('DIAJUKAN')}
+                onClick={handleSubmitJournal}
               >
-                Ajukan Jurnal
+                Kirim Jurnal
               </Button>
             )}
 
-            {!isOwner && status === 'DRAFT' && (
-              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold px-2 py-1 bg-amber-50 dark:bg-amber-950/40 rounded-lg">
-                Hanya pemilik draft ({dutyBook?.petugasName}) atau Admin yang dapat mengubah.
-              </span>
-            )}
-
-            {/* Advance to DIVERIFIKASI */}
-            {status === 'DIAJUKAN' && canVerify && (
+            {/* Admin/Kepsek on Terkirim: Kembalikan ke Draft */}
+            {isTerkirim && canApproveOrComplete && !showRevisionPrompt && (
               <Button
                 type="button"
-                variant="primary"
+                variant="outline"
                 size="sm"
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
                 isLoading={isSubmitting}
-                leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                onClick={() => handleAdvanceStatus('DIVERIFIKASI')}
+                leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                onClick={() => setShowRevisionPrompt(true)}
               >
-                Verifikasi Jurnal
+                Kembalikan ke Draft
               </Button>
             )}
 
-            {/* Advance to DISETUJUI */}
-            {status === 'DIVERIFIKASI' && canApprove && (
+            {/* Admin/Kepsek on Terkirim: Sahkan & Selesaikan (Satu Klik) */}
+            {isTerkirim && canApproveOrComplete && (
               <Button
                 type="button"
                 variant="success"
                 size="sm"
                 isLoading={isSubmitting}
                 leftIcon={<CheckCheck className="w-3.5 h-3.5" />}
-                onClick={() => handleAdvanceStatus('DISETUJUI')}
+                onClick={handleApproveAndComplete}
               >
-                Setujui Jurnal (Kepsek)
-              </Button>
-            )}
-
-            {/* Advance to DIKUNCI */}
-            {status === 'DISETUJUI' && isAdmin && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                isLoading={isSubmitting}
-                leftIcon={<Lock className="w-3.5 h-3.5" />}
-                onClick={() => handleAdvanceStatus('DIKUNCI')}
-              >
-                Kunci Arsip Permanen
+                Sahkan & Selesaikan
               </Button>
             )}
           </div>

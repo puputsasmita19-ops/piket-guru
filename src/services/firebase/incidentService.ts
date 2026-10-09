@@ -95,28 +95,34 @@ export class IncidentService {
   }
 
   /**
-   * Save or update an incident
+   * Save or update an incident atomically with audit log
    */
   public static async saveIncident(
     record: IncidentRecord,
     user: UserProfile
-  ): Promise<void> {
+  ): Promise<IncidentRecord> {
     const isNew = !record.id || record.id.startsWith('temp-');
     const id = isNew ? `inc-${record.tanggal}-${Date.now()}` : record.id;
+    const now = new Date().toISOString();
 
-    const payload: IncidentRecord = {
+    const rawPayload: IncidentRecord = {
       ...record,
       id,
+      pelaporId: record.pelaporId || user.id,
+      pelaporName: record.pelaporName || user.fullName,
+      penanggungJawab: record.penanggungJawab || user.fullName,
+      status: record.status || 'BARU',
       dataSource: 'PRODUCTION',
       isDemo: false,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
       updatedBy: user.fullName,
-      createdAt: record.createdAt || new Date().toISOString(),
+      createdAt: record.createdAt || now,
       createdBy: record.createdBy || user.fullName,
     };
 
-    await FirestoreService.setDocument('incidents', id, payload);
-    await FirestoreService.logAudit({
+    const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
+
+    await FirestoreService.setDocumentWithAudit('incidents', id, payload, {
       userId: user.id,
       userName: user.fullName,
       role: user.role,
@@ -124,11 +130,20 @@ export class IncidentService {
       module: 'INCIDENTS',
       recordId: id,
       details: `${isNew ? 'Melaporkan' : 'Memperbarui'} kejadian: [${payload.kategori}] ${payload.uraian.substring(0, 40)}... (${payload.tingkatKeparahan})`,
+      metadata: {
+        kategori: payload.kategori,
+        tingkatKeparahan: payload.tingkatKeparahan,
+        status: payload.status,
+        tanggal: payload.tanggal,
+        pelaporId: payload.pelaporId,
+      },
     });
+
+    return payload;
   }
 
   /**
-   * Update status of an incident
+   * Update status of an incident atomically with audit log
    */
   public static async updateIncidentStatus(
     incidentId: string,
@@ -150,11 +165,14 @@ export class IncidentService {
     if (newStatus === 'SELESAI') {
       updated.resolvedAt = now;
       updated.resolvedBy = user.fullName;
-      if (resolutionNote) updated.resolutionNote = resolutionNote;
+      if (resolutionNote && resolutionNote.trim()) {
+        updated.resolutionNote = resolutionNote.trim();
+      }
     }
 
-    await FirestoreService.setDocument('incidents', incidentId, updated);
-    await FirestoreService.logAudit({
+    const payload = FirestoreService.sanitizeFirestorePayload(updated);
+
+    await FirestoreService.setDocumentWithAudit('incidents', incidentId, payload, {
       userId: user.id,
       userName: user.fullName,
       role: user.role,
@@ -162,6 +180,11 @@ export class IncidentService {
       module: 'INCIDENTS',
       recordId: incidentId,
       details: `Mengubah status kejadian ID ${incidentId} menjadi ${newStatus}${resolutionNote ? ` (Catatan: ${resolutionNote})` : ''}`,
+      metadata: {
+        oldStatus: existing.status,
+        newStatus,
+        incidentId,
+      },
     });
   }
 

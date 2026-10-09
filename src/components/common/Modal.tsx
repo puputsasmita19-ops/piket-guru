@@ -54,13 +54,13 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Dialog Box */}
       <div
-        className={`relative w-full ${widthStyles[maxWidth]} bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-10 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative w-full ${widthStyles[maxWidth]} bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200 dark:border-[var(--theme-card-border)] z-10 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-150`}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-[var(--theme-card-border)]">
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -71,7 +71,7 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-5 py-3.5 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-3 px-5 py-3.5 bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border-t border-slate-100 dark:border-[var(--theme-card-border)]">
             {footer}
           </div>
         )}

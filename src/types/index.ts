@@ -1,3 +1,5 @@
+import type { DateValue } from '../utils/dateUtils';
+
 export type UserRole = 'ADMIN' | 'KEPALA_SEKOLAH' | 'GURU' | 'TENAGA_KEPENDIDIKAN' | 'SATPAM';
 
 export type DataSourceType = 'PRODUCTION' | 'SEED';
@@ -63,24 +65,39 @@ export interface ScheduleItem extends BaseEntityMetadata {
   ruangName: string;
   status: ScheduleStatus;
   keterangan?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export type AttendanceStatus = 'DALAM_LOKASI' | 'DI_LUAR_LOKASI' | 'GPS_ERROR' | 'AKURASI_RENDAH';
 
 export interface AttendanceRecord extends BaseEntityMetadata {
   id: string;
-  scheduleId: string;
+  scheduleId: string | null;
   userId: string;
   userName: string;
   tanggal: string;
-  jamMasuk: string;
-  jamPulang?: string;
+  jamMasuk: DateValue;
+  jamPulang?: DateValue | null;
   latitude: number;
   longitude: number;
   accuracy: number;
   distance: number;
   status: AttendanceStatus;
   photoUrl?: string;
+  attendanceModeAtCheckIn?: 'TERJADWAL' | 'BEBAS';
+  checkoutPolicy?: {
+    mode: 'TERJADWAL' | 'BEBAS';
+    day: DayOfWeek;
+    checkOutStart?: string;
+    checkOutEnd?: string;
+    keterlambatanMenit?: number;
+    keterangan: string;
+  };
+  keteranganCheckout?: string;
+  createdAt?: DateValue;
+  updatedAt?: DateValue;
 }
 
 export type DutyBookStatus = 'DRAFT' | 'DIAJUKAN' | 'DIVERIFIKASI' | 'DISETUJUI' | 'DIKUNCI';
@@ -130,11 +147,47 @@ export interface DayShiftDetail {
 
 export type DailyScheduleMap = Partial<Record<DayOfWeek, DayShiftDetail>>;
 
+export interface AcademicSemesterConfig {
+  academicYear: string; // e.g. "2026/2027"
+  oddSemesterStart: string; // e.g. "2026-07-01"
+  oddSemesterEnd: string; // e.g. "2026-12-31"
+  evenSemesterStart: string; // e.g. "2027-01-01"
+  evenSemesterEnd: string; // e.g. "2027-06-30"
+}
+
+export interface PrintLayoutConfig {
+  paperSize: 'A4' | 'F4';
+  f4WidthMm?: number; // default 215 mm
+  f4HeightMm?: number; // default 330 mm
+  orientation: 'portrait' | 'landscape';
+  marginTopMm: number; // default 15 mm
+  marginBottomMm: number; // default 15 mm
+  marginLeftMm: number; // default 15 mm
+  marginRightMm: number; // default 15 mm
+  showLogo: boolean;
+  showLetterhead: boolean;
+  showSignatures: boolean;
+}
+
+export type LoginContactType = 'whatsapp' | 'phone' | 'email';
+
+export interface LoginSupportContact {
+  enabled: boolean;
+  adminName: string;
+  buttonLabel: string;
+  contactType: LoginContactType;
+  target: string;
+  initialMessage?: string;
+}
+
 export interface SchoolSettings {
   id?: string;
   schoolName: string;
   npsn: string;
   address: string;
+  phone?: string;
+  email?: string;
+  website?: string;
   appName?: string;
   appSubtitle?: string;
   appCreator?: string;
@@ -142,6 +195,26 @@ export interface SchoolSettings {
   schoolLat: number;
   schoolLng: number;
   allowedRadiusMeters: number;
+  attendanceMode?: 'TERJADWAL' | 'BEBAS';
+  schoolLocationLocked?: boolean;
+  schoolLocationSavedAt?: DateValue;
+  schoolLocationSavedBy?: string;
+  schoolLocationUnlockedAt?: DateValue;
+  schoolLocationUnlockedBy?: string;
+  loginSupportContact?: LoginSupportContact;
+  // Signers and report configuration
+  reportCity?: string;
+  principalName?: string;
+  principalIdType?: 'NIP' | 'NUPTK' | 'ID_GURU' | 'LAINNYA';
+  principalIdNumber?: string;
+  principalSignatureUrl?: string;
+  coordinatorName?: string;
+  coordinatorIdType?: 'NIP' | 'NUPTK' | 'ID_GURU' | 'LAINNYA';
+  coordinatorIdNumber?: string;
+  coordinatorSignatureUrl?: string;
+  academicSemester?: AcademicSemesterConfig;
+  printConfig?: PrintLayoutConfig;
+  lobbyTv?: import('./lobbyTv.types').LobbyTvConfig;
   workHours: {
     start: string;
     end: string;
@@ -169,3 +242,5 @@ export type NavigationTab =
   | 'reports'
   | 'users'
   | 'settings';
+
+export * from './lobbyTv.types';

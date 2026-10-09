@@ -81,19 +81,28 @@ export class ReportService {
       (a) => a.tanggal >= startDate && a.tanggal <= endDate
     );
 
+    const operationalSchedules = schedules.filter(isOperationalRecord);
+    const filteredSchedules = operationalSchedules.filter(
+      (s) => s.tanggal >= startDate && s.tanggal <= endDate
+    );
+
     return operationalTeachers.map((teacher) => {
-      // Find all attendances for this teacher
+      // Find all schedules and attendances for this teacher within the period
+      const teacherSchedules = filteredSchedules.filter(
+        (s) => s.petugasId === teacher.id || (s.petugasName && s.petugasName.includes(teacher.fullName.split(' ')[0]))
+      );
+
       const teacherAtts = filteredAttendance.filter(
-        (a) => a.userId === teacher.id || a.userName.includes(teacher.fullName.split(' ')[0])
+        (a) => a.userId === teacher.id || (a.userName && a.userName.includes(teacher.fullName.split(' ')[0]))
       );
 
       const hadirCount = teacherAtts.filter((a) => a.status === 'DALAM_LOKASI').length;
       const outsideCount = teacherAtts.filter((a) => a.status === 'DI_LUAR_LOKASI' || a.status === 'AKURASI_RENDAH').length;
       const totalRecorded = hadirCount + outsideCount;
-      const totalShift = Math.max(totalRecorded, 4); // Minimum expected baseline for month
+      const totalShift = teacherSchedules.length > 0 ? teacherSchedules.length : Math.max(totalRecorded, 1);
       const tidakHadir = Math.max(0, totalShift - totalRecorded);
 
-      const percentage = totalShift > 0 ? Math.round((hadirCount / totalShift) * 100) : 100;
+      const percentage = totalShift > 0 ? Math.min(100, Math.round((hadirCount / totalShift) * 100)) : 100;
 
       return {
         teacherId: teacher.id,

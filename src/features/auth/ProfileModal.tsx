@@ -61,9 +61,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     <Modal isOpen={isOpen} onClose={onClose} title="Profil Pengguna & Keamanan PIN" maxWidth="lg">
       <div className="space-y-6">
         {/* User Card */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/60 border border-slate-200 dark:border-[var(--theme-card-border)] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-lg shadow-sm">
               {currentUser.fullName.charAt(0)}
             </div>
             <div>
@@ -84,9 +84,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Change PIN Form */}
-        <form onSubmit={handleChangePin} className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <form onSubmit={handleChangePin} className="space-y-4 pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
-            <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <KeyRound className="w-4 h-4 text-[var(--theme-primary)]" />
             <span>Ganti 6-Digit PIN Akses</span>
           </div>
 
@@ -115,7 +115,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 value={oldPin}
                 onChange={(e) => setOldPin(e.target.value)}
                 placeholder="6 digit"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-[var(--theme-primary)] focus:outline-none"
               />
             </div>
 
@@ -129,7 +129,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value)}
                 placeholder="6 digit"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-[var(--theme-primary)] focus:outline-none"
               />
             </div>
 
@@ -143,7 +143,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 value={confirmPin}
                 onChange={(e) => setConfirmPin(e.target.value)}
                 placeholder="6 digit"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-center font-mono text-sm tracking-widest focus:ring-2 focus:ring-[var(--theme-primary)] focus:outline-none"
               />
             </div>
           </div>

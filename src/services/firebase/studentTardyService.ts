@@ -81,53 +81,103 @@ export class StudentTardyService {
   /**
    * Calculate student tardy frequency for current month
    */
-  public static async getStudentTardyCountThisMonth(namaSiswa: string, kelas: string): Promise<number> {
+  public static async getStudentTardyCountThisMonth(
+    studentIdOrName: string,
+    kelas?: string,
+    targetDate?: string,
+    excludeRecordId?: string
+  ): Promise<number> {
     const records = await FirestoreService.getAll<StudentTardyRecord>('studentTardiness');
-    const currentYearMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const dateStr = targetDate || new Date().toISOString().split('T')[0];
+    const currentYearMonth = dateStr.substring(0, 7); // YYYY-MM
 
-    const matching = records.filter(
-      (r) =>
-        r.namaSiswa.trim().toLowerCase() === namaSiswa.trim().toLowerCase() &&
-        r.kelas.trim().toLowerCase() === kelas.trim().toLowerCase() &&
-        r.tanggal.startsWith(currentYearMonth)
-    );
+    const matching = records.filter((r) => {
+      if (excludeRecordId && r.id === excludeRecordId) {
+        return false;
+      }
+      if (!r.tanggal.startsWith(currentYearMonth)) {
+        return false;
+      }
+      if (r.studentId && studentIdOrName && r.studentId === studentIdOrName) {
+        return true;
+      }
+      if (
+        r.namaSiswa.trim().toLowerCase() === studentIdOrName.trim().toLowerCase() &&
+        (!kelas || !r.kelas || r.kelas.trim().toLowerCase() === kelas.trim().toLowerCase())
+      ) {
+        return true;
+      }
+      return false;
+    });
 
     return matching.length;
   }
 
   /**
-   * Register a new tardy student
+   * Save (create or update) a tardy student record atomically
    */
-  public static async registerTardyStudent(
-    data: Omit<StudentTardyRecord, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>,
-    user: UserProfile
+  public static async saveTardyStudent(
+    data: Partial<StudentTardyRecord>,
+    user: UserProfile,
+    isEdit: boolean = false
   ): Promise<StudentTardyRecord> {
-    const id = `trd-${data.tanggal}-${Date.now().toString(36)}`;
+    const isNew = !isEdit && (!data.id || data.id.startsWith('temp-'));
+    const id = isNew ? `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${Date.now().toString(36)}` : (data.id as string);
     const now = new Date().toISOString();
 
-    const payload: StudentTardyRecord = {
-      ...data,
+    const rawPayload: StudentTardyRecord = {
       id,
+      tanggal: data.tanggal || now.split('T')[0],
+      jamDatang: data.jamDatang || '07:15',
+      menitTerlambat: typeof data.menitTerlambat === 'number' ? data.menitTerlambat : 15,
+      studentId: data.studentId || undefined,
+      namaSiswa: (data.namaSiswa || '').trim(),
+      nisn: (data.nisn || '-').trim(),
+      kelas: (data.kelas || '').trim(),
+      alasan: data.alasan || 'BANGUN_KESIANGAN',
+      keteranganAlasan: data.alasan === 'LAINNYA' && data.keteranganAlasan ? data.keteranganAlasan.trim() : undefined,
+      pembinaan: data.pembinaan || 'LITERASI_PERPUSTAKAAN',
+      keteranganPembinaan: data.pembinaan === 'LAINNYA' && data.keteranganPembinaan ? data.keteranganPembinaan.trim() : undefined,
+      poinPelanggaran: typeof data.poinPelanggaran === 'number' ? data.poinPelanggaran : 5,
+      frekuensiBulanIni: typeof data.frekuensiBulanIni === 'number' ? data.frekuensiBulanIni : 1,
+      fotoUrl: data.fotoUrl || undefined,
+      noHpOrangTua: (data.noHpOrangTua || '').trim(),
+      status: data.status || 'DALAM_PEMBINAAN',
+      catatanPetugas: data.catatanPetugas ? data.catatanPetugas.trim() : undefined,
+      petugasPiketName: data.petugasPiketName || user.fullName,
+      petugasPiketId: data.petugasPiketId || user.id,
       dataSource: 'PRODUCTION',
       isDemo: false,
-      createdAt: now,
-      createdBy: user.fullName,
+      createdAt: data.createdAt || now,
+      createdBy: data.createdBy || user.fullName,
       updatedAt: now,
       updatedBy: user.fullName,
     };
+
+    const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
 
     await FirestoreService.setDocument('studentTardiness', id, payload);
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
       role: user.role,
-      action: 'CREATE',
+      action: isNew ? 'CREATE' : 'UPDATE',
       module: 'TARDINESS',
       recordId: id,
-      details: `Mencatat siswa terlambat: ${payload.namaSiswa} (${payload.kelas}) - Terlambat ${payload.menitTerlambat} menit (${payload.pembinaan})`,
+      details: `${isNew ? 'Mencatat' : 'Memperbarui'} siswa terlambat: ${payload.namaSiswa} (${payload.kelas}) - Terlambat ${payload.menitTerlambat} menit (${payload.pembinaan})`,
     });
 
     return payload;
+  }
+
+  /**
+   * Register a new tardy student (backward-compatible wrapper)
+   */
+  public static async registerTardyStudent(
+    data: Omit<StudentTardyRecord, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>,
+    user: UserProfile
+  ): Promise<StudentTardyRecord> {
+    return this.saveTardyStudent(data, user, false);
   }
 
   /**

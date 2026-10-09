@@ -79,16 +79,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:z-0 ${
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:z-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Sidebar Header (Mobile Only for Close Button) */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 lg:hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-[var(--theme-card-border)] lg:hidden">
           <span className="font-bold text-slate-900 dark:text-white text-base">Menu Navigasi</span>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -110,22 +110,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     <button
                       key={item.id}
                       onClick={() => handleMenuClick(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                            isActive
+                              ? 'bg-white/20 text-inherit'
+                              : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400 group-hover:bg-white group-hover:text-[var(--theme-primary)]'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
                         <span>{item.label}</span>
                       </div>
                       {item.badge && !isActive && (
-                        <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded-md font-bold">
+                        <span className="text-[10px] bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)] px-1.5 py-0.5 rounded-lg font-bold">
                           {item.badge}
                         </span>
                       )}
-                      {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-90" />}
                     </button>
                   );
                 })}
@@ -147,17 +155,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     <button
                       key={item.id}
                       onClick={() => handleMenuClick(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                            isActive
+                              ? 'bg-white/20 text-inherit'
+                              : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400 group-hover:bg-white group-hover:text-[var(--theme-primary)]'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
                         <span>{item.label}</span>
                       </div>
-                      {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-90" />}
                     </button>
                   );
                 })}
@@ -167,7 +183,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Sidebar Footer Info */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="p-4 border-t border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-surface-subtle)]/50">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
             <span className="font-semibold text-slate-700 dark:text-slate-300">Piket Guru v1.0.1</span>
             <p className="mt-0.5">Sistem Manajemen Presensi & Buku Piket Digital</p>

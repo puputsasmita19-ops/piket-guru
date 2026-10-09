@@ -68,11 +68,14 @@ const AppContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center font-bold text-xl animate-pulse shadow-lg shadow-blue-500/30">
+      <div
+        className="min-h-screen flex flex-col items-center justify-center text-slate-800 dark:text-white space-y-4 transition-colors"
+        style={{ backgroundColor: 'var(--theme-bg-app)' }}
+      >
+        <div className="w-12 h-12 rounded-2xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-xl animate-pulse shadow-lg shadow-[var(--theme-ring)]">
           P
         </div>
-        <div className="text-xs text-slate-400 font-medium">Memuat Sesi Piket Guru...</div>
+        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Memuat Sesi Piket Guru...</div>
       </div>
     );
   }

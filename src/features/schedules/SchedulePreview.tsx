@@ -24,8 +24,8 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { DAYS_LIST, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { DayOfWeek, ScheduleItem, ScheduleStatus, SchoolSettings } from '../../types';
-import { TeacherRecord, RoomRecord } from '../../types/master.types';
+import { DayOfWeek, ScheduleItem, ScheduleStatus, SchoolSettings, UserProfile } from '../../types';
+import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { ScheduleService } from '../../services/firebase/scheduleService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
@@ -39,7 +39,9 @@ export const SchedulePreview: React.FC = () => {
   const isAdmin = hasRole('ADMIN');
 
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
+  const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,8 +86,16 @@ export const SchedulePreview: React.FC = () => {
       setIsLoading(false);
     });
 
+    const unsubUsers = FirestoreService.subscribeToCollection<UserProfile>('users', (data) => {
+      setUsers(data);
+    });
+
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', (data) => {
       setTeachers(data);
+    });
+
+    const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', (data) => {
+      setStaff(data);
     });
 
     const unsubRooms = FirestoreService.subscribeToCollection<RoomRecord>('rooms', (data) => {
@@ -94,7 +104,9 @@ export const SchedulePreview: React.FC = () => {
 
     return () => {
       unsubSchedules();
+      unsubUsers();
       unsubTeachers();
+      unsubStaff();
       unsubRooms();
     };
   }, []);
@@ -108,11 +120,15 @@ export const SchedulePreview: React.FC = () => {
 
   // Trigger WhatsApp Reminder
   const handleTriggerWaReminder = (schedule: ScheduleItem) => {
-    const teacher = teachers.find((t) => t.id === schedule.petugasId || t.fullName === schedule.petugasName);
+    const user = users.find((u) => u.id === schedule.petugasId);
+    const teacher = teachers.find((t) => (t.userId && t.userId === schedule.petugasId) || t.id === schedule.petugasId || t.fullName === schedule.petugasName);
+    const staffMember = staff.find((s) => (s.userId && s.userId === schedule.petugasId) || s.id === schedule.petugasId || s.fullName === schedule.petugasName);
+    const phone = user?.phone || teacher?.phone || staffMember?.phone || '';
+
     const msg = WhatsAppService.getScheduleReminderMessage(schedule, settings.schoolName);
     setWaModalData({
       isOpen: true,
-      phone: teacher?.phone || '',
+      phone,
       message: msg,
       title: `Kirim Pengingat Tugas Piket: ${schedule.petugasName}`,
     });
@@ -211,7 +227,7 @@ export const SchedulePreview: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <CalendarDays className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <CalendarDays className="w-6 h-6 text-[var(--theme-primary)]" />
             Jadwal Piket Guru & Staff
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -224,7 +240,7 @@ export const SchedulePreview: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              leftIcon={<Sparkles className="w-4 h-4 text-blue-500" />}
+              leftIcon={<Sparkles className="w-4 h-4 text-[var(--theme-primary)]" />}
               onClick={() => setIsRecurringModalOpen(true)}
             >
               Generate Otomatis
@@ -270,8 +286,8 @@ export const SchedulePreview: React.FC = () => {
               onClick={() => setSelectedDay(day)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isSelected
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-[1.02]'
+                  : 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[var(--theme-card-border)] hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
               }`}
             >
               <span>{day}</span>
@@ -280,7 +296,7 @@ export const SchedulePreview: React.FC = () => {
                   HARI INI
                 </span>
               )}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500'}`}>
                 {count}
               </span>
             </button>
@@ -299,7 +315,7 @@ export const SchedulePreview: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari guru, ruangan, atau catatan..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-input-bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
               />
             </div>
 
@@ -307,7 +323,7 @@ export const SchedulePreview: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
+                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
               >
                 <option value="SEMUA">Semua Status</option>
                 <option value="TERJADWAL">TERJADWAL</option>
@@ -318,17 +334,17 @@ export const SchedulePreview: React.FC = () => {
               </select>
 
               {/* View Mode Toggle */}
-              <div className="flex items-center border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-900">
+              <div className="flex items-center border border-slate-200 dark:border-[var(--theme-card-border)] rounded-xl p-1 bg-slate-50 dark:bg-[var(--theme-input-bg)]">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
                   title="Tampilan Kartu"
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setViewMode('table')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
                   title="Tampilan Tabel"
                 >
                   <List className="w-3.5 h-3.5" />
@@ -347,7 +363,7 @@ export const SchedulePreview: React.FC = () => {
               <Card key={item.id} hoverable className="transition-all">
                 <CardContent className="p-5 space-y-4">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm shadow-inner flex-shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)] font-bold flex items-center justify-center text-sm shadow-inner flex-shrink-0">
                       {item.petugasName.charAt(0)}
                     </div>
                     <Badge
@@ -372,30 +388,30 @@ export const SchedulePreview: React.FC = () => {
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                       {item.petugasName}
                     </h4>
-                    <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1">
+                    <div className="flex items-center gap-1.5 text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold mt-1">
                       <MapPin className="w-3.5 h-3.5 text-rose-500" />
                       <span>{item.ruangName}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+                  <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-[var(--theme-card-border)] text-xs text-slate-600 dark:text-slate-300">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      <Clock className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
                       <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
                     </div>
                     {item.keterangan && (
-                      <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg">
+                      <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/50 p-2 rounded-lg">
                         "{item.keterangan}"
                       </p>
                     )}
                   </div>
 
                   {/* Quick Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
                     <select
                       value={item.status}
                       onChange={(e) => handleQuickStatusChange(item, e.target.value as ScheduleStatus)}
-                      className="text-[11px] font-semibold p-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900"
+                      className="text-[11px] font-semibold p-1 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)]"
                     >
                       <option value="TERJADWAL">TERJADWAL</option>
                       <option value="BERJALAN">BERJALAN</option>
@@ -421,7 +437,7 @@ export const SchedulePreview: React.FC = () => {
                               setEditingSchedule(item);
                               setIsFormModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[var(--theme-primary)] hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] cursor-pointer"
                             title="Ubah Jadwal"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -457,7 +473,7 @@ export const SchedulePreview: React.FC = () => {
         <Card>
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
+              <thead className="bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border-b border-slate-200 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-300 font-bold">
                 <tr>
                   <th className="p-4">Guru / Petugas Piket</th>
                   <th className="p-4">Pos / Lokasi</th>
@@ -467,13 +483,13 @@ export const SchedulePreview: React.FC = () => {
                   <th className="p-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-[var(--theme-card-border)]">
                 {filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
                       {item.petugasName}
                     </td>
-                    <td className="p-4 text-blue-600 dark:text-blue-400 font-medium">
+                    <td className="p-4 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold">
                       {item.ruangName}
                     </td>
                     <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
@@ -507,7 +523,7 @@ export const SchedulePreview: React.FC = () => {
                                 setEditingSchedule(item);
                                 setIsFormModalOpen(true);
                               }}
-                              className="p-1 rounded text-slate-400 hover:text-blue-600 cursor-pointer"
+                              className="p-1 rounded text-slate-400 hover:text-[var(--theme-primary)] cursor-pointer"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -540,10 +556,14 @@ export const SchedulePreview: React.FC = () => {
         onSave={handleSaveSchedule}
         onSaveMultiple={handleSaveMultipleSchedules}
         editingSchedule={editingSchedule}
+        users={users}
         teachers={teachers}
+        staff={staff}
         rooms={rooms}
         allSchedules={schedules}
         defaultDay={selectedDay}
+        settings={settings}
+        isLoadingData={isLoading}
         initialMultiPerson={isInitialMultiPerson}
       />
 
@@ -552,8 +572,11 @@ export const SchedulePreview: React.FC = () => {
         isOpen={isRecurringModalOpen}
         onClose={() => setIsRecurringModalOpen(false)}
         onGenerate={handleGenerateRecurring}
+        users={users}
         teachers={teachers}
+        staff={staff}
         rooms={rooms}
+        settings={settings}
       />
 
       {/* WHATSAPP REMINDER MODAL */}

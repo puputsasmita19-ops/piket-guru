@@ -1,0 +1,448 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------
+    // SECURITY & IDENTITY CORE HELPERS
+    // -------------------------------------------------------------
+
+    // Helper: Validates that the request has a valid, authenticated Firebase token
+    function hasAuthToken() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Helper: Retrieves current user document from Firestore (Server-authoritative state)
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Helper: Checks if the user document exists in Firestore
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    // Helper: Validates that the account is legitimate, active, and session is not revoked
+    // Closes SEC-06 and satisfies TAHAP 2C session revocation & account lifecycle policy
+    function isValidActiveUser() {
+      return hasAuthToken() &&
+        userExists(request.auth.uid) &&
+        getUserData(request.auth.uid).get('isActive', false) == true &&
+        // Activation Gate: User must not be pending activation
+        getUserData(request.auth.uid).get('requiresActivation', false) != true &&
+        // Session Revocation: Token auth_time must be strictly > sessionRevokedAtSeconds when revocation marker is present and active (>0)
+        (
+          getUserData(request.auth.uid).get('sessionRevokedAtSeconds', 0) == 0 ||
+          (
+            ('auth_time' in request.auth.token) &&
+            request.auth.token.auth_time is int &&
+            request.auth.token.auth_time > getUserData(request.auth.uid).get('sessionRevokedAtSeconds', 0)
+          )
+        );
+    }
+
+    // Helper: Validates user ownership of a document
+    function isOwner(userId) {
+      return hasAuthToken() && request.auth.uid == userId;
+    }
+
+    // Helper: Server-authoritative role determination (document role takes absolute precedence)
+    function userRole() {
+      return getUserData(request.auth.uid).get('role', 'NONE');
+    }
+
+    function getCurrentRole() {
+      return isValidActiveUser() ? userRole() : 'NONE';
+    }
+
+    function isAdmin() {
+      return isValidActiveUser() && userRole() == 'ADMIN';
+    }
+
+    function isKepalaSekolah() {
+      return isValidActiveUser() && userRole() == 'KEPALA_SEKOLAH';
+    }
+
+    function isStaff() {
+      return isValidActiveUser() &&
+        userRole() in ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'];
+    }
+
+    // Action authority is taken from the current profile, not a caller-supplied role.
+    function canRecordAttendance() {
+      return isStaff() && (
+        userRole() == 'ADMIN' ||
+        (
+          getUserData(request.auth.uid).get('permissions', []) is list &&
+          getUserData(request.auth.uid).get('permissions', []).hasAny(['*', 'attendance.create', 'input_duty_book'])
+        )
+      );
+    }
+
+    function validAttendanceCheckIn(value) {
+      return (value is timestamp && value <= request.time) ||
+        (value is string && value.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z'));
+    }
+
+    // Helper: Hard block on credential fields in user profiles
+    function hasNoCredentials(data) {
+      return !data.keys().hasAny(['pin', 'pinHash', 'pinSalt', 'scryptHash', 'hashedPin', 'password', 'token', 'secret', 'credential', 'authSecret', 'privateKey']);
+    }
+
+    // -------------------------------------------------------------
+    // 1. SETTINGS & CONFIGURATION
+    // -------------------------------------------------------------
+    function validSchoolLocation(data) {
+      return data.keys().hasAll(['schoolLat', 'schoolLng', 'allowedRadiusMeters']) &&
+        data.schoolLat is number && data.schoolLat >= -90 && data.schoolLat <= 90 &&
+        data.schoolLng is number && data.schoolLng >= -180 && data.schoolLng <= 180 &&
+        data.allowedRadiusMeters is number && data.allowedRadiusMeters >= 10 && data.allowedRadiusMeters <= 1000;
+    }
+    function validLocationLockType(data) {
+      return !('schoolLocationLocked' in data) || data.schoolLocationLocked is bool;
+    }
+    function validLocationSave(data) {
+      return validSchoolLocation(data) && data.get('schoolLocationLocked', false) == true &&
+        data.get('schoolLocationSavedAt', null) == request.time &&
+        data.get('schoolLocationSavedBy', null) == request.auth.uid;
+    }
+    function allowedSchoolLocationUpdate() {
+      let changes = request.resource.data.diff(resource.data).affectedKeys();
+      let locationFields = ['schoolLat', 'schoolLng', 'allowedRadiusMeters', 'schoolLocationSavedAt', 'schoolLocationSavedBy'];
+      let wasLocked = resource.data.get('schoolLocationLocked', false) == true;
+      let isLocked = request.resource.data.get('schoolLocationLocked', false) == true;
+      return validLocationLockType(request.resource.data) && (
+        (wasLocked && !changes.hasAny(locationFields) &&
+          ('schoolLocationLocked' in request.resource.data) && (
+            isLocked || (changes.hasOnly(['schoolLocationLocked', 'schoolLocationUnlockedAt', 'schoolLocationUnlockedBy', 'updatedAt']) &&
+              request.resource.data.get('schoolLocationUnlockedAt', null) == request.time &&
+              request.resource.data.get('schoolLocationUnlockedBy', null) == request.auth.uid)
+          )) ||
+        (!wasLocked && (
+          (isLocked && validLocationSave(request.resource.data)) ||
+          (!isLocked && !changes.hasAny(locationFields))
+        ))
+      );
+    }
+    match /settings/{settingId} {
+      // Public kiosk and login branding only have access to public_config
+      // Sensitive internal settings (geofence, radius, admin config, school_config) require valid active user
+      allow read: if isValidActiveUser() || settingId == 'public_config';
+      allow create: if isAdmin() && (settingId != 'school_config' ||
+        (validLocationLockType(request.resource.data) && validSchoolLocation(request.resource.data) &&
+          (request.resource.data.get('schoolLocationLocked', false) != true || validLocationSave(request.resource.data))));
+      allow update: if isAdmin() && (settingId != 'school_config' || allowedSchoolLocationUpdate());
+      allow delete: if isAdmin() && (settingId != 'school_config' || resource.data.get('schoolLocationLocked', false) != true);
+    }
+
+    // -------------------------------------------------------------
+    // 2. USERS COLLECTION (Petugas, Guru, Admin Profiles)
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      // Unauthenticated reads strictly forbidden
+      allow read: if isValidActiveUser();
+
+      // Creation only by Admin, without credential fields, ID matching
+      allow create: if isAdmin() &&
+        hasNoCredentials(request.resource.data) &&
+        request.resource.data.id == userId;
+
+      // Update:
+      // Case A: Admin update (with protection against demoting or deactivating the primary system admin and enforcing monotonic session markers)
+      // Case B: User self-update on safe profile fields only (cannot change role, permissions, isActive, nip, or revocation timestamp)
+      allow update: if (
+        isAdmin() &&
+        hasNoCredentials(request.resource.data) &&
+        // Primary admin protection against accidental self-lockout or role demotion
+        (
+          !(resource.data.role == 'ADMIN' && userId == 'usr-admin-01') ||
+          (request.resource.data.role == 'ADMIN' && request.resource.data.isActive == true)
+        ) &&
+        // Monotonic sessionRevokedAtSeconds enforcement:
+        // Marker cannot be deleted or replaced with an omitted value, and must be >= existing marker
+        (
+          !('sessionRevokedAtSeconds' in resource.data) ||
+          (
+            ('sessionRevokedAtSeconds' in request.resource.data) &&
+            request.resource.data.sessionRevokedAtSeconds is int &&
+            request.resource.data.sessionRevokedAtSeconds >= resource.data.sessionRevokedAtSeconds
+          )
+        )
+      ) || (
+        isOwner(userId) &&
+        hasNoCredentials(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'phone', 'email', 'avatarUrl', 'updatedAt'
+        ])
+      );
+
+      // Deletion: Direct client SDK deletion forbidden to prevent orphan loginId reservations.
+      // All user deletions must proceed via authenticated backend API /api/auth/delete-user.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------
+    // 3. PRIVATE CREDENTIAL STORE & LOGIN ID RESERVATIONS
+    // -------------------------------------------------------------
+    // DENIED TO ALL CLIENT SDKs (INCLUDING ADMIN CLIENTS).
+    // Accessible strictly by backend Admin SDK.
+    match /user_credentials/{userId} {
+      allow read, write: if false;
+    }
+    match /login_ids/{loginId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------
+    // 4. DUTY BOOKS (Jurnal Buku Piket Digital)
+    // 3-Stage Streamlined Workflow: Draft -> Terkirim (DIAJUKAN) -> Selesai (DIKUNCI)
+    // Supports legacy DIVERIFIKASI and DISETUJUI for read & state machine compatibility.
+    // -------------------------------------------------------------
+    match /dutyBooks/{dutyBookId} {
+      allow read: if isValidActiveUser();
+
+      function hasDutyBookWritePerm() {
+        return userRole() == 'ADMIN' || (
+          getUserData(request.auth.uid).get('permissions', []) is list &&
+          getUserData(request.auth.uid).get('permissions', []).hasAny(['*', 'dutybook.create', 'dutybook.update', 'dutyBook.create', 'dutyBook.update', 'input_duty_book'])
+        );
+      }
+
+      function hasDutyBookCreatePerm() {
+        return userRole() == 'ADMIN' || (
+          getUserData(request.auth.uid).get('permissions', []) is list &&
+          getUserData(request.auth.uid).get('permissions', []).hasAny(['*', 'dutybook.create', 'dutyBook.create', 'input_duty_book'])
+        );
+      }
+
+      // Create:
+      // - Admin can create any duty book record (restore, test seeding, admin entry)
+      // - Assigned staff can create as DRAFT or directly submit as DIAJUKAN (Terkirim)
+      // - View-only permissions (dutybook.view) are strictly rejected
+      allow create: if isValidActiveUser() && (
+        isAdmin() ||
+        (
+          isStaff() &&
+          hasDutyBookCreatePerm() &&
+          request.resource.data.petugasId == request.auth.uid &&
+          (request.resource.data.status in ['DRAFT', 'DIAJUKAN'])
+        )
+      );
+
+      // Update:
+      // - Admin can update any duty book (restore, unlock with reason, approval)
+      // - Kepala Sekolah can:
+      //     * Sahkan & Selesaikan: advance DIAJUKAN / DIVERIFIKASI to DIKUNCI / DISETUJUI
+      //     * Kembalikan ke Draft: return DIAJUKAN / DIVERIFIKASI to DRAFT
+      //     * Cannot unlock DIKUNCI / DISETUJUI (only Admin can unlock)
+      // - Assigned staff (petugas):
+      //     * Existing record MUST be in DRAFT
+      //     * Cannot reassign petugasId
+      //     * Can save draft (status == 'DRAFT') or submit journal (status == 'DIAJUKAN')
+      //     * View-only permissions are strictly rejected
+      allow update: if isValidActiveUser() && (
+        isAdmin() ||
+        (
+          isKepalaSekolah() &&
+          (
+            (resource.data.status in ['DIAJUKAN', 'DIVERIFIKASI'] && request.resource.data.status in ['DIKUNCI', 'DISETUJUI']) ||
+            (resource.data.status in ['DIAJUKAN', 'DIVERIFIKASI'] && request.resource.data.status == 'DRAFT')
+          )
+        ) ||
+        (
+          isStaff() &&
+          hasDutyBookWritePerm() &&
+          request.auth.uid == resource.data.petugasId &&
+          request.resource.data.petugasId == resource.data.petugasId &&
+          resource.data.status == 'DRAFT' &&
+          request.resource.data.status in ['DRAFT', 'DIAJUKAN']
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 5. INCIDENTS (Laporan Kejadian Khusus)
+    // Reporter ownership and administrative resolution
+    // -------------------------------------------------------------
+    match /incidents/{incidentId} {
+      allow read: if isValidActiveUser();
+
+      allow create: if isStaff() &&
+        request.resource.data.pelaporId == request.auth.uid &&
+        request.resource.data.status == 'DILAPORKAN';
+
+      // Update:
+      // Reporter can edit report details (cannot reassign pelaporId or self-resolve to SELESAI)
+      // Admin or Kepala Sekolah can escalate, change status, or resolve
+      allow update: if isValidActiveUser() && (
+        userRole() in ['ADMIN', 'KEPALA_SEKOLAH'] ||
+        (
+          userRole() in ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'] &&
+          request.auth.uid == resource.data.pelaporId &&
+          request.resource.data.pelaporId == resource.data.pelaporId &&
+          resource.data.status != 'SELESAI' &&
+          request.resource.data.status != 'SELESAI'
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 6. ATTENDANCE RECORDS (Presensi GPS & Swafoto Petugas)
+    // Strict lifecycle: Check-in creation forbids completed checkout.
+    // Check-out update requires valid jamMasuk, owner, active session, and serverTimestamp for jamPulang & updatedAt.
+    // -------------------------------------------------------------
+    match /attendance/{attendanceId} {
+      allow read: if isValidActiveUser();
+
+      allow create: if canRecordAttendance() &&
+        request.resource.data.userId == request.auth.uid &&
+        ('jamMasuk' in request.resource.data) &&
+        validAttendanceCheckIn(request.resource.data.jamMasuk) &&
+        (!('jamPulang' in request.resource.data) || request.resource.data.jamPulang == null || (request.resource.data.jamPulang is string && request.resource.data.jamPulang == '')) &&
+        (
+          (request.resource.data.get('scheduleId', null) != null && request.resource.data.scheduleId is string && request.resource.data.scheduleId.size() > 0) ||
+          (
+            request.resource.data.get('scheduleId', null) == null &&
+            request.resource.data.get('attendanceModeAtCheckIn', '') == 'BEBAS' &&
+            get(/databases/$(database)/documents/settings/school_config).data.get('attendanceMode', 'TERJADWAL') == 'BEBAS'
+          )
+        );
+
+      allow update: if isAdmin() || (
+        canRecordAttendance() &&
+        isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId &&
+        ('jamMasuk' in resource.data) &&
+        validAttendanceCheckIn(resource.data.jamMasuk) &&
+        (!('jamPulang' in resource.data) || resource.data.jamPulang == null || (resource.data.jamPulang is string && resource.data.jamPulang == '')) &&
+        ('jamPulang' in request.resource.data) &&
+        request.resource.data.jamPulang is timestamp &&
+        request.resource.data.jamPulang == request.time &&
+        ('updatedAt' in request.resource.data) &&
+        request.resource.data.updatedAt is timestamp &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['jamPulang', 'updatedAt', 'checkoutPolicy']) &&
+        (
+          !('checkoutPolicy' in request.resource.data) ||
+          (
+            request.resource.data.checkoutPolicy is map &&
+            ('mode' in request.resource.data.checkoutPolicy) &&
+            request.resource.data.checkoutPolicy.mode in ['TERJADWAL', 'BEBAS'] &&
+            request.resource.data.checkoutPolicy.mode == get(/databases/$(database)/documents/settings/school_config).data.get('attendanceMode', 'TERJADWAL')
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 7. OPERATIONAL MASTER DATA (Teachers, Staff, Students, Rooms, Categories)
+    // -------------------------------------------------------------
+    match /teachers/{teacherId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /staff/{staffId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /incidentCategories/{catId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 8. SCHEDULES & OPERATIONAL LOGS
+    // -------------------------------------------------------------
+    match /schedules/{scheduleId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /substitutions/{subId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /studentTardiness/{tardyId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /studentPermits/{permitId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /visitors/{visitorId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /announcements/{annId} {
+      allow read: if isValidActiveUser();
+      allow write: if isAdmin() || isKepalaSekolah();
+    }
+
+    // -------------------------------------------------------------
+    // 9. AUDIT LOGS & DATABASE SNAPSHOTS
+    // -------------------------------------------------------------
+    match /auditLogs/{logId} {
+      allow read: if isAdmin() || isKepalaSekolah();
+      allow create: if isValidActiveUser();
+      allow update, delete: if false;
+    }
+
+    // Existing operational collections retained from the repository Rules.
+    match /documents/{docId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /backups/{backupId} {
+      allow read, write: if isAdmin();
+    }
+    match /emergencies/{emergencyId} {
+      allow read: if true; // Existing public safety broadcast.
+      allow write: if isStaff();
+    }
+    match /emergency_history/{historyId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isAdmin();
+    }
+
+    match /database_snapshots/{snapId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /database_snapshots_chunks/{chunkId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

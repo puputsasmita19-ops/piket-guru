@@ -87,8 +87,13 @@ export class StudentPermitService {
     const id = `pmt-${data.tanggal}-${Date.now().toString(36)}`;
     const now = new Date().toISOString();
 
+    const cleanData = { ...data };
+    if (cleanData.jenisIzin !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    }
+
     const payload: StudentPermitRecord = {
-      ...data,
+      ...cleanData,
       id,
       dataSource: 'PRODUCTION',
       isDemo: false,
@@ -110,6 +115,60 @@ export class StudentPermitService {
     });
 
     return payload;
+  }
+
+  /**
+   * Update an existing student permit record (Edit)
+   * Preserves existing ID, createdAt, createdBy, dataSource, isDemo.
+   */
+  public static async updatePermit(
+    data: Partial<StudentPermitRecord> & { id: string },
+    user: UserProfile
+  ): Promise<StudentPermitRecord> {
+    const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
+    if (!existing) {
+      throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
+    }
+
+    const now = new Date().toISOString();
+    const cleanData = { ...data };
+
+    // If jenisIzin is not LAINNYA, delete keteranganLainnya
+    if (cleanData.jenisIzin && cleanData.jenisIzin !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    } else if (!cleanData.jenisIzin && existing.jenisIzin !== 'LAINNYA') {
+      delete cleanData.keteranganLainnya;
+    }
+
+    const updated: StudentPermitRecord = {
+      ...existing,
+      ...cleanData,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      dataSource: existing.dataSource,
+      isDemo: existing.isDemo,
+      updatedAt: now,
+      updatedBy: user.fullName,
+    };
+
+    // If jenisIzin changed from LAINNYA to another, remove field if controlledReplace
+    if (updated.jenisIzin !== 'LAINNYA') {
+      delete updated.keteranganLainnya;
+    }
+
+    await FirestoreService.setDocument('studentPermits', existing.id, updated, { controlledReplace: true });
+    await FirestoreService.logAudit({
+      userId: user.id,
+      userName: user.fullName,
+      role: user.role,
+      action: 'UPDATE',
+      module: 'PERMITS',
+      recordId: existing.id,
+      details: `Memperbarui data izin keluar siswa: ${updated.namaSiswa} (${updated.kelas}) - ${updated.jenisIzin}`,
+    });
+
+    return updated;
   }
 
   /**

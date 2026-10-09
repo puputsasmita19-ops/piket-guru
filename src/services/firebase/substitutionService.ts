@@ -88,6 +88,44 @@ export class SubstitutionService {
   }
 
   /**
+   * Update entire teacher substitution record (Edit modal)
+   * Preserves existing ID, createdAt, createdBy.
+   */
+  public static async updateSubstitution(
+    data: Partial<TeacherSubstitutionRecord> & { id: string },
+    user: UserProfile
+  ): Promise<TeacherSubstitutionRecord> {
+    const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
+    if (!existing) {
+      throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
+    }
+
+    const now = new Date().toISOString();
+    const updated: TeacherSubstitutionRecord = {
+      ...existing,
+      ...data,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      updatedAt: now,
+      updatedBy: user.fullName,
+    };
+
+    await FirestoreService.setDocument('substitutions', existing.id, updated);
+    await FirestoreService.logAudit({
+      userId: user.id,
+      userName: user.fullName,
+      role: user.role,
+      action: 'UPDATE',
+      module: 'SUBSTITUTIONS',
+      recordId: existing.id,
+      details: `Memperbarui data guru berhalangan: ${updated.guruBerhalanganName} (${updated.kelas} - ${updated.mataPelajaran}), Inval: ${updated.guruPenggantiName || 'Belum Ditugaskan'}`,
+    });
+
+    return updated;
+  }
+
+  /**
    * Update substitute teacher status (e.g. In progress, completed)
    */
   public static async updateStatus(

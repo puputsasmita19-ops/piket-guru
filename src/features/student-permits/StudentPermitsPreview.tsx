@@ -16,6 +16,8 @@ import {
   HeartPulse,
   Award,
   AlertCircle,
+  Edit2,
+  Users,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -24,7 +26,12 @@ import { Modal } from '../../components/common/Modal';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { StudentPermitFormModal } from './StudentPermitFormModal';
 import { StudentPermitPrintModal } from './StudentPermitPrintModal';
-import { StudentPermitRecord, StudentPermitType, StudentPermitStatus } from '../../types/studentPermit.types';
+import {
+  StudentPermitRecord,
+  StudentPermitType,
+  StudentPermitStatus,
+  getStudentPermitTypeDisplay,
+} from '../../types/studentPermit.types';
 import { TeacherRecord } from '../../types/master.types';
 import { SchoolSettings } from '../../types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -38,6 +45,10 @@ import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 export const StudentPermitsPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const canEdit = Boolean(
+    currentUser?.role &&
+      ['ADMIN', 'SUPER_ADMIN', 'PETUGAS_PIKET', 'GURU', 'STAFF', 'KEPALA_SEKOLAH'].includes(currentUser.role)
+  );
 
   const [permits, setPermits] = useState<StudentPermitRecord[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
@@ -49,6 +60,7 @@ export const StudentPermitsPreview: React.FC = () => {
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [editingPermit, setEditingPermit] = useState<StudentPermitRecord | null>(null);
   const [printPermit, setPrintPermit] = useState<StudentPermitRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<StudentPermitRecord | null>(null);
 
@@ -86,10 +98,14 @@ export const StudentPermitsPreview: React.FC = () => {
     };
   }, []);
 
-  // Create Permit
-  const handleSavePermit = async (data: any) => {
+  // Create or Update Permit
+  const handleSavePermit = async (data: any, isEdit?: boolean) => {
     if (!currentUser) return;
-    await StudentPermitService.createPermit(data, currentUser);
+    if (isEdit && data.id) {
+      await StudentPermitService.updatePermit(data, currentUser);
+    } else {
+      await StudentPermitService.createPermit(data, currentUser);
+    }
   };
 
   // Mark Student Returned
@@ -107,6 +123,7 @@ export const StudentPermitsPreview: React.FC = () => {
 
   // Send WhatsApp Alert to Parent
   const handleSendWaToParent = (permit: StudentPermitRecord) => {
+    const jenisDisplay = getStudentPermitTypeDisplay(permit);
     const msg = `*PEMBERITAHUAN IZIN KELUAR SEKOLAH*
 *${settings.schoolName}*
 
@@ -114,9 +131,9 @@ Yth. Orang Tua / Wali dari siswa:
 👤 *Nama Siswa:* ${permit.namaSiswa}
 🎓 *Kelas:* ${permit.kelas}
 📅 *Waktu:* ${formatIndonesianDate(permit.tanggal)} (Pukul ${permit.jamKeluar} WIB)
-🏷️ *Jenis Izin:* ${permit.jenisIzin.replace('_', ' ')}
+🏷️ *Jenis Izin:* ${jenisDisplay}
 📝 *Alasan:* ${permit.alasan}
-👥 *Pendamping/Penjemput:* ${permit.namaPenjemput} (${permit.penjemput})
+👥 *Pendamping/Penjemput:* ${permit.namaPenjemput || 'Orang Tua / Wali'} (${permit.penjemput})
 
 Siswa telah diberikan surat izin resmi oleh Petugas Piket Sekolah (*${permit.petugasPiketName}*).
 Demikian informasi ini disampaikan. Terima kasih. 🙏`;
@@ -131,7 +148,22 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
 
   // Export CSV
   const handleExportCsv = () => {
-    const headers = ['No Surat', 'Tanggal', 'Jam Keluar', 'Jam Kembali', 'Nama Siswa', 'NISN', 'Kelas', 'Jenis Izin', 'Alasan', 'Penjemput', 'No HP Ortu', 'Guru Mapel', 'Petugas Piket', 'Status'];
+    const headers = [
+      'No Surat',
+      'Tanggal',
+      'Jam Keluar',
+      'Jam Kembali',
+      'Nama Siswa',
+      'NISN',
+      'Kelas',
+      'Jenis Izin',
+      'Alasan',
+      'Penjemput',
+      'No HP Ortu',
+      'Guru Mapel',
+      'Petugas Piket',
+      'Status',
+    ];
     const rows = filteredPermits.map((p) => [
       p.id,
       p.tanggal,
@@ -140,9 +172,9 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
       p.namaSiswa,
       p.nisn,
       p.kelas,
-      p.jenisIzin,
+      getStudentPermitTypeDisplay(p),
       p.alasan,
-      `${p.namaPenjemput} (${p.penjemput})`,
+      `${p.namaPenjemput || '-'} (${p.penjemput})`,
       p.noHpOrangTua || '-',
       p.guruPengajarName || '-',
       p.petugasPiketName,
@@ -160,11 +192,16 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
   const filteredPermits = permits.filter((p) => {
     const matchStatus = statusFilter === 'SEMUA' || p.status === statusFilter;
     const matchType = typeFilter === 'SEMUA' || p.jenisIzin === typeFilter;
+    const q = searchQuery.toLowerCase();
+    const typeLabel = getStudentPermitTypeDisplay(p).toLowerCase();
     const matchSearch =
-      p.namaSiswa.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.alasan.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.petugasPiketName.toLowerCase().includes(searchQuery.toLowerCase());
+      p.namaSiswa.toLowerCase().includes(q) ||
+      p.kelas.toLowerCase().includes(q) ||
+      p.alasan.toLowerCase().includes(q) ||
+      (p.keteranganLainnya && p.keteranganLainnya.toLowerCase().includes(q)) ||
+      (p.namaPenjemput && p.namaPenjemput.toLowerCase().includes(q)) ||
+      p.petugasPiketName.toLowerCase().includes(q) ||
+      typeLabel.includes(q);
 
     return matchStatus && matchType && matchSearch;
   });
@@ -192,14 +229,19 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
           >
             Ekspor Excel
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => setIsFormModalOpen(true)}
-          >
-            + Terbitkan Surat Izin
-          </Button>
+          {canEdit && (
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setEditingPermit(null);
+                setIsFormModalOpen(true);
+              }}
+            >
+              + Terbitkan Surat Izin
+            </Button>
+          )}
         </div>
       </div>
 
@@ -256,7 +298,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari nama siswa, kelas, alasan..."
+                placeholder="Cari nama siswa, kelas, alasan, jenis izin..."
                 className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
@@ -283,14 +325,156 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                 <option value="URUSAN_KELUARGA">Urusan Keluarga</option>
                 <option value="DISPENSASI_LOMBA">Dispensasi Lomba</option>
                 <option value="KELUAR_SEBENTAR">Keluar Sebentar</option>
+                <option value="LAINNYA">Lain-lain</option>
               </select>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* PERMITS TABLE */}
-      <Card>
+      {/* PERMITS LIST: RESPONSIVE MOBILE CARDS & DESKTOP TABLE */}
+      {/* Mobile Card List (Hidden on tablet/desktop) */}
+      <div className="block md:hidden space-y-3">
+        {filteredPermits.length > 0 ? (
+          filteredPermits.map((item) => (
+            <Card key={item.id} className="overflow-hidden border border-slate-200 dark:border-slate-800">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">
+                      {item.namaSiswa}
+                    </div>
+                    <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                      🎓 {item.kelas} {item.nisn && item.nisn !== '-' ? `• NISN: ${item.nisn}` : ''}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      item.status === 'SEDANG_KELUAR'
+                        ? 'warning'
+                        : item.status === 'SUDAH_KEMBALI'
+                        ? 'success'
+                        : 'primary'
+                    }
+                    size="sm"
+                  >
+                    {item.status === 'SEDANG_KELUAR'
+                      ? 'Sedang di Luar'
+                      : item.status === 'SUDAH_KEMBALI'
+                      ? 'Sudah Kembali'
+                      : 'Pulang Selesai'}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant={
+                      item.jenisIzin === 'SAKIT_PULANG'
+                        ? 'danger'
+                        : item.jenisIzin === 'DISPENSASI_LOMBA'
+                        ? 'success'
+                        : item.jenisIzin === 'KELUAR_SEBENTAR'
+                        ? 'warning'
+                        : item.jenisIzin === 'LAINNYA'
+                        ? 'info'
+                        : 'neutral'
+                    }
+                    size="sm"
+                  >
+                    {getStudentPermitTypeDisplay(item)}
+                  </Badge>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    🕒 Keluar: <strong>{item.jamKeluar}</strong>
+                    {item.jamKembali ? ` • Kembali: ${item.jamKembali}` : ''}
+                  </span>
+                </div>
+
+                <div className="text-xs bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1">
+                  <p className="text-slate-700 dark:text-slate-300 italic">
+                    "{item.alasan}"
+                  </p>
+                  <div className="text-[11px] text-slate-500 flex items-center justify-between gap-1 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span>👥 Pendamping: <strong>{item.namaPenjemput || '-'}</strong> ({item.penjemput})</span>
+                    {item.noHpOrangTua && <span className="font-mono text-emerald-600">📞 {item.noHpOrangTua}</span>}
+                  </div>
+                </div>
+
+                {/* Mobile Actions */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    {canEdit && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        className="text-xs min-h-[36px] px-3 font-semibold"
+                        leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                        onClick={() => {
+                          setEditingPermit(item);
+                          setIsFormModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs min-h-[36px] px-2.5"
+                      leftIcon={<Printer className="w-3.5 h-3.5" />}
+                      onClick={() => setPrintPermit(item)}
+                    >
+                      Cetak
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {item.status === 'SEDANG_KELUAR' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 min-h-[36px] px-2.5"
+                        leftIcon={<LogIn className="w-3.5 h-3.5" />}
+                        onClick={() => handleMarkReturned(item)}
+                      >
+                        Tiba Kembali
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleSendWaToParent(item)}
+                      className="p-2 rounded-lg text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 cursor-pointer"
+                      title="Kirim Notifikasi WA ke Orang Tua"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(item)}
+                        className="p-2 rounded-lg text-rose-500 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card>
+            <CardContent className="p-8 text-center text-slate-400 text-xs">
+              Belum ada data izin keluar siswa untuk filter terpilih.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Desktop Table View (Hidden on mobile) */}
+      <Card className="hidden md:block">
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
@@ -312,7 +496,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                         {item.namaSiswa}
                       </div>
                       <div className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
-                        {item.kelas} {item.nisn !== '-' ? `• NISN: ${item.nisn}` : ''}
+                        {item.kelas} {item.nisn && item.nisn !== '-' ? `• NISN: ${item.nisn}` : ''}
                       </div>
                     </td>
 
@@ -325,11 +509,13 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                             ? 'success'
                             : item.jenisIzin === 'KELUAR_SEBENTAR'
                             ? 'warning'
+                            : item.jenisIzin === 'LAINNYA'
+                            ? 'info'
                             : 'neutral'
                         }
                         size="sm"
                       >
-                        {item.jenisIzin.replace('_', ' ')}
+                        {getStudentPermitTypeDisplay(item)}
                       </Badge>
                     </td>
 
@@ -345,7 +531,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                         "{item.alasan}"
                       </p>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Dijemput: <strong>{item.namaPenjemput}</strong> ({item.penjemput})
+                        Dijemput: <strong>{item.namaPenjemput || '-'}</strong> ({item.penjemput})
                       </div>
                     </td>
 
@@ -370,6 +556,21 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
 
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Edit Button */}
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPermit(item);
+                              setIsFormModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            title="Ubah Data Izin Siswa"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {/* Notify Parent WA */}
                         <button
                           type="button"
@@ -432,8 +633,12 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
       {/* PERMIT FORM MODAL */}
       <StudentPermitFormModal
         isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
+        onClose={() => {
+          setIsFormModalOpen(false);
+          setEditingPermit(null);
+        }}
         onSave={handleSavePermit}
+        editingPermit={editingPermit}
         teachers={teachers}
       />
 

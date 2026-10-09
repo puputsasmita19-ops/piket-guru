@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Phone,
+  Smartphone,
   Mail,
   Filter,
   AlertTriangle,
@@ -20,6 +21,10 @@ import {
   ChevronRight,
   MapPin,
   Hash,
+  ShieldCheck,
+  Layers,
+  Eye,
+  Download,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -28,10 +33,13 @@ import { Modal } from '../../components/common/Modal';
 import { UserFormModal } from './UserFormModal';
 import { StudentFormModal } from './StudentFormModal';
 import { ResetPinModal } from './ResetPinModal';
+import { ApplyGuruDutyPermissionsModal } from './ApplyGuruDutyPermissionsModal';
+import { OrphanReservationsModal } from './OrphanReservationsModal';
 import { BulkImportModal } from '../master/BulkImportModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { UserService } from '../../services/auth/userService';
 import { StudentService } from '../../services/firebase/studentService';
+import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserProfile, UserRole } from '../../types';
 import { StudentRecord } from '../../types/master.types';
@@ -41,7 +49,7 @@ import { formatIndonesianDate } from '../../utils/dateUtils';
 type UserCategoryTab = 'GURU' | 'SISWA';
 
 export const UserManagementView: React.FC = () => {
-  const { currentUser, hasRole } = useAuth();
+  const { currentUser, hasRole, refreshProfile } = useAuth();
   const isAdmin = hasRole('ADMIN');
 
   // Active Category: Guru & Tendik vs Siswa
@@ -73,11 +81,20 @@ export const UserManagementView: React.FC = () => {
   const [targetPinUser, setTargetPinUser] = useState<UserProfile | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<UserProfile | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+
+  // Modal for Terapkan Hak Akses Piket Guru
+  const [isApplyGuruDutyModalOpen, setIsApplyGuruDutyModalOpen] = useState(false);
+  const [guruDutyTargetUser, setGuruDutyTargetUser] = useState<UserProfile | null>(null);
+
+  // Modal for Orphan LoginId Reservations
+  const [isOrphanModalOpen, setIsOrphanModalOpen] = useState(false);
 
   // Modals for Siswa
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
   const [deleteConfirmStudent, setDeleteConfirmStudent] = useState<StudentRecord | null>(null);
+  const [selectedDetailStudent, setSelectedDetailStudent] = useState<StudentRecord | null>(null);
 
   useEffect(() => {
     UserService.bootstrapIfEmpty();
@@ -119,9 +136,26 @@ export const UserManagementView: React.FC = () => {
     if (!currentUser) return;
     if (data.id) {
       await UserService.updateUser(data.id, data, currentUser);
+      if (data.id === currentUser.id) {
+        await refreshProfile();
+      }
+      setFeedbackSuccess(`Profil dan hak akses pengguna ${data.fullName} berhasil diperbarui di database. Izin berlaku langsung pada sesi pengguna tanpa cache.`);
     } else {
       await UserService.createUser(data, currentUser);
+      setFeedbackSuccess(`Pengguna baru ${data.fullName} berhasil didaftarkan dengan hak akses default role.`);
     }
+    setTimeout(() => setFeedbackSuccess(null), 6000);
+  };
+
+  // Apply Guru Duty Permissions to existing user
+  const handleApplyGuruDutyPermissions = async (userId: string, newPermissions: string[]) => {
+    if (!currentUser) return;
+    await UserService.updateUser(userId, { permissions: newPermissions }, currentUser);
+    if (userId === currentUser.id) {
+      await refreshProfile();
+    }
+    setFeedbackSuccess(`Hak akses Piket Guru berhasil diterapkan untuk ${guruDutyTargetUser?.fullName || 'pengguna'}. Profil telah disinkronkan ke database dan langsung aktif.`);
+    setTimeout(() => setFeedbackSuccess(null), 6000);
   };
 
   // Reset PIN User
@@ -143,7 +177,7 @@ export const UserManagementView: React.FC = () => {
     await UserService.toggleActiveStatus(user.id, newStatus, currentUser);
   };
 
-  // Delete User
+  // Delete User (uses backend endpoint for atomic user, credential, and loginId reservation deletion)
   const handleDeleteUser = async () => {
     if (!deleteConfirmUser || !currentUser) return;
     if (deleteConfirmUser.id === currentUser.id) {
@@ -153,8 +187,16 @@ export const UserManagementView: React.FC = () => {
       return;
     }
     setActionError(null);
-    await UserService.deleteUser(deleteConfirmUser.id, currentUser);
-    setDeleteConfirmUser(null);
+    try {
+      const res = await UserService.deleteUser(deleteConfirmUser.id, currentUser);
+      setFeedbackSuccess(res.message || `Akun ${deleteConfirmUser.fullName} (${deleteConfirmUser.loginId || deleteConfirmUser.id}) berhasil dihapus beserta reservasi ID.`);
+      setTimeout(() => setFeedbackSuccess(null), 6000);
+    } catch (err: any) {
+      setActionError(err.message || 'Gagal menghapus pengguna.');
+      setTimeout(() => setActionError(null), 6000);
+    } finally {
+      setDeleteConfirmUser(null);
+    }
   };
 
   // Save Student (Siswa)
@@ -165,6 +207,7 @@ export const UserManagementView: React.FC = () => {
     kelas: string;
     jenisKelamin: 'L' | 'P';
     noHpOrangTua: string;
+    noHpSiswa?: string;
     alamat?: string;
     isActive: boolean;
   }) => {
@@ -177,6 +220,7 @@ export const UserManagementView: React.FC = () => {
       kelas: data.kelas,
       jenisKelamin: data.jenisKelamin,
       noHpOrangTua: data.noHpOrangTua,
+      noHpSiswa: (data.noHpSiswa || '').trim() || undefined,
       alamat: data.alamat,
       isActive: data.isActive,
       createdAt: data.id
@@ -197,6 +241,35 @@ export const UserManagementView: React.FC = () => {
       recordId: studentId,
       details: `${data.id ? 'Memperbarui' : 'Menambahkan'} data siswa ${data.nama} (Kelas ${data.kelas})`,
     });
+    setFeedbackSuccess(
+      `Data siswa ${data.nama} (${data.nisn}) berhasil ${data.id ? 'diperbarui' : 'disimpan'} ke database.`
+    );
+    setTimeout(() => setFeedbackSuccess(null), 6000);
+  };
+
+  // Export Students CSV
+  const handleExportStudentsCsv = () => {
+    const headers = [
+      'NISN',
+      'Nama Lengkap Siswa',
+      'Kelas',
+      'Jenis Kelamin',
+      'Nomor HP Siswa',
+      'No HP Orang Tua / Wali',
+      'Alamat Domisili',
+      'Status Siswa',
+    ];
+    const rows = filteredStudents.map((s) => [
+      s.nisn,
+      s.nama,
+      s.kelas,
+      s.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan',
+      s.noHpSiswa || '-',
+      s.noHpOrangTua || '-',
+      s.alamat || '-',
+      s.isActive !== false ? 'Aktif' : 'Nonaktif',
+    ]);
+    ExportUtils.exportToCsv(`Data_Siswa_${Date.now()}`, headers, rows);
   };
 
   // Toggle Active Status Student
@@ -263,6 +336,7 @@ export const UserManagementView: React.FC = () => {
       s.nama.toLowerCase().includes(studentSearch.toLowerCase()) ||
       s.nisn.includes(studentSearch) ||
       s.kelas.toLowerCase().includes(studentSearch.toLowerCase()) ||
+      (s.noHpSiswa && s.noHpSiswa.includes(studentSearch)) ||
       (s.noHpOrangTua && s.noHpOrangTua.includes(studentSearch));
 
     return matchClass && matchGender && matchStatus && matchSearch;
@@ -291,6 +365,21 @@ export const UserManagementView: React.FC = () => {
           </div>
           <button
             onClick={() => setActionError(null)}
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {feedbackSuccess && (
+        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-semibold">{feedbackSuccess}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackSuccess(null)}
             className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
           >
             ✕
@@ -338,19 +427,19 @@ export const UserManagementView: React.FC = () => {
       </div>
 
       {/* ERGONOMIC CATEGORY SELECTOR TABS (GURU VS SISWA) */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-fit">
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] rounded-2xl w-fit">
         <button
           type="button"
           onClick={() => setActiveCategory('GURU')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeCategory === 'GURU'
-              ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm shadow-blue-500/10'
+              ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-sm shadow-[var(--theme-ring)]'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <GraduationCap className="w-4 h-4" />
           <span>Golongan Guru & Tenaga Pendidik</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-extrabold">
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] font-extrabold border border-[var(--theme-primary-border)]">
             {totalUsers}
           </span>
         </button>
@@ -420,6 +509,16 @@ export const UserManagementView: React.FC = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60"
+                        leftIcon={<Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                        onClick={() => setIsOrphanModalOpen(true)}
+                        title="Pindai dan periksa reservasi ID Login yatim"
+                      >
+                        Periksa ID Yatim
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
                         onClick={() => {
                           setBulkImportDefaultType('USERS_TEACHERS');
@@ -477,6 +576,16 @@ export const UserManagementView: React.FC = () => {
                     <option value="NONAKTIF">Hanya Nonaktif</option>
                   </select>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<Download className="w-4 h-4 text-blue-600" />}
+                    onClick={handleExportStudentsCsv}
+                    title="Export daftar siswa yang difilter ke format CSV"
+                  >
+                    Export (.CSV)
+                  </Button>
+
                   {isAdmin && (
                     <>
                       <Button
@@ -515,7 +624,7 @@ export const UserManagementView: React.FC = () => {
         <CardContent className="p-0">
           <div className="overflow-x-auto max-h-[560px] overflow-y-auto scrollbar-thin">
             {isGuru ? (
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[860px]">
                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
                   <tr>
                     <th className="p-4">Pengguna & Identitas</th>
@@ -616,6 +725,21 @@ export const UserManagementView: React.FC = () => {
                         {isAdmin && (
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {user.role === 'GURU' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60"
+                                  leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                                  onClick={() => {
+                                    setGuruDutyTargetUser(user);
+                                    setIsApplyGuruDutyModalOpen(true);
+                                  }}
+                                  title="Terapkan Hak Akses Piket Guru (Dashboard, Jadwal, Presensi, Buku Piket)"
+                                >
+                                  Terapkan Hak Akses
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -665,25 +789,28 @@ export const UserManagementView: React.FC = () => {
                 </tbody>
               </table>
             ) : (
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[940px]">
                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
                   <tr>
-                    <th className="p-4">Nama Siswa & NISN</th>
-                    <th className="p-4">Kelas</th>
-                    <th className="p-4">L/P</th>
-                    <th className="p-4">Kontak Orang Tua / Wali</th>
-                    <th className="p-4">Alamat Domisili</th>
-                    <th className="p-4 text-center">Status</th>
-                    {isAdmin && <th className="p-4 text-right">Aksi</th>}
+                    <th className="p-4 w-[240px] min-w-[220px]">Nama Siswa & NISN</th>
+                    <th className="p-4 w-[150px] min-w-[130px]">Kelas</th>
+                    <th className="p-4 w-[110px] min-w-[100px]">L/P</th>
+                    <th className="p-4 w-[160px] min-w-[150px]">Nomor HP Siswa</th>
+                    <th className="p-4 w-[170px] min-w-[160px]">Kontak Orang Tua / Wali</th>
+                    <th className="p-4 min-w-[180px]">Alamat Domisili</th>
+                    <th className="p-4 w-[100px] min-w-[90px] text-center">Status</th>
+                    <th className="p-4 w-[120px] min-w-[110px] text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {paginatedStudents.map((st) => {
                     const isActive = st.isActive !== false;
+                    const hasClass = Boolean(st.kelas && st.kelas.trim());
+                    const classNameText = st.kelas ? st.kelas.trim() : '';
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="p-4">
+                        <td className="p-4 align-middle">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-xs shrink-0">
                               {st.nama.charAt(0)}
@@ -699,32 +826,51 @@ export const UserManagementView: React.FC = () => {
                           </div>
                         </td>
 
-                        <td className="p-4">
-                          <span className="font-bold text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-1 rounded-md border border-blue-200 dark:border-blue-900/60">
-                            {st.kelas}
-                          </span>
+                        <td className="p-4 align-middle">
+                          {hasClass ? (
+                            <span className="inline-flex items-center justify-center text-center font-semibold text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800/60 shadow-xs max-w-full leading-snug">
+                              <span className={classNameText.length <= 16 ? "whitespace-nowrap" : "break-words"}>
+                                {classNameText}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center text-center text-[11px] text-slate-400 dark:text-slate-500 bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 italic font-normal whitespace-nowrap">
+                              Belum ditentukan
+                            </span>
+                          )}
                         </td>
 
-                        <td className="p-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        <td className="p-4 align-middle">
+                          <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[10px] font-bold whitespace-nowrap ${
                             st.jenisKelamin === 'L' ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' : 'bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300'
                           }`}>
                             {st.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
                           </span>
                         </td>
 
-                        <td className="p-4 text-slate-600 dark:text-slate-300">
-                          <div className="flex items-center gap-1.5 text-[11px]">
+                        <td className="p-4 align-middle text-slate-600 dark:text-slate-300">
+                          {st.noHpSiswa ? (
+                            <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap">
+                              <Smartphone className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{st.noHpSiswa}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic whitespace-nowrap">Tanpa No HP</span>
+                          )}
+                        </td>
+
+                        <td className="p-4 align-middle text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap">
                             <Phone className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                             <span className="font-mono font-bold">{st.noHpOrangTua || '-'}</span>
                           </div>
                         </td>
 
-                        <td className="p-4 text-slate-600 dark:text-slate-300 text-[11px] max-w-xs truncate">
+                        <td className="p-4 align-middle text-slate-600 dark:text-slate-300 text-[11px] max-w-xs truncate">
                           {st.alamat || '-'}
                         </td>
 
-                        <td className="p-4 text-center">
+                        <td className="p-4 align-middle text-center">
                           <button
                             type="button"
                             onClick={() => handleToggleStudentStatus(st)}
@@ -740,37 +886,50 @@ export const UserManagementView: React.FC = () => {
                           </button>
                         </td>
 
-                        {isAdmin && (
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs"
-                                onClick={() => {
-                                  setEditingStudent(st);
-                                  setIsStudentModalOpen(true);
-                                }}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs text-rose-600 hover:bg-rose-50"
-                                onClick={() => setDeleteConfirmStudent(st)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </td>
-                        )}
+                        <td className="p-4 align-middle text-right">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              onClick={() => setSelectedDetailStudent(st)}
+                              title="Lihat Detail Lengkap Siswa"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs"
+                                  onClick={() => {
+                                    setEditingStudent(st);
+                                    setIsStudentModalOpen(true);
+                                  }}
+                                  title="Edit Data Siswa"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs text-rose-600 hover:bg-rose-50"
+                                  onClick={() => setDeleteConfirmStudent(st)}
+                                  title="Hapus Data Siswa"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
                   {paginatedStudents.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
                         Tidak ada data siswa yang cocok dengan filter pencarian.
                       </td>
                     </tr>
@@ -818,7 +977,7 @@ export const UserManagementView: React.FC = () => {
                       onClick={() => setPageSize(sz)}
                       className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
                         pageSize === sz
-                          ? 'bg-blue-600 text-white shadow-xs'
+                          ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -835,7 +994,7 @@ export const UserManagementView: React.FC = () => {
                     type="button"
                     disabled={validCurrentPage <= 1}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -857,8 +1016,8 @@ export const UserManagementView: React.FC = () => {
                             onClick={() => setCurrentPage(pageNum)}
                             className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                               validCurrentPage === pageNum
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
+                                : 'bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
                             }`}
                           >
                             {pageNum}
@@ -991,6 +1150,147 @@ export const UserManagementView: React.FC = () => {
         isOpen={isBulkImportOpen}
         onClose={() => setIsBulkImportOpen(false)}
         defaultType={bulkImportDefaultType}
+      />
+
+      {/* APPLY GURU DUTY PERMISSIONS MODAL */}
+      <ApplyGuruDutyPermissionsModal
+        isOpen={isApplyGuruDutyModalOpen}
+        onClose={() => {
+          setIsApplyGuruDutyModalOpen(false);
+          setGuruDutyTargetUser(null);
+        }}
+        user={guruDutyTargetUser}
+        onApply={handleApplyGuruDutyPermissions}
+      />
+
+      {/* STUDENT DETAIL MODAL */}
+      <Modal
+        isOpen={!!selectedDetailStudent}
+        onClose={() => setSelectedDetailStudent(null)}
+        title="Detail Data Siswa"
+        maxWidth="md"
+      >
+        {selectedDetailStudent && (
+          <div className="space-y-4 text-xs">
+            {/* Header info */}
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white font-extrabold text-base flex items-center justify-center shrink-0 shadow-sm">
+                {selectedDetailStudent.nama.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {selectedDetailStudent.nama}
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      selectedDetailStudent.isActive !== false
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                    }`}
+                  >
+                    {selectedDetailStudent.isActive !== false ? 'Aktif' : 'Nonaktif'}
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
+                  NISN: {selectedDetailStudent.nisn} • Kelas: {selectedDetailStudent.kelas || 'Belum ditentukan'}
+                </p>
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Nomor HP Siswa</span>
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  {selectedDetailStudent.noHpSiswa ? (
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                      {selectedDetailStudent.noHpSiswa}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">Tidak ada (Belum diisi)</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">No. HP / WA Wali Murid</span>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {selectedDetailStudent.noHpOrangTua || '-'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Jenis Kelamin</span>
+                <div className="font-semibold text-slate-800 dark:text-slate-200">
+                  {selectedDetailStudent.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Kelas / Rombel</span>
+                <div className="font-bold text-blue-600 dark:text-blue-400">
+                  {selectedDetailStudent.kelas || <span className="italic text-slate-400 font-normal">Belum ditentukan</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Address */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Alamat Domisili</span>
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                <span className="text-slate-700 dark:text-slate-300">
+                  {selectedDetailStudent.alamat || 'Alamat domisili belum dicatat.'}
+                </span>
+              </div>
+            </div>
+
+            {/* Timestamps */}
+            <div className="text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2 flex flex-wrap justify-between gap-2">
+              <span>ID: {selectedDetailStudent.id}</span>
+              {selectedDetailStudent.updatedAt && (
+                <span>Diperbarui: {formatIndonesianDate(selectedDetailStudent.updatedAt.slice(0, 10))}</span>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDetailStudent(null)}
+              >
+                Tutup
+              </Button>
+              {isAdmin && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                  onClick={() => {
+                    const st = selectedDetailStudent;
+                    setSelectedDetailStudent(null);
+                    setEditingStudent(st);
+                    setIsStudentModalOpen(true);
+                  }}
+                >
+                  Edit Siswa
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ORPHAN RESERVATIONS MODAL */}
+      <OrphanReservationsModal
+        isOpen={isOrphanModalOpen}
+        onClose={() => setIsOrphanModalOpen(false)}
       />
     </div>
   );

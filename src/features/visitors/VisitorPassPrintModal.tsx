@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { VisitorRecord } from '../../types/visitor.types';
+import { VisitorRecord, getVisitorCategoryDisplay } from '../../types/visitor.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { Printer, UserCheck, ShieldCheck } from 'lucide-react';
@@ -78,10 +78,14 @@ export const VisitorPassPrintModal: React.FC<VisitorPassPrintModalProps> = ({
               <span className="font-bold text-black">{visitor.instansiAsal}</span>
             </div>
             <div>
+              <span className="text-slate-500 block">Kategori Tamu:</span>
+              <span className="font-bold text-blue-900">{getVisitorCategoryDisplay(visitor)}</span>
+            </div>
+            <div>
               <span className="text-slate-500 block">Waktu Masuk:</span>
               <span className="font-mono font-bold">{visitor.tanggal}, {visitor.jamMasuk} WIB</span>
             </div>
-            <div>
+            <div className="col-span-2">
               <span className="text-slate-500 block">Pihak Dituju:</span>
               <span className="font-bold text-black">{visitor.tujuanBertemu}</span>
             </div>

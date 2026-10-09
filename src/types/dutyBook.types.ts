@@ -1,5 +1,34 @@
 import { DutyBookStatus, BaseEntityMetadata } from './index';
 
+export type SimplifiedDutyBookStage = 'DRAFT' | 'TERKIRIM' | 'SELESAI';
+
+export interface DutyBookDisplayStatus {
+  stage: SimplifiedDutyBookStage;
+  label: 'Draft' | 'Terkirim' | 'Selesai';
+  variant: 'primary' | 'warning' | 'success';
+}
+
+/**
+ * Maps raw storage status to the streamlined 3-stage user display:
+ * - DRAFT -> 'Draft'
+ * - DIAJUKAN, DIVERIFIKASI -> 'Terkirim'
+ * - DISETUJUI, DIKUNCI -> 'Selesai'
+ */
+export function getDutyBookDisplayStatus(status: DutyBookStatus | string): DutyBookDisplayStatus {
+  switch (status) {
+    case 'DRAFT':
+      return { stage: 'DRAFT', label: 'Draft', variant: 'primary' };
+    case 'DIAJUKAN':
+    case 'DIVERIFIKASI':
+      return { stage: 'TERKIRIM', label: 'Terkirim', variant: 'warning' };
+    case 'DISETUJUI':
+    case 'DIKUNCI':
+      return { stage: 'SELESAI', label: 'Selesai', variant: 'success' };
+    default:
+      return { stage: 'DRAFT', label: 'Draft', variant: 'primary' };
+  }
+}
+
 export interface DutyBookSection {
   kondisiKeamanan: string;
   kondisiKebersihan: string;
@@ -27,6 +56,10 @@ export interface DutyBookRecord extends DutyBookSection, BaseEntityMetadata {
 
   // Workflow status
   status: DutyBookStatus;
+
+  // Revision & Unlock Reasons
+  revisionReason?: string;
+  unlockReason?: string;
 
   // Approval & Verification metadata
   submittedAt?: string;

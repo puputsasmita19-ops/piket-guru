@@ -32,7 +32,7 @@ import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
 import { IncidentRecord } from '../../types/incident.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, formatTime, getCurrentDayName } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 
 export const CommandCenterPreview: React.FC = () => {
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
@@ -47,7 +47,7 @@ export const CommandCenterPreview: React.FC = () => {
   const [activeBellSound, setActiveBellSound] = useState<string | null>(null);
 
   const todayName = getCurrentDayName();
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = getTodayISODate();
 
   useEffect(() => {
     FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
@@ -125,7 +125,7 @@ export const CommandCenterPreview: React.FC = () => {
           title="Lonceng Bel Sekolah Digital (Audio Synthesizer)"
           subtitle="Aktivasi suara bel otomatis tanpa memerlukan perangkat audio eksternal"
           action={
-            <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-semibold font-mono">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold font-mono">
               <Volume2 className="w-4 h-4" />
               <span>Web Audio Chimes Ready</span>
             </div>
@@ -137,11 +137,11 @@ export const CommandCenterPreview: React.FC = () => {
               onClick={() => handlePlayBell('MASUK')}
               className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-left ${
                 activeBellSound === 'MASUK'
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105'
-                  : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-blue-500'
+                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] border-[var(--theme-primary)] shadow-lg scale-105'
+                  : 'bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border-slate-200 dark:border-[var(--theme-card-border)] hover:border-[var(--theme-primary-border)]'
               }`}
             >
-              <Bell className="w-5 h-5 text-blue-500 mb-1" />
+              <Bell className="w-5 h-5 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] mb-1" />
               <div className="font-bold text-xs">Bel Masuk Pagi</div>
               <div className="text-[10px] opacity-75">Westminster 4-Tone</div>
             </button>
@@ -203,10 +203,10 @@ export const CommandCenterPreview: React.FC = () => {
         <Card>
           <CardContent className="p-4">
             <span className="text-xs text-slate-500 font-medium">Tamu Aktif di Kampus</span>
-            <div className="text-2xl font-extrabold text-blue-600 mt-1">
+            <div className="text-2xl font-extrabold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] mt-1">
               {activeVisitors.length} Tamu
             </div>
-            <div className="text-[11px] text-blue-600 font-medium mt-1">Lobi & Pos Keamanan</div>
+            <div className="text-[11px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-medium mt-1">Lobi & Pos Keamanan</div>
           </CardContent>
         </Card>
 

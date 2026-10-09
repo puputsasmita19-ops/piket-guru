@@ -1,7 +1,16 @@
-import { DayOfWeek, UserRole } from '../types';
+import { DayOfWeek, UserRole, SchoolSettings, LoginSupportContact, DEFAULT_LOBBY_TV_CONFIG } from '../types';
 
 export const APP_NAME = 'PIKET GURU';
 export const APP_SUBTITLE = 'Jadwal & Buku Piket Digital Sekolah';
+
+export const DEFAULT_LOGIN_SUPPORT_CONTACT: LoginSupportContact = {
+  enabled: true,
+  adminName: 'Admin Piket Sekolah',
+  buttonLabel: 'Hubungi Admin',
+  contactType: 'whatsapp',
+  target: '081234567890',
+  initialMessage: 'Halo Admin, saya membutuhkan bantuan terkait akses login akun Piket Guru.',
+};
 
 export const DEFAULT_DAILY_SCHEDULES: Record<DayOfWeek, {
   start: string;
@@ -67,20 +76,23 @@ export const DEFAULT_DAILY_SCHEDULES: Record<DayOfWeek, {
     isActive: true,
   },
   MINGGU: {
-    start: '07:00',
-    end: '12:00',
-    checkInStart: '06:30',
-    checkInEnd: '08:00',
-    checkOutStart: '11:30',
-    checkOutEnd: '13:30',
-    isActive: false,
+    start: '06:30',
+    end: '15:30',
+    checkInStart: '06:00',
+    checkInEnd: '08:30',
+    checkOutStart: '14:30',
+    checkOutEnd: '17:00',
+    isActive: true,
   },
 };
 
-export const DEFAULT_SCHOOL_SETTINGS = {
+export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
   schoolName: 'SMA Negeri 1 Prestasi Bangsa',
   npsn: '20109988',
   address: 'Jl. Pendidikan No. 45, Kompleks Edukasi, Jakarta',
+  phone: '021-78901234',
+  email: 'info@sman1prestasibangsa.sch.id',
+  website: 'www.sman1prestasibangsa.sch.id',
   appName: 'PIKET GURU',
   appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
   appCreator: 'Tim Pengembang Sistem Piket',
@@ -88,6 +100,38 @@ export const DEFAULT_SCHOOL_SETTINGS = {
   schoolLat: -6.200000,
   schoolLng: 106.816666,
   allowedRadiusMeters: 50,
+  attendanceMode: 'TERJADWAL',
+  reportCity: 'Jakarta',
+  principalName: 'Dr. Hj. Siti Rohmah, M.Pd.',
+  principalIdType: 'NIP',
+  principalIdNumber: '197605122000032001',
+  principalSignatureUrl: '',
+  coordinatorName: 'Drs. H. Ahmad Fauzi, M.Pd.',
+  coordinatorIdType: 'NIP',
+  coordinatorIdNumber: '198503152010011002',
+  coordinatorSignatureUrl: '',
+  academicSemester: {
+    academicYear: '2026/2027',
+    oddSemesterStart: '2026-07-01',
+    oddSemesterEnd: '2026-12-31',
+    evenSemesterStart: '2027-01-01',
+    evenSemesterEnd: '2027-06-30',
+  },
+  loginSupportContact: DEFAULT_LOGIN_SUPPORT_CONTACT,
+  lobbyTv: DEFAULT_LOBBY_TV_CONFIG,
+  printConfig: {
+    paperSize: 'A4',
+    f4WidthMm: 215,
+    f4HeightMm: 330,
+    orientation: 'portrait',
+    marginTopMm: 15,
+    marginBottomMm: 15,
+    marginLeftMm: 15,
+    marginRightMm: 15,
+    showLogo: true,
+    showLetterhead: true,
+    showSignatures: true,
+  },
   workHours: {
     start: '06:30',
     end: '15:30',
@@ -95,12 +139,12 @@ export const DEFAULT_SCHOOL_SETTINGS = {
     checkInEnd: '07:30',
     checkOutStart: '14:30',
     checkOutEnd: '17:00',
-    activeDays: ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'] as DayOfWeek[],
+    activeDays: ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'] as DayOfWeek[],
     dailySchedules: DEFAULT_DAILY_SCHEDULES,
   },
 };
 
-export const DAYS_LIST: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+export const DAYS_LIST: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: 'Administrator',

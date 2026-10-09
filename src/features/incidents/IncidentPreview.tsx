@@ -22,7 +22,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { IncidentFormModal } from './IncidentFormModal';
 import { IncidentDetailModal } from './IncidentDetailModal';
-import { IncidentRecord, IncidentStatus, IncidentSeverity } from '../../types/incident.types';
+import { IncidentRecord, IncidentStatus, IncidentSeverity, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { IncidentCategoryRecord } from '../../types/master.types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { IncidentService } from '../../services/firebase/incidentService';
@@ -112,6 +112,7 @@ export const IncidentPreview: React.FC = () => {
       i.uraian.toLowerCase().includes(searchQuery.toLowerCase()) ||
       i.lokasi.toLowerCase().includes(searchQuery.toLowerCase()) ||
       i.pihakTerlibat.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getIncidentCategoryDisplay(i).toLowerCase().includes(searchQuery.toLowerCase()) ||
       i.kategoriName.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchStatus && matchCat && matchSev && matchSearch;
@@ -264,7 +265,7 @@ export const IncidentPreview: React.FC = () => {
                 <CardContent className="p-5 space-y-3.5">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                      {item.kategoriName}
+                      {getIncidentCategoryDisplay(item)}
                     </span>
                     <Badge
                       variant={
@@ -375,7 +376,7 @@ export const IncidentPreview: React.FC = () => {
                       {item.tanggal} <span className="text-[11px] text-slate-400">{item.waktu}</span>
                     </td>
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
-                      {item.kategoriName}
+                      {getIncidentCategoryDisplay(item)}
                     </td>
                     <td className="p-4 text-slate-800 dark:text-slate-200 max-w-xs truncate">
                       {item.uraian}
@@ -466,7 +467,7 @@ export const IncidentPreview: React.FC = () => {
               Hapus Laporan Ini?
             </h4>
             <p className="text-xs text-slate-500 mt-1">
-              {deleteConfirm?.kategoriName} • {deleteConfirm?.lokasi}
+              {getIncidentCategoryDisplay(deleteConfirm)} • {deleteConfirm?.lokasi}
             </p>
           </div>
           <div className="flex justify-center gap-3 pt-2">

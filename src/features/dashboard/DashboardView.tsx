@@ -28,6 +28,7 @@ import { Button } from '../../components/common/Button';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { AnnouncementFormModal } from './AnnouncementFormModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { PERMISSIONS } from '../../config/permissions';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AnnouncementService } from '../../services/firebase/announcementService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
@@ -36,26 +37,30 @@ import {
   AttendanceRecord,
   SchoolSettings,
 } from '../../types';
-import { DutyBookRecord } from '../../types/dutyBook.types';
-import { IncidentRecord } from '../../types/incident.types';
+import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
+import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { AnnouncementRecord } from '../../types/announcement.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
 import { VisitorRecord } from '../../types/visitor.types';
+import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, formatTime, getCurrentDayName } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
+import { isScheduleMatchingUser } from '../../utils/scheduleUtils';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
-  const { currentUser, hasRole } = useAuth();
+  const { currentUser, hasRole, hasPermission } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
+  const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [dutyBooks, setDutyBooks] = useState<DutyBookRecord[]>([]);
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
@@ -80,7 +85,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   });
 
   const todayName = getCurrentDayName();
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = getTodayISODate();
 
   useEffect(() => {
     AnnouncementService.bootstrapIfEmpty();
@@ -90,6 +95,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
+    const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
+    const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
     const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendance);
     const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', setDutyBooks);
     const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', setIncidents);
@@ -103,6 +110,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
     return () => {
       unsubSched();
+      unsubTeachers();
+      unsubStaff();
       unsubAtt();
       unsubBooks();
       unsubInc();
@@ -123,6 +132,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const todayPermits = studentPermits.filter((p) => p.tanggal === todayISO);
   const todaySubstitutions = substitutions.filter((s) => s.tanggal === todayISO);
   const todayVisitors = visitors.filter((v) => v.tanggal === todayISO);
+
+  // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
+  const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
+
+  const myTodaySchedule = schedules.find((s) => s.hari === todayName && isMySchedule(s));
+  const myAttendance = attendance.find((a) => a.tanggal === todayISO && a.userId === currentUser?.id);
+  const myDutyBook = dutyBooks.find((b) => b.tanggal === todayISO && (b.petugasId === currentUser?.id || (teachers.some(t => t.userId === currentUser?.id && t.id === b.petugasId))));
+  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && s.hari !== todayName);
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;
@@ -156,44 +173,191 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   return (
     <div className="space-y-6">
       {/* HERO WELCOME BANNER */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-blue-700 via-indigo-700 to-blue-900 text-white p-6 sm:p-8 shadow-xl shadow-blue-900/10">
+      <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-[var(--theme-primary)] via-[var(--theme-primary-hover)] to-[var(--theme-primary-active)] text-white p-6 sm:p-8 shadow-xl shadow-[var(--theme-ring)]">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-blue-100 backdrop-blur-md text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white backdrop-blur-md text-xs font-semibold">
               <Building2 className="w-3.5 h-3.5" />
               <span>{settings.schoolName}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               Selamat Bertugas, {currentUser?.fullName}
             </h1>
-            <p className="text-blue-100 text-xs sm:text-sm max-w-xl leading-relaxed">
+            <p className="text-white/90 text-xs sm:text-sm max-w-xl leading-relaxed">
               Sistem Terintegrasi Presensi GPS Geolocation, Jurnal Buku Piket Digital & Penanganan Cepat Insiden Sekolah.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="glass"
-              size="md"
-              className="text-xs font-bold"
-              onClick={() => onNavigateTab('attendance')}
-            >
-              Presensi Mandiri
-            </Button>
-            <Button
-              variant="white"
-              size="md"
-              className="text-xs font-bold shadow-lg"
-              onClick={() => onNavigateTab('duty-book')}
-            >
-              Isi Buku Piket
-            </Button>
+            {hasPermission(PERMISSIONS.ATTENDANCE_VIEW) && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab('attendance')}
+                className="group relative inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-white bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/20 hover:border-white/50 focus-visible:border-white shadow-sm hover:shadow-lg backdrop-blur-md transition-all duration-250 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:transform-none cursor-pointer select-none"
+                aria-label="Buka Presensi Mandiri"
+              >
+                <ShieldCheck className="w-4 h-4 text-white group-hover:scale-105 transition-transform duration-250 ease-out motion-reduce:transform-none shrink-0" />
+                <span>Presensi Mandiri</span>
+              </button>
+            )}
+            {hasPermission(PERMISSIONS.DUTYBOOK_VIEW) && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab('duty-book')}
+                className="group relative inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[var(--theme-primary-text)] bg-white hover:bg-[var(--theme-primary-light)] active:bg-white/90 border border-transparent hover:border-[var(--theme-primary-border)] shadow-md hover:shadow-xl transition-all duration-250 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:transform-none cursor-pointer select-none"
+                aria-label="Buka Isi Buku Piket"
+              >
+                <BookOpenCheck className="w-4 h-4 text-[var(--theme-primary)] group-hover:scale-105 transition-transform duration-250 ease-out motion-reduce:transform-none shrink-0" />
+                <span>Isi Buku Piket</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Decorative background glow */}
-        <div className="absolute -right-12 -top-12 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -right-12 -top-12 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
       </div>
+
+      {/* PERSONAL DUTY STATUS CARD (TEACHER DUTY HUD) */}
+      <Card className="border-[var(--theme-primary-border)]/60 bg-linear-to-b from-[var(--theme-primary-light)]/40 to-white dark:from-[var(--theme-primary-light)]/20 dark:to-[var(--theme-card-bg)] shadow-md">
+        <CardContent className="p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--theme-primary-border)]/40 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-sm shadow-md shadow-[var(--theme-ring)] shrink-0">
+                {currentUser?.fullName?.charAt(0) || 'G'}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    Status Tugas Piket Anda Hari Ini
+                  </h2>
+                  <Badge variant={myTodaySchedule ? 'primary' : 'neutral'} size="sm">
+                    {todayName}, {formatIndonesianDate(new Date())}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {myTodaySchedule
+                    ? `Terjadwal di ${myTodaySchedule.ruangName} (${myTodaySchedule.jamMulai} - ${myTodaySchedule.jamSelesai} WIB)`
+                    : 'Tidak ada jadwal tugas piket untuk akun Anda hari ini.'}
+                </p>
+              </div>
+            </div>
+
+            {myTodaySchedule && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)]/50 text-xs font-semibold self-start sm:self-auto">
+                <Clock className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
+                <span>Shift Aktif Hari Ini</span>
+              </div>
+            )}
+          </div>
+
+          {/* Details & Status Pill Grid */}
+          {myTodaySchedule ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Box 1: Pos Piket */}
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)] border border-slate-200/80 dark:border-[var(--theme-card-border)] space-y-1">
+                <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
+                  <span>Pos & Ruang Piket</span>
+                </span>
+                <div className="text-sm font-bold text-slate-900 dark:text-white">
+                  {myTodaySchedule.ruangName}
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>{myTodaySchedule.jamMulai} - {myTodaySchedule.jamSelesai} WIB</span>
+                </div>
+              </div>
+
+              {/* Box 2: Status Presensi GPS */}
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)] border border-slate-200/80 dark:border-[var(--theme-card-border)] space-y-1">
+                <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Status Presensi GPS</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <Badge variant={myAttendance ? (myAttendance.status === 'DALAM_LOKASI' ? 'success' : 'warning') : 'neutral'} size="sm">
+                    {myAttendance ? (myAttendance.status === 'DALAM_LOKASI' ? 'Hadir (GPS Valid)' : 'Luar Radius') : 'Belum Presensi'}
+                  </Badge>
+                  {myAttendance && (
+                    <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                      {formatTime(myAttendance.jamMasuk)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {myAttendance
+                    ? `Dicatat secara terverifikasi (Jarak: ${Math.round(myAttendance.distance || 0)}m)`
+                    : 'Segera lakukan presensi mandiri saat tiba di pos piket'}
+                </div>
+              </div>
+
+              {/* Box 3: Status Jurnal Buku Piket */}
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)] border border-slate-200/80 dark:border-[var(--theme-card-border)] space-y-1">
+                <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                  <BookOpenCheck className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Jurnal Buku Piket Anda</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {myDutyBook ? (
+                    (() => {
+                      const displayInfo = getDutyBookDisplayStatus(myDutyBook.status);
+                      return (
+                        <Badge variant={displayInfo.variant} size="sm">
+                          {displayInfo.label}
+                        </Badge>
+                      );
+                    })()
+                  ) : (
+                    <Badge variant="neutral" size="sm">
+                      Belum Dibuat
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-400 truncate">
+                  {myDutyBook
+                    ? (myDutyBook.catatanPiket || 'Draft sedang dikerjakan')
+                    : 'Silakan isi jurnal 7 aspek situasi sekolah hari ini'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)]/80 border border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-slate-100 dark:bg-[var(--theme-card-bg)] text-slate-500 shrink-0">
+                  <Info className="w-5 h-5 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white">
+                    Anda tidak memiliki penugasan piket pada hari ini ({todayName}).
+                  </div>
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
+                    {myOtherSchedules.length > 0 ? (
+                      <>
+                        Jadwal piket Anda berikutnya: {' '}
+                        <strong>
+                          {myOtherSchedules.map((s) => `${s.hari} (${s.ruangName} • ${s.jamMulai}-${s.jamSelesai} WIB)`).join(', ')}
+                        </strong>
+                      </>
+                    ) : (
+                      'Belum ada jadwal piket yang ditugaskan ke ID akun Anda. Anda tetap dapat memantau jurnal atau situasi umum sekolah.'
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs self-start sm:self-center shrink-0"
+                onClick={() => onNavigateTab('schedules')}
+              >
+                Lihat Semua Jadwal
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* METRIC STAT CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -202,7 +366,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">Petugas Hari Ini</span>
-              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)] flex items-center justify-center">
                 <Users className="w-4 h-4" />
               </div>
             </div>
@@ -241,10 +405,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               </div>
             </div>
             <div className="text-xl font-bold text-slate-900 dark:text-white truncate">
-              {todayDutyBook ? todayDutyBook.status : 'BELUM DIBUAT'}
+              {todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status).label : 'Belum Dibuat'}
             </div>
             <div className="text-[11px] text-purple-600 font-medium">
-              {todayDutyBook ? 'Tahap Dokumen' : 'Siap Diisi'}
+              {todayDutyBook ? 'Tahap Jurnal' : 'Siap Diisi'}
             </div>
           </CardContent>
         </Card>
@@ -288,11 +452,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
         <div
           onClick={() => onNavigateTab('student-permits')}
-          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-blue-400 dark:hover:border-blue-600 transition-all cursor-pointer shadow-xs group"
+          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-[var(--theme-primary-border)] transition-all cursor-pointer shadow-xs group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-blue-600">Izin Keluar Kelas</span>
-            <div className="p-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600">
+            <span className="text-[11px] text-slate-500 font-semibold group-hover:text-[var(--theme-primary)]">Izin Keluar Kelas</span>
+            <div className="p-1 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)]">
               <FileText className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -346,7 +510,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 variant="outline"
                 size="sm"
                 className="text-xs"
-                leftIcon={<Plus className="w-3.5 h-3.5 text-blue-600" />}
+                leftIcon={<Plus className="w-3.5 h-3.5 text-[var(--theme-primary)]" />}
                 onClick={() => setIsAnnModalOpen(true)}
               >
                 + Buat Pengumuman
@@ -420,7 +584,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-blue-600"
+                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
                 onClick={() => onNavigateTab('schedules')}
               >
                 Lihat Semua Jadwal
@@ -431,7 +595,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             {todaySchedules.length > 0 ? (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {todaySchedules.map((item) => {
-                  const att = todayAttendance.find((a) => a.userId === item.petugasId || a.userName.includes(item.petugasName.split(' ')[0]));
+                  const att = todayAttendance.find((a) => a.userId === item.petugasId);
                   const isPresent = att?.status === 'DALAM_LOKASI';
 
                   return (
@@ -492,7 +656,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-blue-600"
+                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
                 onClick={() => onNavigateTab('incidents')}
               >
                 Buka Manajemen Insiden
@@ -506,7 +670,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                   <div key={inc.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-900 dark:text-white">
-                        [{inc.kategoriName}] {inc.lokasi}
+                        [{getIncidentCategoryDisplay(inc)}] {inc.lokasi}
                       </span>
                       <Badge
                         variant={inc.status === 'SELESAI' ? 'success' : inc.tingkatKeparahan === 'KRITIS' ? 'danger' : 'warning'}

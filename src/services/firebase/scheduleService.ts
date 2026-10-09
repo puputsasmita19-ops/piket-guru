@@ -1,8 +1,81 @@
 import { FirestoreService } from './firestoreService';
-import { ScheduleItem, DayOfWeek, ScheduleStatus } from '../../types';
+import { ScheduleItem, DayOfWeek, ScheduleStatus, UserProfile, UserRole } from '../../types';
 import { TeacherRecord, RoomRecord } from '../../types/master.types';
 
 export class ScheduleService {
+  /**
+   * Updates an existing schedule strictly preserving the same ID and existing metadata.
+   * Resolves officer and room details from authoritative server/master data.
+   * Rejects if the document does not exist (prevents reviving deleted schedules or creating duplicates).
+   */
+  public static async updateSchedule(
+    id: string,
+    payload: {
+      hari: DayOfWeek;
+      tanggal: string;
+      jamMulai: string;
+      jamSelesai: string;
+      petugasId: string;
+      ruangId: string;
+      status: ScheduleStatus;
+      keterangan?: string;
+    },
+    users: UserProfile[],
+    rooms: RoomRecord[],
+    actor: { id: string; name: string; role: UserRole }
+  ): Promise<ScheduleItem> {
+    const existing = await FirestoreService.getById<ScheduleItem>('schedules', id);
+    if (!existing) {
+      throw new Error('Jadwal piket tidak ditemukan atau telah dihapus sebelumnya. Pembaruan dibatalkan.');
+    }
+
+    // Resolve authoritative user and room from server master records
+    const targetUser = users.find((u) => u.id === payload.petugasId);
+    if (!targetUser) {
+      throw new Error('Petugas yang dipilih tidak ditemukan dalam daftar pengguna aktif.');
+    }
+    if (targetUser.isActive === false) {
+      throw new Error('Petugas yang dipilih sedang berstatus nonaktif.');
+    }
+
+    const targetRoom = rooms.find((r) => r.id === payload.ruangId);
+    if (!targetRoom) {
+      throw new Error('Pos/ruangan yang dipilih tidak valid.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const updated: ScheduleItem = {
+      ...existing,
+      id,
+      hari: payload.hari,
+      tanggal: payload.tanggal,
+      jamMulai: payload.jamMulai,
+      jamSelesai: payload.jamSelesai,
+      petugasId: targetUser.id,
+      petugasName: targetUser.fullName,
+      petugasRole: targetUser.role,
+      ruangId: targetRoom.id,
+      ruangName: targetRoom.name,
+      status: payload.status,
+      keterangan: payload.keterangan || '',
+      updatedAt: nowIso,
+    };
+
+    await FirestoreService.setDocument('schedules', id, updated);
+
+    await FirestoreService.logAudit({
+      userId: actor.id,
+      userName: actor.name,
+      role: actor.role,
+      action: 'UPDATE',
+      module: 'SCHEDULES',
+      recordId: id,
+      details: `Memperbarui jadwal piket: ${updated.petugasName} (${updated.hari} di ${updated.ruangName})`,
+    });
+
+    return updated;
+  }
+
   /**
    * Check for schedule conflicts:
    * 1. Same teacher assigned at same day/date with overlapping hours

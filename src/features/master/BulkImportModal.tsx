@@ -49,6 +49,7 @@ interface ParsedStudentRow {
   nama: string;
   kelas: string;
   jenisKelamin: 'L' | 'P';
+  noHpSiswa?: string;
   noHpOrangTua: string;
   alamat: string;
   isValid: boolean;
@@ -99,12 +100,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       a.click();
       URL.revokeObjectURL(url);
     } else {
-      const csvHeader = 'NISN,Nama Lengkap,Kelas,Jenis Kelamin,No HP Orang Tua,Alamat\n';
+      const csvHeader = 'NISN,Nama Lengkap,Kelas,Jenis Kelamin,No HP Siswa (Opsional),No HP Orang Tua,Alamat\n';
       const csvRows = [
-        '0081234561,Ahmad Pratama,X MIPA 1,L,081234567890,Jl. Merdeka No. 10',
-        '0081234562,Dewi Anggraini,X MIPA 1,P,081234567891,Jl. Melati No. 4',
-        '0081234563,Fajar Nugroho,X IPS 2,L,081234567892,Jl. Anggrek No. 12',
-        '0071234564,Siti Nurhaliza,XI MIPA 2,P,081234567893,Jl. Kenanga No. 8',
+        '0081234561,Ahmad Pratama,X MIPA 1,L,081298765401,081234567890,Jl. Merdeka No. 10',
+        '0081234562,Dewi Anggraini,X MIPA 1,P,,081234567891,Jl. Melati No. 4',
+        '0081234563,Fajar Nugroho,X IPS 2,L,081298765403,081234567892,Jl. Anggrek No. 12',
+        '0071234564,Siti Nurhaliza,XI MIPA 2,P,,081234567893,Jl. Kenanga No. 8',
       ].join('\n');
       const blob = new Blob([csvHeader + csvRows], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -128,13 +129,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       return;
     }
 
-    // Skip header line if it looks like header
-    const firstLineLower = lines[0].toLowerCase();
-    const dataLines =
-      firstLineLower.includes('nip') || firstLineLower.includes('nisn') || firstLineLower.includes('nama')
-        ? lines.slice(1)
-        : lines;
-
     const splitLine = (line: string): string[] => {
       // Support comma or semicolon
       const delimiter = line.includes(';') ? ';' : ',';
@@ -156,6 +150,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       values.push(current.trim().replace(/^"|"$/g, ''));
       return values;
     };
+
+    // Check if first line is header
+    const firstLineCols = splitLine(lines[0]).map((h) => h.toLowerCase().trim());
+    const isFirstLineHeader =
+      firstLineCols.some((h) => h.includes('nip') || h.includes('nisn') || h.includes('nama') || h.includes('kelas'));
+
+    const dataLines = isFirstLineHeader ? lines.slice(1) : lines;
 
     if (type === 'USERS_TEACHERS') {
       const rows: ParsedUserRow[] = dataLines.map((line) => {
@@ -200,18 +201,79 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       });
       setParsedUsers(rows);
     } else {
+      // Dynamic header index detection for students if header exists
+      let colIdxNisn = 0;
+      let colIdxNama = 1;
+      let colIdxKelas = 2;
+      let colIdxJk = 3;
+      let colIdxHpSiswa = -1;
+      let colIdxHpOrtu = 4;
+      let colIdxAlamat = 5;
+
+      if (isFirstLineHeader) {
+        const findIdx = (keywords: string[]) =>
+          firstLineCols.findIndex((h) => keywords.some((k) => h.includes(k)));
+
+        const nIdx = findIdx(['nisn']);
+        const nmIdx = findIdx(['nama']);
+        const klIdx = findIdx(['kelas', 'rombel']);
+        const jkIdx = findIdx(['jenis kelamin', 'gender', 'jk', 'l/p']);
+        const hpSiswaIdx = findIdx(['hp siswa', 'nomor hp siswa', 'telepon siswa', 'no hp siswa']);
+        const hpOrtuIdx = findIdx(['hp orang tua', 'hp ortu', 'no hp ortu', 'wali', 'orang tua']);
+        const almtIdx = findIdx(['alamat', 'domisili']);
+
+        if (nIdx !== -1) colIdxNisn = nIdx;
+        if (nmIdx !== -1) colIdxNama = nmIdx;
+        if (klIdx !== -1) colIdxKelas = klIdx;
+        if (jkIdx !== -1) colIdxJk = jkIdx;
+        if (hpSiswaIdx !== -1) colIdxHpSiswa = hpSiswaIdx;
+        if (hpOrtuIdx !== -1) colIdxHpOrtu = hpOrtuIdx;
+        if (almtIdx !== -1) colIdxAlamat = almtIdx;
+      }
+
       const rows: ParsedStudentRow[] = dataLines.map((line) => {
         const cols = splitLine(line);
-        const nisn = cols[0] || '';
-        const nama = cols[1] || '';
-        const kelas = cols[2] || 'X MIPA 1';
-        let gender = (cols[3] || 'L').toUpperCase().trim();
+
+        let nisn = '';
+        let nama = '';
+        let kelas = '';
+        let gender = 'L';
+        let noHpSiswa = '';
+        let noHpOrangTua = '-';
+        let alamat = '';
+
+        if (isFirstLineHeader && colIdxHpSiswa !== -1) {
+          nisn = cols[colIdxNisn] || '';
+          nama = cols[colIdxNama] || '';
+          kelas = cols[colIdxKelas] || 'X MIPA 1';
+          gender = (cols[colIdxJk] || 'L').toUpperCase().trim();
+          noHpSiswa = (cols[colIdxHpSiswa] || '').trim();
+          noHpOrangTua = cols[colIdxHpOrtu] || '-';
+          alamat = cols[colIdxAlamat] || '';
+        } else if (cols.length >= 7) {
+          // 7 columns format: NISN, Nama, Kelas, JK, No HP Siswa, No HP Ortu, Alamat
+          nisn = cols[0] || '';
+          nama = cols[1] || '';
+          kelas = cols[2] || 'X MIPA 1';
+          gender = (cols[3] || 'L').toUpperCase().trim();
+          noHpSiswa = (cols[4] || '').trim();
+          noHpOrangTua = cols[5] || '-';
+          alamat = cols[6] || '';
+        } else {
+          // Backward compatibility 6 columns format: NISN, Nama, Kelas, JK, No HP Ortu, Alamat
+          nisn = cols[0] || '';
+          nama = cols[1] || '';
+          kelas = cols[2] || 'X MIPA 1';
+          gender = (cols[3] || 'L').toUpperCase().trim();
+          noHpSiswa = '';
+          noHpOrangTua = cols[4] || '-';
+          alamat = cols[5] || '';
+        }
+
         if (gender !== 'L' && gender !== 'P') {
           gender = gender.startsWith('P') ? 'P' : 'L';
         }
         const jenisKelamin = gender as 'L' | 'P';
-        const noHpOrangTua = cols[4] || '-';
-        const alamat = cols[5] || '';
 
         let isValid = true;
         let error = '';
@@ -224,6 +286,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         } else if (!kelas) {
           isValid = false;
           error = 'Kelas tidak boleh kosong';
+        } else if (noHpSiswa && !/^(\+62|62|0)8[0-9]{7,13}$/.test(noHpSiswa)) {
+          isValid = false;
+          error = `Format No. HP Siswa "${noHpSiswa}" tidak valid (gunakan 08... atau +62...)`;
         }
 
         return {
@@ -231,6 +296,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           nama,
           kelas,
           jenisKelamin,
+          noHpSiswa,
           noHpOrangTua,
           alamat,
           isValid,
@@ -382,6 +448,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               nama: row.nama,
               kelas: row.kelas,
               jenisKelamin: row.jenisKelamin,
+              noHpSiswa: (row.noHpSiswa || '').trim(),
               noHpOrangTua: row.noHpOrangTua,
               alamat: row.alamat,
               isActive: true,
@@ -613,6 +680,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                       <th className="p-2">Nama Siswa</th>
                       <th className="p-2">Kelas</th>
                       <th className="p-2">L/P</th>
+                      <th className="p-2">No. HP Siswa</th>
                       <th className="p-2">No. HP Ortu</th>
                     </tr>
                   </thead>
@@ -635,6 +703,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                         <td className="p-2 font-bold whitespace-nowrap">{s.nama || '-'}</td>
                         <td className="p-2 whitespace-nowrap">{s.kelas || '-'}</td>
                         <td className="p-2 whitespace-nowrap">{s.jenisKelamin}</td>
+                        <td className="p-2 whitespace-nowrap font-mono">{s.noHpSiswa || '-'}</td>
                         <td className="p-2 whitespace-nowrap font-mono">{s.noHpOrangTua || '-'}</td>
                       </tr>
                     ))}

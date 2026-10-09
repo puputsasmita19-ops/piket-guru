@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { StudentRecord } from '../../types/master.types';
-import { User, Phone, MapPin, Hash, Sparkles } from 'lucide-react';
+import { User, Phone, Smartphone, MapPin, Hash, Sparkles } from 'lucide-react';
 
 interface StudentFormModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface StudentFormModalProps {
     kelas: string;
     jenisKelamin: 'L' | 'P';
     noHpOrangTua: string;
+    noHpSiswa?: string;
     alamat?: string;
     isActive: boolean;
   }) => Promise<void>;
@@ -31,6 +32,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [kelas, setKelas] = useState('X MIPA 1');
   const [jenisKelamin, setJenisKelamin] = useState<'L' | 'P'>('L');
   const [noHpOrangTua, setNoHpOrangTua] = useState('');
+  const [noHpSiswa, setNoHpSiswa] = useState('');
   const [alamat, setAlamat] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,6 +45,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setKelas(editingStudent.kelas || 'X MIPA 1');
       setJenisKelamin(editingStudent.jenisKelamin || 'L');
       setNoHpOrangTua(editingStudent.noHpOrangTua || '');
+      setNoHpSiswa(editingStudent.noHpSiswa || '');
       setAlamat(editingStudent.alamat || '');
       setIsActive(editingStudent.isActive !== false);
     } else {
@@ -51,6 +54,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setKelas('X MIPA 1');
       setJenisKelamin('L');
       setNoHpOrangTua('');
+      setNoHpSiswa('');
       setAlamat('');
       setIsActive(true);
     }
@@ -72,6 +76,16 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       return;
     }
 
+    // Validate noHpSiswa if provided
+    const cleanNoHpSiswa = noHpSiswa.trim();
+    if (cleanNoHpSiswa) {
+      const phoneRegex = /^(\+62|62|0)8[0-9]{7,13}$/;
+      if (!phoneRegex.test(cleanNoHpSiswa)) {
+        setError('Format Nomor HP Siswa tidak valid. Gunakan awalan 08... atau +62... (contoh: 081234567890)');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
@@ -82,6 +96,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
         kelas: kelas.trim(),
         jenisKelamin,
         noHpOrangTua: noHpOrangTua.trim(),
+        noHpSiswa: cleanNoHpSiswa || '',
         alamat: alamat.trim(),
         isActive,
       });
@@ -140,24 +155,24 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Nama Lengkap Siswa *
-          </label>
-          <div className="relative">
-            <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              required
-              value={nama}
-              onChange={(e) => setNama(e.target.value)}
-              placeholder="Contoh: Muhammad Rizky Pratama"
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
-            />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2 space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Nama Lengkap Siswa *
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                required
+                value={nama}
+                onChange={(e) => setNama(e.target.value)}
+                placeholder="Contoh: Muhammad Rizky Pratama"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Jenis Kelamin *
@@ -170,6 +185,28 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               <option value="L">Laki-laki (L)</option>
               <option value="P">Perempuan (P)</option>
             </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Nomor HP Siswa
+              </label>
+              <span className="text-[10px] text-slate-400 font-semibold">(Opsional)</span>
+            </div>
+            <div className="relative">
+              <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="tel"
+                value={noHpSiswa}
+                onChange={(e) => setNoHpSiswa(e.target.value)}
+                placeholder="0812xxxxxxxx atau +62..."
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400">Format 08... atau +62... Kosongkan jika siswa tidak memiliki HP.</p>
           </div>
 
           <div className="space-y-1">
@@ -187,6 +224,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
               />
             </div>
+            <p className="text-[10px] text-slate-400">Kontak utama notifikasi & perizinan wali.</p>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileBarChart2,
   Calendar,
@@ -18,6 +18,8 @@ import {
   GraduationCap,
   Clock,
   ShieldAlert,
+  CalendarRange,
+  ChevronDown,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -40,15 +42,25 @@ import {
   AttendanceRecord,
   SchoolSettings,
 } from '../../types';
-import { DutyBookRecord } from '../../types/dutyBook.types';
-import { IncidentRecord } from '../../types/incident.types';
+import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
+import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { TeacherRecord, IncidentCategoryRecord } from '../../types/master.types';
-import { StudentTardyRecord } from '../../types/studentTardy.types';
-import { StudentPermitRecord } from '../../types/studentPermit.types';
-import { TeacherSubstitutionRecord } from '../../types/substitution.types';
-import { VisitorRecord } from '../../types/visitor.types';
+import { StudentTardyRecord, getTardyReasonDisplay, getDisciplineActionDisplay } from '../../types/studentTardy.types';
+import { StudentPermitRecord, getStudentPermitTypeDisplay } from '../../types/studentPermit.types';
+import { TeacherSubstitutionRecord, getSubstitutionReasonDisplay } from '../../types/substitution.types';
+import { VisitorRecord, getVisitorCategoryDisplay } from '../../types/visitor.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate } from '../../utils/dateUtils';
+import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
+import {
+  ReportPeriodMode,
+  INDONESIAN_MONTHS,
+  getWeeklyPeriod,
+  getMonthlyPeriod,
+  getSemesterPeriod,
+  getYearlyPeriod,
+  validateDateRange,
+  formatISODate,
+} from '../../utils/reportPeriodUtils';
 
 type ReportTab =
   | 'attendance'
@@ -75,20 +87,28 @@ export const ReportsPreview: React.FC = () => {
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
 
-  // Filter Date Range (Default to dynamic current month)
-  const [startDate, setStartDate] = useState<string>(() => {
+  // Period Mode State: 'monthly' | 'weekly' | 'semester' | 'yearly' | 'custom'
+  const [periodMode, setPeriodMode] = useState<ReportPeriodMode>('monthly');
+
+  // Sub-inputs for each mode
+  const [weeklyRefDate, setWeeklyRefDate] = useState<string>(() => getTodayISODate());
+  const [monthlyYear, setMonthlyYear] = useState<number>(() => new Date().getFullYear());
+  const [monthlyMonth, setMonthlyMonth] = useState<number>(() => new Date().getMonth() + 1);
+  const [semesterAcademicYear, setSemesterAcademicYear] = useState<string>(
+    () => DEFAULT_SCHOOL_SETTINGS.academicSemester?.academicYear || '2026/2027'
+  );
+  const [semesterType, setSemesterType] = useState<'GANJIL' | 'GENAP'>('GANJIL');
+  const [yearlyYear, setYearlyYear] = useState<number>(() => new Date().getFullYear());
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}-01`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   });
-  const [endDate, setEndDate] = useState<string>(() => {
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-    return `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   });
+
   const [activeTab, setActiveTab] = useState<ReportTab>('attendance');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -98,7 +118,12 @@ export const ReportsPreview: React.FC = () => {
   // Subscriptions to all operational collections
   useEffect(() => {
     FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
+      if (data) {
+        setSettings(data);
+        if (data.academicSemester?.academicYear) {
+          setSemesterAcademicYear(data.academicSemester.academicYear);
+        }
+      }
     });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
@@ -126,110 +151,192 @@ export const ReportsPreview: React.FC = () => {
     };
   }, []);
 
+  // Compute Active Date Range & Period Description based on periodMode
+  const { startDate, endDate, periodLabel } = useMemo(() => {
+    if (periodMode === 'weekly') {
+      const res = getWeeklyPeriod(weeklyRefDate);
+      return {
+        startDate: res.startDate,
+        endDate: res.endDate,
+        periodLabel: res.label,
+      };
+    } else if (periodMode === 'monthly') {
+      const res = getMonthlyPeriod(monthlyYear, monthlyMonth);
+      return {
+        startDate: res.startDate,
+        endDate: res.endDate,
+        periodLabel: res.label,
+      };
+    } else if (periodMode === 'semester') {
+      const res = getSemesterPeriod(semesterAcademicYear, semesterType, settings);
+      return {
+        startDate: res.startDate,
+        endDate: res.endDate,
+        periodLabel: `${res.label} (${formatIndonesianDate(res.startDate)} s.d ${formatIndonesianDate(res.endDate)})`,
+      };
+    } else if (periodMode === 'yearly') {
+      const res = getYearlyPeriod(yearlyYear);
+      return {
+        startDate: res.startDate,
+        endDate: res.endDate,
+        periodLabel: `Tahun Kalender ${yearlyYear} (${formatIndonesianDate(res.startDate)} s.d ${formatIndonesianDate(res.endDate)})`,
+      };
+    } else {
+      // custom
+      return {
+        startDate: customStartDate,
+        endDate: customEndDate,
+        periodLabel: `${formatIndonesianDate(customStartDate)} s.d ${formatIndonesianDate(customEndDate)}`,
+      };
+    }
+  }, [
+    periodMode,
+    weeklyRefDate,
+    monthlyYear,
+    monthlyMonth,
+    semesterAcademicYear,
+    semesterType,
+    yearlyYear,
+    customStartDate,
+    customEndDate,
+    settings,
+  ]);
+
+  const dateValidation = validateDateRange(startDate, endDate);
+
   // Aggregated Summaries
-  const attendanceSummaries = ReportService.getTeacherAttendanceSummary(
-    schedules,
-    attendanceList,
-    teachers,
-    startDate,
-    endDate
-  );
+  const attendanceSummaries = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return ReportService.getTeacherAttendanceSummary(
+      schedules,
+      attendanceList,
+      teachers,
+      startDate,
+      endDate
+    );
+  }, [schedules, attendanceList, teachers, startDate, endDate, dateValidation.isValid]);
 
-  const incidentSummaries = ReportService.getIncidentCategorySummary(
-    incidents,
-    categories,
-    startDate,
-    endDate
-  );
+  const incidentSummaries = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return ReportService.getIncidentCategorySummary(
+      incidents,
+      categories,
+      startDate,
+      endDate
+    );
+  }, [incidents, categories, startDate, endDate, dateValidation.isValid]);
 
-  const filteredIncidents = incidents.filter(
-    (i) => i.tanggal >= startDate && i.tanggal <= endDate &&
-      (searchQuery === '' ||
-        i.uraian?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        i.lokasi?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        i.kategoriName?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredIncidents = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return incidents.filter(
+      (i) =>
+        i.tanggal >= startDate &&
+        i.tanggal <= endDate &&
+        (searchQuery === '' ||
+          i.uraian?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          i.lokasi?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getIncidentCategoryDisplay(i).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          i.kategoriName?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [incidents, startDate, endDate, searchQuery, dateValidation.isValid]);
+
   const totalIncidents = filteredIncidents.length;
   const resolvedIncidents = filteredIncidents.filter((i) => i.status === 'SELESAI').length;
 
-  const filteredDutyBooks = dutyBooks.filter(
-    (b) => b.tanggal >= startDate && b.tanggal <= endDate &&
-      (searchQuery === '' ||
-        b.petugasName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.ruangName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.catatanPiket?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredDutyBooks = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return dutyBooks.filter(
+      (b) =>
+        b.tanggal >= startDate &&
+        b.tanggal <= endDate &&
+        (searchQuery === '' ||
+          b.petugasName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          b.ruangName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          b.catatanPiket?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [dutyBooks, startDate, endDate, searchQuery, dateValidation.isValid]);
 
-  // New Analytics & Filtered Collections
-  const tardyAnalytics = ReportService.getStudentTardyAnalytics(studentTardiness, startDate, endDate);
-  const filteredTardiness = studentTardiness.filter(
-    (r) => r.tanggal >= startDate && r.tanggal <= endDate &&
-      (searchQuery === '' ||
-        r.namaSiswa?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.nisn?.includes(searchQuery) ||
-        r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.alasan?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Analytics & Filtered Collections
+  const tardyAnalytics = useMemo(() => {
+    if (!dateValidation.isValid) return { totalTardy: 0, byClass: {}, byReason: {} };
+    return ReportService.getStudentTardyAnalytics(studentTardiness, startDate, endDate);
+  }, [studentTardiness, startDate, endDate, dateValidation.isValid]);
 
-  const permitAnalytics = ReportService.getStudentPermitAnalytics(studentPermits, startDate, endDate);
-  const filteredPermits = studentPermits.filter(
-    (r) => r.tanggal >= startDate && r.tanggal <= endDate &&
-      (searchQuery === '' ||
-        r.namaSiswa?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.alasan?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.penjemput?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredTardiness = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return studentTardiness.filter(
+      (r) =>
+        r.tanggal >= startDate &&
+        r.tanggal <= endDate &&
+        (searchQuery === '' ||
+          r.namaSiswa?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.nisn?.includes(searchQuery) ||
+          r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getTardyReasonDisplay(r).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getDisciplineActionDisplay(r).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.alasan?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [studentTardiness, startDate, endDate, searchQuery, dateValidation.isValid]);
 
-  const substitutionAnalytics = ReportService.getSubstitutionAnalytics(substitutions, startDate, endDate);
-  const filteredSubstitutions = substitutions.filter(
-    (r) => r.tanggal >= startDate && r.tanggal <= endDate &&
-      (searchQuery === '' ||
-        r.guruBerhalanganName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.guruPenggantiName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.mataPelajaran?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const permitAnalytics = useMemo(() => {
+    if (!dateValidation.isValid) return { totalPermits: 0, byType: {}, byClass: {} };
+    return ReportService.getStudentPermitAnalytics(studentPermits, startDate, endDate);
+  }, [studentPermits, startDate, endDate, dateValidation.isValid]);
 
-  const visitorAnalytics = ReportService.getVisitorAnalytics(visitors, startDate, endDate);
-  const filteredVisitors = visitors.filter(
-    (r) => r.tanggal >= startDate && r.tanggal <= endDate &&
-      (searchQuery === '' ||
-        r.namaTamu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.instansiAsal?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.tujuanBertemu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.keperluan?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredPermits = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return studentPermits.filter(
+      (r) =>
+        r.tanggal >= startDate &&
+        r.tanggal <= endDate &&
+        (searchQuery === '' ||
+          r.namaSiswa?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getStudentPermitTypeDisplay(r).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.alasan?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.penjemput?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [studentPermits, startDate, endDate, searchQuery, dateValidation.isValid]);
 
-  const periodLabel = `${formatIndonesianDate(startDate)} s.d ${formatIndonesianDate(endDate)}`;
+  const substitutionAnalytics = useMemo(() => {
+    if (!dateValidation.isValid) return { totalSubstitutions: 0, completed: 0, inProgress: 0, pending: 0 };
+    return ReportService.getSubstitutionAnalytics(substitutions, startDate, endDate);
+  }, [substitutions, startDate, endDate, dateValidation.isValid]);
 
-  // Quick Preset Handlers
-  const handleSetQuickPeriod = (preset: 'today' | '7days' | 'month' | 'lastMonth') => {
-    const today = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const filteredSubstitutions = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return substitutions.filter(
+      (r) =>
+        r.tanggal >= startDate &&
+        r.tanggal <= endDate &&
+        (searchQuery === '' ||
+          r.guruBerhalanganName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.guruPenggantiName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.mataPelajaran?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.kelas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getSubstitutionReasonDisplay(r).toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [substitutions, startDate, endDate, searchQuery, dateValidation.isValid]);
 
-    if (preset === 'today') {
-      const iso = toISO(today);
-      setStartDate(iso);
-      setEndDate(iso);
-    } else if (preset === '7days') {
-      const past7 = new Date(today);
-      past7.setDate(today.getDate() - 7);
-      setStartDate(toISO(past7));
-      setEndDate(toISO(today));
-    } else if (preset === 'month') {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setStartDate(toISO(firstDay));
-      setEndDate(toISO(lastDay));
-    } else if (preset === 'lastMonth') {
-      const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
-      setStartDate(toISO(firstDay));
-      setEndDate(toISO(lastDay));
-    }
-  };
+  const visitorAnalytics = useMemo(() => {
+    if (!dateValidation.isValid) return { totalVisitors: 0, currentlyVisiting: 0, completed: 0, rejected: 0 };
+    return ReportService.getVisitorAnalytics(visitors, startDate, endDate);
+  }, [visitors, startDate, endDate, dateValidation.isValid]);
+
+  const filteredVisitors = useMemo(() => {
+    if (!dateValidation.isValid) return [];
+    return visitors.filter(
+      (r) =>
+        r.tanggal >= startDate &&
+        r.tanggal <= endDate &&
+        (searchQuery === '' ||
+          r.namaTamu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.instansiAsal?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getVisitorCategoryDisplay(r).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.tujuanBertemu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.keperluan?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [visitors, startDate, endDate, searchQuery, dateValidation.isValid]);
 
   // --- EXPORT TO CSV / EXCEL HANDLERS ---
   const handleExportAttendanceCsv = async () => {
@@ -264,7 +371,7 @@ export const ReportsPreview: React.FC = () => {
       i.id,
       i.tanggal,
       i.waktu,
-      i.kategoriName,
+      getIncidentCategoryDisplay(i),
       i.tingkatKeparahan,
       i.lokasi,
       i.pihakTerlibat,
@@ -300,7 +407,7 @@ export const ReportsPreview: React.FC = () => {
       b.kondisiSiswa || '-',
       b.catatanPiket || '-',
       b.tindakLanjut || '-',
-      b.status,
+      getDutyBookDisplayStatus(b.status).label,
     ]);
 
     ExportUtils.exportToCsv(`Rekap_Jurnal_Buku_Piket_${startDate}_${endDate}`, headers, rows);
@@ -316,7 +423,7 @@ export const ReportsPreview: React.FC = () => {
   };
 
   const handleExportTardinessCsv = async () => {
-    const headers = ['No', 'ID', 'Tanggal', 'Jam Tiba', 'Menit Terlambat', 'NISN', 'Nama Siswa', 'Kelas', 'Alasan', 'Keterangan', 'Bentuk Pembinaan', 'Poin Pelanggaran', 'Status', 'Petugas Piket'];
+    const headers = ['No', 'ID', 'Tanggal', 'Jam Tiba', 'Menit Terlambat', 'NISN', 'Nama Siswa', 'Kelas', 'Alasan', 'Bentuk Pembinaan', 'Poin Pelanggaran', 'Status', 'Petugas Piket'];
     const rows = filteredTardiness.map((r, idx) => [
       idx + 1,
       r.id,
@@ -326,9 +433,8 @@ export const ReportsPreview: React.FC = () => {
       `'${r.nisn}`,
       r.namaSiswa,
       r.kelas,
-      r.alasan,
-      r.keteranganAlasan || '-',
-      r.pembinaan,
+      getTardyReasonDisplay(r),
+      getDisciplineActionDisplay(r),
       r.poinPelanggaran,
       r.status,
       r.petugasPiketName,
@@ -357,7 +463,7 @@ export const ReportsPreview: React.FC = () => {
       `'${r.nisn}`,
       r.namaSiswa,
       r.kelas,
-      r.jenisIzin,
+      getStudentPermitTypeDisplay(r),
       r.alasan,
       r.penjemput,
       r.namaPenjemput || '-',
@@ -389,7 +495,7 @@ export const ReportsPreview: React.FC = () => {
       r.mataPelajaran,
       r.kelas,
       r.jamPelajaran,
-      r.alasan,
+      getSubstitutionReasonDisplay(r),
       r.guruPenggantiName || 'Belum Ditugaskan',
       r.materiDanTugasSiswa,
       r.status,
@@ -418,9 +524,9 @@ export const ReportsPreview: React.FC = () => {
       r.jamKeluar || '-',
       r.namaTamu,
       r.instansiAsal,
-      r.kategori,
-      r.noHp,
-      `'${r.nomorIdentitas}`,
+      getVisitorCategoryDisplay(r),
+      r.noHp || '-',
+      r.nomorIdentitas ? `'${r.nomorIdentitas}` : '-',
       r.nomorBadge,
       r.tujuanBertemu,
       r.keperluan,
@@ -465,11 +571,11 @@ export const ReportsPreview: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <FileBarChart2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <FileBarChart2 className="w-6 h-6 text-[var(--theme-primary)]" />
             Laporan, Rekapitulasi & Analitik Piket
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pusat analitik kepatuhan tugas piket, kedisiplinan siswa, layanan inval, buku tamu, dan pencetakan laporan bulanan resmi
+            Pusat rekapitulasi kepatuhan piket, kedisiplinan siswa, layanan inval, buku tamu, dan pencetakan dokumen resmi
           </p>
         </div>
 
@@ -480,7 +586,7 @@ export const ReportsPreview: React.FC = () => {
             leftIcon={<Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
             onClick={() => setIsPrintModalOpen(true)}
           >
-            Cetak Rekap Bulanan Resmi
+            Pratinjau & Cetak Rekap Resmi
           </Button>
 
           <Button
@@ -494,78 +600,271 @@ export const ReportsPreview: React.FC = () => {
         </div>
       </div>
 
-      {/* DATE RANGE FILTER BAR & SEARCH */}
+      {/* FILTER PERIODE REKAP (5 PILIHAN PERIODE LENGKAP) */}
       <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {/* Mode Selector Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-              <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Rentang Periode Laporan:</span>
+              <CalendarRange className="w-4 h-4 text-[var(--theme-primary)]" />
+              <span>Pilihan Periode Rekapitulasi:</span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 text-xs">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                />
-                <span className="text-slate-400">s/d</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                />
-              </div>
-
-              {/* Quick Filter Buttons */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleSetQuickPeriod('today')}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                >
-                  Hari Ini
-                </button>
-                <button
-                  onClick={() => handleSetQuickPeriod('7days')}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                >
-                  7 Hari
-                </button>
-                <button
-                  onClick={() => handleSetQuickPeriod('month')}
-                  className="px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-100 cursor-pointer"
-                >
-                  Bulan Ini
-                </button>
-                <button
-                  onClick={() => handleSetQuickPeriod('lastMonth')}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                >
-                  Bulan Lalu
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+              <button
+                onClick={() => setPeriodMode('weekly')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  periodMode === 'weekly'
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Mingguan
+              </button>
+              <button
+                onClick={() => setPeriodMode('monthly')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  periodMode === 'monthly'
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Bulanan
+              </button>
+              <button
+                onClick={() => setPeriodMode('semester')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  periodMode === 'semester'
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Semester
+              </button>
+              <button
+                onClick={() => setPeriodMode('yearly')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  periodMode === 'yearly'
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Tahunan
+              </button>
+              <button
+                onClick={() => setPeriodMode('custom')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  periodMode === 'custom'
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Rentang Khusus
+              </button>
             </div>
           </div>
 
-          {/* Search box */}
-          <div className="relative pt-1 border-t border-slate-100 dark:border-slate-800/80">
-            <Search className="w-4 h-4 absolute left-3 top-4 text-slate-400" />
+          {/* Dynamic Inputs according to selected Period Mode */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1">
+              {/* 1. MINGGUAN */}
+              {periodMode === 'weekly' && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Pilih Tanggal Acuan Minggu:
+                    </label>
+                    <input
+                      type="date"
+                      value={weeklyRefDate}
+                      onChange={(e) => setWeeklyRefDate(e.target.value)}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="pt-4 text-slate-500 text-[11px]">
+                    Sistem otomatis menghitung rentang <strong>Senin s.d Minggu</strong> pada pekan tersebut.
+                  </div>
+                </div>
+              )}
+
+              {/* 2. BULANAN */}
+              {periodMode === 'monthly' && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Pilih Bulan:
+                    </label>
+                    <select
+                      value={monthlyMonth}
+                      onChange={(e) => setMonthlyMonth(Number(e.target.value))}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium cursor-pointer"
+                    >
+                      {INDONESIAN_MONTHS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Tahun:
+                    </label>
+                    <input
+                      type="number"
+                      min={2020}
+                      max={2035}
+                      value={monthlyYear}
+                      onChange={(e) => setMonthlyYear(Number(e.target.value) || new Date().getFullYear())}
+                      className="p-2 w-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono text-center"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3. SEMESTER */}
+              {periodMode === 'semester' && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Tahun Ajaran:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: 2026/2027"
+                      value={semesterAcademicYear}
+                      onChange={(e) => setSemesterAcademicYear(e.target.value)}
+                      className="p-2 w-32 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Semester:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSemesterType('GANJIL')}
+                        className={`px-3 py-2 rounded-xl font-bold border text-xs cursor-pointer ${
+                          semesterType === 'GANJIL'
+                            ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] border-[var(--theme-primary)]'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        Semester Ganjil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSemesterType('GENAP')}
+                        className={`px-3 py-2 rounded-xl font-bold border text-xs cursor-pointer ${
+                          semesterType === 'GENAP'
+                            ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] border-[var(--theme-primary)]'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        Semester Genap
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. TAHUNAN */}
+              {periodMode === 'yearly' && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Tahun Kalender:
+                    </label>
+                    <input
+                      type="number"
+                      min={2020}
+                      max={2035}
+                      value={yearlyYear}
+                      onChange={(e) => setYearlyYear(Number(e.target.value) || new Date().getFullYear())}
+                      className="p-2 w-28 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono text-center font-bold"
+                    />
+                  </div>
+                  <div className="pt-4 text-slate-500 text-[11px]">
+                    Mencakup seluruh 1 Januari s.d 31 Desember pada tahun tersebut.
+                  </div>
+                </div>
+              )}
+
+              {/* 5. RENTANG KHUSUS */}
+              {periodMode === 'custom' && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Tanggal Mulai:
+                    </label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+
+                  <span className="pt-4 text-slate-400 font-bold">s/d</span>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Tanggal Selesai:
+                    </label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Active Range Summary Badge */}
+            <div className="shrink-0 p-3 rounded-xl bg-[var(--theme-primary-light)] border border-[var(--theme-primary-border)] text-xs space-y-1">
+              <span className="text-[10px] font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] uppercase tracking-wide block">
+                Rentang Tanggal Efektif:
+              </span>
+              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 font-mono">
+                <span>{startDate}</span>
+                <span className="text-slate-400">s/d</span>
+                <span>{endDate}</span>
+              </div>
+              <p className="text-[11px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-sans font-medium">
+                {periodLabel}
+              </p>
+            </div>
+          </div>
+
+          {/* Date Validation Alert if any */}
+          {!dateValidation.isValid && (
+            <div className="p-3 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-900 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{dateValidation.errorMessage}</span>
+            </div>
+          )}
+
+          {/* Search bar */}
+          <div className="relative pt-2 border-t border-slate-100 dark:border-slate-800/80">
+            <Search className="w-4 h-4 absolute left-3 top-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Cari nama siswa, guru, kelas, keterangan, atau nomor identitas..."
+              placeholder="Cari nama siswa, guru, kelas, uraian kejadian, tamu, atau nomor identitas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] focus:bg-white dark:focus:bg-[var(--theme-input-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
             />
           </div>
         </CardContent>
       </Card>
 
       {/* REPORT TABS NAVIGATION (7 TABS TOTAL) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 dark:border-slate-800 scrollbar-none">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 dark:border-[var(--theme-card-border)] scrollbar-none">
         {[
           { id: 'attendance', label: 'Presensi Guru', icon: Users, count: attendanceSummaries.length },
           { id: 'incidents', label: 'Insiden Kejadian', icon: AlertTriangle, count: totalIncidents },
@@ -586,7 +885,7 @@ export const ReportsPreview: React.FC = () => {
               }}
               className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs whitespace-nowrap transition-all cursor-pointer ${
                 isActive
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30 rounded-t-xl'
+                  ? 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] bg-[var(--theme-primary-light)]/50 dark:bg-[var(--theme-primary-light)]/20 rounded-t-xl'
                   : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -595,8 +894,8 @@ export const ReportsPreview: React.FC = () => {
               <span
                 className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                   isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)]'
+                    : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {tab.count}
@@ -629,7 +928,7 @@ export const ReportsPreview: React.FC = () => {
             <Card>
               <CardContent className="p-4">
                 <span className="text-slate-500 text-xs block">Kehadiran Valid GPS</span>
-                <strong className="text-xl font-bold text-blue-600">
+                <strong className="text-xl font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">
                   {attendanceSummaries.reduce((a, c) => a + c.hadir, 0)} Shift
                 </strong>
               </CardContent>
@@ -663,37 +962,45 @@ export const ReportsPreview: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {attendanceSummaries.map((item) => (
-                    <tr key={item.teacherId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="p-4 font-bold text-slate-900 dark:text-white">
-                        {item.fullName}
-                      </td>
-                      <td className="p-4 font-mono text-slate-500 text-[11px]">
-                        {item.nip}
-                      </td>
-                      <td className="p-4 text-center font-mono">
-                        {item.totalShift}
-                      </td>
-                      <td className="p-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {item.hadir}
-                      </td>
-                      <td className="p-4 text-center font-mono text-amber-600">
-                        {item.terlambatOrOutside}
-                      </td>
-                      <td className="p-4 text-center font-bold">
-                        <span className={`px-2 py-1 rounded-lg text-xs ${
-                          item.percentage >= 80 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          {item.percentage}%
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <Badge variant={item.percentage >= 80 ? 'success' : 'warning'} size="sm">
-                          {item.percentage >= 80 ? 'Sangat Baik' : 'Cukup'}
-                        </Badge>
+                  {attendanceSummaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-slate-400">
+                        Tidak ada data jadwal piket pada periode ini.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    attendanceSummaries.map((item) => (
+                      <tr key={item.teacherId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="p-4 font-bold text-slate-900 dark:text-white">
+                          {item.fullName}
+                        </td>
+                        <td className="p-4 font-mono text-slate-500 text-[11px]">
+                          {item.nip}
+                        </td>
+                        <td className="p-4 text-center font-mono">
+                          {item.totalShift}
+                        </td>
+                        <td className="p-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {item.hadir}
+                        </td>
+                        <td className="p-4 text-center font-mono text-amber-600">
+                          {item.terlambatOrOutside}
+                        </td>
+                        <td className="p-4 text-center font-bold">
+                          <span className={`px-2 py-1 rounded-lg text-xs ${
+                            item.percentage >= 80 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {item.percentage}%
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <Badge variant={item.percentage >= 80 ? 'success' : 'warning'} size="sm">
+                            {item.percentage >= 80 ? 'Sangat Baik' : 'Cukup'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </CardContent>
@@ -747,32 +1054,42 @@ export const ReportsPreview: React.FC = () => {
                   {filteredIncidents.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-6 text-center text-slate-400">
-                        Tidak ada catatan insiden sesuai filter periode dan kata kunci.
+                        Tidak ada catatan insiden kejadian pada periode ini.
                       </td>
                     </tr>
                   ) : (
-                    filteredIncidents.map((i) => (
-                      <tr key={i.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                    filteredIncidents.map((inc) => (
+                      <tr key={inc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                         <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatIndonesianDate(i.tanggal)} ({i.waktu})
+                          {formatIndonesianDate(inc.tanggal)}
+                          <span className="block text-[11px] text-slate-400 font-normal">{inc.waktu} WIB</span>
                         </td>
-                        <td className="p-4 font-bold text-slate-900 dark:text-white">
-                          {i.kategoriName}
+                        <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                          {getIncidentCategoryDisplay(inc)}
                         </td>
-                        <td className="p-4 text-slate-800 dark:text-slate-200 max-w-xs truncate">
-                          {i.uraian}
+                        <td className="p-4 text-slate-700 dark:text-slate-300 max-w-xs break-words">
+                          {inc.uraian}
                         </td>
                         <td className="p-4 text-slate-500">
-                          {i.lokasi}
+                          {inc.lokasi}
                         </td>
                         <td className="p-4">
-                          <Badge variant={i.tingkatKeparahan === 'KRITIS' ? 'danger' : 'warning'} size="sm">
-                            {i.tingkatKeparahan}
+                          <Badge
+                            variant={
+                              inc.tingkatKeparahan === 'KRITIS'
+                                ? 'danger'
+                                : inc.tingkatKeparahan === 'TINGGI'
+                                ? 'warning'
+                                : 'info'
+                            }
+                            size="sm"
+                          >
+                            {inc.tingkatKeparahan}
                           </Badge>
                         </td>
                         <td className="p-4">
-                          <Badge variant={i.status === 'SELESAI' ? 'success' : 'primary'} size="sm">
-                            {i.status}
+                          <Badge variant={inc.status === 'SELESAI' ? 'success' : 'warning'} size="sm">
+                            {inc.status.replace(/_/g, ' ')}
                           </Badge>
                         </td>
                       </tr>
@@ -789,45 +1106,51 @@ export const ReportsPreview: React.FC = () => {
       {activeTab === 'dutyBooks' && (
         <Card>
           <CardHeader
-            title={`Rekapitulasi Jurnal Buku Piket Digital (${periodLabel})`}
-            subtitle="Daftar pengarsipan buku piket dan status verifikasi kepala sekolah"
+            title={`Arsip Catatan Jurnal Buku Piket (${periodLabel})`}
+            subtitle="Pencatatan laporan kondisi lingkungan, kebersihan, dan keamanan harian"
           />
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
                 <tr>
-                  <th className="p-4">Hari & Tanggal</th>
+                  <th className="p-4">Tanggal & Shift</th>
                   <th className="p-4">Petugas Piket</th>
                   <th className="p-4">Pos / Ruangan</th>
-                  <th className="p-4">Ringkasan Situasi</th>
-                  <th className="p-4">Status Buku</th>
+                  <th className="p-4">Kondisi Keamanan & Fasilitas</th>
+                  <th className="p-4">Catatan Observasi Piket</th>
+                  <th className="p-4">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredDutyBooks.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-slate-400">
+                    <td colSpan={6} className="p-6 text-center text-slate-400">
                       Tidak ada catatan jurnal buku piket pada periode ini.
                     </td>
                   </tr>
                 ) : (
                   filteredDutyBooks.map((b) => (
                     <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {b.hari}, {formatIndonesianDate(b.tanggal)}
+                      <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {formatIndonesianDate(b.tanggal)}
+                        <span className="block text-[11px] text-slate-400 font-normal">{b.jamMulai} - {b.jamSelesai}</span>
                       </td>
-                      <td className="p-4 font-semibold text-slate-800 dark:text-slate-200">
+                      <td className="p-4 font-bold text-slate-900 dark:text-white">
                         {b.petugasName}
                       </td>
-                      <td className="p-4 text-blue-600 dark:text-blue-400">
+                      <td className="p-4 text-slate-700 dark:text-slate-300">
                         {b.ruangName}
                       </td>
-                      <td className="p-4 text-slate-600 dark:text-slate-400 max-w-sm truncate">
+                      <td className="p-4 text-slate-600 dark:text-slate-400">
+                        <div>Keamanan: <strong className="text-slate-800 dark:text-slate-200">{b.kondisiKeamanan || '-'}</strong></div>
+                        <div>Kebersihan: <strong className="text-slate-800 dark:text-slate-200">{b.kondisiKebersihan || '-'}</strong></div>
+                      </td>
+                      <td className="p-4 text-slate-700 dark:text-slate-300 max-w-xs break-words">
                         {b.catatanPiket || '-'}
                       </td>
                       <td className="p-4">
-                        <Badge variant={b.status === 'DIKUNCI' ? 'neutral' : b.status === 'DISETUJUI' ? 'success' : 'primary'} size="sm">
-                          {b.status}
+                        <Badge variant="primary" size="sm">
+                          {getDutyBookDisplayStatus(b.status).label}
                         </Badge>
                       </td>
                     </tr>
@@ -842,29 +1165,29 @@ export const ReportsPreview: React.FC = () => {
       {/* TAB 4: STUDENT TARDINESS SUMMARY */}
       {activeTab === 'studentTardiness' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Total Kasus Terlambat</span>
-                <strong className="text-xl font-bold text-amber-600">{tardyAnalytics.totalTardy} Siswa</strong>
+                <span className="text-slate-500 text-xs block">Total Keterlambatan</span>
+                <strong className="text-xl font-bold text-amber-600">{filteredTardiness.length} Siswa</strong>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Terlambat Berulang (&gt;1x)</span>
-                <strong className="text-xl font-bold text-rose-600">{tardyAnalytics.repeatOffenders} Siswa</strong>
+                <span className="text-slate-500 text-xs block">Total Poin Pelanggaran</span>
+                <strong className="text-xl font-bold text-rose-600">
+                  {filteredTardiness.reduce((a, c) => a + (c.poinPelanggaran || 0), 0)} Poin
+                </strong>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Rata-rata Menit Terlambat</span>
-                <strong className="text-xl font-bold text-slate-800 dark:text-white">{tardyAnalytics.avgMinutesTardy} Menit</strong>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Akumulasi Poin Pelanggaran</span>
-                <strong className="text-xl font-bold text-indigo-600">{tardyAnalytics.totalPoints} Poin</strong>
+                <span className="text-slate-500 text-xs block">Rata-rata Menit Keterlambatan</span>
+                <strong className="text-xl font-bold text-slate-900 dark:text-white">
+                  {filteredTardiness.length > 0
+                    ? Math.round(filteredTardiness.reduce((a, c) => a + (c.menitTerlambat || 0), 0) / filteredTardiness.length)
+                    : 0} Menit
+                </strong>
               </CardContent>
             </Card>
           </div>
@@ -872,18 +1195,18 @@ export const ReportsPreview: React.FC = () => {
           <Card>
             <CardHeader
               title={`Rekapitulasi Keterlambatan Siswa (${periodLabel})`}
-              subtitle="Catatan kedatangan siswa melewati batas jam masuk sekolah dan bentuk pembinaan"
+              subtitle="Pencatatan pelanggaran disiplin waktu dan bentuk pembinaan"
             />
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
                   <tr>
                     <th className="p-4">Tanggal & Jam</th>
-                    <th className="p-4">Nama Siswa</th>
+                    <th className="p-4">Nama Siswa & NISN</th>
                     <th className="p-4">Kelas</th>
                     <th className="p-4 text-center">Keterlambatan</th>
-                    <th className="p-4">Alasan Keterlambatan</th>
-                    <th className="p-4">Bentuk Pembinaan Disiplin</th>
+                    <th className="p-4">Alasan</th>
+                    <th className="p-4">Bentuk Pembinaan</th>
                     <th className="p-4 text-center">Poin</th>
                     <th className="p-4">Petugas</th>
                   </tr>
@@ -892,36 +1215,36 @@ export const ReportsPreview: React.FC = () => {
                   {filteredTardiness.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="p-6 text-center text-slate-400">
-                        Tidak ada rekaman keterlambatan siswa untuk periode ini.
+                        Tidak ada catatan keterlambatan siswa pada periode ini.
                       </td>
                     </tr>
                   ) : (
                     filteredTardiness.map((r) => (
                       <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                         <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatIndonesianDate(r.tanggal)} ({r.jamDatang})
-                        </td>
-                        <td className="p-4 font-bold text-slate-900 dark:text-white">
-                          {r.namaSiswa}
-                          <span className="block font-mono text-[10px] text-slate-400 font-normal">NISN: {r.nisn}</span>
-                        </td>
-                        <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
-                          {r.kelas}
-                        </td>
-                        <td className="p-4 text-center font-bold text-amber-700 dark:text-amber-400 font-mono">
-                          +{r.menitTerlambat} mnt
-                        </td>
-                        <td className="p-4 text-slate-700 dark:text-slate-300">
-                          <span className="font-semibold">{r.alasan.replace(/_/g, ' ')}</span>
-                          {r.keteranganAlasan && <span className="block text-slate-500 text-[11px]">{r.keteranganAlasan}</span>}
+                          {formatIndonesianDate(r.tanggal)}
+                          <span className="block text-[11px] text-slate-400 font-normal">{r.jamDatang} WIB</span>
                         </td>
                         <td className="p-4">
-                          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[11px] font-medium">
-                            {r.pembinaan.replace(/_/g, ' ')}
+                          <strong className="text-slate-900 dark:text-white block">{r.namaSiswa}</strong>
+                          <span className="font-mono text-slate-500 text-[11px]">NISN: {r.nisn}</span>
+                        </td>
+                        <td className="p-4 font-medium text-slate-700 dark:text-slate-300">
+                          {r.kelas}
+                        </td>
+                        <td className="p-4 text-center font-bold text-amber-700">
+                          {r.menitTerlambat} Menit
+                        </td>
+                        <td className="p-4">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">
+                            {getTardyReasonDisplay(r)}
                           </span>
                         </td>
-                        <td className="p-4 text-center font-mono font-bold text-rose-600">
-                          {r.poinPelanggaran}
+                        <td className="p-4 text-slate-700 dark:text-slate-300">
+                          {getDisciplineActionDisplay(r)}
+                        </td>
+                        <td className="p-4 text-center font-bold text-rose-600">
+                          +{r.poinPelanggaran}
                         </td>
                         <td className="p-4 text-slate-500">
                           {r.petugasPiketName}
@@ -942,34 +1265,40 @@ export const ReportsPreview: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Total Izin Diberikan</span>
-                <strong className="text-xl font-bold text-blue-600">{permitAnalytics.totalPermits} Izin</strong>
+                <span className="text-slate-500 text-xs block">Total Izin Keluar</span>
+                <strong className="text-xl font-bold text-emerald-600">{filteredPermits.length} Siswa</strong>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Sedang di Luar</span>
-                <strong className="text-xl font-bold text-amber-600">{permitAnalytics.currentlyOut} Siswa</strong>
+                <span className="text-slate-500 text-xs block">Izin Sakit Pulang</span>
+                <strong className="text-xl font-bold text-rose-600">
+                  {filteredPermits.filter((p) => p.jenisIzin === 'SAKIT_PULANG').length} Siswa
+                </strong>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Sudah Kembali Masuk</span>
-                <strong className="text-xl font-bold text-emerald-600">{permitAnalytics.returned} Siswa</strong>
+                <span className="text-slate-500 text-xs block">Dispensasi / Lomba</span>
+                <strong className="text-xl font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">
+                  {filteredPermits.filter((p) => p.jenisIzin === 'DISPENSASI_LOMBA').length} Siswa
+                </strong>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <span className="text-slate-500 text-xs block">Izin Pulang ke Rumah</span>
-                <strong className="text-xl font-bold text-indigo-600">{permitAnalytics.leftSchool} Siswa</strong>
+                <span className="text-slate-500 text-xs block">Keperluan Keluarga/Lain</span>
+                <strong className="text-xl font-bold text-amber-600">
+                  {filteredPermits.filter((p) => p.jenisIzin === 'URUSAN_KELUARGA' || p.jenisIzin === 'LAINNYA').length} Siswa
+                </strong>
               </CardContent>
             </Card>
           </div>
 
           <Card>
             <CardHeader
-              title={`Rekapitulasi Izin Meninggalkan Sekolah / Kelas (${periodLabel})`}
-              subtitle="Catatan izin keluar lingkungan sekolah resmi atas verifikasi piket"
+              title={`Rekapitulasi Izin Meninggalkan Sekolah (${periodLabel})`}
+              subtitle="Pencatatan surat izin keluar/pulang siswa dan penjemput resmi"
             />
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -978,9 +1307,9 @@ export const ReportsPreview: React.FC = () => {
                     <th className="p-4">Tanggal & Jam</th>
                     <th className="p-4">Nama Siswa</th>
                     <th className="p-4">Kelas</th>
-                    <th className="p-4">Jenis Perizinan</th>
-                    <th className="p-4">Alasan & Kepentingan</th>
-                    <th className="p-4">Penjemput</th>
+                    <th className="p-4">Jenis Izin</th>
+                    <th className="p-4">Alasan / Keterangan</th>
+                    <th className="p-4">Pendamping / Penjemput</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Petugas</th>
                   </tr>
@@ -996,31 +1325,36 @@ export const ReportsPreview: React.FC = () => {
                     filteredPermits.map((r) => (
                       <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                         <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatIndonesianDate(r.tanggal)} ({r.jamKeluar}{r.jamKembali ? ` - ${r.jamKembali}` : ''})
+                          {formatIndonesianDate(r.tanggal)}
+                          <span className="block text-[11px] text-slate-400 font-normal">
+                            {r.jamKeluar}{r.jamKembali ? ` - ${r.jamKembali}` : ''}
+                          </span>
                         </td>
                         <td className="p-4 font-bold text-slate-900 dark:text-white">
                           {r.namaSiswa}
-                          <span className="block font-mono text-[10px] text-slate-400 font-normal">NISN: {r.nisn}</span>
                         </td>
-                        <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
+                        <td className="p-4 font-medium text-slate-700 dark:text-slate-300">
                           {r.kelas}
                         </td>
                         <td className="p-4">
                           <span className="inline-block px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-medium">
-                            {r.jenisIzin.replace(/_/g, ' ')}
+                            {getStudentPermitTypeDisplay(r)}
                           </span>
                         </td>
-                        <td className="p-4 text-slate-700 dark:text-slate-300 max-w-xs">
+                        <td className="p-4 text-slate-700 dark:text-slate-300 max-w-xs break-words">
                           {r.alasan}
                         </td>
                         <td className="p-4 text-slate-600 dark:text-slate-400">
-                          {r.penjemput} {r.namaPenjemput ? `(${r.namaPenjemput})` : ''}
+                          {r.penjemput}
+                          {r.namaPenjemput && <span className="block text-[11px] text-slate-500 font-medium">({r.namaPenjemput})</span>}
                         </td>
                         <td className="p-4">
                           <Badge
                             variant={
-                              r.status === 'SUDAH_KEMBALI' || r.status === 'SELESAI_PULANG'
+                              r.status === 'SELESAI_PULANG'
                                 ? 'success'
+                                : r.status === 'SUDAH_KEMBALI'
+                                ? 'primary'
                                 : 'warning'
                             }
                             size="sm"
@@ -1060,7 +1394,7 @@ export const ReportsPreview: React.FC = () => {
             <Card>
               <CardContent className="p-4">
                 <span className="text-slate-500 text-xs block">Sedang Berlangsung</span>
-                <strong className="text-xl font-bold text-blue-600">{substitutionAnalytics.inProgress} Shift</strong>
+                <strong className="text-xl font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">{substitutionAnalytics.inProgress} Shift</strong>
               </CardContent>
             </Card>
             <Card>
@@ -1111,16 +1445,16 @@ export const ReportsPreview: React.FC = () => {
                           <span className="block text-slate-500 font-mono text-[11px]">{r.kelas}</span>
                         </td>
                         <td className="p-4">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">
-                            {r.alasan.replace(/_/g, ' ')}
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            {getSubstitutionReasonDisplay(r)}
                           </span>
                         </td>
-                        <td className="p-4 font-bold text-blue-600 dark:text-blue-400">
+                        <td className="p-4 font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">
                           {r.guruPenggantiName || (
                             <span className="text-rose-500 italic">Belum ada pengganti</span>
                           )}
                         </td>
-                        <td className="p-4 text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                        <td className="p-4 text-slate-600 dark:text-slate-300 max-w-xs break-words">
                           {r.materiDanTugasSiswa}
                         </td>
                         <td className="p-4">
@@ -1211,20 +1545,20 @@ export const ReportsPreview: React.FC = () => {
                         </td>
                         <td className="p-4 font-bold text-slate-900 dark:text-white">
                           {r.namaTamu}
-                          <span className="block font-mono text-[10px] text-blue-600 dark:text-blue-400 font-normal">Badge: {r.nomorBadge}</span>
+                          <span className="block font-mono text-[10px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-normal">Badge: {r.nomorBadge}</span>
                         </td>
                         <td className="p-4 text-slate-700 dark:text-slate-300">
                           {r.instansiAsal}
                         </td>
                         <td className="p-4">
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">
-                            {r.kategori.replace(/_/g, ' ')}
+                            {getVisitorCategoryDisplay(r)}
                           </span>
                         </td>
                         <td className="p-4 font-semibold text-slate-900 dark:text-white">
                           {r.tujuanBertemu}
                         </td>
-                        <td className="p-4 text-slate-600 dark:text-slate-400 max-w-xs truncate">
+                        <td className="p-4 text-slate-600 dark:text-slate-400 max-w-xs break-words">
                           {r.keperluan}
                         </td>
                         <td className="p-4">
@@ -1254,7 +1588,7 @@ export const ReportsPreview: React.FC = () => {
         </div>
       )}
 
-      {/* MONTHLY REPORT PRINT MODAL (ALL 6 MODULES CONNECTED) */}
+      {/* MONTHLY REPORT PRINT MODAL (ALL MODULES CONNECTED) */}
       <MonthlyReportPrintModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
@@ -1268,6 +1602,7 @@ export const ReportsPreview: React.FC = () => {
         permitRecords={filteredPermits}
         substitutionRecords={filteredSubstitutions}
         visitorRecords={filteredVisitors}
+        dutyBookRecords={filteredDutyBooks}
       />
     </div>
   );

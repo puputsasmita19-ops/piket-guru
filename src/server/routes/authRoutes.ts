@@ -352,9 +352,19 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
     npsn: '20109988',
     address: 'Jl. Pendidikan No. 45, Kompleks Edukasi, Jakarta',
     phone: '081234567890',
+    email: 'info@smkdrsoebandi.sch.id',
+    website: 'smkdrsoebandi.sch.id',
     logoUrl: '',
     appName: 'PIKET GURU',
     appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
+    loginSupportContact: {
+      enabled: true,
+      adminName: 'Admin Piket Sekolah',
+      buttonLabel: 'Hubungi Admin',
+      contactType: 'whatsapp',
+      target: '081234567890',
+      initialMessage: 'Halo Admin, saya membutuhkan bantuan terkait akses login akun Piket Guru.',
+    },
   };
 
   if (!adminDb) {
@@ -371,6 +381,18 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
     const docSnap = await adminDb.collection('settings').doc('school_config').get();
     if (docSnap.exists) {
       const data = docSnap.data() || {};
+      const contactData = data.loginSupportContact || {};
+      const sanitizedContact = {
+        enabled: contactData.enabled !== false,
+        adminName: String(contactData.adminName || DEFAULT_CONFIG.loginSupportContact.adminName).slice(0, 100),
+        buttonLabel: String(contactData.buttonLabel || DEFAULT_CONFIG.loginSupportContact.buttonLabel).slice(0, 50),
+        contactType: ['whatsapp', 'phone', 'email'].includes(contactData.contactType)
+          ? contactData.contactType
+          : DEFAULT_CONFIG.loginSupportContact.contactType,
+        target: String(contactData.target ?? DEFAULT_CONFIG.loginSupportContact.target).slice(0, 100),
+        initialMessage: String(contactData.initialMessage ?? DEFAULT_CONFIG.loginSupportContact.initialMessage).slice(0, 500),
+      };
+
       res.json({
         success: true,
         config: {
@@ -378,9 +400,12 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
           npsn: data.npsn || DEFAULT_CONFIG.npsn,
           address: data.address || DEFAULT_CONFIG.address,
           phone: data.phone || DEFAULT_CONFIG.phone,
+          email: data.email || DEFAULT_CONFIG.email,
+          website: data.website || DEFAULT_CONFIG.website,
           logoUrl: data.logoUrl || DEFAULT_CONFIG.logoUrl,
           appName: data.appName || DEFAULT_CONFIG.appName,
           appSubtitle: data.appSubtitle || DEFAULT_CONFIG.appSubtitle,
+          loginSupportContact: sanitizedContact,
         },
         source: 'DATABASE',
         status: 'OPERATIONAL',
@@ -788,6 +813,19 @@ authRouter.post('/create-user', requireAuth, requireAdmin, async (req: Request, 
         throw new Error(`USER_EXISTS: Akun dengan ID '${userId}' sudah ada.`);
       }
 
+      let effectivePermissions = Array.isArray(permissions) && permissions.length > 0 ? [...permissions] : [];
+      if (effectivePermissions.length === 0) {
+        if (role === 'ADMIN') effectivePermissions = ['*'];
+        else if (role === 'GURU') effectivePermissions = ['dashboard.view', 'schedule.view', 'attendance.view', 'attendance.create', 'dutybook.view', 'dutybook.create', 'dutybook.update', 'incident.view', 'incident.create'];
+        else if (role === 'KEPALA_SEKOLAH') effectivePermissions = ['dashboard.view', 'schedule.view', 'attendance.view', 'dutybook.view', 'dutybook.verify', 'dutybook.unlock', 'reports.view', 'reports.export'];
+        else if (role === 'TENAGA_KEPENDIDIKAN') effectivePermissions = ['dashboard.view', 'schedule.view', 'attendance.view', 'attendance.create', 'dutybook.view', 'dutybook.create', 'incident.view', 'incident.create'];
+        else if (role === 'SATPAM') effectivePermissions = ['dashboard.view', 'schedule.view', 'attendance.view', 'attendance.create', 'incident.view', 'incident.create'];
+      }
+      // Security rule: GURU must never be granted wildcard '*'
+      if (role === 'GURU') {
+        effectivePermissions = effectivePermissions.filter((p: string) => p !== '*');
+      }
+
       const now = new Date().toISOString();
       const userRecord: any = {
         id: userId,
@@ -799,7 +837,7 @@ authRouter.post('/create-user', requireAuth, requireAdmin, async (req: Request, 
         email: (email || '').trim(),
         phone: (phone || '').trim(),
         isActive: isActive !== false,
-        permissions: Array.isArray(permissions) ? permissions : [],
+        permissions: effectivePermissions,
         requiresActivation: !hasInitialPin,
         sessionRevokedAtSeconds: Math.floor(Date.now() / 1000),
         dataSource: 'PRODUCTION',
@@ -945,6 +983,306 @@ authRouter.post('/update-user', requireAuth, requireAdmin, async (req: Request, 
     }
     console.error('[AUTH_ROUTES] Update user error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Gagal memperbarui pengguna.' });
+  }
+});
+
+/**
+ * POST /api/auth/delete-user
+ * Atomic user profile, credential, and loginId reservation deletion (CR-LIFECYCLE-LOGINID).
+ * Reads all required documents inside transaction before writing.
+ * Strictly preserves loginId reservation if owned by another account.
+ * Handles Firebase Auth revocation with explicit error reporting outside transaction.
+ */
+authRouter.post('/delete-user', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  const { userId } = req.body || {};
+  const caller = (req as any).user;
+
+  if (!userId || typeof userId !== 'string' || !userId.trim()) {
+    res.status(400).json({ success: false, error: 'User ID wajib disertakan.' });
+    return;
+  }
+  const targetUserId = userId.trim();
+
+  // Self-deletion protection
+  if (caller.uid === targetUserId) {
+    res.status(400).json({
+      success: false,
+      error: 'Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif digunakan.',
+      code: 'CANNOT_DELETE_SELF',
+    });
+    return;
+  }
+
+  if (!adminDb) {
+    res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
+    return;
+  }
+
+  try {
+    const userRef = adminDb.collection('users').doc(targetUserId);
+    const existingSnap = await userRef.get();
+
+    if (!existingSnap.exists) {
+      // Check if there are orphan credentials or reservations for this ID
+      res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan dalam sistem.', code: 'USER_NOT_FOUND' });
+      return;
+    }
+
+    const existingData = existingSnap.data() || {};
+
+    // Administrator protection: cannot delete last active administrator
+    if (existingData.role === 'ADMIN') {
+      const adminQuery = await adminDb
+        .collection('users')
+        .where('role', '==', 'ADMIN')
+        .where('isActive', '==', true)
+        .get();
+      const otherActiveAdmins = adminQuery.docs.filter((d) => d.id !== targetUserId);
+      if (otherActiveAdmins.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Tidak dapat menghapus satu-satunya Administrator aktif di sistem.',
+          code: 'LAST_ADMIN_PROTECTED',
+        });
+        return;
+      }
+    }
+
+    const targetLoginId = existingData.loginId ? normalizeLoginId(existingData.loginId) : null;
+    let reservationDeleted = false;
+
+    // 1. Transactional Firestore Cleanup: Users, Credentials, & LoginId Reservation
+    await adminDb.runTransaction(async (transaction) => {
+      // READS MUST OCCUR FIRST
+      const txUserSnap = await transaction.get(userRef);
+      const credRef = adminDb.collection('user_credentials').doc(targetUserId);
+      const credSnap = await transaction.get(credRef);
+
+      let resRef: FirebaseFirestore.DocumentReference | null = null;
+      let resSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+      if (targetLoginId) {
+        resRef = adminDb.collection('login_ids').doc(targetLoginId);
+        resSnap = await transaction.get(resRef);
+      }
+
+      // WRITES OCCUR AFTER ALL READS
+      if (txUserSnap.exists) {
+        transaction.delete(userRef);
+      }
+      if (credSnap.exists) {
+        transaction.delete(credRef);
+      }
+      if (resRef && resSnap && resSnap.exists) {
+        const resData = resSnap.data();
+        // Strict ownership check: only delete reservation if it belongs to targetUserId
+        if (resData?.userId === targetUserId) {
+          transaction.delete(resRef);
+          reservationDeleted = true;
+        } else {
+          console.warn(`[AUTH_ROUTES] Reservation for loginId '${targetLoginId}' belongs to userId '${resData?.userId}', not deleting.`);
+        }
+      }
+    });
+
+    // 2. Out-of-transaction Firebase Auth session revocation & user deletion
+    let authCleanupStatus: 'COMPLETED' | 'NOT_APPLICABLE' | 'FAILED' = 'COMPLETED';
+    let authCleanupError: string | undefined;
+    if (adminAuth) {
+      try {
+        await adminAuth.revokeRefreshTokens(targetUserId).catch(() => {});
+        await adminAuth.deleteUser(targetUserId);
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/user-not-found') {
+          authCleanupStatus = 'NOT_APPLICABLE';
+        } else {
+          console.warn(`[AUTH_ROUTES] Firebase Auth deletion warning for ${targetUserId}:`, authErr);
+          authCleanupStatus = 'FAILED';
+          authCleanupError = authErr?.message || 'Gagal menghapus akun Firebase Auth.';
+        }
+      }
+    }
+
+    // 3. Log Audit
+    const callerData = (req as any).callerData || {};
+    await adminDb.collection('audit_logs').add({
+      userId: caller.uid,
+      userName: callerData.fullName || caller.email || 'Admin',
+      role: 'ADMIN',
+      action: 'DELETE',
+      module: 'USERS',
+      recordId: targetUserId,
+      details: `Menghapus akun pengguna ${existingData.fullName || targetUserId} (ID Login: ${targetLoginId || '-'}) beserta kredensial dan reservasi ID.`,
+      timestamp: new Date().toISOString(),
+      authCleanupStatus,
+      reservationDeleted,
+    });
+
+    res.json({
+      success: true,
+      partial: authCleanupStatus === 'FAILED',
+      authCleanup: {
+        status: authCleanupStatus,
+        error: authCleanupError,
+        retryable: authCleanupStatus === 'FAILED',
+      },
+      reservationDeleted,
+      message: authCleanupStatus === 'FAILED'
+        ? 'Profil pengguna, kredensial, dan reservasi ID berhasil dihapus dari database, namun pencabutan sesi Firebase Auth mengalami kegagalan/tertunda.'
+        : `Akun pengguna ${existingData.fullName || targetUserId} beserta kredensial dan reservasi ID berhasil dihapus sepenuhnya.`,
+    });
+  } catch (err: any) {
+    console.error('[AUTH_ROUTES] Delete user error:', err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Gagal menghapus pengguna dari sistem.',
+    });
+  }
+});
+
+/**
+ * GET /api/auth/orphan-reservations
+ * Scans login_ids collection to find orphan reservations without modifying data (dry-run inspection).
+ */
+authRouter.get('/orphan-reservations', requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+  if (!adminDb) {
+    res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
+    return;
+  }
+
+  try {
+    const resSnaps = await adminDb.collection('login_ids').get();
+    const orphans: Array<{
+      loginId: string;
+      userId: string;
+      createdAt?: string;
+      reason: string;
+    }> = [];
+
+    for (const doc of resSnaps.docs) {
+      const data = doc.data() || {};
+      const resUserId = data.userId;
+      const resLoginId = doc.id;
+
+      if (!resUserId) {
+        orphans.push({
+          loginId: resLoginId,
+          userId: '',
+          createdAt: data.createdAt,
+          reason: 'Reservasi tidak memiliki userId yang terasosiasi.',
+        });
+        continue;
+      }
+
+      const userSnap = await adminDb.collection('users').doc(resUserId).get();
+      if (!userSnap.exists) {
+        // Double-check if any other user uses this loginId
+        const usersWithSameLoginId = await adminDb
+          .collection('users')
+          .where('loginId', '==', resLoginId)
+          .get();
+
+        if (usersWithSameLoginId.empty) {
+          orphans.push({
+            loginId: resLoginId,
+            userId: resUserId,
+            createdAt: data.createdAt,
+            reason: `Profil akun pemilik (ID: ${resUserId}) sudah tidak ada di database.`,
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      count: orphans.length,
+      orphans,
+      message: orphans.length === 0
+        ? 'Tidak ditemukan reservasi ID Login yatim.'
+        : `Ditemukan ${orphans.length} reservasi ID Login yatim yang dapat dibersihkan.`,
+    });
+  } catch (err: any) {
+    console.error('[AUTH_ROUTES] Check orphan reservations error:', err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Gagal memeriksa reservasi yatim.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/clean-orphan-reservation
+ * Atomically releases an orphan loginId reservation if owner user document does not exist.
+ */
+authRouter.post('/clean-orphan-reservation', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  const { loginId } = req.body || {};
+  const caller = (req as any).user;
+
+  if (!loginId || typeof loginId !== 'string' || !loginId.trim()) {
+    res.status(400).json({ success: false, error: 'ID Login wajib disertakan.' });
+    return;
+  }
+  const normLoginId = normalizeLoginId(loginId);
+
+  if (!adminDb) {
+    res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
+    return;
+  }
+
+  try {
+    const resRef = adminDb.collection('login_ids').doc(normLoginId);
+
+    await adminDb.runTransaction(async (transaction) => {
+      const resSnap = await transaction.get(resRef);
+      if (!resSnap.exists) {
+        return; // Already cleaned
+      }
+
+      const resData = resSnap.data() || {};
+      const resUserId = resData.userId;
+
+      if (resUserId) {
+        const userRef = adminDb.collection('users').doc(resUserId);
+        const userSnap = await transaction.get(userRef);
+        if (userSnap.exists) {
+          throw new Error(`ACTIVE_USER_EXISTS: Tidak dapat melepas reservasi '${normLoginId}' karena akun pemilik '${userSnap.data()?.fullName || resUserId}' masih aktif.`);
+        }
+      }
+
+      // Safe to delete
+      transaction.delete(resRef);
+    });
+
+    const callerData = (req as any).callerData || {};
+    await adminDb.collection('audit_logs').add({
+      userId: caller.uid,
+      userName: callerData.fullName || caller.email || 'Admin',
+      role: 'ADMIN',
+      action: 'DELETE',
+      module: 'USERS',
+      recordId: normLoginId,
+      details: `Membersihkan reservasi ID Login yatim: ${normLoginId}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      loginId: normLoginId,
+      message: `Reservasi ID Login '${normLoginId}' berhasil dilepaskan dan dapat digunakan kembali.`,
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('ACTIVE_USER_EXISTS')) {
+      res.status(409).json({
+        success: false,
+        error: err.message.replace('ACTIVE_USER_EXISTS: ', ''),
+        code: 'ACTIVE_USER_EXISTS',
+      });
+      return;
+    }
+    console.error('[AUTH_ROUTES] Clean orphan reservation error:', err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Gagal membersihkan reservasi yatim.',
+    });
   }
 });
 

@@ -30,6 +30,8 @@ import {
   RoomRecord,
   IncidentCategoryRecord,
   AuditLogRecord,
+  getTeacherDisplayIdentifier,
+  maskNik,
 } from '../../types/master.types';
 import { StudentService } from '../../services/firebase/studentService';
 import { BulkImportModal, ImportType } from './BulkImportModal';
@@ -67,6 +69,7 @@ export const MasterDataTabs: React.FC = () => {
   // Modals state
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<TeacherRecord | null>(null);
+  const [teacherFormError, setTeacherFormError] = useState<string | null>(null);
 
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<RoomRecord | null>(null);
@@ -127,11 +130,13 @@ export const MasterDataTabs: React.FC = () => {
     setEditingTeacher(null);
     setTeacherStatusMode('PNS');
     setCustomTeacherStatus('');
+    setTeacherFormError(null);
     setIsTeacherModalOpen(true);
   };
 
   const handleOpenEditTeacher = (t: TeacherRecord) => {
     setEditingTeacher(t);
+    setTeacherFormError(null);
     const known = ['PNS', 'PPPK', 'GTT', 'HONORER'];
     if (known.includes(t.statusKepegawaian)) {
       setTeacherStatusMode(t.statusKepegawaian);
@@ -166,6 +171,7 @@ export const MasterDataTabs: React.FC = () => {
   // --- CRUD TEACHERS ---
   const handleSaveTeacher = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setTeacherFormError(null);
     const form = e.currentTarget;
     const formData = new FormData(form);
 
@@ -174,35 +180,105 @@ export const MasterDataTabs: React.FC = () => {
         ? customTeacherStatus.trim() || 'Lain-lain'
         : teacherStatusMode;
 
-    const id = editingTeacher ? editingTeacher.id : `tch-${Date.now()}`;
+    const currentId = editingTeacher ? editingTeacher.id : `tch-${Date.now()}`;
+    const nip = String(formData.get('nip') || '').trim();
+    const nuptk = String(formData.get('nuptk') || '').trim();
+    const nik = String(formData.get('nik') || '').trim();
+    let idGuru = String(formData.get('idGuru') || '').trim();
+    const fullName = String(formData.get('fullName') || '').trim();
+    const mataPelajaran = String(formData.get('mataPelajaran') || '').trim();
+    const pangkatGolongan = String(formData.get('pangkatGolongan') || '').trim();
+    const phone = String(formData.get('phone') || '').trim();
+    const email = String(formData.get('email') || '').trim();
+
+    if (!fullName) {
+      setTeacherFormError('Nama lengkap guru wajib diisi.');
+      return;
+    }
+
+    // Auto-generate stable idGuru if not provided
+    if (!idGuru) {
+      if (editingTeacher?.idGuru) {
+        idGuru = editingTeacher.idGuru;
+      } else {
+        const teacherCount = teachers.length + 1;
+        idGuru = `GR-${String(teacherCount).padStart(3, '0')}`;
+      }
+    }
+
+    // Duplicate check for NIP (excluding empty string / '-')
+    if (nip && nip !== '-') {
+      const dupNip = teachers.find((t) => t.id !== currentId && t.nip && t.nip.trim() === nip);
+      if (dupNip) {
+        setTeacherFormError(`NIP "${nip}" sudah digunakan oleh guru lain: ${dupNip.fullName}.`);
+        return;
+      }
+    }
+
+    // Duplicate check for NUPTK (excluding empty string / '-')
+    if (nuptk && nuptk !== '-') {
+      const dupNuptk = teachers.find((t) => t.id !== currentId && t.nuptk && t.nuptk.trim() === nuptk);
+      if (dupNuptk) {
+        setTeacherFormError(`NUPTK "${nuptk}" sudah digunakan oleh guru lain: ${dupNuptk.fullName}.`);
+        return;
+      }
+    }
+
+    // Duplicate check for NIK (excluding empty string / '-')
+    if (nik && nik !== '-') {
+      const dupNik = teachers.find((t) => t.id !== currentId && t.nik && t.nik.trim() === nik);
+      if (dupNik) {
+        setTeacherFormError(`NIK "${nik}" sudah digunakan oleh guru lain: ${dupNik.fullName}.`);
+        return;
+      }
+    }
+
+    // Duplicate check for ID Guru
+    if (idGuru) {
+      const dupId = teachers.find((t) => t.id !== currentId && t.idGuru && t.idGuru.trim() === idGuru);
+      if (dupId) {
+        setTeacherFormError(`ID Guru "${idGuru}" sudah digunakan oleh guru lain: ${dupId.fullName}.`);
+        return;
+      }
+    }
+
     const payload: TeacherRecord = {
-      id,
-      nip: formData.get('nip') as string,
-      fullName: formData.get('fullName') as string,
-      mataPelajaran: formData.get('mataPelajaran') as string,
-      pangkatGolongan: formData.get('pangkatGolongan') as string,
+      id: currentId,
+      userId: editingTeacher?.userId,
+      nip: nip || '',
+      nuptk: nuptk || undefined,
+      nik: nik || undefined,
+      idGuru: idGuru || undefined,
+      fullName,
+      mataPelajaran,
+      pangkatGolongan: pangkatGolongan || '-',
       statusKepegawaian: finalStatus,
-      phone: formData.get('phone') as string,
-      email: formData.get('email') as string,
+      phone,
+      email,
       createdAt: editingTeacher ? editingTeacher.createdAt : new Date().toISOString(),
       createdBy: editingTeacher ? editingTeacher.createdBy : currentUser?.fullName || 'ADMIN',
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser?.fullName || 'ADMIN',
     };
 
-    await FirestoreService.setDocument('teachers', id, payload);
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: editingTeacher ? 'UPDATE' : 'CREATE',
-      module: 'TEACHERS',
-      recordId: id,
-      details: `${editingTeacher ? 'Memperbarui' : 'Menambahkan'} data guru: ${payload.fullName} (${payload.nip}) [${finalStatus}]`,
-    });
+    try {
+      await FirestoreService.setDocument('teachers', currentId, payload);
+      await FirestoreService.logAudit({
+        userId: currentUser?.id || 'usr-admin',
+        userName: currentUser?.fullName || 'Admin',
+        role: currentUser?.role || 'ADMIN',
+        action: editingTeacher ? 'UPDATE' : 'CREATE',
+        module: 'TEACHERS',
+        recordId: currentId,
+        details: `${editingTeacher ? 'Memperbarui' : 'Menambahkan'} data guru: ${payload.fullName} (${getTeacherDisplayIdentifier(payload).displayBadge}) [${finalStatus}]`,
+      });
 
-    setIsTeacherModalOpen(false);
-    setEditingTeacher(null);
+      setIsTeacherModalOpen(false);
+      setEditingTeacher(null);
+      setTeacherFormError(null);
+    } catch (err: any) {
+      setTeacherFormError(err.message || 'Gagal menyimpan data guru ke database.');
+    }
   };
 
   // --- CRUD ROOMS ---
@@ -499,14 +575,14 @@ export const MasterDataTabs: React.FC = () => {
               }}
               className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 isActive
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-950/30 rounded-t-xl'
+                  ? 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] dark:border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/50 rounded-t-xl'
                   : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
               <span>{tab.label}</span>
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                isActive ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)]' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
               }`}>
                 {tab.count}
               </span>
@@ -539,48 +615,75 @@ export const MasterDataTabs: React.FC = () => {
           <CardContent className="p-0">
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {teachers
-                .filter((t) => t.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || t.nip.includes(searchQuery))
-                .map((t) => (
-                  <div key={t.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
-                        {t.fullName.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-slate-900 dark:text-white">{t.fullName}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                          NIP. {t.nip} • {t.pangkatGolongan}
+                .filter((t) => {
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    t.fullName.toLowerCase().includes(q) ||
+                    (t.nip && t.nip.includes(searchQuery)) ||
+                    (t.nuptk && t.nuptk.includes(searchQuery)) ||
+                    (t.nik && t.nik.includes(searchQuery)) ||
+                    (t.idGuru && t.idGuru.toLowerCase().includes(q)) ||
+                    (t.mataPelajaran && t.mataPelajaran.toLowerCase().includes(q))
+                  );
+                })
+                .map((t) => {
+                  const idInfo = getTeacherDisplayIdentifier(t);
+                  return (
+                    <div key={t.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                          {t.fullName.charAt(0)}
                         </div>
-                        <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">
-                          📚 Mapel: {t.mataPelajaran}
+                        <div>
+                          <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            <span>{t.fullName}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-blue-50 dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-bold border border-blue-100 dark:border-slate-700">
+                              {idInfo.displayBadge}
+                            </span>
+                            {t.idGuru && t.idGuru !== idInfo.value && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                ID: {t.idGuru}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span>{t.pangkatGolongan}</span>
+                            {t.nik && (
+                              <span>• NIK: {maskNik(t.nik)}</span>
+                            )}
+                            {t.phone && <span>• 📞 {t.phone}</span>}
+                          </div>
+                          <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">
+                            📚 Mapel: {t.mataPelajaran}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                      <Badge variant="primary" size="sm">
-                        {t.statusKepegawaian}
-                      </Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        leftIcon={<Edit2 className="w-3.5 h-3.5" />}
-                        onClick={() => handleOpenEditTeacher(t)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
-                        onClick={() => setDeleteConfirm({ collection: 'teachers', id: t.id, name: t.fullName })}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <Badge variant="primary" size="sm">
+                          {t.statusKepegawaian}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                          onClick={() => handleOpenEditTeacher(t)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                          onClick={() => setDeleteConfirm({ collection: 'teachers', id: t.id, name: t.fullName })}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </CardContent>
         </Card>
@@ -856,39 +959,92 @@ export const MasterDataTabs: React.FC = () => {
         isOpen={isTeacherModalOpen}
         onClose={() => setIsTeacherModalOpen(false)}
         title={editingTeacher ? 'Ubah Data Guru' : 'Tambah Guru Baru'}
+        maxWidth="lg"
       >
         <form onSubmit={handleSaveTeacher} className="space-y-4">
+          {teacherFormError && (
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="font-medium">{teacherFormError}</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Nama Lengkap & Gelar *
+            </label>
+            <input
+              required
+              name="fullName"
+              defaultValue={editingTeacher?.fullName}
+              placeholder="Contoh: Siti Nurhaliza, S.Pd."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">NIP</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                NIP <span className="text-slate-400 font-normal">(Opsional)</span>
+              </label>
               <input
-                required
                 name="nip"
+                type="text"
                 defaultValue={editingTeacher?.nip}
-                placeholder="18 digit NIP"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="Contoh: 197501012000011001"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Lengkap & Gelar</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                NUPTK <span className="text-slate-400 font-normal">(Opsional, 16 digit)</span>
+              </label>
               <input
-                required
-                name="fullName"
-                defaultValue={editingTeacher?.fullName}
-                placeholder="Contoh: Siti Nurhaliza, S.Pd."
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                name="nuptk"
+                type="text"
+                defaultValue={editingTeacher?.nuptk}
+                placeholder="Contoh: 1234567890123456"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Mata Pelajaran</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                NIK KTP <span className="text-slate-400 font-normal">(Opsional, 16 digit)</span>
+              </label>
+              <input
+                name="nik"
+                type="text"
+                maxLength={16}
+                defaultValue={editingTeacher?.nik}
+                placeholder="16 digit NIK KTP"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                ID Guru <span className="text-slate-400 font-normal">(Unik, otomatis jika kosong)</span>
+              </label>
+              <input
+                name="idGuru"
+                type="text"
+                defaultValue={editingTeacher?.idGuru}
+                placeholder="Contoh: GR-001"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Mata Pelajaran *</label>
               <input
                 required
                 name="mataPelajaran"
                 defaultValue={editingTeacher?.mataPelajaran}
-                placeholder="Contoh: Matematika"
+                placeholder="Contoh: Matematika, Fisika"
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
@@ -896,7 +1052,8 @@ export const MasterDataTabs: React.FC = () => {
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Pangkat / Golongan</label>
               <input
                 name="pangkatGolongan"
-                defaultValue={editingTeacher?.pangkatGolongan || 'Penata Muda / IIIa'}
+                defaultValue={editingTeacher?.pangkatGolongan || '-'}
+                placeholder="Contoh: Penata Muda / IIIa"
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>

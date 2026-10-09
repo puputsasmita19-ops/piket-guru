@@ -69,7 +69,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               if (validationError) setValidationError(null);
             }}
             placeholder="081234567890"
-            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs font-mono"
           />
         </div>
 
@@ -81,7 +81,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             <button
               type="button"
               onClick={handleCopyText}
-              className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-[11px] text-[var(--theme-primary)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
             >
               {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
               <span>{isCopied ? 'Tersalin!' : 'Salin Teks'}</span>
@@ -91,11 +91,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             rows={7}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-sans leading-relaxed"
+            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs font-sans leading-relaxed"
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
           <Button variant="outline" size="sm" onClick={onClose}>
             Batal
           </Button>

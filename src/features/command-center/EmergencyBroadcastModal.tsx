@@ -97,7 +97,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
         {/* EMERGENCY HOTLINES */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <PhoneCall className="w-3.5 h-3.5 text-blue-500" />
+            <PhoneCall className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
             <span>Panggilan Cepat Instansi Terkait (Hotline 24 Jam)</span>
           </label>
 
@@ -108,7 +108,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
                 <a
                   key={idx}
                   href={`tel:${contact.number}`}
-                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 transition-all flex items-center justify-between gap-2 text-xs group"
+                  className="p-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] hover:border-[var(--theme-primary)] transition-all flex items-center justify-between gap-2 text-xs group"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className={`p-2 rounded-lg border ${contact.color}`}>
@@ -118,12 +118,12 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
                       <div className="font-bold text-slate-900 dark:text-white">
                         {contact.name}
                       </div>
-                      <div className="font-mono text-blue-600 dark:text-blue-400 font-bold">
+                      <div className="font-mono text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold">
                         Panggilan: {contact.number}
                       </div>
                     </div>
                   </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[var(--theme-primary)] transition-colors" />
                 </a>
               );
             })}
@@ -131,7 +131,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
         </div>
 
         {/* SOP EMERGENCY PROTOCOL */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/40 border border-slate-200 dark:border-[var(--theme-card-border)] text-xs space-y-2">
           <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
             <span>Protokol Tanggap Darurat Tim Piket Sekolah:</span>
@@ -144,7 +144,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
           </ol>
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
           <Button variant="outline" size="sm" onClick={onClose}>
             Tutup
           </Button>

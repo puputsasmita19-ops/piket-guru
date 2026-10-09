@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { StudentPermitRecord } from '../../types/studentPermit.types';
+import { StudentPermitRecord, getStudentPermitTypeDisplay } from '../../types/studentPermit.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { Printer, FileText } from 'lucide-react';
@@ -74,7 +74,7 @@ export const StudentPermitPrintModal: React.FC<StudentPermitPrintModalProps> = (
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Jenis Izin:</span>
-              <span className="col-span-2 font-bold text-blue-900">{permit.jenisIzin.replace('_', ' ')}</span>
+              <span className="col-span-2 font-bold text-blue-900">{getStudentPermitTypeDisplay(permit)}</span>
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="text-slate-500">Jam Meninggalkan:</span>

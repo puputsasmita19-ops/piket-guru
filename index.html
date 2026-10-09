@@ -31,11 +31,21 @@
             document.documentElement.classList.remove('dark');
             document.documentElement.style.colorScheme = 'light';
           }
+
+          var savedPastel = localStorage.getItem('piket_guru_pastel_theme') || 'default';
+          document.documentElement.setAttribute('data-pastel-theme', savedPastel);
+
+          var darkColors = { default: '#0f172a', sky: '#0c1a26', mint: '#0a1f17', lavender: '#181028', peach: '#1f140b', rose: '#200d13' };
+          var lightColors = { default: '#2563eb', sky: '#0284c7', mint: '#059669', lavender: '#7c3aed', peach: '#ea580c', rose: '#e11d48' };
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute('content', isDark ? (darkColors[savedPastel] || '#0f172a') : (lightColors[savedPastel] || '#2563eb'));
+          }
         } catch (e) {}
       })();
     </script>
   </head>
-  <body class="font-sans antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-150">
+  <body class="font-sans antialiased text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-150">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
