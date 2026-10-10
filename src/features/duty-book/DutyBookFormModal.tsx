@@ -18,7 +18,12 @@ import {
   Shield,
   RotateCcw,
   CheckCircle2,
+  FileText,
+  Trash2,
+  WifiOff,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface DutyBookFormModalProps {
   isOpen: boolean;
@@ -91,6 +96,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any } | null>(null);
 
   // Revision & Unlock dialogs
   const [showRevisionPrompt, setShowRevisionPrompt] = useState<boolean>(false);
@@ -108,6 +114,8 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
     isSelesai ||
     (isTerkirim && !canApproveOrComplete);
 
+  const draftKey = dutyBook?.id || `new-${tanggal}`;
+
   useEffect(() => {
     setErrorMessage(null);
     setDebugInfo(null);
@@ -116,6 +124,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
     setShowUnlockPrompt(false);
     setRevisionReason('');
     setUnlockReason('');
+    setAvailableDraft(null);
 
     if (dutyBook) {
       setTanggal(dutyBook.tanggal);
@@ -144,7 +153,6 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       setScheduleId(schedules[0]?.id || 'sch-general');
       setPetugasName(currentUser?.fullName || '');
       setRuangName(schedules[0]?.ruangName || 'Gerbang & Pos Utama');
-      // Do not auto-prefill fake normal statements without confirmation
       setKondisiKeamanan('');
       setKondisiKebersihan('');
       setKondisiKelas('');
@@ -156,7 +164,93 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       setStatus('DRAFT');
       setOriginalUpdatedAt(undefined);
     }
+
+    // Check if there is an existing uncommitted draft for this user & record
+    if (isOpen && currentUser?.id && (!dutyBook || dutyBook.status === 'DRAFT')) {
+      const checkKey = dutyBook?.id || `new-${dutyBook?.tanggal || getTodayISODate()}`;
+      DraftService.getDraft(currentUser.id, 'DUTY_BOOK', checkKey).then((saved) => {
+        if (saved && saved.data) {
+          setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data });
+        }
+      });
+    }
   }, [dutyBook, schedules, currentUser, isOpen]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || isReadOnly || !currentUser?.id) return;
+    if (!kondisiKeamanan && !kondisiKebersihan && !kondisiKelas && !kondisiFasilitas && !kondisiSiswa && !catatanPiket) {
+      return;
+    }
+    const targetKey = dutyBook?.id || `new-${tanggal}`;
+    DraftService.saveDraftDebounced(currentUser.id, 'DUTY_BOOK', targetKey, {
+      tanggal,
+      hari,
+      jamMulai,
+      jamSelesai,
+      scheduleId,
+      petugasName,
+      ruangName,
+      kondisiKeamanan,
+      kondisiKebersihan,
+      kondisiKelas,
+      kondisiFasilitas,
+      kondisiSiswa,
+      catatanPiket,
+      kegiatanKhusus,
+      tindakLanjut,
+    });
+  }, [
+    isOpen,
+    isReadOnly,
+    currentUser?.id,
+    tanggal,
+    hari,
+    jamMulai,
+    jamSelesai,
+    scheduleId,
+    petugasName,
+    ruangName,
+    kondisiKeamanan,
+    kondisiKebersihan,
+    kondisiKelas,
+    kondisiFasilitas,
+    kondisiSiswa,
+    catatanPiket,
+    kegiatanKhusus,
+    tindakLanjut,
+    dutyBook?.id,
+  ]);
+
+  const handleRestoreDraft = () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.hari) setHari(d.hari);
+    if (d.jamMulai) setJamMulai(d.jamMulai);
+    if (d.jamSelesai) setJamSelesai(d.jamSelesai);
+    if (d.scheduleId) setScheduleId(d.scheduleId);
+    if (d.petugasName) setPetugasName(d.petugasName);
+    if (d.ruangName) setRuangName(d.ruangName);
+    if (d.kondisiKeamanan !== undefined) setKondisiKeamanan(d.kondisiKeamanan);
+    if (d.kondisiKebersihan !== undefined) setKondisiKebersihan(d.kondisiKebersihan);
+    if (d.kondisiKelas !== undefined) setKondisiKelas(d.kondisiKelas);
+    if (d.kondisiFasilitas !== undefined) setKondisiFasilitas(d.kondisiFasilitas);
+    if (d.kondisiSiswa !== undefined) setKondisiSiswa(d.kondisiSiswa);
+    if (d.catatanPiket !== undefined) setCatatanPiket(d.catatanPiket);
+    if (d.kegiatanKhusus !== undefined) setKegiatanKhusus(d.kegiatanKhusus);
+    if (d.tindakLanjut !== undefined) setTindakLanjut(d.tindakLanjut);
+    setAvailableDraft(null);
+    setSuccessMessage('Draf berhasil dipulihkan!');
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    const targetKey = dutyBook?.id || `new-${tanggal}`;
+    await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', targetKey);
+    setAvailableDraft(null);
+  };
 
   // Explicit user action to load standard format if requested
   const handleApplyStandardTemplates = () => {
@@ -217,14 +311,62 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
     setErrorMessage(null);
     setDebugInfo(null);
     setIsSubmitting(true);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const payload = constructPayload('DRAFT');
+
+    if (isOffline && currentUser) {
+      try {
+        await SyncQueueService.enqueue(
+          currentUser,
+          'DUTYBOOK_SUBMIT',
+          'dutyBooks',
+          payload.id,
+          { record: payload, isSubmitOnly: false }
+        );
+        await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
+        setSuccessMessage('Offline — Draf jurnal tersimpan di perangkat dan masuk ke antrean kirim!');
+        setTimeout(() => onClose(), 1200);
+      } catch (err: any) {
+        setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
-      const payload = constructPayload('DRAFT');
       await onSave(payload, originalUpdatedAt);
+      if (currentUser) {
+        await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
+      }
       setSuccessMessage('Draft jurnal berhasil disimpan!');
       setTimeout(() => {
         onClose();
       }, 1000);
     } catch (err: any) {
+      const isNetwork =
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('network') ||
+        err?.code === 'unavailable' ||
+        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      if (isNetwork && currentUser) {
+        try {
+          await SyncQueueService.enqueue(
+            currentUser,
+            'DUTYBOOK_SUBMIT',
+            'dutyBooks',
+            payload.id,
+            { record: payload, isSubmitOnly: false }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
+          setSuccessMessage('Koneksi terputus. Data diamankan ke antrean sinkronisasi offline!');
+          setTimeout(() => onClose(), 1400);
+          return;
+        } catch {}
+      }
+
       console.warn('[DutyBookForm] Save draft failed:', {
         name: err.name,
         code: err.code,
@@ -285,18 +427,66 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
     setErrorMessage(null);
     setDebugInfo(null);
     setIsSubmitting(true);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const payload = constructPayload('DIAJUKAN');
+
+    if (isOffline && currentUser) {
+      try {
+        await SyncQueueService.enqueue(
+          currentUser,
+          'DUTYBOOK_SUBMIT',
+          'dutyBooks',
+          payload.id,
+          { record: payload, isSubmitOnly: true }
+        );
+        await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
+        setSuccessMessage('Offline — Jurnal resmi tersimpan di antrean perangkat & akan dikirim otomatis!');
+        setTimeout(() => onClose(), 1200);
+      } catch (err: any) {
+        setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
-      const payload = constructPayload('DIAJUKAN');
       if (onSubmitJournal) {
         await onSubmitJournal(payload, originalUpdatedAt);
       } else {
         await onStatusChange(payload, 'DIAJUKAN');
+      }
+      if (currentUser) {
+        await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
       }
       setSuccessMessage('Jurnal resmi berhasil dikirim! Menunggu pengesahan.');
       setTimeout(() => {
         onClose();
       }, 1200);
     } catch (err: any) {
+      const isNetwork =
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('network') ||
+        err?.code === 'unavailable' ||
+        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      if (isNetwork && currentUser) {
+        try {
+          await SyncQueueService.enqueue(
+            currentUser,
+            'DUTYBOOK_SUBMIT',
+            'dutyBooks',
+            payload.id,
+            { record: payload, isSubmitOnly: true }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
+          setSuccessMessage('Koneksi terputus. Jurnal diamankan di antrean sinkronisasi offline!');
+          setTimeout(() => onClose(), 1400);
+          return;
+        } catch {}
+      }
+
       console.warn('[DutyBookForm] Submit journal failed:', {
         name: err.name,
         code: err.code,
@@ -319,7 +509,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       } else if (isPermissionDenied) {
         setErrorMessage('Tidak memiliki izin menyimpan jurnal.');
       } else {
-        setErrorMessage(err.message || 'Gagal mengirim jurnal buku piket.');
+        setErrorMessage(err.message || 'Gagal mengirim buku piket.');
       }
       setDebugInfo(`[${err.name || 'Error'}${err.code ? `:${err.code}` : ''}] ${err.message || 'Terjadi kesalahan sistem'}`);
     } finally {
@@ -461,6 +651,41 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSaveDraft} className="space-y-6">
+        {/* Uncommitted Local Draft Banner */}
+        {availableDraft && (
+          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="text-xs">
+                <p className="font-bold">Ditemukan draf jurnal tersimpan di perangkat ini</p>
+                <p className="text-amber-700 dark:text-amber-400">
+                  Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleRestoreDraft}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+              >
+                Lanjutkan Draf
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                title="Buang Draf"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Buang</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Status Pipeline Banner (Simplified 3 Stages) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2.5">

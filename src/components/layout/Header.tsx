@@ -19,6 +19,8 @@ import {
   Check,
   X,
   RotateCcw,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,9 +32,14 @@ import { ProfileModal } from '../../features/auth/ProfileModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { SchoolBellService } from '../../services/audio/bellService';
 import { SchoolSettings } from '../../types';
+import { OfflineSyncBadge } from './OfflineSyncBadge';
+import { UnsavedOfflineWarningModal } from '../common/UnsavedOfflineWarningModal';
+import { OfflineStorage } from '../../services/offline/offlineStorage';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
+  isDesktopSidebarHidden?: boolean;
+  onToggleDesktopSidebar?: () => void;
 }
 
 interface NotificationItem {
@@ -71,7 +78,11 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
   },
 ];
 
-export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onToggleSidebar,
+  isDesktopSidebarHidden = false,
+  onToggleDesktopSidebar,
+}) => {
   const { theme, setTheme, pastelTheme, setPastelTheme, isDark, pastelThemesList } = useTheme();
   const { currentUser, logout } = useAuth();
   const { activeTab, subView } = useNavigation();
@@ -83,6 +94,34 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+  const [unsavedCounts, setUnsavedCounts] = useState({ pending: 0, drafts: 0 });
+
+  const handleInitiateLogout = async () => {
+    setShowUserMenu(false);
+    if (!currentUser?.id) {
+      await logout();
+      return;
+    }
+    try {
+      const queueItems = await OfflineStorage.getSyncItemsByUser(currentUser.id);
+      const drafts = await OfflineStorage.listDraftsByUser(currentUser.id);
+      const pending = queueItems.filter((i) => i.status === 'PENDING_NETWORK' || i.status === 'NEEDS_ACTION').length;
+      if (pending > 0 || drafts.length > 0) {
+        setUnsavedCounts({ pending, drafts: drafts.length });
+        setShowLogoutWarning(true);
+      } else {
+        await logout();
+      }
+    } catch {
+      await logout();
+    }
+  };
+
+  const handleConfirmLogout = async (purgeUserData: boolean) => {
+    setShowLogoutWarning(false);
+    await logout({ purgeUserData });
+  };
 
   // Automatically close notifications and menus whenever user navigates or activeTab/subView changes
   useEffect(() => {
@@ -188,40 +227,62 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   return (
     <>
       <header
-        className="sticky top-0 z-30 backdrop-blur-md border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
+        className="shrink-0 sticky top-0 z-30 backdrop-blur-md border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
         style={{ backgroundColor: 'var(--theme-header-bg)' }}
       >
-        <div className="flex items-center justify-between px-3 sm:px-6 h-16">
+        <div className="flex items-center justify-between px-2.5 sm:px-6 h-16">
           {/* Left Side: Logo & School Title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2 sm:mr-3">
+            {/* Mobile Sidebar Trigger */}
             <button
               onClick={onToggleSidebar}
-              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
-              aria-label="Buka Menu"
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+              aria-label="Buka Menu Navigasi"
+              title="Buka Menu Navigasi"
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3">
+            {/* Desktop Sidebar Hide/Show Toggle */}
+            {onToggleDesktopSidebar && (
+              <button
+                onClick={onToggleDesktopSidebar}
+                className={`hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] items-center justify-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                  isDesktopSidebarHidden
+                    ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] font-semibold'
+                    : ''
+                }`}
+                aria-label={isDesktopSidebarHidden ? 'Tampilkan panel menu (Ctrl+B)' : 'Sembunyikan panel menu (Ctrl+B)'}
+                title={isDesktopSidebarHidden ? 'Tampilkan panel menu' : 'Sembunyikan panel menu'}
+              >
+                {isDesktopSidebarHidden ? (
+                  <PanelLeftOpen className="w-5 h-5 text-[var(--theme-primary)]" />
+                ) : (
+                  <PanelLeftClose className="w-5 h-5" />
+                )}
+              </button>
+            )}
+
+            <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 min-w-0 flex-1">
               {logoUrl ? (
-                <div className="w-9 h-9 rounded-xl bg-white dark:bg-[var(--theme-card-bg)] p-0.5 flex items-center justify-center shadow-md shadow-[var(--theme-ring)] border border-slate-200 dark:border-[var(--theme-card-border)] shrink-0">
-                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain rounded-lg" />
+                <div className="w-7 h-7 xs:w-8 xs:h-8 sm:w-9 sm:h-9 rounded-xl bg-white dark:bg-[var(--theme-card-bg)] p-0.5 flex items-center justify-center shadow-md shadow-[var(--theme-ring)] border border-slate-200 dark:border-[var(--theme-card-border)] shrink-0">
+                  <img src={logoUrl} alt="Logo Sekolah" className="w-full h-full object-contain rounded-lg" />
                 </div>
               ) : (
-                <div className="w-9 h-9 rounded-xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center shadow-md shadow-[var(--theme-ring)] font-bold text-lg shrink-0">
+                <div className="w-7 h-7 xs:w-8 xs:h-8 sm:w-9 sm:h-9 rounded-xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center shadow-md shadow-[var(--theme-ring)] font-bold text-xs xs:text-base sm:text-lg shrink-0">
                   P
                 </div>
               )}
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-base sm:text-lg">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-xs xs:text-sm sm:text-lg whitespace-nowrap shrink-0">
                     {appName}
                   </span>
-                  <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)]/50">
+                  <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)]/50 shrink-0">
                     v1.0.1
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[160px] sm:max-w-xs">
+                <p className="text-[9px] xs:text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px] xs:max-w-[170px] sm:max-w-xs leading-tight">
                   {schoolName}
                 </p>
               </div>
@@ -229,7 +290,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           </div>
 
           {/* Center: Live Date & Time (Desktop) */}
-          <div className="hidden md:flex flex-col items-center">
+          <div className="hidden md:flex flex-col items-center shrink-0 px-2">
             <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
               {formatIndonesianDate(currentTime)}
             </div>
@@ -238,31 +299,22 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             </div>
           </div>
 
-          {/* Right Side: Network Status, Notifications, Theme Switcher & User Profile */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Status Online/Offline Indicator */}
-            <div className="hidden sm:flex items-center">
-              {isOnline ? (
-                <Badge variant="success" size="sm" icon={<Wifi className="w-3 h-3" />}>
-                  Online
-                </Badge>
-              ) : (
-                <Badge variant="warning" size="sm" icon={<WifiOff className="w-3 h-3" />}>
-                  Offline (Lokal)
-                </Badge>
-              )}
-            </div>
+          {/* Right Side: Connection Status, Notifications, Theme Switcher & User Profile */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {/* Offline Sync & Connection Status Button */}
+            <OfflineSyncBadge />
 
             {/* Notification Bell Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors relative cursor-pointer"
+                className="p-2.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
                 title="Pusat Notifikasi & Bel Sekolah"
+                aria-label="Pusat Notifikasi dan Bel Sekolah"
               >
                 <Bell className="w-4 h-4" />
                 {hasUnreadNotif && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--theme-primary)] ring-2 ring-white dark:ring-[var(--theme-card-bg)] animate-pulse" />
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--theme-primary)] ring-2 ring-white dark:ring-[var(--theme-card-bg)] animate-pulse" />
                 )}
               </button>
 
@@ -466,7 +518,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             <div className="relative">
               <button
                 onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
+                className="p-2.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
                 title="Ganti Tema & Warna"
                 aria-label="Pengaturan Tema & Warna"
               >
@@ -561,9 +613,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+                  aria-label="Menu Pengguna & Profil"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-xs shadow-inner overflow-hidden">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-xs shadow-inner overflow-hidden shrink-0">
                     {currentUser.fullName.charAt(0)}
                   </div>
                   <div className="hidden lg:block text-left">
@@ -574,7 +627,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                       {ROLE_LABELS[currentUser.role]}
                     </div>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block shrink-0" />
                 </button>
 
                 {showUserMenu && (
@@ -605,10 +658,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                           <User className="w-4 h-4 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]" /> Profil & Ganti PIN
                         </button>
                         <button
-                          onClick={() => {
-                            setShowUserMenu(false);
-                            logout();
-                          }}
+                          onClick={handleInitiateLogout}
                           className="w-full text-left px-2.5 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg font-medium cursor-pointer flex items-center gap-2"
                         >
                           <LogOut className="w-4 h-4" /> Keluar Sesi
@@ -625,6 +675,15 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
 
       {/* Profile & PIN Management Dialog */}
       <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+
+      {/* Warning Dialog when logging out with unsynced drafts / queue items */}
+      <UnsavedOfflineWarningModal
+        isOpen={showLogoutWarning}
+        onClose={() => setShowLogoutWarning(false)}
+        pendingCount={unsavedCounts.pending}
+        draftsCount={unsavedCounts.drafts}
+        onConfirmLogout={handleConfirmLogout}
+      />
     </>
   );
 };

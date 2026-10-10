@@ -1,12 +1,14 @@
 import { UserProfile, UserRole } from '../../types';
 import { FirestoreService } from '../firebase/firestoreService';
 import { authService } from './authService';
+import { OfflineStorage } from '../offline/offlineStorage';
 
 export interface AuthProfileValidationResult {
   success: boolean;
   profile: UserProfile | null;
   error?: string;
   code?: string;
+  isOfflineSession?: boolean;
 }
 
 export interface FirebaseUserLike {
@@ -18,7 +20,8 @@ export interface FirebaseUserLike {
 /**
  * Server-authoritative profile validator for Firebase authenticated sessions (R21-03, R21-04).
  * Strictly requires an authoritative UID-bound profile via FirestoreService.getByIdStrict.
- * Never falls back to local display caches or email-based profile substitution.
+ * Distinguishes network failures from security/permission rejections:
+ * Network failure alone does NOT wipe previously verified sessions if a verified snapshot exists.
  */
 export async function validateFirebaseUserProfile(
   fbUser: FirebaseUserLike | null,
@@ -35,20 +38,51 @@ export async function validateFirebaseUserProfile(
   }
 
   let profile: UserProfile | null = null;
+  let isOfflineFallback = false;
+
   try {
-    // 1. Strict UID-bound lookup; throws immediately on error or PERMISSION_DENIED without reading cache
+    // 1. Strict UID-bound lookup from server
     profile = await FirestoreService.getByIdStrict<UserProfile>('users', fbUser.uid);
   } catch (readErr: any) {
-    console.error('[AUTH_VALIDATOR] Strict profile lookup error:', readErr?.message || readErr);
-    await authService.clearSession();
-    return {
-      success: false,
-      profile: null,
-      error: options.isLoginWithGoogle
-        ? 'Gagal memverifikasi profil sekolah. Akses database ditolak.'
-        : 'Gagal membaca profil pengguna dari database sekolah.',
-      code: 'DB_READ_ERROR',
-    };
+    const errorMsg = readErr?.message || String(readErr);
+    const errorCode = readErr?.code || '';
+    const isNetworkError =
+      (typeof navigator !== 'undefined' && !navigator.onLine) ||
+      errorCode === 'unavailable' ||
+      errorCode === 'failed-precondition' ||
+      errorMsg.includes('offline') ||
+      errorMsg.includes('network') ||
+      errorMsg.includes('Failed to fetch') ||
+      errorMsg.includes('client is offline');
+
+    // If genuine network loss, check if an existing verified profile snapshot exists for this exact UID
+    if (isNetworkError) {
+      const cachedVerified = await OfflineStorage.getVerifiedProfile(fbUser.uid);
+      if (cachedVerified && cachedVerified.id === fbUser.uid) {
+        console.warn('[AUTH_VALIDATOR] Operating in offline mode with verified session snapshot for UID:', fbUser.uid);
+        profile = cachedVerified;
+        isOfflineFallback = true;
+      } else {
+        return {
+          success: false,
+          profile: null,
+          error: 'Koneksi internet diperlukan untuk memverifikasi profil akun ini pertama kali.',
+          code: 'OFFLINE_NO_CACHE',
+        };
+      }
+    } else {
+      // Definite security or permission rejection by Firestore
+      console.error('[AUTH_VALIDATOR] Strict profile lookup error (permission/security):', errorMsg);
+      await authService.clearSession();
+      return {
+        success: false,
+        profile: null,
+        error: options.isLoginWithGoogle
+          ? 'Gagal memverifikasi profil sekolah. Akses database ditolak.'
+          : 'Gagal membaca profil pengguna dari database sekolah.',
+        code: 'DB_READ_ERROR',
+      };
+    }
   }
 
   // 2. Strict ID binding check & lifecycle status validation
@@ -107,11 +141,23 @@ export async function validateFirebaseUserProfile(
       role: authoritativeRole,
     };
 
+    if (!isOfflineFallback) {
+      await OfflineStorage.saveVerifiedProfile(activeProfile);
+    }
+
     return {
       success: true,
       profile: activeProfile,
+      isOfflineSession: isOfflineFallback,
     };
   } catch (tokenErr: any) {
+    if (isOfflineFallback && profile) {
+      return {
+        success: true,
+        profile,
+        isOfflineSession: true,
+      };
+    }
     authService.clearSession();
     return {
       success: false,

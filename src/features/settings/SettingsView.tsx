@@ -42,6 +42,7 @@ import { SecurityCenterCard } from './SecurityCenterCard';
 import { BellEmergencyAutomationCard } from './BellEmergencyAutomationCard';
 import { SnapshotManagerCard } from './SnapshotManagerCard';
 import { AuditForensicViewer } from './AuditForensicViewer';
+import { OperationalResetCard } from './OperationalResetCard';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
@@ -822,7 +823,7 @@ export const SettingsView: React.FC = () => {
             }`}
           >
             <HardDrive className="w-3.5 h-3.5 text-emerald-500" />
-            Backup JSON
+            Pemeliharaan &amp; Backup
           </button>
           <button
             onClick={() => setActiveTab('theme')}
@@ -953,13 +954,13 @@ export const SettingsView: React.FC = () => {
           {/* Card Pengaturan Kalender Semester Akademik */}
           <Card>
             <CardHeader
-              title="Pengaturan Batas Tanggal Semester & Tahun Ajaran"
+              title="Pengaturan Batas Tanggal Semester & Tahun Pelajaran"
               subtitle="Acuan resmi rentang filter laporan rekap semesteran agar sesuai dengan kalender akademik sekolah"
             />
             <CardContent className="p-5 sm:p-6 space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Tahun Ajaran Aktif
+                  Tahun Pelajaran Aktif
                 </label>
                 <input
                   disabled={!isAdmin}
@@ -2278,6 +2279,16 @@ export const SettingsView: React.FC = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* FITUR PEMELIHARAAN: RESET DATA OPERASIONAL */}
+          {currentUser && (
+            <div className="md:col-span-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <OperationalResetCard
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+              />
+            </div>
+          )}
         </div>
       )}
 

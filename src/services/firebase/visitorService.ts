@@ -80,10 +80,16 @@ export class VisitorService {
    * Register a new visitor check-in
    */
   public static async registerVisitor(
-    data: Omit<VisitorRecord, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>,
+    data: Omit<VisitorRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<VisitorRecord> {
-    const id = `vis-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `vis-${data.tanggal}-${Date.now().toString(36)}`;
+    // Idempotency check: jika tamu telah tercatat di server (misal respons jaringan terputus), kembalikan tanpa membuat log audit ganda
+    const existingDoc = await FirestoreService.getById<VisitorRecord>('visitors', id);
+    if (existingDoc) {
+      return existingDoc;
+    }
+
     const now = new Date().toISOString();
 
     const cleanData = { ...data };
@@ -127,6 +133,10 @@ export class VisitorService {
     const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', data.id);
     if (!existing) {
       throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
+    }
+
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+      throw new Error(`Konflik pembaruan: Data buku tamu telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
     const now = new Date().toISOString();

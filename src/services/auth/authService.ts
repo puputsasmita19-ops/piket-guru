@@ -2,6 +2,8 @@ import { UserProfile } from '../../types';
 import { ROLE_PERMISSIONS } from '../../config/permissions';
 import { auth } from '../firebase/firebase';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { OfflineStorage } from '../offline/offlineStorage';
+import { SyncQueueService } from '../offline/syncQueueService';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 
@@ -530,9 +532,15 @@ class AuthService {
   }
 
   /**
-   * Clears session, signs out from Firebase Auth, and purges local storage
+   * Clears session, signs out from Firebase Auth, and purges local storage.
+   * Gracefully tears down all active Firestore listeners.
    */
-  public async clearSession(): Promise<void> {
+  public async clearSession(options?: { purgeUserData?: boolean; userId?: string }): Promise<void> {
+    // 1. Immediately disconnect all active Firestore real-time listeners
+    OfflineStorage.teardownActiveListeners();
+
+    const targetUid = options?.userId || this.currentFirebaseUser?.uid || auth?.currentUser?.uid;
+
     try {
       if (auth) {
         await signOut(auth);
@@ -549,6 +557,11 @@ class AuthService {
       } catch {
         // ignore
       }
+    }
+
+    // Purge user data if requested or if on shared/untrusted device
+    if (targetUid && (options?.purgeUserData || !OfflineStorage.isTrustedDevice())) {
+      OfflineStorage.purgeUserData(targetUid).catch(() => {});
     }
   }
 }

@@ -81,10 +81,16 @@ export class StudentPermitService {
    * Create a new student permit / gate pass
    */
   public static async createPermit(
-    data: Omit<StudentPermitRecord, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>,
+    data: Omit<StudentPermitRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<StudentPermitRecord> {
-    const id = `pmt-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `pmt-${data.tanggal}-${Date.now().toString(36)}`;
+    // Idempotency check: jika dokumen telah tercatat di server (misal kegagalan respons jaringan), kembalikan tanpa duplikasi audit log
+    const existingDoc = await FirestoreService.getById<StudentPermitRecord>('studentPermits', id);
+    if (existingDoc) {
+      return existingDoc;
+    }
+
     const now = new Date().toISOString();
 
     const cleanData = { ...data };
@@ -128,6 +134,10 @@ export class StudentPermitService {
     const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
     if (!existing) {
       throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
+    }
+
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+      throw new Error(`Konflik pembaruan: Surat izin telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
     const now = new Date().toISOString();

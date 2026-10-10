@@ -25,7 +25,10 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  FileText,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface IncidentFormModalProps {
   isOpen: boolean;
@@ -56,6 +59,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   const [tindakLanjut, setTindakLanjut] = useState<string>('');
   const [status, setStatus] = useState<IncidentStatus>('BARU');
   const [photos, setPhotos] = useState<IncidentPhoto[]>([]);
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any; attachments?: { [key: string]: Blob } } | null>(null);
 
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -63,6 +67,8 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const draftKey = editingIncident?.id || 'new-incident';
 
   // Ensure 'LAINNYA' is always present as a stable option without duplicate entries
   const effectiveCategories = useMemo(() => {
@@ -131,7 +137,125 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
     setDebugInfo(null);
     setFieldErrors({});
     setIsSubmitting(false);
-  }, [editingIncident, effectiveCategories, isOpen]);
+    setAvailableDraft(null);
+
+    // Check for saved uncommitted draft
+    if (isOpen && currentUser?.id && !editingIncident) {
+      DraftService.getDraft(currentUser.id, 'INCIDENT', draftKey).then((saved) => {
+        if (saved && saved.data) {
+          setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data, attachments: saved.attachments });
+        }
+      });
+    }
+  }, [editingIncident, effectiveCategories, isOpen, currentUser?.id]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || !hasWritePermission || !currentUser?.id || editingIncident) return;
+    if (!lokasi.trim() && !pihakTerlibat.trim() && !uraian.trim() && !tindakanAwal.trim() && photos.length === 0) {
+      return;
+    }
+
+    const saveAsync = async () => {
+      // Convert photos to Blobs for IndexedDB attachment storage
+      const attachments: { [key: string]: Blob } = {};
+      const lightPhotos = await Promise.all(
+        photos.map(async (p, idx) => {
+          if (p.url.startsWith('data:')) {
+            try {
+              const blob = await DraftService.dataUrlToBlob(p.url);
+              attachments[`photo_${idx}`] = blob;
+              return { ...p, url: `attachment:photo_${idx}` };
+            } catch {
+              return p;
+            }
+          }
+          return p;
+        })
+      );
+
+      DraftService.saveDraftDebounced(currentUser.id, 'INCIDENT', draftKey, {
+        tanggal,
+        waktu,
+        kategori,
+        kategoriLainnya,
+        tingkatKeparahan,
+        lokasi,
+        pihakTerlibat,
+        uraian,
+        tindakanAwal,
+        tindakLanjut,
+        status,
+        photos: lightPhotos,
+      }, attachments);
+    };
+
+    saveAsync().catch(() => {});
+  }, [
+    isOpen,
+    hasWritePermission,
+    currentUser?.id,
+    editingIncident,
+    tanggal,
+    waktu,
+    kategori,
+    kategoriLainnya,
+    tingkatKeparahan,
+    lokasi,
+    pihakTerlibat,
+    uraian,
+    tindakanAwal,
+    tindakLanjut,
+    status,
+    photos,
+    draftKey,
+  ]);
+
+  const handleRestoreDraft = async () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.waktu) setWaktu(d.waktu);
+    if (d.kategori) setKategori(d.kategori);
+    if (d.kategoriLainnya !== undefined) setKategoriLainnya(d.kategoriLainnya);
+    if (d.tingkatKeparahan) setTingkatKeparahan(d.tingkatKeparahan);
+    if (d.lokasi !== undefined) setLokasi(d.lokasi);
+    if (d.pihakTerlibat !== undefined) setPihakTerlibat(d.pihakTerlibat);
+    if (d.uraian !== undefined) setUraian(d.uraian);
+    if (d.tindakanAwal !== undefined) setTindakanAwal(d.tindakanAwal);
+    if (d.tindakLanjut !== undefined) setTindakLanjut(d.tindakLanjut);
+    if (d.status) setStatus(d.status);
+
+    // Restore photos from attachments
+    if (Array.isArray(d.photos) && d.photos.length > 0) {
+      const restoredPhotos: IncidentPhoto[] = [];
+      for (const p of d.photos) {
+        if (p.url.startsWith('attachment:') && availableDraft.attachments) {
+          const attachKey = p.url.replace('attachment:', '');
+          const blob = availableDraft.attachments[attachKey];
+          if (blob) {
+            try {
+              const dataUrl = await DraftService.blobToDataUrl(blob);
+              restoredPhotos.push({ ...p, url: dataUrl });
+              continue;
+            } catch {}
+          }
+        }
+        restoredPhotos.push(p);
+      }
+      setPhotos(restoredPhotos);
+    }
+
+    setAvailableDraft(null);
+    setSuccessMessage('Draf laporan berhasil dipulihkan!');
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    await DraftService.deleteDraft(currentUser.id, 'INCIDENT', draftKey);
+    setAvailableDraft(null);
+  };
 
   const handleAddPhoto = (imageDataUrl: string) => {
     const newPhoto: IncidentPhoto = {
@@ -210,40 +334,87 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
     setDebugInfo(null);
     setIsSubmitting(true);
 
+    const selectedCat = effectiveCategories.find((c) => c.code === kategori);
+    const isLainnya = kategori === 'LAINNYA';
+
+    const payload: IncidentRecord = {
+      id: editingIncident ? editingIncident.id : `inc-${tanggal}-${Date.now()}`,
+      tanggal,
+      waktu: waktu.trim(),
+      kategori,
+      kategoriName: isLainnya ? 'Lain-lain' : selectedCat ? selectedCat.name : kategori,
+      ...(isLainnya && kategoriLainnya.trim() ? { kategoriLainnya: kategoriLainnya.trim() } : {}),
+      tingkatKeparahan,
+      lokasi: lokasi.trim(),
+      pihakTerlibat: pihakTerlibat.trim(),
+      uraian: uraian.trim(),
+      tindakanAwal: tindakanAwal.trim(),
+      ...(tindakLanjut.trim() ? { tindakLanjut: tindakLanjut.trim() } : {}),
+      penanggungJawab: editingIncident?.penanggungJawab || currentUser?.fullName || 'Petugas Piket',
+      pelaporId: editingIncident?.pelaporId || currentUser?.id,
+      pelaporName: editingIncident?.pelaporName || currentUser?.fullName || 'Petugas Piket',
+      status,
+      ...(photos.length > 0 ? { photos } : {}),
+      createdAt: editingIncident ? editingIncident.createdAt : new Date().toISOString(),
+      createdBy: editingIncident ? editingIncident.createdBy : currentUser?.fullName || 'Petugas',
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser?.fullName || 'Petugas',
+    };
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline && currentUser) {
+      try {
+        await SyncQueueService.enqueue(
+          currentUser,
+          'INCIDENT_REPORT',
+          'incidents',
+          payload.id,
+          payload
+        );
+        await DraftService.deleteDraft(currentUser.id, 'INCIDENT', draftKey);
+        setSuccessMessage('Offline — Laporan kejadian tersimpan di antrean perangkat & akan dikirim otomatis!');
+        setTimeout(() => onClose(), 1200);
+      } catch (err: any) {
+        setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
-      const selectedCat = effectiveCategories.find((c) => c.code === kategori);
-      const isLainnya = kategori === 'LAINNYA';
-
-      const payload: IncidentRecord = {
-        id: editingIncident ? editingIncident.id : `inc-${tanggal}-${Date.now()}`,
-        tanggal,
-        waktu: waktu.trim(),
-        kategori,
-        kategoriName: isLainnya ? 'Lain-lain' : selectedCat ? selectedCat.name : kategori,
-        ...(isLainnya && kategoriLainnya.trim() ? { kategoriLainnya: kategoriLainnya.trim() } : {}),
-        tingkatKeparahan,
-        lokasi: lokasi.trim(),
-        pihakTerlibat: pihakTerlibat.trim(),
-        uraian: uraian.trim(),
-        tindakanAwal: tindakanAwal.trim(),
-        ...(tindakLanjut.trim() ? { tindakLanjut: tindakLanjut.trim() } : {}),
-        penanggungJawab: editingIncident?.penanggungJawab || currentUser?.fullName || 'Petugas Piket',
-        pelaporId: editingIncident?.pelaporId || currentUser?.id,
-        pelaporName: editingIncident?.pelaporName || currentUser?.fullName || 'Petugas Piket',
-        status,
-        ...(photos.length > 0 ? { photos } : {}),
-        createdAt: editingIncident ? editingIncident.createdAt : new Date().toISOString(),
-        createdBy: editingIncident ? editingIncident.createdBy : currentUser?.fullName || 'Petugas',
-        updatedAt: new Date().toISOString(),
-        updatedBy: currentUser?.fullName || 'Petugas',
-      };
-
       await onSave(payload);
+      if (currentUser) {
+        await DraftService.deleteDraft(currentUser.id, 'INCIDENT', draftKey);
+      }
       setSuccessMessage(editingIncident ? 'Perubahan laporan berhasil disimpan!' : 'Laporan kejadian berhasil dikirim!');
       setTimeout(() => {
         onClose();
       }, 1200);
     } catch (err: any) {
+      const isNetwork =
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('network') ||
+        err?.code === 'unavailable' ||
+        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      if (isNetwork && currentUser) {
+        try {
+          await SyncQueueService.enqueue(
+            currentUser,
+            'INCIDENT_REPORT',
+            'incidents',
+            payload.id,
+            payload
+          );
+          await DraftService.deleteDraft(currentUser.id, 'INCIDENT', draftKey);
+          setSuccessMessage('Koneksi terputus. Laporan kejadian diamankan di antrean sinkronisasi offline!');
+          setTimeout(() => onClose(), 1400);
+          return;
+        } catch {}
+      }
+
       console.warn('[IncidentFormModal] Submit incident failed:', {
         name: err.name,
         code: err.code,
@@ -283,6 +454,41 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         maxWidth="2xl"
       >
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          {/* Uncommitted Local Draft Banner */}
+          {availableDraft && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold">Ditemukan draf laporan kejadian tersimpan di perangkat ini</p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleRestoreDraft}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+                >
+                  Lanjutkan Draf
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                  title="Buang Draf"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Buang</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Header Row: Waktu, Kategori, Severity */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">

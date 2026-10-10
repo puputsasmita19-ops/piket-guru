@@ -7,10 +7,18 @@ import { validateFirebaseUserProfile } from '../services/auth/authProfileValidat
 import { checkUserPermission, PermissionKey } from '../config/permissions';
 import { FirestoreService } from '../services/firebase/firestoreService';
 
+import { OfflineStorage } from '../services/offline/offlineStorage';
+import { SyncQueueService } from '../services/offline/syncQueueService';
+
 interface AuthContextType {
   currentUser: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isOffline: boolean;
+  isOfflineSession: boolean;
+  isTrustedDevice: boolean;
+  setTrustedDevice: (trusted: boolean) => void;
+  revalidateSessionOnline: () => Promise<boolean>;
   loginWithPin: (
     nipOrUserId: string,
     pin: string
@@ -22,7 +30,7 @@ interface AuthContextType {
     remainingSeconds?: number;
   }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: (options?: { purgeUserData?: boolean }) => Promise<void>;
   refreshProfile: () => Promise<void>;
   changePin: (
     oldPin: string,
@@ -44,11 +52,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // R21-02: Initial state starts as null; never restore authenticated state from localStorage when fbUser is null
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+  const [isOfflineSession, setIsOfflineSession] = useState(false);
+  const [isTrustedDeviceState, setIsTrustedDeviceState] = useState(() => OfflineStorage.isTrustedDevice());
 
-  const logout = useCallback(() => {
-    authService.clearSession();
-    setCurrentUser(null);
+  const setTrustedDevice = useCallback((trusted: boolean) => {
+    OfflineStorage.setTrustedDevice(trusted);
+    setIsTrustedDeviceState(trusted);
   }, []);
+
+  const logout = useCallback(async (options?: { purgeUserData?: boolean }) => {
+    await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
+    setCurrentUser(null);
+    setIsOfflineSession(false);
+  }, [currentUser?.id]);
+
+  // Revalidate session with server when network reconnects
+  const revalidateSessionOnline = useCallback(async (): Promise<boolean> => {
+    if (!auth?.currentUser) return false;
+    try {
+      const valRes = await validateFirebaseUserProfile(auth.currentUser);
+      if (valRes.success && valRes.profile) {
+        setCurrentUser(valRes.profile);
+        setIsOfflineSession(false);
+        // Automatically attempt queue sync on revalidation
+        SyncQueueService.triggerSync(valRes.profile).catch(() => {});
+        return true;
+      } else {
+        console.warn('[AUTH_CONTEXT] Revalidation online rejected by server:', valRes.error);
+        await logout();
+        return false;
+      }
+    } catch (e) {
+      console.error('[AUTH_CONTEXT] Online revalidation error:', e);
+      return false;
+    }
+  }, [logout]);
+
+  // Network online/offline event listener
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      revalidateSessionOnline();
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [revalidateSessionOnline]);
 
   // Listen to Firebase Auth state changes and strictly sync active profile from database (REV-07)
   // Local cache is NEVER the authority for session validity or user roles.
@@ -63,8 +121,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (fbUser: User | null) => {
       if (!fbUser) {
         if (isMounted) {
-          authService.clearSession();
+          await authService.clearSession();
           setCurrentUser(null);
+          setIsOfflineSession(false);
           setIsLoading(false);
         }
         return;
@@ -75,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!valRes.success || !valRes.profile) {
           console.warn('[AUTH_CONTEXT] User profile validation failed:', valRes.error);
           if (isMounted) {
-            logout();
+            await logout();
             setIsLoading(false);
           }
           return;
@@ -83,12 +142,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (isMounted) {
           setCurrentUser(valRes.profile);
+          setIsOfflineSession(!!valRes.isOfflineSession);
           setIsLoading(false);
+          SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
         }
       } catch (err) {
         console.error('[AUTH_CONTEXT] Failed to verify active Firebase session:', err);
         if (isMounted) {
-          logout();
+          await logout();
           setIsLoading(false);
         }
       }
@@ -284,6 +345,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         isAuthenticated: !!currentUser,
         isLoading,
+        isOffline,
+        isOfflineSession,
+        isTrustedDevice: isTrustedDeviceState,
+        setTrustedDevice,
+        revalidateSessionOnline,
         loginWithPin,
         loginWithGoogle,
         logout,

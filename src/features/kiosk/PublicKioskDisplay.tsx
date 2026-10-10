@@ -924,10 +924,10 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
               <div className="p-6 rounded-3xl bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/80 dark:border-[var(--theme-card-border)] shadow-md space-y-3">
                 <div className="flex items-center gap-2 text-xs font-bold text-purple-600 dark:text-purple-400">
                   <BookOpen className="w-4 h-4" />
-                  <span>TAHUN AJARAN & KONTAK</span>
+                  <span>TAHUN PELAJARAN & KONTAK</span>
                 </div>
                 <div className="text-sm font-bold text-slate-900 dark:text-white">
-                  Tahun Ajaran {settings.academicSemester?.academicYear || '2026/2027'}
+                  Tahun Pelajaran {settings.academicSemester?.academicYear || '2026/2027'}
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Layanan Pengaduan & Informasi Piket Sekolah Terintegrasi.

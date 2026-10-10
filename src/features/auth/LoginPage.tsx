@@ -34,7 +34,7 @@ import { SchoolSettings, LoginContactType } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithPin, loginWithGoogle, isLoading } = useAuth();
+  const { loginWithPin, loginWithGoogle, isLoading, isTrustedDevice, setTrustedDevice } = useAuth();
   const {
     theme,
     setTheme,
@@ -930,6 +930,23 @@ export const LoginPage: React.FC = () => {
             <span className="flex-1 font-medium">{errorMessage}</span>
           </div>
         )}
+
+        {/* Pilihan Perangkat Pribadi vs Perangkat Bersama */}
+        <div className="flex items-start gap-2.5 px-1 py-1 rounded-xl bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/50 border border-slate-200/60 dark:border-[var(--theme-card-border)]/60">
+          <input
+            id="trusted-device-checkbox"
+            type="checkbox"
+            checked={isTrustedDevice}
+            onChange={(e) => setTrustedDevice(e.target.checked)}
+            className="mt-0.5 rounded border-slate-300 dark:border-slate-600 text-[var(--theme-primary)] focus:ring-[var(--theme-primary)] w-4 h-4 cursor-pointer"
+          />
+          <label htmlFor="trusted-device-checkbox" className="text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">Perangkat Pribadi / Tepercaya</span>
+            <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Aktifkan draf & penyimpanan lokal persisten. Jangan centang jika menggunakan perangkat bersama.
+            </span>
+          </label>
+        </div>
 
         {/* Submit Button (Ergonomic alternative to virtual pad) */}
         <button

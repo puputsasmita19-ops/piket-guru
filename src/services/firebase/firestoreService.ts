@@ -17,9 +17,10 @@ import {
   QueryConstraint,
   Unsubscribe,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { AuditLogRecord } from '../../types/master.types';
 import { isOperationalRecord, UserRole } from '../../types';
+import { OfflineStorage } from '../offline/offlineStorage';
 
 const getLocalItem = (key: string): string | null => {
   if (typeof localStorage !== 'undefined') {
@@ -105,78 +106,14 @@ export class FirestoreService {
    * while strictly protecting active user session, production data, and school configuration.
    */
   public static purgeDemoCache(): void {
+    // Purge legacy unscoped caches (piket_firestore_*) across all collections
+    OfflineStorage.purgeLegacyUnscopedCaches();
+
     if (typeof localStorage === 'undefined') return;
 
     try {
-      // 1. Sanitize users cache
-      const usersStr = localStorage.getItem('piket_guru_users_db_v1');
-      if (usersStr) {
-        try {
-          const users = JSON.parse(usersStr);
-          if (Array.isArray(users)) {
-            const cleanUsers = users.filter(
-              (u) => u.userId === 'usr-admin-01' || (!u.isDemo && u.dataSource !== 'SEED')
-            );
-            localStorage.setItem('piket_guru_users_db_v1', JSON.stringify(cleanUsers));
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // 2. Sanitize all collection caches
-      const collections = [
-        'users',
-        'teachers',
-        'staff',
-        'rooms',
-        'incidentCategories',
-        'students',
-        'schedules',
-        'attendance',
-        'dutyBooks',
-        'incidents',
-        'studentTardiness',
-        'substitutions',
-        'studentPermits',
-        'visitors',
-        'announcements',
-      ];
-
-      for (const col of collections) {
-        const key = `piket_firestore_${col}`;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              if (col === 'incidentCategories') {
-                const clean = parsed.map((item) => ({ ...item, isDemo: false, dataSource: 'PRODUCTION' }));
-                localStorage.setItem(key, JSON.stringify(clean));
-              } else if (col === 'users') {
-                const clean = parsed.filter(
-                  (item) => item.id === 'usr-admin-01' || (!item.isDemo && item.dataSource !== 'SEED')
-                );
-                localStorage.setItem(key, JSON.stringify(clean));
-              } else {
-                const clean = parsed.filter(
-                  (item) =>
-                    !item.isDemo &&
-                    item.dataSource !== 'SEED' &&
-                    !item.id?.startsWith('room-') &&
-                    !item.id?.startsWith('tch-') &&
-                    !item.id?.startsWith('stf-') &&
-                    !item.id?.startsWith('std-') &&
-                    !item.id?.startsWith('sch-')
-                );
-                localStorage.setItem(key, JSON.stringify(clean));
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
+      // Clean legacy plaintext credentials cache
+      localStorage.removeItem('piket_guru_users_db_v1');
     } catch (e) {
       console.warn('Error purging demo cache:', e);
     }
@@ -191,14 +128,15 @@ export class FirestoreService {
     constraints: QueryConstraint[] = [],
     options: QueryDataOptions = { operationalOnly: true }
   ): Promise<T[]> {
+    const currentUid = auth?.currentUser?.uid || 'guest';
     try {
       const colRef = collection(db, collectionName);
       const q = query(colRef, ...constraints);
       const snapshot = await getDocs(q);
       const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
 
-      // Update local storage cache with full snapshot
-      setLocalItem(`piket_firestore_${collectionName}`, JSON.stringify(items));
+      // Update scoped cache for current user account
+      OfflineStorage.setScopedCache(currentUid, collectionName, items).catch(() => {});
 
       if (options.operationalOnly !== false) {
         return items.filter(isOperationalRecord);
@@ -206,18 +144,13 @@ export class FirestoreService {
       return items;
     } catch (err) {
       console.error(`Error fetching collection ${collectionName}:`, err);
-      // Fallback to local storage if network is offline
-      const localData = getLocalItem(`piket_firestore_${collectionName}`);
-      if (localData) {
-        try {
-          const parsed = JSON.parse(localData) as T[];
-          if (options.operationalOnly !== false) {
-            return parsed.filter(isOperationalRecord);
-          }
-          return parsed;
-        } catch {
-          return [];
+      // Fallback to isolated scoped cache for current user if network is offline
+      const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
+      if (cached && Array.isArray(cached.data)) {
+        if (options.operationalOnly !== false) {
+          return cached.data.filter(isOperationalRecord);
         }
+        return cached.data;
       }
       return [];
     }
@@ -239,7 +172,7 @@ export class FirestoreService {
   }
 
   /**
-   * Real-time listener for a collection with default operational filtering.
+   * Real-time listener for a collection with default operational filtering and scoped cache fallback.
    */
   public static subscribeToCollection<T>(
     collectionName: string,
@@ -248,15 +181,27 @@ export class FirestoreService {
     constraints: QueryConstraint[] = [],
     options: QueryDataOptions = { operationalOnly: true }
   ): Unsubscribe {
+    const currentUid = auth?.currentUser?.uid || 'guest';
     const colRef = collection(db, collectionName);
     const q = query(colRef, ...constraints);
 
-    return onSnapshot(
+    // Load cached data right away for instant offline rendering
+    OfflineStorage.getScopedCache<T>(currentUid, collectionName).then((cached) => {
+      if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+        if (options.operationalOnly !== false) {
+          onData(cached.data.filter(isOperationalRecord));
+        } else {
+          onData(cached.data);
+        }
+      }
+    }).catch(() => {});
+
+    const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
-        // Cache full snapshot to local storage
-        setLocalItem(`piket_firestore_${collectionName}`, JSON.stringify(items));
+        // Cache full snapshot to scoped cache
+        OfflineStorage.setScopedCache(currentUid, collectionName, items).catch(() => {});
 
         if (options.operationalOnly !== false) {
           onData(items.filter(isOperationalRecord));
@@ -264,11 +209,23 @@ export class FirestoreService {
           onData(items);
         }
       },
-      (error) => {
+      async (error) => {
         console.warn(`Snapshot listener warning for ${collectionName}:`, error);
+        // Fallback to scoped cache on offline listener interruption
+        const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
+        if (cached && Array.isArray(cached.data)) {
+          if (options.operationalOnly !== false) {
+            onData(cached.data.filter(isOperationalRecord));
+          } else {
+            onData(cached.data);
+          }
+        }
         if (onError) onError(error);
       }
     );
+
+    // Register active listener with unified teardown manager
+    return OfflineStorage.registerListener(unsubscribe);
   }
 
   /**
@@ -383,11 +340,12 @@ export class FirestoreService {
       await setDoc(docRef, payload, { merge: true });
     }
 
-    // Update local cache
+    // Update scoped cache for active user
     try {
+      const currentUid = auth?.currentUser?.uid || 'guest';
       const existing = await this.getAllRaw<T>(collectionName);
       const updated = existing.filter((item) => item.id !== id).concat(payload as unknown as T);
-      setLocalItem(`piket_firestore_${collectionName}`, JSON.stringify(updated));
+      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
     } catch {}
   }
 
@@ -401,7 +359,7 @@ export class FirestoreService {
     onError?: (err: Error) => void
   ): Unsubscribe {
     const docRef = doc(db, collectionName, id);
-    return onSnapshot(
+    const unsubscribe = onSnapshot(
       docRef,
       (snapshot) => {
         if (snapshot.exists()) {
@@ -415,6 +373,7 @@ export class FirestoreService {
         if (onError) onError(error);
       }
     );
+    return OfflineStorage.registerListener(unsubscribe);
   }
 
   /**
@@ -435,13 +394,14 @@ export class FirestoreService {
     }
     await updateDoc(docRef, cleanFields);
 
-    // Update local cache
+    // Update scoped cache for active user
     try {
+      const currentUid = auth?.currentUser?.uid || 'guest';
       const existing = await this.getAllRaw<any>(collectionName);
       const updated = existing.map((item) =>
         item.id === id ? { ...item, ...cleanFields } : item
       );
-      setLocalItem(`piket_firestore_${collectionName}`, JSON.stringify(updated));
+      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
     } catch {}
   }
 
@@ -558,11 +518,12 @@ export class FirestoreService {
     batch.set(auditRef, logRecord);
     await batch.commit();
 
-    // Update local cache
+    // Update scoped cache for active user
     try {
+      const currentUid = auth?.currentUser?.uid || 'guest';
       const existing = await this.getAllRaw<T>(collectionName);
       const updated = existing.filter((item) => item.id !== id).concat(payload as unknown as T);
-      setLocalItem(`piket_firestore_${collectionName}`, JSON.stringify(updated));
+      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
     } catch {}
   }
 }

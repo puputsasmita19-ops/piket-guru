@@ -149,6 +149,10 @@ export class DutyBookService {
         throw new Error('Akses ditolak: Buku piket telah disahkan & selesai (terkunci).');
       }
       if (user.role === 'GURU' && (existing.status === 'DIAJUKAN' || existing.status === 'DIVERIFIKASI')) {
+        if (existing.petugasId === user.id) {
+          // Idempotent retry: Jurnal sudah berhasil diterima oleh server sebelumnya
+          return existing;
+        }
         throw new Error('Akses ditolak: Buku piket ini sudah terkirim sebelumnya.');
       }
       if (originalUpdatedAt && existing.updatedAt && existing.updatedAt !== originalUpdatedAt) {

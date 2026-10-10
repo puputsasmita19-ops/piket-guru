@@ -25,7 +25,10 @@ import {
   CheckCircle2,
   Save,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface SubstitutionFormModalProps {
   isOpen: boolean;
@@ -104,9 +107,16 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const draftKey = useMemo(() => {
+    return editingSubstitution ? `edit_${editingSubstitution.id}` : 'new_substitution';
+  }, [editingSubstitution]);
+
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any } | null>(null);
+
   // Reset or prefill form when modal opens or editingSubstitution changes
   useEffect(() => {
     if (isOpen) {
+      setAvailableDraft(null);
       if (editingSubstitution) {
         setTanggal(editingSubstitution.tanggal || new Date().toISOString().split('T')[0]);
         setGuruBerhalanganId(editingSubstitution.guruBerhalanganId || '');
@@ -155,12 +165,90 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
         setCatatanPiket('');
         setOriginalUpdatedAt(undefined);
         setConcurrencyConflict(false);
+
+        // Check for saved uncommitted draft
+        if (currentUser?.id) {
+          DraftService.getDraft(currentUser.id, 'SUBSTITUTION', draftKey).then((saved) => {
+            if (saved && saved.data) {
+              setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data });
+            }
+          });
+        }
       }
       setErrorMessage(null);
       setFieldErrors({});
       setIsSubmitting(false);
     }
-  }, [isOpen, editingSubstitution, teachers]);
+  }, [isOpen, editingSubstitution, teachers, currentUser?.id, draftKey]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || !currentUser?.id || editingSubstitution) return;
+    if (!guruBerhalanganName.trim() && !mataPelajaran.trim() && !materiDanTugasSiswa.trim()) return;
+
+    DraftService.saveDraftDebounced(currentUser.id, 'SUBSTITUTION', draftKey, {
+      tanggal,
+      guruBerhalanganId,
+      guruBerhalanganName,
+      mataPelajaran,
+      alasan,
+      keteranganAlasan,
+      kelas,
+      jamPelajaran,
+      guruPenggantiId,
+      guruPenggantiName,
+      materiDanTugasSiswa,
+      catatanPiket,
+    });
+  }, [
+    isOpen,
+    currentUser?.id,
+    editingSubstitution,
+    tanggal,
+    guruBerhalanganId,
+    guruBerhalanganName,
+    mataPelajaran,
+    alasan,
+    keteranganAlasan,
+    kelas,
+    jamPelajaran,
+    guruPenggantiId,
+    guruPenggantiName,
+    materiDanTugasSiswa,
+    catatanPiket,
+    draftKey,
+  ]);
+
+  const handleRestoreDraft = () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.guruBerhalanganId !== undefined) setGuruBerhalanganId(d.guruBerhalanganId);
+    if (d.guruBerhalanganName) {
+      setGuruBerhalanganName(d.guruBerhalanganName);
+      setAbsentSearchTerm(d.guruBerhalanganName);
+    }
+    if (d.mataPelajaran) setMataPelajaran(d.mataPelajaran);
+    if (d.alasan) setAlasan(d.alasan);
+    if (d.keteranganAlasan !== undefined) setKeteranganAlasan(d.keteranganAlasan);
+    if (d.kelas) setKelas(d.kelas);
+    if (d.jamPelajaran) setJamPelajaran(d.jamPelajaran);
+    if (d.guruPenggantiId !== undefined) setGuruPenggantiId(d.guruPenggantiId);
+    if (d.guruPenggantiName) {
+      setGuruPenggantiName(d.guruPenggantiName);
+      setSubSearchTerm(d.guruPenggantiName);
+    }
+    if (d.materiDanTugasSiswa) setMateriDanTugasSiswa(d.materiDanTugasSiswa);
+    if (d.catatanPiket !== undefined) setCatatanPiket(d.catatanPiket);
+
+    setAvailableDraft(null);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    await DraftService.deleteDraft(currentUser.id, 'SUBSTITUTION', draftKey);
+    setAvailableDraft(null);
+  };
 
   // Real-time concurrency listener when editing an existing substitution
   useEffect(() => {
@@ -358,8 +446,58 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
         createdBy: editingSubstitution?.createdBy,
       };
 
-      await onSave(payload, Boolean(editingSubstitution));
-      onClose();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline && currentUser) {
+        try {
+          const recId = payload.id || `sub-${payload.tanggal}-${Date.now().toString(36)}`;
+          await SyncQueueService.enqueue(
+            currentUser,
+            'SUBSTITUTION_REPORT',
+            'substitutions',
+            recId,
+            { record: { ...payload, id: recId }, isUpdate: Boolean(editingSubstitution) }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'SUBSTITUTION', draftKey);
+          onClose();
+        } catch (err: any) {
+          setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      try {
+        await onSave(payload, Boolean(editingSubstitution));
+        if (currentUser) {
+          await DraftService.deleteDraft(currentUser.id, 'SUBSTITUTION', draftKey);
+        }
+        onClose();
+      } catch (err: any) {
+        const isNetwork =
+          err?.message?.includes('Failed to fetch') ||
+          err?.message?.includes('network') ||
+          err?.code === 'unavailable' ||
+          (typeof navigator !== 'undefined' && !navigator.onLine);
+
+        if (isNetwork && currentUser) {
+          try {
+            const recId = payload.id || `sub-${payload.tanggal}-${Date.now().toString(36)}`;
+            await SyncQueueService.enqueue(
+              currentUser,
+              'SUBSTITUTION_REPORT',
+              'substitutions',
+              recId,
+              { record: { ...payload, id: recId }, isUpdate: Boolean(editingSubstitution) }
+            );
+            await DraftService.deleteDraft(currentUser.id, 'SUBSTITUTION', draftKey);
+            onClose();
+            return;
+          } catch {}
+        }
+        throw err;
+      }
     } catch (err: any) {
       console.warn('[SubstitutionFormModal] Save substitution error:', err);
       const isPermDenied =
@@ -385,6 +523,41 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 sm:gap-6">
+        {/* DRAFT RECOVERY BANNER */}
+        {availableDraft && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                <Save className="w-4 h-4" />
+              </div>
+              <div className="text-xs">
+                <p className="font-bold">Ditemukan draf guru inval tersimpan di perangkat ini</p>
+                <p className="text-amber-700 dark:text-amber-400">
+                  Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleRestoreDraft}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+              >
+                Lanjutkan Draf
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                title="Buang Draf"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Buang</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {concurrencyConflict && (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />

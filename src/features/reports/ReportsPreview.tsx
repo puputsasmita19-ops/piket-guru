@@ -728,7 +728,7 @@ export const ReportsPreview: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <div className="space-y-1">
                     <label className="font-semibold text-slate-700 dark:text-slate-300 block">
-                      Tahun Ajaran:
+                      Tahun Pelajaran:
                     </label>
                     <input
                       type="text"

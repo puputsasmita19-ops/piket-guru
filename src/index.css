@@ -612,10 +612,20 @@ button.bg-\[var\(--theme-primary\)\],
     --theme-card-bg: #ffffff !important;
     background-color: #ffffff !important;
     color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
+  aside,
   .print\:hidden,
   button[aria-label="Kembali ke atas"] {
     display: none !important;
+  }
+
+  #main-content-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
   }
 }

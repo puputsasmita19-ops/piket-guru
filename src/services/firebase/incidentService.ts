@@ -103,6 +103,16 @@ export class IncidentService {
   ): Promise<IncidentRecord> {
     const isNew = !record.id || record.id.startsWith('temp-');
     const id = isNew ? `inc-${record.tanggal}-${Date.now()}` : record.id;
+
+    // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
+    const existingDoc = await FirestoreService.getById<IncidentRecord>('incidents', id);
+    if (isNew && existingDoc) {
+      return existingDoc;
+    }
+    if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > record.updatedAt && existingDoc.updatedBy !== user.fullName) {
+      throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+    }
+
     const now = new Date().toISOString();
 
     const rawPayload: IncidentRecord = {

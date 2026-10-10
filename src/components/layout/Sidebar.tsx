@@ -16,6 +16,9 @@ import {
   Settings,
   X,
   ChevronRight,
+  Pin,
+  PinOff,
+  PanelLeftClose,
 } from 'lucide-react';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,6 +28,10 @@ import { PERMISSIONS, PermissionKey } from '../../config/permissions';
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  isDesktopHidden?: boolean;
+  onToggleDesktopHide?: () => void;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }
 
 interface MenuItem {
@@ -35,7 +42,14 @@ interface MenuItem {
   badge?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onClose,
+  isDesktopHidden = false,
+  onToggleDesktopHide,
+  isPinned = true,
+  onTogglePin,
+}) => {
   const { activeTab, setActiveTab } = useNavigation();
   const { hasPermission } = useAuth();
 
@@ -79,23 +93,82 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:z-0 ${
+        aria-label="Panel Navigasi Aplikasi"
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${
+          isDesktopHidden
+            ? 'lg:-translate-x-full lg:w-0 lg:border-r-0 lg:overflow-hidden lg:invisible lg:p-0'
+            : 'lg:translate-x-0 lg:w-64 lg:visible'
+        } ${
+          isPinned
+            ? 'lg:relative lg:top-0 lg:bottom-auto lg:h-full lg:z-10'
+            : 'lg:relative lg:top-0 lg:bottom-auto lg:h-auto lg:min-h-[calc(100vh-4rem)] lg:z-0'
         }`}
       >
-        {/* Sidebar Header (Mobile Only for Close Button) */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-[var(--theme-card-border)] lg:hidden">
-          <span className="font-bold text-slate-900 dark:text-white text-base">Menu Navigasi</span>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+        {/* Sidebar Controls Header */}
+        <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/70 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs tracking-tight">
+              Panel Navigasi
+            </span>
+            {isPinned && !isDesktopHidden && (
+              <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-md">
+                Tersemat
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Desktop Pin / Unpin (Freeze) Button */}
+            {onTogglePin && (
+              <button
+                type="button"
+                onClick={onTogglePin}
+                className={`hidden lg:flex p-1.5 rounded-xl transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] ${
+                  isPinned
+                    ? 'text-[var(--theme-primary)] bg-[var(--theme-primary-light)] font-bold'
+                    : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)]'
+                }`}
+                aria-label={isPinned ? 'Lepas sematan menu (Menu ikut tergulir)' : 'Sematkan menu (Freeze menu tetap di posisi)'}
+                title={isPinned ? 'Lepas sematan menu (Lepas Freeze)' : 'Sematkan menu (Freeze / Diam saat digulir)'}
+              >
+                {isPinned ? (
+                  <Pin className="w-4 h-4 fill-current rotate-45" />
+                ) : (
+                  <PinOff className="w-4 h-4" />
+                )}
+              </button>
+            )}
+
+            {/* Desktop Hide Button */}
+            {onToggleDesktopHide && (
+              <button
+                type="button"
+                onClick={onToggleDesktopHide}
+                className="hidden lg:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+                aria-label="Sembunyikan panel menu (Ctrl+B)"
+                title="Sembunyikan panel menu"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Mobile Close Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+              aria-label="Tutup panel navigasi"
+              title="Tutup panel navigasi"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Nav Items */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 space-y-6">
           {/* Main Duty Section */}
           {visibleMainItems.length > 0 && (
             <div>
@@ -183,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Sidebar Footer Info */}
-        <div className="p-4 border-t border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-surface-subtle)]/50">
+        <div className="p-4 border-t border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-surface-subtle)]/50 shrink-0">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
             <span className="font-semibold text-slate-700 dark:text-slate-300">Piket Guru v1.0.1</span>
             <p className="mt-0.5">Sistem Manajemen Presensi & Buku Piket Digital</p>

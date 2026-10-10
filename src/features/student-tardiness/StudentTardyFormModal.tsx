@@ -30,7 +30,10 @@ import {
   CheckCircle2,
   HelpCircle,
   Save,
+  FileText,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface StudentTardyFormModalProps {
   isOpen: boolean;
@@ -77,6 +80,9 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any; attachments?: { [key: string]: Blob } } | null>(null);
+
+  const draftKey = editingTardy?.id || 'new-tardy';
 
   // Search input state for student picker
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -134,8 +140,116 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       setFieldErrors({});
       setIsSubmitting(false);
       setIsStudentDropdownOpen(false);
+      setAvailableDraft(null);
+
+      // Check for saved uncommitted draft
+      if (currentUser?.id && !editingTardy) {
+        DraftService.getDraft(currentUser.id, 'STUDENT_TARDY', draftKey).then((saved) => {
+          if (saved && saved.data) {
+            setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data, attachments: saved.attachments });
+          }
+        });
+      }
     }
-  }, [isOpen, editingTardy]);
+  }, [isOpen, editingTardy, currentUser?.id, draftKey]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || !currentUser?.id || editingTardy) return;
+    if (!namaSiswa.trim() && !kelas.trim() && !fotoUrl) return;
+
+    const saveAsync = async () => {
+      const attachments: { [key: string]: Blob } = {};
+      let cleanFotoUrl = fotoUrl;
+
+      if (fotoUrl && fotoUrl.startsWith('data:')) {
+        try {
+          const blob = await DraftService.dataUrlToBlob(fotoUrl);
+          attachments['tardy_photo'] = blob;
+          cleanFotoUrl = 'attachment:tardy_photo';
+        } catch {}
+      }
+
+      DraftService.saveDraftDebounced(currentUser.id, 'STUDENT_TARDY', draftKey, {
+        tanggal,
+        jamDatang,
+        studentId,
+        namaSiswa,
+        nisn,
+        kelas,
+        alasan,
+        keteranganAlasan,
+        pembinaan,
+        keteranganPembinaan,
+        poinPelanggaran,
+        frekuensiBulanIni,
+        noHpOrangTua,
+        fotoUrl: cleanFotoUrl,
+        catatanPetugas,
+      }, attachments);
+    };
+
+    saveAsync().catch(() => {});
+  }, [
+    isOpen,
+    currentUser?.id,
+    editingTardy,
+    tanggal,
+    jamDatang,
+    studentId,
+    namaSiswa,
+    nisn,
+    kelas,
+    alasan,
+    keteranganAlasan,
+    pembinaan,
+    keteranganPembinaan,
+    poinPelanggaran,
+    frekuensiBulanIni,
+    noHpOrangTua,
+    fotoUrl,
+    catatanPetugas,
+    draftKey,
+  ]);
+
+  const handleRestoreDraft = async () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.jamDatang) setJamDatang(d.jamDatang);
+    if (d.studentId !== undefined) setStudentId(d.studentId);
+    if (d.namaSiswa) {
+      setNamaSiswa(d.namaSiswa);
+      setStudentSearchTerm(d.namaSiswa);
+    }
+    if (d.nisn !== undefined) setNisn(d.nisn);
+    if (d.kelas) setKelas(d.kelas);
+    if (d.alasan) setAlasan(d.alasan);
+    if (d.keteranganAlasan !== undefined) setKeteranganAlasan(d.keteranganAlasan);
+    if (d.pembinaan) setPembinaan(d.pembinaan);
+    if (d.keteranganPembinaan !== undefined) setKeteranganPembinaan(d.keteranganPembinaan);
+    if (d.poinPelanggaran !== undefined) setPoinPelanggaran(d.poinPelanggaran);
+    if (d.frekuensiBulanIni !== undefined) setFrekuensiBulanIni(d.frekuensiBulanIni);
+    if (d.noHpOrangTua !== undefined) setNoHpOrangTua(d.noHpOrangTua);
+    if (d.catatanPetugas !== undefined) setCatatanPetugas(d.catatanPetugas);
+
+    if (d.fotoUrl?.startsWith('attachment:') && availableDraft.attachments?.['tardy_photo']) {
+      try {
+        const dataUrl = await DraftService.blobToDataUrl(availableDraft.attachments['tardy_photo']);
+        setFotoUrl(dataUrl);
+      } catch {}
+    } else if (d.fotoUrl) {
+      setFotoUrl(d.fotoUrl);
+    }
+
+    setAvailableDraft(null);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
+    setAvailableDraft(null);
+  };
 
   // Determine school bell entry limit (e.g. "07:00")
   const entryLimitTime = useMemo(() => {
@@ -302,8 +416,58 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         createdBy: editingTardy?.createdBy,
       };
 
-      await onSave(payload, Boolean(editingTardy));
-      onClose();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline && currentUser) {
+        try {
+          const recId = payload.id || `trd-${payload.tanggal}-${Date.now().toString(36)}`;
+          await SyncQueueService.enqueue(
+            currentUser,
+            'TARDY_REPORT',
+            'studentTardiness',
+            recId,
+            { ...payload, id: recId }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
+          onClose();
+        } catch (err: any) {
+          setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      try {
+        await onSave(payload, Boolean(editingTardy));
+        if (currentUser) {
+          await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
+        }
+        onClose();
+      } catch (err: any) {
+        const isNetwork =
+          err?.message?.includes('Failed to fetch') ||
+          err?.message?.includes('network') ||
+          err?.code === 'unavailable' ||
+          (typeof navigator !== 'undefined' && !navigator.onLine);
+
+        if (isNetwork && currentUser) {
+          try {
+            const recId = payload.id || `trd-${payload.tanggal}-${Date.now().toString(36)}`;
+            await SyncQueueService.enqueue(
+              currentUser,
+              'TARDY_REPORT',
+              'studentTardiness',
+              recId,
+              { ...payload, id: recId }
+            );
+            await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
+            onClose();
+            return;
+          } catch {}
+        }
+        throw err;
+      }
     } catch (err: any) {
       console.warn('[StudentTardyFormModal] Save tardy error:', err);
       const isPermDenied =
@@ -330,6 +494,41 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         maxWidth="2xl"
       >
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 sm:gap-6">
+          {/* Uncommitted Local Draft Banner */}
+          {availableDraft && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold">Ditemukan draf isian siswa terlambat tersimpan di perangkat ini</p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleRestoreDraft}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+                >
+                  Lanjutkan Draf
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                  title="Buang Draf"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Buang</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ========================================================================= */}
           {/* 1. BARIS IDENTITAS: NAMA SISWA & KELAS                                    */}
           {/* ========================================================================= */}

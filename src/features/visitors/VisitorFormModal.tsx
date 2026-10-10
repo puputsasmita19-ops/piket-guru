@@ -26,6 +26,8 @@ import {
   Clock,
   FileText,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface VisitorFormModalProps {
   isOpen: boolean;
@@ -66,6 +68,9 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any; attachments?: { [key: string]: Blob } } | null>(null);
+
+  const draftKey = editingVisitor?.id || 'new-visitor';
 
   // Concurrency detection
   const [originalUpdatedAt, setOriginalUpdatedAt] = useState<string | null>(null);
@@ -110,8 +115,110 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
       setErrorMessage(null);
       setFieldErrors({});
       setIsSubmitting(false);
+      setAvailableDraft(null);
+
+      // Check for saved uncommitted draft
+      if (currentUser?.id && !editingVisitor) {
+        DraftService.getDraft(currentUser.id, 'VISITOR', draftKey).then((saved) => {
+          if (saved && saved.data) {
+            setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data, attachments: saved.attachments });
+          }
+        });
+      }
     }
-  }, [isOpen, editingVisitor, teachers]);
+  }, [isOpen, editingVisitor, teachers, currentUser?.id, draftKey]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || !currentUser?.id || editingVisitor) return;
+    if (!namaTamu.trim() && !instansiAsal.trim() && !keperluan.trim() && !fotoUrl) return;
+
+    const saveAsync = async () => {
+      const attachments: { [key: string]: Blob } = {};
+      let cleanFotoUrl = fotoUrl;
+
+      if (fotoUrl && fotoUrl.startsWith('data:')) {
+        try {
+          const blob = await DraftService.dataUrlToBlob(fotoUrl);
+          attachments['visitor_photo'] = blob;
+          cleanFotoUrl = 'attachment:visitor_photo';
+        } catch {}
+      }
+
+      DraftService.saveDraftDebounced(currentUser.id, 'VISITOR', draftKey, {
+        tanggal,
+        jamMasuk,
+        jamKeluar,
+        namaTamu,
+        instansiAsal,
+        kategori,
+        keteranganLainnya,
+        noHp,
+        nomorIdentitas,
+        nomorBadge,
+        tujuanBertemu,
+        keperluan,
+        fotoUrl: cleanFotoUrl,
+        catatanPetugas,
+      }, attachments);
+    };
+
+    saveAsync().catch(() => {});
+  }, [
+    isOpen,
+    currentUser?.id,
+    editingVisitor,
+    tanggal,
+    jamMasuk,
+    jamKeluar,
+    namaTamu,
+    instansiAsal,
+    kategori,
+    keteranganLainnya,
+    noHp,
+    nomorIdentitas,
+    nomorBadge,
+    tujuanBertemu,
+    keperluan,
+    fotoUrl,
+    catatanPetugas,
+    draftKey,
+  ]);
+
+  const handleRestoreDraft = async () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.jamMasuk) setJamMasuk(d.jamMasuk);
+    if (d.jamKeluar !== undefined) setJamKeluar(d.jamKeluar);
+    if (d.namaTamu) setNamaTamu(d.namaTamu);
+    if (d.instansiAsal !== undefined) setInstansiAsal(d.instansiAsal);
+    if (d.kategori) setKategori(d.kategori);
+    if (d.keteranganLainnya !== undefined) setKeteranganLainnya(d.keteranganLainnya);
+    if (d.noHp !== undefined) setNoHp(d.noHp);
+    if (d.nomorIdentitas !== undefined) setNomorIdentitas(d.nomorIdentitas);
+    if (d.nomorBadge) setNomorBadge(d.nomorBadge);
+    if (d.tujuanBertemu) setTujuanBertemu(d.tujuanBertemu);
+    if (d.keperluan) setKeperluan(d.keperluan);
+    if (d.catatanPetugas !== undefined) setCatatanPetugas(d.catatanPetugas);
+
+    if (d.fotoUrl?.startsWith('attachment:') && availableDraft.attachments?.['visitor_photo']) {
+      try {
+        const dataUrl = await DraftService.blobToDataUrl(availableDraft.attachments['visitor_photo']);
+        setFotoUrl(dataUrl);
+      } catch {}
+    } else if (d.fotoUrl) {
+      setFotoUrl(d.fotoUrl);
+    }
+
+    setAvailableDraft(null);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    await DraftService.deleteDraft(currentUser.id, 'VISITOR', draftKey);
+    setAvailableDraft(null);
+  };
 
   // Real-time concurrency listener
   useEffect(() => {
@@ -211,8 +318,58 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         createdBy: editingVisitor?.createdBy,
       };
 
-      await onSave(payload, Boolean(editingVisitor));
-      onClose();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline && currentUser) {
+        try {
+          const recId = payload.id || `vis-${payload.tanggal}-${Date.now().toString(36)}`;
+          await SyncQueueService.enqueue(
+            currentUser,
+            'VISITOR_REPORT',
+            'visitors',
+            recId,
+            { record: { ...payload, id: recId }, isUpdate: Boolean(editingVisitor) }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'VISITOR', draftKey);
+          onClose();
+        } catch (err: any) {
+          setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      try {
+        await onSave(payload, Boolean(editingVisitor));
+        if (currentUser) {
+          await DraftService.deleteDraft(currentUser.id, 'VISITOR', draftKey);
+        }
+        onClose();
+      } catch (err: any) {
+        const isNetwork =
+          err?.message?.includes('Failed to fetch') ||
+          err?.message?.includes('network') ||
+          err?.code === 'unavailable' ||
+          (typeof navigator !== 'undefined' && !navigator.onLine);
+
+        if (isNetwork && currentUser) {
+          try {
+            const recId = payload.id || `vis-${payload.tanggal}-${Date.now().toString(36)}`;
+            await SyncQueueService.enqueue(
+              currentUser,
+              'VISITOR_REPORT',
+              'visitors',
+              recId,
+              { record: { ...payload, id: recId }, isUpdate: Boolean(editingVisitor) }
+            );
+            await DraftService.deleteDraft(currentUser.id, 'VISITOR', draftKey);
+            onClose();
+            return;
+          } catch {}
+        }
+        throw err;
+      }
     } catch (err: any) {
       console.warn('[VisitorFormModal] Save error:', err);
       const isPermDenied =
@@ -239,6 +396,40 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         maxWidth="lg"
       >
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 sm:gap-5">
+          {/* Uncommitted Local Draft Banner */}
+          {availableDraft && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold">Ditemukan draf isian buku tamu tersimpan di perangkat ini</p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleRestoreDraft}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+                >
+                  Lanjutkan Draf
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                  title="Buang Draf"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Buang</span>
+                </button>
+              </div>
+            </div>
+          )}
           {/* CONCURRENCY WARNING */}
           {hasConcurrencyConflict && (
             <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">

@@ -123,6 +123,16 @@ export class StudentTardyService {
   ): Promise<StudentTardyRecord> {
     const isNew = !isEdit && (!data.id || data.id.startsWith('temp-'));
     const id = isNew ? `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${Date.now().toString(36)}` : (data.id as string);
+
+    // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
+    const existingDoc = await FirestoreService.getById<StudentTardyRecord>('studentTardiness', id);
+    if (isNew && existingDoc) {
+      return existingDoc;
+    }
+    if (isEdit && existingDoc && data.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > data.updatedAt && existingDoc.updatedBy !== user.fullName) {
+      throw new Error(`Konflik pembaruan: Catatan keterlambatan telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+    }
+
     const now = new Date().toISOString();
 
     const rawPayload: StudentTardyRecord = {

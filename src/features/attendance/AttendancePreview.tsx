@@ -15,6 +15,7 @@ import {
   Check,
   X,
   Radio,
+  Trash2,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -25,6 +26,7 @@ import { LocationService, LocationCoordinates, GeofenceResult } from '../../serv
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AttendanceService } from '../../services/firebase/attendanceService';
 import { useAuth } from '../../contexts/AuthContext';
+import { DraftService } from '../../services/offline/draftService';
 import { PERMISSIONS } from '../../config/permissions';
 import { AttendanceRecord, AttendanceStatus, ScheduleItem, SchoolSettings } from '../../types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
@@ -66,7 +68,7 @@ const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = 
 };
 
 export const AttendancePreview: React.FC = () => {
-  const { currentUser, hasRole, hasPermission } = useAuth();
+  const { currentUser, hasRole, hasPermission, isOffline } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
@@ -244,6 +246,36 @@ export const AttendancePreview: React.FC = () => {
     (a) => a.tanggal === todayISO && a.userId === currentUser?.id
   );
 
+  // Restore attendance selfie draft for today if available
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    DraftService.getDraft<CapturedSelfie>(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO)
+      .then((draft) => {
+        if (draft && draft.data && !existingAttendanceToday) {
+          const photoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(draft.data.capturedAt));
+          if (photoDate === todayISO) {
+            setCapturedSelfie(draft.data);
+            setCheckInStatus({
+              tone: 'info',
+              message: 'Draf swafoto presensi untuk hari ini dipulihkan dari perangkat. Anda dapat melanjutkan pengiriman atau mengambil ulang.',
+            });
+          } else {
+            DraftService.deleteDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO).catch(console.warn);
+          }
+        }
+      })
+      .catch((err) => console.warn('[ATTENDANCE] Error restoring selfie draft:', err));
+  }, [currentUser?.id, todayISO, !!existingAttendanceToday]);
+
+  const handleDiscardSelfie = () => {
+    setCapturedSelfie(null);
+    pendingSelfieRef.current = null;
+    setCheckInStatus(null);
+    if (currentUser?.id) {
+      DraftService.deleteDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO).catch(console.warn);
+    }
+  };
+
   const prepareSelfieCapture = async () => {
     pendingSelfieRef.current = null;
     if (!currentUser) throw new Error('Sesi akun tidak ditemukan. Silakan masuk kembali.');
@@ -377,6 +409,15 @@ export const AttendancePreview: React.FC = () => {
       return;
     }
 
+    if (!navigator.onLine || isOffline) {
+      setCheckInStatus({
+        tone: 'info',
+        message: 'Koneksi internet terputus. Swafoto dan bukti presensi Anda tersimpan aman sebagai draf di perangkat ini. Sesuai kebijakan sekolah, pengesahan presensi memerlukan validasi server. Silakan hubungkan internet lalu klik Kirim Presensi Masuk kembali.',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     setIsSubmitting(true);
     setCheckInStatus({ tone: 'info', message: 'Menyimpan presensi masuk ke server...' });
 
@@ -393,6 +434,10 @@ export const AttendancePreview: React.FC = () => {
         userRole: currentUser.role,
         settings,
       });
+
+      if (currentUser?.id) {
+        DraftService.deleteDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO).catch(console.warn);
+      }
 
       setCheckInStatus({
         tone: 'success',
@@ -424,6 +469,14 @@ export const AttendancePreview: React.FC = () => {
     }
     if (!isAdmin && existingAttendanceToday.userId !== currentUser.id) {
       setCheckoutStatus({ tone: 'error', message: 'Akses ditolak: Anda hanya dapat melakukan presensi pulang atas nama Anda sendiri.' });
+      return;
+    }
+
+    if (!navigator.onLine || isOffline) {
+      setCheckoutStatus({
+        tone: 'error',
+        message: 'Koneksi internet terputus. Pencatatan presensi pulang memerlukan verifikasi waktu server. Silakan hubungkan internet lalu coba kembali.',
+      });
       return;
     }
 
@@ -850,13 +903,24 @@ export const AttendancePreview: React.FC = () => {
                         <p className="text-[11px] text-slate-500">
                           Nama, sekolah, waktu WIB, dan GPS sudah menyatu dengan foto. Ketuk foto untuk memperbesar, lalu segera kirim presensi.
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => setIsCameraModalOpen(true)}
-                          className="text-xs text-[var(--theme-primary)] hover:underline font-semibold cursor-pointer"
-                        >
-                          Ganti Foto
-                        </button>
+                        <div className="flex items-center gap-3 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsCameraModalOpen(true)}
+                            className="text-xs text-[var(--theme-primary)] hover:underline font-semibold cursor-pointer"
+                          >
+                            Ganti Foto
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-700">•</span>
+                          <button
+                            type="button"
+                            onClick={handleDiscardSelfie}
+                            className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Buang Swafoto</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1100,7 +1164,10 @@ export const AttendancePreview: React.FC = () => {
           const evidence = pendingSelfieRef.current;
           if (evidence && evidence.dataUrl === dataUrl && evidence.userId === currentUser?.id) {
             setCapturedSelfie(evidence);
-            setCheckInStatus({ tone: 'info', message: 'Swafoto berwatermark siap. Segera tekan Kirim Presensi Masuk.' });
+            setCheckInStatus({ tone: 'info', message: 'Swafoto berwatermark siap & tersimpan sebagai draf. Segera tekan Kirim Presensi Masuk.' });
+            if (currentUser?.id) {
+              DraftService.saveDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO, evidence).catch(console.warn);
+            }
           }
           pendingSelfieRef.current = null;
         }}

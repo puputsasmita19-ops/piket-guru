@@ -56,10 +56,16 @@ export class SubstitutionService {
    * Record a new teacher absence & assign substitute
    */
   public static async createSubstitution(
-    data: Omit<TeacherSubstitutionRecord, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>,
+    data: Omit<TeacherSubstitutionRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<TeacherSubstitutionRecord> {
-    const id = `inv-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `inv-${data.tanggal}-${Date.now().toString(36)}`;
+    // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
+    const existingDoc = await FirestoreService.getById<TeacherSubstitutionRecord>('substitutions', id);
+    if (existingDoc) {
+      return existingDoc;
+    }
+
     const now = new Date().toISOString();
 
     const payload: TeacherSubstitutionRecord = {
@@ -98,6 +104,10 @@ export class SubstitutionService {
     const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
     if (!existing) {
       throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
+    }
+
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+      throw new Error(`Konflik pembaruan: Catatan guru inval telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
     const now = new Date().toISOString();

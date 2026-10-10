@@ -25,7 +25,10 @@ import {
   AlertTriangle,
   Loader2,
   X,
+  Trash2,
 } from 'lucide-react';
+import { DraftService } from '../../services/offline/draftService';
+import { SyncQueueService } from '../../services/offline/syncQueueService';
 
 interface StudentPermitFormModalProps {
   isOpen: boolean;
@@ -78,6 +81,9 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any } | null>(null);
+
+  const draftKey = editingPermit?.id || 'new-permit';
 
   // Concurrency detection
   const [originalUpdatedAt, setOriginalUpdatedAt] = useState<string | null>(null);
@@ -176,8 +182,90 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
       setFieldErrors({});
       setIsStudentDropdownOpen(false);
       setIsSubmitting(false);
+      setAvailableDraft(null);
+
+      // Check for saved uncommitted draft
+      if (currentUser?.id && !editingPermit) {
+        DraftService.getDraft(currentUser.id, 'STUDENT_PERMIT', draftKey).then((saved) => {
+          if (saved && saved.data) {
+            setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data });
+          }
+        });
+      }
     }
-  }, [isOpen, editingPermit]);
+  }, [isOpen, editingPermit, currentUser?.id, draftKey]);
+
+  // Debounced auto-save draft while typing
+  useEffect(() => {
+    if (!isOpen || !currentUser?.id || editingPermit) return;
+    if (!namaSiswa.trim() && !kelas.trim() && !alasan.trim()) return;
+
+    DraftService.saveDraftDebounced(currentUser.id, 'STUDENT_PERMIT', draftKey, {
+      tanggal,
+      jamKeluar,
+      studentId,
+      namaSiswa,
+      nisn,
+      kelas,
+      jenisIzin,
+      keteranganLainnya,
+      alasan,
+      penjemput,
+      namaPenjemput,
+      noHpOrangTua,
+      guruPengajarName,
+      catatanPetugas,
+    });
+  }, [
+    isOpen,
+    currentUser?.id,
+    editingPermit,
+    tanggal,
+    jamKeluar,
+    studentId,
+    namaSiswa,
+    nisn,
+    kelas,
+    jenisIzin,
+    keteranganLainnya,
+    alasan,
+    penjemput,
+    namaPenjemput,
+    noHpOrangTua,
+    guruPengajarName,
+    catatanPetugas,
+    draftKey,
+  ]);
+
+  const handleRestoreDraft = () => {
+    if (!availableDraft?.data) return;
+    const d = availableDraft.data;
+    if (d.tanggal) setTanggal(d.tanggal);
+    if (d.jamKeluar) setJamKeluar(d.jamKeluar);
+    if (d.studentId !== undefined) setStudentId(d.studentId);
+    if (d.namaSiswa) {
+      setNamaSiswa(d.namaSiswa);
+      setStudentSearchTerm(d.namaSiswa);
+    }
+    if (d.nisn !== undefined) setNisN(d.nisn);
+    if (d.kelas) setKelas(d.kelas);
+    if (d.jenisIzin) setJenisIzin(d.jenisIzin);
+    if (d.keteranganLainnya !== undefined) setKeteranganLainnya(d.keteranganLainnya);
+    if (d.alasan) setAlasan(d.alasan);
+    if (d.penjemput) setPenjemput(d.penjemput);
+    if (d.namaPenjemput !== undefined) setNamaPenjemput(d.namaPenjemput);
+    if (d.noHpOrangTua !== undefined) setNoHpOrangTua(d.noHpOrangTua);
+    if (d.guruPengajarName !== undefined) setGuruPengajarName(d.guruPengajarName);
+    if (d.catatanPetugas !== undefined) setCatatanPetugas(d.catatanPetugas);
+
+    setAvailableDraft(null);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentUser?.id) return;
+    await DraftService.deleteDraft(currentUser.id, 'STUDENT_PERMIT', draftKey);
+    setAvailableDraft(null);
+  };
 
   // Real-time concurrency listener
   useEffect(() => {
@@ -291,8 +379,58 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
         createdBy: editingPermit?.createdBy,
       };
 
-      await onSave(payload, Boolean(editingPermit));
-      onClose();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline && currentUser) {
+        try {
+          const recId = payload.id || `pmt-${payload.tanggal}-${Date.now().toString(36)}`;
+          await SyncQueueService.enqueue(
+            currentUser,
+            'PERMIT_REPORT',
+            'studentPermits',
+            recId,
+            { record: { ...payload, id: recId }, isUpdate: Boolean(editingPermit) }
+          );
+          await DraftService.deleteDraft(currentUser.id, 'STUDENT_PERMIT', draftKey);
+          onClose();
+        } catch (err: any) {
+          setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      try {
+        await onSave(payload, Boolean(editingPermit));
+        if (currentUser) {
+          await DraftService.deleteDraft(currentUser.id, 'STUDENT_PERMIT', draftKey);
+        }
+        onClose();
+      } catch (err: any) {
+        const isNetwork =
+          err?.message?.includes('Failed to fetch') ||
+          err?.message?.includes('network') ||
+          err?.code === 'unavailable' ||
+          (typeof navigator !== 'undefined' && !navigator.onLine);
+
+        if (isNetwork && currentUser) {
+          try {
+            const recId = payload.id || `pmt-${payload.tanggal}-${Date.now().toString(36)}`;
+            await SyncQueueService.enqueue(
+              currentUser,
+              'PERMIT_REPORT',
+              'studentPermits',
+              recId,
+              { record: { ...payload, id: recId }, isUpdate: Boolean(editingPermit) }
+            );
+            await DraftService.deleteDraft(currentUser.id, 'STUDENT_PERMIT', draftKey);
+            onClose();
+            return;
+          } catch {}
+        }
+        throw err;
+      }
     } catch (err: any) {
       console.warn('[StudentPermitFormModal] Save error:', err);
       const isPermDenied =
@@ -318,6 +456,41 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
       maxWidth="xl"
     >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 sm:gap-6">
+        {/* Uncommitted Local Draft Banner */}
+        {availableDraft && (
+          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="text-xs">
+                <p className="font-bold">Ditemukan draf surat izin tersimpan di perangkat ini</p>
+                <p className="text-amber-700 dark:text-amber-400">
+                  Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleRestoreDraft}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+              >
+                Lanjutkan Draf
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                title="Buang Draf"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Buang</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* CONCURRENCY WARNING */}
         {hasConcurrencyConflict && (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
