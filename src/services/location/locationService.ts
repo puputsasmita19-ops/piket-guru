@@ -22,6 +22,7 @@ export interface WatchPositionOptions {
 }
 
 export class LocationService {
+  /** Strictly enforced maximum attendance accuracy limit (50 meters) */
   public static readonly MAX_ATTENDANCE_ACCURACY_METERS = 50;
   private static activeWatchId: number | null = null;
   private static activeTimeoutId: any = null;
@@ -54,14 +55,13 @@ export class LocationService {
    * Helper that ensures the caller has a fresh, valid GPS position before submitting.
    * If previous is still fresh and valid, returns it immediately.
    * If previous is stale (>30s) or missing, executes renew() to fetch a fresh reading.
-   * Never mutates or fakes the timestamp of an expired position.
    */
   public static async ensureFreshPosition(
     previous: LocationCoordinates | null | undefined,
     renew: () => Promise<LocationCoordinates>,
     maxAgeMs = 30000
   ): Promise<LocationCoordinates> {
-    if (this.isFreshPosition(previous, maxAgeMs)) {
+    if (this.isFreshPosition(previous, maxAgeMs) && previous!.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
       return previous!;
     }
     const fresh = await renew();
@@ -82,6 +82,9 @@ export class LocationService {
     lat2: number,
     lon2: number
   ): number {
+    if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) {
+      return Infinity;
+    }
     const R = 6371e3; // Earth's radius in meters
     const rad = Math.PI / 180;
     const phi1 = lat1 * rad;
@@ -99,7 +102,7 @@ export class LocationService {
 
   /**
    * Evaluates geofence condition based on distance and device accuracy.
-   * Strictly evaluates the user's real coordinates against school coordinates and tolerance radius.
+   * Strictly evaluates user's real coordinates against official school coordinates and tolerance radius.
    */
   public static evaluateGeofence(
     userLat: number,
@@ -159,7 +162,7 @@ export class LocationService {
       const reject = this.activeRejector;
       this.activeRejector = null;
       try {
-        const abortErr = new Error('Pencarian GPS dibatalkan oleh pengguna.');
+        const abortErr = new Error('Pencarian GPS dibatalkan.');
         abortErr.name = 'AbortError';
         reject(abortErr);
       } catch {}
@@ -176,19 +179,16 @@ export class LocationService {
   }
 
   /**
-   * Retrieves current position using progressive watchPosition with high accuracy.
-   * Capped at maximum 10 seconds refinement window.
-   * Displays real-time onProgress updates, finishes immediately on <=20m,
-   * or after brief refinement on <=50m.
+   * Retrieves current position using geolocation with strict wait time (2.5 seconds max UI wait).
+   * Displays real-time onProgress updates, stops loading spinner instantly on timeout or resolution.
    */
   public static getCurrentPosition(
     options: WatchPositionOptions | boolean = {}
   ): Promise<LocationCoordinates> {
-    const opts: WatchPositionOptions =
-      typeof options === 'boolean' ? {} : options;
+    const opts: WatchPositionOptions = typeof options === 'boolean' ? {} : options;
 
     const {
-      timeoutMs = 10000, // Strictly capped at max 10 seconds
+      timeoutMs = 2500, // Capped strictly at 2.5 seconds (2,500 ms)
       desiredAccuracyMeters = 20,
       maxStaleAgeMs = 30000,
       onProgress,
@@ -205,31 +205,24 @@ export class LocationService {
       if (typeof window !== 'undefined' && window.isSecureContext === false) {
         reject(
           new Error(
-            'Koneksi browser tidak aman (HTTPS diperlukan untuk izin GPS Geolocation). Silakan buka aplikasi melalui protokol HTTPS.'
+            'Koneksi browser tidak aman (HTTPS diperlukan untuk izin lokasi GPS). Silakan buka aplikasi melalui protokol HTTPS.'
           )
         );
         return;
       }
 
-      // 3. Permissions-Policy introspection check (if available in modern browser/iframe)
-      if (typeof document !== 'undefined') {
-        const policy = (document as any).featurePolicy || (document as any).permissionsPolicy;
-        if (policy && typeof policy.allowsFeature === 'function') {
-          try {
-            if (!policy.allowsFeature('geolocation')) {
-              reject(
-                new Error(
-                  'Akses GPS dibatasi oleh Permissions-Policy panel/iframe. Silakan buka tautan aplikasi langsung di tab baru browser ponsel Anda.'
-                )
-              );
-              return;
-            }
-          } catch {
-            // If policy introspection throws or is not implemented, do not reject; let browser callback decide.
-          }
-        }
+      // Fast Path: If recent valid reading exists (<=30s) and meets accuracy (<=50m), return immediately
+      if (
+        this.lastValidPosition &&
+        this.isFreshPosition(this.lastValidPosition, maxStaleAgeMs) &&
+        this.lastValidPosition.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS
+      ) {
+        if (onProgress) onProgress(this.lastValidPosition, false);
+        resolve(this.lastValidPosition);
+        return;
       }
 
+      // Cancel any previous concurrent search immediately
       this.clearCurrentWatcher(false);
       const requestId = ++this.currentRequestId;
       this.activeRejector = reject;
@@ -270,24 +263,24 @@ export class LocationService {
         reject(err);
       };
 
-      // Max 10-second overall timeout handler
+      // Strict 2,500ms timeout handler
       this.activeTimeoutId = setTimeout(() => {
         if (hasCompleted || requestId !== this.currentRequestId) return;
+
         if (bestReading && bestReading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-          // Finish with best fresh reading obtained within 10s
           finishSuccess(bestReading);
         } else if (bestReading && bestReading.accuracy > this.MAX_ATTENDANCE_ACCURACY_METERS) {
           finishError(
             new Error(
-              `Pencarian GPS selesai (10 detik). Akurasi sinyal belum memadai (±${Math.round(
+              `Akurasi sinyal GPS terdeteksi ±${Math.round(
                 bestReading.accuracy
-              )}m, kebijakan presensi memerlukan akurasi ≤50m). Silakan pindah ke area terbuka dan klik Coba Lagi.`
+              )}m, belum memenuhi batas presensi (≤50m). Silakan pindah ke area terbuka lalu klik Coba Lagi.`
             )
           );
         } else {
           finishError(
             new Error(
-              'Waktu pencarian sinyal GPS habis (10 detik). Pastikan GPS HP aktif dan berada di area terbuka yang tidak terhalang.'
+              'Pencarian GPS mencapai batas waktu tunggu (2,5 detik). Pastikan GPS HP aktif di area terbuka lalu klik Coba Lagi.'
             )
           );
         }
@@ -300,7 +293,7 @@ export class LocationService {
 
             const now = Date.now();
             const posTime = pos.timestamp || now;
-            // Reject stale cached readings older than 30s or future timestamps
+            // Reject stale readings > 30s or future timestamps
             if (now - posTime > maxStaleAgeMs || posTime > now + 5000) {
               return;
             }
@@ -318,52 +311,42 @@ export class LocationService {
               bestReading = reading;
             }
 
-            // High accuracy desired (<= 20 meters) -> resolve immediately
+            if (onProgress) {
+              onProgress(reading, reading.accuracy > desiredAccuracyMeters);
+            }
+
+            // High accuracy (<=20m) -> resolve immediately
             if (reading.accuracy <= desiredAccuracyMeters) {
-              if (onProgress) onProgress(reading, false);
               finishSuccess(reading);
               return;
             }
 
-            // If acceptable accuracy (<= 50 meters), give a brief refinement window (1.5s) to get <=20m, otherwise finish
-            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-              if (onProgress) onProgress(reading, true);
-              if (!this.activeRefineTimeoutId) {
-                this.activeRefineTimeoutId = setTimeout(() => {
-                  if (hasCompleted || requestId !== this.currentRequestId) return;
-                  if (bestReading && bestReading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-                    finishSuccess(bestReading);
-                  }
-                }, 1500);
-              }
-              return;
-            }
-
-            // Immediately report valid provisional reading and real-time distance
-            if (onProgress) {
-              onProgress(reading, true);
+            // Valid accuracy (<=50m) -> set 1s refine timer or finish
+            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS && !this.activeRefineTimeoutId) {
+              this.activeRefineTimeoutId = setTimeout(() => {
+                if (hasCompleted || requestId !== this.currentRequestId) return;
+                if (bestReading && bestReading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
+                  finishSuccess(bestReading);
+                }
+              }, 1000);
             }
           },
           (err) => {
             if (hasCompleted || requestId !== this.currentRequestId) return;
 
-            // If a valid reading was already obtained, don't fail on transient TIMEOUT
-            if (bestReading && err.code === err.TIMEOUT) {
-              return;
-            }
-
-            let msg = 'Gagal mendeteksi lokasi GPS.';
+            let msg = 'Sinyal GPS tidak tersedia.';
             switch (err.code) {
               case err.PERMISSION_DENIED:
                 msg =
-                  'Izin lokasi GPS ditolak oleh browser/perangkat. Mohon aktifkan izin lokasi di pengaturan browser Anda (atau buka di tab baru jika di dalam frame preview).';
+                  'Izin lokasi GPS ditolak oleh browser/perangkat. Aktifkan izin lokasi di pengaturan browser Anda.';
                 break;
               case err.POSITION_UNAVAILABLE:
                 msg =
-                  'Sinyal lokasi GPS tidak tersedia atau perangkat belum dapat menentukan posisi. Pastikan GPS/Location HP aktif dan coba di area terbuka.';
+                  'Sinyal lokasi GPS tidak tersedia. Pastikan GPS/Location HP aktif dan berada di area terbuka.';
                 break;
               case err.TIMEOUT:
-                msg = 'Waktu permintaan lokasi GPS habis (Timeout 10 detik). Pastikan sinyal GPS aktif dan berada di area terbuka.';
+                msg =
+                  'Waktu permintaan lokasi GPS habis (2,5 detik). Pastikan sinyal GPS aktif lalu klik Coba Lagi.';
                 break;
             }
 
@@ -374,7 +357,7 @@ export class LocationService {
           {
             enableHighAccuracy: true,
             maximumAge: 0,
-            timeout: 8000,
+            timeout: timeoutMs,
           }
         );
       } catch (err: any) {

@@ -7,6 +7,7 @@ import { ScrollToTop } from '../common/ScrollToTop';
 import { PanelLeftOpen } from 'lucide-react';
 
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { InteractiveGuideTour } from '../guide/InteractiveGuideTour';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -87,6 +88,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     >
       <AppUpdateBanner />
       <EmergencyBanner />
+      <InteractiveGuideTour />
       <Header
         onToggleSidebar={() => setSidebarOpen(true)}
         isDesktopSidebarHidden={isDesktopHidden}
@@ -138,3 +140,4 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     </div>
   );
 };
+

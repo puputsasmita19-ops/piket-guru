@@ -119,14 +119,29 @@ export const AttendancePreview: React.FC = () => {
 
   // 1. Load Settings & Subscriptions
   useEffect(() => {
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) {
-        setSettings(data);
-        setSettingsReady(true);
+    // Realtime subscription to authoritative school configuration
+    const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>(
+      'settings',
+      'school_config',
+      (data) => {
+        if (data) {
+          setSettings(data);
+          setSettingsReady(true);
+          // Recalculate distance immediately against latest school coordinates
+          if (coords) {
+            const freshGeo = LocationService.evaluateGeofence(
+              coords.latitude,
+              coords.longitude,
+              coords.accuracy,
+              data.schoolLat,
+              data.schoolLng,
+              data.allowedRadiusMeters
+            );
+            setGeofence(freshGeo);
+          }
+        }
       }
-    }).catch(() => {
-      setCheckInStatus({ tone: 'error', message: 'Pengaturan sekolah belum berhasil dimuat. Muat ulang halaman sebelum mengambil swafoto.' });
-    });
+    );
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
       setSchedules(data);
@@ -146,12 +161,13 @@ export const AttendancePreview: React.FC = () => {
       if (slowTxTimerRef.current) {
         clearTimeout(slowTxTimerRef.current);
       }
+      unsubSettings();
       unsubSched();
       unsubTeachers();
       unsubStaff();
       unsubAtt();
     };
-  }, []);
+  }, [coords]);
 
   useEffect(() => {
     // A photo must never survive an account or school-location change.
@@ -161,14 +177,14 @@ export const AttendancePreview: React.FC = () => {
   }, [currentUser?.id, currentUser?.fullName, currentUser?.loginId, settings.schoolName,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
 
-  // 2. Fetch live GPS position on mount & manual refresh
+  // 2. Fetch live GPS position on mount & manual refresh (2.5s max UI wait limit)
   const refreshGpsLocation = async (isManual = false) => {
     setIsLocating(true);
     setIsProvisional(false);
     setGpsError(null);
     try {
       const position = await LocationService.getCurrentPosition({
-        timeoutMs: 10000, // Capped at max 10 seconds
+        timeoutMs: 2500, // Capped at strictly 2.5 seconds
         desiredAccuracyMeters: 20,
         onProgress: (pos, isProv) => {
           setCoords(pos);
@@ -200,7 +216,7 @@ export const AttendancePreview: React.FC = () => {
       setGeofence(geo);
 
       if (geo.status === 'AKURASI_RENDAH') {
-        setGpsError(`Akurasi sinyal GPS saat ini (±${Math.round(position.accuracy)}m) belum memenuhi kebijakan presensi (maksimal ≤50m). Silakan pindah ke area terbuka dan klik tombol Coba Lagi.`);
+        setGpsError(`Akurasi sinyal GPS saat ini (±${Math.round(position.accuracy)}m) belum memenuhi kebijakan presensi (maksimal ≤50m). Silakan pindah ke area terbuka dan klik tombol Perbarui.`);
       } else if (isManual) {
         setFeedbackSuccess(`Koordinat GPS berhasil disinkronkan (Akurasi: ±${Math.round(position.accuracy)}m)!`);
         setTimeout(() => setFeedbackSuccess(null), 3500);
@@ -611,7 +627,7 @@ export const AttendancePreview: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div data-tour="attendance-container" className="space-y-6">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -699,7 +715,7 @@ export const AttendancePreview: React.FC = () => {
               />
               <CardContent className="p-5 sm:p-6 space-y-6">
                 {/* Geolocation Status HUD */}
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div data-tour="gps-status" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className={`p-2.5 rounded-2xl text-white shadow-sm flex items-center justify-center ${
@@ -732,60 +748,62 @@ export const AttendancePreview: React.FC = () => {
                     </div>
 
                     <Button
+                      data-tour="refresh-gps-button"
                       variant="outline"
                       size="sm"
-                      className="text-xs self-start sm:self-center"
+                      className="text-xs self-start sm:self-center shrink-0 min-h-[40px]"
                       isLoading={isLocating}
                       leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />}
                       onClick={() => refreshGpsLocation(true)}
                     >
-                      {isLocating ? 'Menyelaraskan...' : 'Perbarui Koordinat GPS'}
+                      {isLocating ? 'Menyelaraskan (2,5s)...' : 'Perbarui Koordinat GPS'}
                     </Button>
                   </div>
 
                   {gpsError ? (
-                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-2.5">
-                        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <span className="font-bold block">Kendala Sinyal / Izin Lokasi:</span>
-                          <p className="text-[11px] leading-relaxed">{gpsError}</p>
-                        </div>
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-xs text-rose-900 dark:text-rose-100">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        <span>Kendala Sinyal / Izin GPS</span>
                       </div>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        className="text-xs shrink-0 self-end sm:self-center"
-                        isLoading={isLocating}
-                        leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />}
-                        onClick={() => refreshGpsLocation(true)}
-                      >
-                        Coba Lagi (Perbarui GPS)
-                      </Button>
+                      <p className="text-[11px] leading-relaxed text-rose-700 dark:text-rose-300">
+                        {gpsError}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 italic pt-1">
+                        Langkah berikutnya: Pindah ke area terbuka, pastikan izin lokasi browser aktif, lalu klik tombol "Perbarui Koordinat GPS" di atas.
+                      </p>
                     </div>
                   ) : coords ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
-                      <div className="min-w-0">
-                        <span className="text-slate-500 block truncate">Jarak dari Sekolah:</span>
-                        <span className={`font-bold font-mono text-sm block truncate ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
+                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Jarak Sekolah:</span>
+                        <span className={`font-bold font-mono text-sm block mt-0.5 ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                           {geofence?.distanceMeters ?? '-'} Meter
                         </span>
+                        <span className="text-[10px] text-slate-400 block font-medium">
+                          {geofence?.isWithinRadius ? '✓ Dalam Radius' : '✕ Di Luar Radius'}
+                        </span>
                       </div>
-                      <div className="min-w-0">
-                        <span className="text-slate-500 block truncate">Akurasi GPS:</span>
-                        <span className={`font-bold font-mono text-xs block truncate ${
+
+                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Akurasi GPS:</span>
+                        <span className={`font-bold font-mono text-xs block mt-0.5 ${
                           coords.accuracy <= 20
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : coords.accuracy <= 50
                             ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-rose-600'
+                            : 'text-rose-600 dark:text-rose-400'
                         }`}>
                           ± {Math.round(coords.accuracy)} Meter {isProvisional ? '(Sementara)' : ''}
                         </span>
+                        <span className="text-[10px] text-slate-400 block font-medium">
+                          {coords.accuracy <= 50 ? '✓ Akurasi Memadai' : '✕ Akurasi Rendah'}
+                        </span>
                       </div>
-                      <div className="min-w-0">
-                        <span className="text-slate-500 block truncate">Waktu Pembacaan:</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px] block truncate">
+
+                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Waktu Pembacaan:</span>
+                        <span className="font-mono text-slate-800 dark:text-slate-200 text-xs font-bold block mt-0.5">
                           {new Date(coords.timestamp).toLocaleTimeString('id-ID', {
                             timeZone: 'Asia/Jakarta',
                             hour: '2-digit',
@@ -793,11 +811,13 @@ export const AttendancePreview: React.FC = () => {
                             second: '2-digit',
                           })} WIB
                         </span>
+                        <span className="text-[10px] text-slate-400 block font-medium">Waktu Server HP</span>
                       </div>
-                      <div className="min-w-0">
-                        <span className="text-slate-500 block truncate">Koordinat Terbaca:</span>
-                        <span className="font-mono text-slate-600 dark:text-slate-400 text-[10px] block truncate" title={`${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`}>
-                          {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+
+                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Koordinat Terbaca:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px] font-bold block mt-0.5 break-all">
+                          {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
                         </span>
                       </div>
                     </div>
@@ -896,7 +916,7 @@ export const AttendancePreview: React.FC = () => {
                 )}
 
                 {/* Camera Selfie Section */}
-                <div className="space-y-2">
+                <div data-tour="camera-section" className="space-y-2">
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
                       Swafoto Selfie di Pos / Area Tugas:
@@ -963,11 +983,12 @@ export const AttendancePreview: React.FC = () => {
                 </div>
 
                 {/* Submit Actions */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <div data-tour="attendance-actions" className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
                   {!existingAttendanceToday ? (
                     <div className="space-y-3">
                       <div className="flex flex-col sm:flex-row items-center justify-end gap-3">
                         <Button
+                          data-tour="checkin-button"
                           variant="success"
                           size="lg"
                           className="w-full sm:w-auto"
@@ -1031,7 +1052,7 @@ export const AttendancePreview: React.FC = () => {
           </div>
 
           {/* Right 1 Col: Status Today Summary */}
-          <div className="space-y-4">
+          <div data-tour="my-history-section" className="space-y-4">
             <Card>
               <CardHeader
                 title="Status Kehadiran Saya Hari Ini"

@@ -94,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
+        data-tour="sidebar-nav"
         aria-label="Panel Navigasi Aplikasi"
         className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'

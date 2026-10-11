@@ -37,6 +37,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
 
   return (
     <nav
+      data-tour="mobile-nav"
       aria-label="Navigasi Utama Mobile"
       className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-md border-t border-slate-200/80 dark:border-[var(--theme-card-border)] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] pb-safe transition-colors duration-200 print:hidden"
       style={{ backgroundColor: 'var(--theme-header-bg)' }}

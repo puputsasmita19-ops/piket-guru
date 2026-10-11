@@ -566,7 +566,7 @@ export const ReportsPreview: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div data-tour="reports-container" className="space-y-6">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

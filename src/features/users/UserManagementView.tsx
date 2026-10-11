@@ -356,7 +356,7 @@ export const UserManagementView: React.FC = () => {
   const paginatedStudents = pageSize === 0 ? filteredStudents : filteredStudents.slice(startIndex, startIndex + effectivePageSize);
 
   return (
-    <div className="space-y-6">
+    <div data-tour="users-table" className="space-y-6">
       {actionError && (
         <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5">

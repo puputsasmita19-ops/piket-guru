@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
-  Volume2,
   Check,
   X,
   RotateCcw,
@@ -30,7 +29,6 @@ import { formatIndonesianDate, formatShortIndonesianDate, formatTimeWithSeconds,
 import { Badge } from '../common/Badge';
 import { ProfileModal } from '../../features/auth/ProfileModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
-import { SchoolBellService } from '../../services/audio/bellService';
 import { SchoolSettings } from '../../types';
 import { OfflineSyncBadge } from './OfflineSyncBadge';
 import { GuideHelpButton } from './GuideHelpButton';
@@ -142,7 +140,6 @@ export const Header: React.FC<HeaderProps> = ({
     return DEFAULT_NOTIFICATIONS;
   });
 
-  const [isPlayingBell, setIsPlayingBell] = useState(false);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const hasUnreadNotif = unreadCount > 0;
 
@@ -188,14 +185,6 @@ export const Header: React.FC<HeaderProps> = ({
       n.id === id ? { ...n, isRead: !n.isRead } : n
     );
     saveNotifications(updated);
-  };
-
-  const handleTestSchoolBell = () => {
-    setIsPlayingBell(true);
-    SchoolBellService.playSchoolBell();
-    setTimeout(() => {
-      setIsPlayingBell(false);
-    }, 2800);
   };
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -330,13 +319,13 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Notification Bell Dropdown */}
               <div className="relative">
-                <Tooltip content="Pusat notifikasi, bel sekolah, dan siaran pengumuman" position="bottom">
+                <Tooltip content="Pusat Notifikasi" position="bottom">
                   <button
                     type="button"
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="p-2 sm:p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95"
-                    title="Pusat Notifikasi & Bel Sekolah"
-                    aria-label="Pusat Notifikasi dan Bel Sekolah"
+                    title="Pusat Notifikasi"
+                    aria-label="Pusat Notifikasi"
                   >
                     <Bell className="w-4 h-4" />
                     {hasUnreadNotif && (
@@ -354,8 +343,8 @@ export const Header: React.FC<HeaderProps> = ({
                     />
                     <div
                       role="dialog"
-                      aria-label="Pusat Siaran dan Notifikasi"
-                      className="fixed top-16 left-3.5 right-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[420px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[min(580px,calc(100vh-5rem))] overflow-hidden"
+                      aria-label="Pusat Notifikasi"
+                      className="fixed top-16 left-3.5 right-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[380px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[min(520px,calc(100vh-5rem))] overflow-hidden"
                     >
                       {/* Header Panel */}
                       <div className="p-3.5 sm:p-4 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] shrink-0">
@@ -367,7 +356,7 @@ export const Header: React.FC<HeaderProps> = ({
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                                  Pusat Siaran & Notifikasi
+                                  Notifikasi
                                 </h3>
                                 {unreadCount > 0 && (
                                   <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[var(--theme-primary)] text-white shrink-0">
@@ -376,7 +365,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 )}
                               </div>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                Pemberitahuan & kontrol siaran bel sekolah
+                                Pemberitahuan & informasi aplikasi
                               </p>
                             </div>
                           </div>
@@ -384,8 +373,8 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowNotifications(false)}
-                            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-hover)] transition-colors cursor-pointer shrink-0"
-                            aria-label="Tutup Pusat Notifikasi"
+                            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-hover)] transition-colors cursor-pointer shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                            aria-label="Tutup Notifikasi"
                             title="Tutup (Esc)"
                           >
                             <X className="w-4 h-4" />
@@ -416,44 +405,19 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                       </div>
 
-                      {/* Scrollable Content Body */}
-                      <div className="p-3.5 sm:p-4 space-y-3 overflow-y-auto flex-1 min-h-0">
-                        {/* Bell School Quick Test Action */}
-                        <div className="p-3 rounded-2xl bg-gradient-to-r from-[var(--theme-primary-light)]/70 via-slate-50 to-[var(--theme-primary-light)]/30 dark:from-[var(--theme-primary-light)]/15 dark:via-slate-800/40 dark:to-slate-800/20 border border-[var(--theme-primary-border)]/70 dark:border-slate-700/60 shadow-xs flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-[var(--theme-primary)] text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 xs:mt-0">
-                              <Volume2 className={`w-4 h-4 ${isPlayingBell ? 'animate-bounce' : ''}`} />
+                      {/* Content Body */}
+                      <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 min-h-0 space-y-2.5">
+                        {notifications.length === 0 ? (
+                          <div className="py-8 px-4 text-center flex flex-col items-center justify-center space-y-2">
+                            <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center">
+                              <Bell className="w-5 h-5" />
                             </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                                <span>Uji Nada Bel Sekolah</span>
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" title="Sistem Bel Siap" />
-                              </div>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed mt-0.5 break-words whitespace-normal">
-                                Simulasi nada Westminster Quarters 4-fase
-                              </p>
-                            </div>
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                              Belum ada notifikasi
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleTestSchoolBell}
-                            disabled={isPlayingBell}
-                            className="w-full xs:w-auto px-3.5 py-2 text-xs font-bold bg-[var(--theme-primary)] hover:brightness-95 active:brightness-90 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs active:scale-95 disabled:opacity-75"
-                            title="Putar nada bel sekolah sekarang"
-                          >
-                            <Volume2 className={`w-3.5 h-3.5 ${isPlayingBell ? 'animate-spin' : ''}`} />
-                            <span>{isPlayingBell ? 'Memutar Bel...' : 'Putar Bel'}</span>
-                          </button>
-                        </div>
-
-                        {/* Notifications List */}
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1">
-                            <span>Daftar Pemberitahuan</span>
-                            <span>{notifications.length} Info</span>
-                          </div>
-
-                          {notifications.map((notif) => (
+                        ) : (
+                          notifications.map((notif) => (
                             <div
                               key={notif.id}
                               className={`p-3 rounded-2xl border transition-all ${
@@ -533,8 +497,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 </div>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   </>

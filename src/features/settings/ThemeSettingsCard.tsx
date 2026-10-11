@@ -9,11 +9,13 @@ import {
   Layers,
   Layout,
   Check,
+  HelpCircle,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { useTheme, PastelTheme } from '../../contexts/ThemeContext';
+import { useGuide } from '../../contexts/GuideContext';
 
 export const ThemeSettingsCard: React.FC = () => {
   const {
@@ -24,6 +26,8 @@ export const ThemeSettingsCard: React.FC = () => {
     isDark,
     pastelThemesList,
   } = useTheme();
+
+  const { showOnLogin, setShowOnLogin, openGuideModal } = useGuide();
 
   const currentThemeMeta = pastelThemesList.find((p) => p.id === pastelTheme) || pastelThemesList[0];
 
@@ -247,6 +251,48 @@ export const ThemeSettingsCard: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* 3. Panduan Penggunaan Card */}
+      <Card>
+        <CardHeader
+          title="Panduan Penggunaan Interaktif"
+          subtitle="Atur preferensi panduan bertahap aplikasi Piket Guru"
+        />
+        <CardContent className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border border-slate-200 dark:border-[var(--theme-card-border)]">
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                Tampilkan panduan saat masuk
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Otomatis menampilkan tur interaktif saat pertama kali masuk di setiap sesi login.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={showOnLogin}
+                onChange={(e) => setShowOnLogin(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--theme-primary)]"></div>
+            </label>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon={<HelpCircle className="w-4 h-4" />}
+              onClick={openGuideModal}
+            >
+              Mulai Panduan Interaktif Sekarang
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
+

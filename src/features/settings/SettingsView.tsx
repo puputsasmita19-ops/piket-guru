@@ -108,6 +108,8 @@ export const SettingsView: React.FC = () => {
   const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
+  const [schoolLatRaw, setSchoolLatRaw] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat.toString());
+  const [schoolLngRaw, setSchoolLngRaw] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng.toString());
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState(
     DEFAULT_SCHOOL_SETTINGS.allowedRadiusMeters
   );
@@ -564,6 +566,8 @@ export const SettingsView: React.FC = () => {
     setIsLocationLocked(stored.schoolLocationLocked === true);
     setSchoolLat(stored.schoolLat);
     setSchoolLng(stored.schoolLng);
+    setSchoolLatRaw(stored.schoolLat ? stored.schoolLat.toString() : '');
+    setSchoolLngRaw(stored.schoolLng ? stored.schoolLng.toString() : '');
     setAllowedRadiusMeters(stored.allowedRadiusMeters);
     setSettingsReady(true);
     // Local cache is a convenience only; receipt and teacher coordinates come from Firestore.
@@ -666,9 +670,9 @@ export const SettingsView: React.FC = () => {
     if (locationDisabled) return;
     const requestId = ++locationRequestRef.current;
     setIsDetectingLocation(true);
-    setLocationStatus({ tone: 'info', message: 'Mendeteksi titik sekolah dari perangkat, maksimal 10 detik. Hasil belum otomatis disimpan.' });
+    setLocationStatus({ tone: 'info', message: 'Mendeteksi titik sekolah dari perangkat (maksimal 2,5 detik)... Hasil belum otomatis disimpan.' });
     try {
-      const pos = await LocationService.getCurrentPosition();
+      const pos = await LocationService.getCurrentPosition({ timeoutMs: 2500, desiredAccuracyMeters: 20 });
       if (!mountedRef.current || requestId !== locationRequestRef.current) return;
       setLocationAccuracy(pos.accuracy);
       const draft = schoolLocationDraftFromGps(pos);
@@ -1607,109 +1611,109 @@ export const SettingsView: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="settings-location-section" data-tour="settings-location-card">
             <CardHeader
-              title="Konfigurasi Geofencing GPS & Toleransi Radius Presensi"
-              subtitle="Koordinat titik pusat sekolah dan batas toleransi jarak kehadiran guru piket"
-              action={
-                isAdmin && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    isLoading={isDetectingLocation}
-                    leftIcon={<MapPin className="w-3.5 h-3.5 text-rose-500" />}
-                    onClick={handleDetectCurrentLocation}
-                    disabled={locationDisabled}
-                  >
-                    {isDetectingLocation ? 'Mencari Lokasi...' : 'Deteksi Lokasi Sekolah'}
-                  </Button>
-                )
-              }
-            />
-            <CardContent className="p-5 sm:p-6 space-y-4">
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2 text-xs">
-                <div className="font-bold flex items-center gap-2">
-                  {isLocationLocked ? <Lock className="w-4 h-4 text-emerald-600" /> : <LockOpen className="w-4 h-4 text-amber-600" />}
-                  {!settingsReady ? 'Status server belum tersedia' : isLocationLocked ? 'Lokasi Sekolah Terkunci' : 'Lokasi Terbuka untuk Diedit Admin'}
-                </div>
-                <p className="text-slate-600 dark:text-slate-400">
-                  Kunci ini disimpan di server dan tetap berlaku setelah halaman dibuka kembali. GPS guru mengukur posisi guru, tanpa mengubah titik sekolah.
-                </p>
-                {hasStoredLocation && Number.isFinite(settings.schoolLat) && Number.isFinite(settings.schoolLng) ? (
-                  <p className="font-mono text-[11px] break-words">
-                    Acuan tersimpan: {settings.schoolLat.toFixed(6)}, {settings.schoolLng.toFixed(6)} · radius {settings.allowedRadiusMeters} meter
-                    {settings.schoolLocationSavedAt ? ` · disimpan ${formatTime(settings.schoolLocationSavedAt, true)}` : ''}
+                title="Konfigurasi Geofencing GPS & Toleransi Radius Presensi"
+                subtitle="Koordinat titik pusat sekolah dan batas toleransi jarak kehadiran guru piket"
+                action={
+                  isAdmin && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      isLoading={isDetectingLocation}
+                      leftIcon={<MapPin className="w-3.5 h-3.5 text-rose-500" />}
+                      onClick={handleDetectCurrentLocation}
+                      disabled={locationDisabled}
+                    >
+                      {isDetectingLocation ? 'Mencari Lokasi...' : 'Deteksi Lokasi Sekolah'}
+                    </Button>
+                  )
+                }
+              />
+              <CardContent className="p-5 sm:p-6 space-y-4">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2 text-xs">
+                  <div className="font-bold flex items-center gap-2">
+                    {isLocationLocked ? <Lock className="w-4 h-4 text-emerald-600" /> : <LockOpen className="w-4 h-4 text-amber-600" />}
+                    {!settingsReady ? 'Status server belum tersedia' : isLocationLocked ? 'Lokasi Sekolah Terkunci' : 'Lokasi Terbuka untuk Diedit Admin'}
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400">
+                    Kunci ini disimpan di server dan tetap berlaku setelah halaman dibuka kembali. GPS guru mengukur posisi guru, tanpa mengubah titik sekolah.
                   </p>
-                ) : <p className="text-amber-700 dark:text-amber-300">Belum ada koordinat sekolah yang terkonfirmasi. Nilai formulir belum menjadi bukti penyimpanan.</p>}
-                {!isLocationLocked && locationDirty && <p className="text-amber-700 dark:text-amber-300">Koordinat/radius pada formulir belum disimpan.</p>}
-                {locationAccuracy !== null && <p>Akurasi hasil deteksi terakhir: ±{Math.round(locationAccuracy)} meter.</p>}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Latitude Sekolah
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    disabled={locationDisabled}
-                    min={-90}
-                    max={90}
-                    value={Number.isFinite(schoolLat) ? schoolLat : ''}
-                    onChange={(e) => { setSchoolLat(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                  />
+                  {hasStoredLocation && Number.isFinite(settings.schoolLat) && Number.isFinite(settings.schoolLng) ? (
+                    <p className="font-mono text-[11px] break-words">
+                      Acuan tersimpan: {settings.schoolLat.toFixed(6)}, {settings.schoolLng.toFixed(6)} · radius {settings.allowedRadiusMeters} meter
+                      {settings.schoolLocationSavedAt ? ` · disimpan ${formatTime(settings.schoolLocationSavedAt, true)}` : ''}
+                    </p>
+                  ) : <p className="text-amber-700 dark:text-amber-300">Belum ada koordinat sekolah yang terkonfirmasi. Nilai formulir belum menjadi bukti penyimpanan.</p>}
+                  {!isLocationLocked && locationDirty && <p className="text-amber-700 dark:text-amber-300">Koordinat/radius pada formulir belum disimpan.</p>}
+                  {locationAccuracy !== null && <p>Akurasi hasil deteksi terakhir: ±{Math.round(locationAccuracy)} meter.</p>}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Latitude Sekolah
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={locationDisabled}
+                      min={-90}
+                      max={90}
+                      value={Number.isFinite(schoolLat) ? schoolLat : ''}
+                      onChange={(e) => { setSchoolLat(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Longitude Sekolah
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={locationDisabled}
+                      min={-180}
+                      max={180}
+                      value={Number.isFinite(schoolLng) ? schoolLng : ''}
+                      onChange={(e) => { setSchoolLng(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Batas Toleransi Radius (Meter)
+                    </label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={1000}
+                      disabled={locationDisabled}
+                      value={Number.isFinite(allowedRadiusMeters) ? allowedRadiusMeters : ''}
+                      onChange={(e) => { setAllowedRadiusMeters(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Longitude Sekolah
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    disabled={locationDisabled}
-                    min={-180}
-                    max={180}
-                    value={Number.isFinite(schoolLng) ? schoolLng : ''}
-                    onChange={(e) => { setSchoolLng(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                  />
+                <div data-tour="settings-save-location" className="flex flex-wrap items-center gap-2">
+                  {isAdmin && (isLocationLocked ? (
+                    <Button type="button" variant="outline" size="sm" isLoading={isUnlockingLocation}
+                      disabled={!settingsReady || locationBusy || isSavingSchool} leftIcon={<LockOpen className="w-4 h-4" />} onClick={handleUnlockLocation}>
+                      Buka Kunci Lokasi
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="primary" size="sm" isLoading={isSavingLocation}
+                      disabled={locationDisabled} leftIcon={<Lock className="w-4 h-4" />} onClick={handleSaveLocation}>
+                      Simpan &amp; Kunci Lokasi
+                    </Button>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" disabled={locationBusy || isSavingSchool}
+                    onClick={handleReloadLocation}>Muat Ulang Status</Button>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Batas Toleransi Radius (Meter)
-                  </label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={1000}
-                    disabled={locationDisabled}
-                    value={Number.isFinite(allowedRadiusMeters) ? allowedRadiusMeters : ''}
-                    onChange={(e) => { setAllowedRadiusMeters(e.target.value === '' ? NaN : Number(e.target.value)); markLocationDraft(); }}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {isAdmin && (isLocationLocked ? (
-                  <Button type="button" variant="outline" size="sm" isLoading={isUnlockingLocation}
-                    disabled={!settingsReady || locationBusy || isSavingSchool} leftIcon={<LockOpen className="w-4 h-4" />} onClick={handleUnlockLocation}>
-                    Buka Kunci Lokasi
-                  </Button>
-                ) : (
-                  <Button type="button" variant="primary" size="sm" isLoading={isSavingLocation}
-                    disabled={locationDisabled} leftIcon={<Lock className="w-4 h-4" />} onClick={handleSaveLocation}>
-                    Simpan &amp; Kunci Lokasi
-                  </Button>
-                ))}
-                <Button type="button" variant="outline" size="sm" disabled={locationBusy || isSavingSchool}
-                  onClick={handleReloadLocation}>Muat Ulang Status</Button>
-              </div>
               <InlineSettingsStatus status={locationStatus} />
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Deteksi hanya mengisi formulir. Simpan &amp; Kunci Lokasi menetapkan titik acuan presensi guru. Buka kunci tidak mengubah titik tersebut.

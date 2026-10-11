@@ -232,7 +232,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                     Status Tugas Piket Anda Hari Ini
                   </h2>
                   <Badge variant={myTodaySchedule ? 'primary' : 'neutral'} size="sm">
-                    {todayName}, {formatIndonesianDate(new Date())}
+                    {formatIndonesianDate(new Date())}
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -329,7 +329,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 </div>
                 <div>
                   <div className="font-bold text-slate-900 dark:text-white">
-                    Anda tidak memiliki penugasan piket pada hari ini ({todayName}).
+                    Tidak ada penugasan piket hari ini.
                   </div>
                   <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
                     {myOtherSchedules.length > 0 ? (
@@ -578,7 +578,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         {/* LEFT: TODAY'S DUTY ROSTER */}
         <Card>
           <CardHeader
-            title={`Daftar Guru Bertugas Hari Ini (${todayName})`}
+            title="Daftar Guru Bertugas Hari Ini"
             subtitle={`${formatIndonesianDate(new Date())} • ${todaySchedules.length} Pos Terjadwal`}
             action={
               <Button

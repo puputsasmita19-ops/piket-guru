@@ -8,7 +8,7 @@ import {
 import { auth, db } from './firebase';
 import { FirestoreService } from './firestoreService';
 import { AttendanceRecord, AttendanceStatus, UserRole, SchoolSettings } from '../../types';
-import { LocationCoordinates, GeofenceResult } from '../location/locationService';
+import { LocationService, LocationCoordinates, GeofenceResult } from '../location/locationService';
 import { formatTime, getTodayISODate, getCurrentDayName, getCurrentTimeHHMM } from '../../utils/dateUtils';
 import { getShiftHoursForDay } from '../../utils/scheduleUtils';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
@@ -116,7 +116,22 @@ export class AttendanceService {
     }
 
     const nowIso = new Date().toISOString();
-    const status: AttendanceStatus = geofence?.status || 'DALAM_LOKASI';
+
+    // Re-evaluate geofence against authoritative school coordinates from server config
+    const schoolLat = authoritativeSettings?.schoolLat ?? (authoritativeSettings as any)?.latitude ?? DEFAULT_SCHOOL_SETTINGS.schoolLat;
+    const schoolLng = authoritativeSettings?.schoolLng ?? (authoritativeSettings as any)?.longitude ?? DEFAULT_SCHOOL_SETTINGS.schoolLng;
+    const allowedRadius = authoritativeSettings?.allowedRadiusMeters ?? (authoritativeSettings as any)?.radiusMeters ?? DEFAULT_SCHOOL_SETTINGS.allowedRadiusMeters;
+
+    const authoritativeGeofence = LocationService.evaluateGeofence(
+      coords.latitude,
+      coords.longitude,
+      coords.accuracy,
+      schoolLat,
+      schoolLng,
+      allowedRadius
+    );
+
+    const status: AttendanceStatus = authoritativeGeofence.status;
 
     // In BEBAS mode without a schedule, scheduleId is stored as null (never a fake general-duty doc)
     const storedScheduleId = scheduleId ? scheduleId.trim() : null;
@@ -131,7 +146,7 @@ export class AttendanceService {
       latitude: coords.latitude,
       longitude: coords.longitude,
       accuracy: Math.round(coords.accuracy * 10) / 10,
-      distance: Math.round(geofence.distanceMeters),
+      distance: Math.round(authoritativeGeofence.distanceMeters),
       status,
       photoUrl: photoUrl || undefined,
       attendanceModeAtCheckIn: effectiveMode,
