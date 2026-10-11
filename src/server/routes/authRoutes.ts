@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { CredentialStore } from '../services/credentialStore.js';
+import { hashPinAdaptive } from '../crypto/adaptiveHash.js';
 import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
 import { UserProfile } from '../../types/index.js';
 import firebaseConfig from '../../../firebase-applet-config.json' with { type: 'json' };
@@ -1561,7 +1562,6 @@ authRouter.post(
       }
 
       // Compute scrypt hash BEFORE transaction
-      const { hashPinAdaptive } = await import('../crypto/adaptiveHash');
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) res.status(503).json({ success: false, error: 'Sesi permintaan dibatalkan sebelum hashing.', code: 'RATE_LIMIT_LEASE_LOST' });
         return;
@@ -1655,7 +1655,6 @@ authRouter.post(
       }
 
       // Compute scrypt hash BEFORE transaction
-      const { hashPinAdaptive } = await import('../crypto/adaptiveHash');
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) res.status(503).json({ success: false, error: 'Sesi permintaan dibatalkan sebelum hashing.', code: 'RATE_LIMIT_LEASE_LOST' });
         return;
