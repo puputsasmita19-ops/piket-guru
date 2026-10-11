@@ -126,7 +126,7 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
       <div
         role="region"
         aria-label="Panel Notifikasi Status Koneksi"
-        className="fixed top-16 left-3 right-3 sm:left-auto sm:right-0 sm:top-full sm:mt-2 z-50 w-auto sm:w-[360px] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-xl border border-slate-200 dark:border-[var(--theme-card-border)] p-4 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto"
+        className="fixed top-16 left-3 right-3 sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 z-50 w-auto sm:w-[360px] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-xl border border-slate-200 dark:border-[var(--theme-card-border)] p-4 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto"
       >
         {/* Panel Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">

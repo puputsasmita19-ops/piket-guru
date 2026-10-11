@@ -224,10 +224,23 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               />
             )}
 
+            {/* Processing Overlay during GPS & Compression */}
+            {isProcessing && (
+              <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center text-white space-y-3 z-10">
+                <RefreshCw className="w-8 h-8 text-[var(--theme-primary)] animate-spin" />
+                <div className="space-y-1">
+                  <span className="font-bold text-sm block">Memproses Foto & GPS...</span>
+                  <span className="text-xs text-slate-300 block">
+                    Menyinkronkan koordinat, kompresi foto, dan memasang watermark presensi.
+                  </span>
+                </div>
+              </div>
+            )}
+
             <canvas ref={canvasRef} className="hidden" />
 
             {/* Switch Camera Overlay Button */}
-            {!capturedImage && !cameraError && (
+            {!capturedImage && !cameraError && !isProcessing && (
               <button
                 type="button"
                 onClick={toggleCamera}
@@ -243,7 +256,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isProcessing}>
             Batal
           </Button>
 
@@ -254,6 +267,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 size="sm"
                 leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
                 onClick={handleRetake}
+                disabled={isProcessing}
               >
                 Ulangi Foto
               </Button>
@@ -262,6 +276,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 size="sm"
                 leftIcon={<Check className="w-4 h-4" />}
                 onClick={handleConfirm}
+                disabled={isProcessing}
               >
                 Gunakan Foto Ini
               </Button>
@@ -274,7 +289,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 leftIcon={<Camera className="w-4 h-4" />}
                 onClick={handleTakeSnapshot}
                 isLoading={isProcessing}
-                loadingText="Menyiapkan GPS dan foto..."
+                loadingText="Memproses Foto & GPS..."
               >
                 Ambil Gambar
               </Button>

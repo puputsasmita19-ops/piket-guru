@@ -222,6 +222,14 @@ export class OfflineStorage {
     attachments?: { [key: string]: Blob }
   ): Promise<void> {
     if (!userId) return;
+
+    // Check if draft data contains oversized photo string (> 550,000 chars ~ 400 KB JPEG)
+    const photoStr = (data as any)?.dataUrl || (data as any)?.photoUrl;
+    if (typeof photoStr === 'string' && photoStr.length > 550_000) {
+      const sizeKb = Math.round(((photoStr.length - 23) * 0.75) / 1024);
+      throw new Error(`Ukuran foto draf (${sizeKb} KB) melebihi batas aman dokumen (maksimal ~400 KB). Silakan ambil ulang foto.`);
+    }
+
     const id = `${userId}:${formType}:${recordId}`;
     const draft: DraftRecord = {
       id,
@@ -241,7 +249,9 @@ export class OfflineStorage {
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem(`piket_draft_${id}`, JSON.stringify({ ...draft, attachments: undefined }));
         }
-      } catch {}
+      } catch (sErr) {
+        console.warn('[OFFLINE_STORAGE] sessionStorage write warning (memory fallback preserved):', sErr);
+      }
       return;
     }
 

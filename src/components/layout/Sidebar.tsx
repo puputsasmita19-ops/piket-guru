@@ -24,6 +24,7 @@ import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavigationTab } from '../../types';
 import { PERMISSIONS, PermissionKey } from '../../config/permissions';
+import { Tooltip } from '../common/Tooltip';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -122,36 +123,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center gap-1">
             {/* Desktop Pin / Unpin (Freeze) Button */}
             {onTogglePin && (
-              <button
-                type="button"
-                onClick={onTogglePin}
-                className={`hidden lg:flex p-1.5 rounded-xl transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] ${
-                  isPinned
-                    ? 'text-[var(--theme-primary)] bg-[var(--theme-primary-light)] font-bold'
-                    : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)]'
-                }`}
-                aria-label={isPinned ? 'Lepas sematan menu (Menu ikut tergulir)' : 'Sematkan menu (Freeze menu tetap di posisi)'}
-                title={isPinned ? 'Lepas sematan menu (Lepas Freeze)' : 'Sematkan menu (Freeze / Diam saat digulir)'}
-              >
-                {isPinned ? (
-                  <Pin className="w-4 h-4 fill-current rotate-45" />
-                ) : (
-                  <PinOff className="w-4 h-4" />
-                )}
-              </button>
+              <Tooltip content={isPinned ? "Lepas sematan menu agar dapat tergulir" : "Pertahankan panel menu pada posisinya saat halaman digulir"} position="bottom">
+                <button
+                  type="button"
+                  onClick={onTogglePin}
+                  className={`hidden lg:flex p-1.5 rounded-xl transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] ${
+                    isPinned
+                      ? 'text-[var(--theme-primary)] bg-[var(--theme-primary-light)] font-bold'
+                      : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)]'
+                  }`}
+                  aria-label={isPinned ? 'Lepas sematan menu (Menu ikut tergulir)' : 'Sematkan menu (Freeze menu tetap di posisi)'}
+                  title={isPinned ? 'Lepas sematan menu (Lepas Freeze)' : 'Sematkan menu (Freeze / Diam saat digulir)'}
+                >
+                  {isPinned ? (
+                    <Pin className="w-4 h-4 fill-current rotate-45" />
+                  ) : (
+                    <PinOff className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
             )}
 
             {/* Desktop Hide Button */}
             {onToggleDesktopHide && (
-              <button
-                type="button"
-                onClick={onToggleDesktopHide}
-                className="hidden lg:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
-                aria-label="Sembunyikan panel menu (Ctrl+B)"
-                title="Sembunyikan panel menu"
-              >
-                <PanelLeftClose className="w-4 h-4" />
-              </button>
+              <Tooltip content="Sembunyikan panel menu navigasi" position="bottom">
+                <button
+                  type="button"
+                  onClick={onToggleDesktopHide}
+                  className="hidden lg:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+                  aria-label="Sembunyikan panel menu (Ctrl+B)"
+                  title="Sembunyikan panel menu"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              </Tooltip>
             )}
 
             {/* Mobile Close Button */}

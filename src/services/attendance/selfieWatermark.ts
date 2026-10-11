@@ -13,9 +13,49 @@ export interface CapturedSelfie extends SelfieEvidence {
   dataUrl: string;
 }
 
-// Keep the existing photoUrl field comfortably below Firestore's document limit.
-export const MAX_SELFIE_DATA_URL_LENGTH = 700_000;
+// Target size range: 150 - 250 KB JPEG (Base64 length ~200k - 340k chars)
+export const TARGET_MAX_DATA_URL_LENGTH = 340_000;
+// Safe maximum limit for Firestore doc safety (< 400 KB JPEG Base64, well under Firestore 1MB limit)
+export const SAFE_MAX_DATA_URL_LENGTH = 550_000;
+export const MAX_SELFIE_DATA_URL_LENGTH = SAFE_MAX_DATA_URL_LENGTH;
 export const SELFIE_GPS_MAX_AGE_MS = 30_000;
+
+export interface SelfieSizeCheckResult {
+  isValid: boolean;
+  sizeKb: number;
+  isWithinTarget: boolean;
+  error?: string;
+}
+
+export function checkSelfieDataUrlSize(dataUrl: string): SelfieSizeCheckResult {
+  if (!dataUrl || !dataUrl.startsWith('data:image/jpeg;base64,')) {
+    return {
+      isValid: false,
+      sizeKb: 0,
+      isWithinTarget: false,
+      error: 'Format foto presensi tidak valid. Ambil ulang swafoto dari kamera.',
+    };
+  }
+
+  const base64Length = dataUrl.length - 'data:image/jpeg;base64,'.length;
+  const sizeBytes = Math.round(base64Length * 0.75);
+  const sizeKb = Math.round(sizeBytes / 1024);
+
+  if (dataUrl.length > SAFE_MAX_DATA_URL_LENGTH) {
+    return {
+      isValid: false,
+      sizeKb,
+      isWithinTarget: false,
+      error: `Ukuran foto presensi (${sizeKb} KB) melebihi batas aman dokumen (${Math.round((SAFE_MAX_DATA_URL_LENGTH * 0.75) / 1024)} KB). Silakan ambil ulang foto dengan jarak dan pencahayaan yang pas.`,
+    };
+  }
+
+  return {
+    isValid: true,
+    sizeKb,
+    isWithinTarget: dataUrl.length <= TARGET_MAX_DATA_URL_LENGTH,
+  };
+}
 
 export function validateSelfieEvidence(evidence: SelfieEvidence, now = Date.now()): void {
   const { coords, capturedAt } = evidence;
@@ -44,81 +84,113 @@ export function formatSelfieTime(timestamp: number): string {
   }).format(new Date(timestamp)) + ' WIB';
 }
 
-/** Stamp into JPEG pixels. The appended panel never covers or mirrors the face. */
+/** Stamp into JPEG pixels with progressive compression and strict size bounds. */
 export function stampCheckInSelfie(source: HTMLCanvasElement, evidence: SelfieEvidence): string {
   validateSelfieEvidence(evidence);
   if (source.width <= 0 || source.height <= 0) throw new Error('Kamera belum siap. Coba ambil foto lagi.');
-  const width = Math.max(640, Math.min(960, source.width));
-  const photoHeight = Math.round(width * source.height / source.width);
-  if (photoHeight > 1920) throw new Error('Rasio foto tidak didukung. Gunakan kamera dalam posisi normal.');
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Watermark tidak dapat dibuat. Coba gunakan browser lain.');
-  const padding = Math.round(width * 0.035);
-  const fontSize = Math.round(width * 0.027);
-  const lineHeight = Math.round(fontSize * 1.5);
-  context.font = `500 ${fontSize}px Arial, sans-serif`;
-  const textWidth = width - padding * 2;
-  const wrap = (value: string): string[] => {
-    const result: string[] = [];
-    let line = '';
-    for (const word of cleanText(value).split(' ')) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (context.measureText(candidate).width <= textWidth) {
-        line = candidate;
-        continue;
+
+  const sourceWidth = source.width;
+  const sourceHeight = source.height;
+
+  // Never scale up source image if source is smaller than target resolution
+  const targetWidths = [800, 640, 480];
+  const candidateWidths: number[] = [];
+  for (const tw of targetWidths) {
+    const w = Math.min(tw, sourceWidth);
+    if (w >= 320 && !candidateWidths.includes(w)) {
+      candidateWidths.push(w);
+    }
+  }
+  if (candidateWidths.length === 0) candidateWidths.push(Math.max(320, sourceWidth));
+
+  let bestSafeCandidate: string | null = null;
+  const qualitySequence = [0.80, 0.70, 0.60, 0.50, 0.45];
+
+  for (const width of candidateWidths) {
+    const photoHeight = Math.round((width * sourceHeight) / sourceWidth);
+    if (photoHeight > 1920) throw new Error('Rasio foto tidak didukung. Gunakan kamera dalam posisi normal.');
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Watermark tidak dapat dibuat. Coba gunakan browser lain.');
+
+    const padding = Math.max(12, Math.round(width * 0.035));
+    const fontSize = Math.max(13, Math.round(width * 0.028));
+    const lineHeight = Math.round(fontSize * 1.5);
+    context.font = `500 ${fontSize}px Arial, sans-serif`;
+    const textWidth = width - padding * 2;
+
+    const wrap = (value: string): string[] => {
+      const result: string[] = [];
+      let line = '';
+      for (const word of cleanText(value).split(' ')) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (context.measureText(candidate).width <= textWidth) {
+          line = candidate;
+          continue;
+        }
+        if (line) result.push(line);
+        line = '';
+        for (const character of word) {
+          if (context.measureText(line + character).width > textWidth && line) {
+            result.push(line);
+            line = character;
+          } else line += character;
+        }
       }
-      if (line) result.push(line);
-      line = '';
-      // Split only unusually long words/IDs; preserve every character of the identity.
-      for (const character of word) {
-        if (context.measureText(line + character).width > textWidth && line) {
-          result.push(line);
-          line = character;
-        } else line += character;
+      if (line.trim()) result.push(line.trim());
+      return result;
+    };
+
+    const lines = [
+      ...wrap(evidence.schoolName),
+      ...wrap(`Nama: ${evidence.userName}`),
+      ...(evidence.loginId?.trim() ? wrap(`ID login: ${evidence.loginId}`) : []),
+      ...wrap(`Waktu foto: ${formatSelfieTime(evidence.capturedAt)}`),
+      ...wrap(`GPS: ${evidence.coords.latitude.toFixed(6)}, ${evidence.coords.longitude.toFixed(6)}`),
+      ...wrap(`Akurasi GPS: ±${evidence.coords.accuracy.toFixed(1)} m`),
+      ...wrap(`Waktu GPS: ${formatSelfieTime(evidence.coords.timestamp)}`),
+    ];
+
+    if (lines.length > 24) throw new Error('Nama akun/sekolah terlalu panjang untuk watermark. Hubungi admin.');
+
+    canvas.width = width;
+    canvas.height = photoHeight + padding * 2 + lineHeight * (lines.length + 1) + 10;
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(source, 0, 0, width, photoHeight);
+
+    context.fillStyle = '#0f172a';
+    context.fillRect(0, photoHeight, width, canvas.height - photoHeight);
+    context.fillStyle = '#34d399';
+    context.fillRect(0, photoHeight, width, 5);
+
+    context.textBaseline = 'top';
+    context.font = `700 ${fontSize}px Arial, sans-serif`;
+    context.fillText('PRESENSI MASUK • CHECK-IN', padding, photoHeight + padding);
+
+    context.font = `500 ${fontSize}px Arial, sans-serif`;
+    context.fillStyle = '#f8fafc';
+    lines.forEach((line, index) => context.fillText(line, padding, photoHeight + padding + lineHeight * (index + 1) + 5));
+
+    for (const quality of qualitySequence) {
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (dataUrl.startsWith('data:image/jpeg;base64,')) {
+        if (dataUrl.length <= TARGET_MAX_DATA_URL_LENGTH) {
+          // Hitting target size (150 - 250 KB), return immediately
+          return dataUrl;
+        }
+        if (dataUrl.length <= SAFE_MAX_DATA_URL_LENGTH && !bestSafeCandidate) {
+          bestSafeCandidate = dataUrl;
+        }
       }
     }
-    if (line.trim()) result.push(line.trim());
-    return result;
-  };
-  const lines = [
-    ...wrap(evidence.schoolName),
-    ...wrap(`Nama: ${evidence.userName}`),
-    ...(evidence.loginId?.trim() ? wrap(`ID login: ${evidence.loginId}`) : []),
-    ...wrap(`Waktu foto: ${formatSelfieTime(evidence.capturedAt)}`),
-    ...wrap(`GPS: ${evidence.coords.latitude.toFixed(6)}, ${evidence.coords.longitude.toFixed(6)}`),
-    ...wrap(`Akurasi GPS: ±${evidence.coords.accuracy.toFixed(1)} m`),
-    ...wrap(`Waktu GPS: ${formatSelfieTime(evidence.coords.timestamp)}`),
-  ];
-  if (lines.length > 24) throw new Error('Nama akun/sekolah terlalu panjang untuk watermark. Hubungi admin.');
-  canvas.width = width;
-  canvas.height = photoHeight + padding * 2 + lineHeight * (lines.length + 1) + 10;
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(source, 0, 0, width, photoHeight);
-  context.fillStyle = '#0f172a';
-  context.fillRect(0, photoHeight, width, canvas.height - photoHeight);
-  context.fillStyle = '#34d399';
-  context.fillRect(0, photoHeight, width, 5);
-  context.textBaseline = 'top';
-  context.font = `700 ${fontSize}px Arial, sans-serif`;
-  context.fillText('PRESENSI MASUK • CHECK-IN', padding, photoHeight + padding);
-  context.font = `500 ${fontSize}px Arial, sans-serif`;
-  context.fillStyle = '#f8fafc';
-  lines.forEach((line, index) => context.fillText(line, padding, photoHeight + padding + lineHeight * (index + 1) + 5));
-  for (const quality of [0.85, 0.75, 0.65, 0.55]) {
-    const dataUrl = canvas.toDataURL('image/jpeg', quality);
-    if (dataUrl.startsWith('data:image/jpeg;base64,') && dataUrl.length <= MAX_SELFIE_DATA_URL_LENGTH) return dataUrl;
   }
-  if (width > 640) {
-    // Re-render the panel at a readable font size instead of shrinking stamped text.
-    const smaller = document.createElement('canvas');
-    smaller.width = 640;
-    smaller.height = Math.round(640 * source.height / source.width);
-    const smallerContext = smaller.getContext('2d');
-    if (!smallerContext) throw new Error('Watermark tidak dapat dibuat. Coba gunakan browser lain.');
-    smallerContext.drawImage(source, 0, 0, smaller.width, smaller.height);
-    return stampCheckInSelfie(smaller, evidence);
+
+  if (bestSafeCandidate) {
+    return bestSafeCandidate;
   }
-  throw new Error('Ukuran foto terlalu besar. Dekatkan kamera dan ambil ulang foto.');
+
+  throw new Error('Ukuran foto terlalu besar dan melebihi batas aman (maksimal ~400 KB). Posisikan kamera lebih dekat dan ambil ulang foto.');
 }

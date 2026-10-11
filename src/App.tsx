@@ -7,6 +7,7 @@ import React, { useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
+import { GuideProvider } from './contexts/GuideContext';
 import { Layout } from './components/layout/Layout';
 import { MobileExitConfirmModal } from './components/common/MobileExitConfirmModal';
 import { LoginPage } from './features/auth/LoginPage';
@@ -188,7 +189,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <NavigationProvider>
-          <AppContent />
+          <GuideProvider>
+            <AppContent />
+          </GuideProvider>
         </NavigationProvider>
       </AuthProvider>
     </ThemeProvider>

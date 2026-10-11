@@ -39,6 +39,33 @@ export function formatIndonesianDate(dateString?: string | Date): string {
   }).format(date);
 }
 
+export function formatShortIndonesianDate(dateString?: string | Date): string {
+  if (!dateString) return '-';
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+  if (isNaN(date.getTime())) return String(dateString);
+
+  return new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(date);
+}
+
+export function formatTimeRaw(dateString?: string | Date): string {
+  if (!dateString) return '00:00:00';
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+  if (isNaN(date.getTime())) return '00:00:00';
+
+  return new Intl.DateTimeFormat('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Jakarta',
+  }).format(date);
+}
+
 export function formatTime(timeInput?: any, includeSeconds = false): string {
   if (!timeInput) return '-';
   if (typeof timeInput === 'string' && timeInput.length === 5 && timeInput.includes(':')) {

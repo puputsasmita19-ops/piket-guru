@@ -33,6 +33,7 @@ import {
   Check,
 } from 'lucide-react';
 import { formatIndonesianDate } from '../../utils/dateUtils';
+import { ContextualHelp } from '../../components/common/Tooltip';
 
 interface OperationalResetCardProps {
   currentUser: UserProfile;
@@ -221,6 +222,10 @@ export const OperationalResetCard: React.FC<OperationalResetCardProps> = ({
               <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-[var(--theme-primary)]" />
                 <span>1. Pilih Kategori Data Operasional yang Akan Dibersihkan</span>
+                <ContextualHelp
+                  title="Reset Data Operasional"
+                  content="Menghapus data operasional lokal/percobaan. Rekod di Firestore tidak terpengaruh kecuali jika sengaja dieksekusi oleh Administrator."
+                />
               </label>
               <div className="flex items-center gap-2">
                 <button

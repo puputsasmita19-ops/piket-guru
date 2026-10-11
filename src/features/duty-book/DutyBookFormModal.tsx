@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
+import { ContextualHelp } from '../../components/common/Tooltip';
 
 interface DutyBookFormModalProps {
   isOpen: boolean;
@@ -856,8 +857,12 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
 
         {/* 5 KONDISI WAJIB */}
         <div className="space-y-4 pt-1">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 pb-1 border-b border-slate-100 dark:border-slate-800">
-            Kondisi Sekolah & Lingkungan (Wajib Saat Pengiriman)
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 pb-1 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span>Kondisi Sekolah & Lingkungan (Wajib Saat Pengiriman)</span>
+            <ContextualHelp
+              title="Buku Piket Digital"
+              content="Catat kondisi keamanan, kebersihan, KBM kelas, sarpras, dan ketertiban siswa secara riil selama piket."
+            />
           </div>
 
           {/* 1. Keamanan */}

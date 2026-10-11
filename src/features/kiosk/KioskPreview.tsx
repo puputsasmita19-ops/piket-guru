@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
+import { ContextualHelp } from '../../components/common/Tooltip';
 import { PublicKioskDisplay } from './PublicKioskDisplay';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { ScheduleItem, SchoolSettings } from '../../types';
@@ -72,7 +73,11 @@ export const KioskPreview: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <Tv className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            Mode TV Informasi Publik (Kiosk Display)
+            <span>Mode TV Informasi Publik (Kiosk Display)</span>
+            <ContextualHelp
+              title="Mode TV Lobi (Kiosk)"
+              content="Tampilan layar TV Lobi sekolah yang menyajikan jadwal piket, bel sekolah, pengumuman, dan status kehadiran secara otomatis."
+            />
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             Tampilan layar penuh dinamis untuk Smart TV lobi sekolah, ruang guru, dan pos gerbang utama

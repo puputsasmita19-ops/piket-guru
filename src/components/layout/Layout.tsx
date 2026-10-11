@@ -80,8 +80,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div
-      className={`text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150 ${
-        isPinned ? 'min-h-screen lg:h-screen lg:max-h-screen lg:overflow-hidden' : 'min-h-screen'
+      className={`text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150 min-h-screen ${
+        isPinned ? 'lg:h-screen lg:max-h-screen lg:overflow-hidden' : ''
       }`}
       style={{ backgroundColor: 'var(--theme-bg-app)' }}
     >
@@ -95,7 +95,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <div
         className={`flex-1 flex relative ${
-          isPinned ? 'min-h-0 overflow-hidden' : ''
+          isPinned ? 'lg:min-h-0 lg:overflow-hidden' : ''
         }`}
       >
         <Sidebar
@@ -125,7 +125,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           id="main-content-scroll"
           className={`flex-1 max-w-7xl mx-auto w-full transition-all duration-200 pb-20 lg:pb-8 p-3 sm:p-6 md:p-8 ${
             isPinned
-              ? 'min-h-0 overflow-y-auto overscroll-contain'
+              ? 'lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain'
               : 'overflow-visible'
           }`}
         >

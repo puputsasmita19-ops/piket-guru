@@ -20,6 +20,7 @@ import {
   Square,
   Sparkles,
 } from 'lucide-react';
+import { ContextualHelp } from '../../components/common/Tooltip';
 
 interface UserFormModalProps {
   isOpen: boolean;
@@ -300,10 +301,16 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
         {/* GRANULAR PERMISSIONS */}
         <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <Shield className="w-4 h-4 text-blue-500" />
-              <span>Hak Akses & Izin Spesifik ({permissions.length} Aktif)</span>
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-blue-500" />
+                <span>Hak Akses & Izin Spesifik ({permissions.length} Aktif)</span>
+              </label>
+              <ContextualHelp
+                title="Hak Akses Pengguna"
+                content="Mengatur izin navigasi dan aksi operasional berdasarkan peran dan kebutuhan tugas pengguna."
+              />
+            </div>
             <Button
               type="button"
               variant="ghost"

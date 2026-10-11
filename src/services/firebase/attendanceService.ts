@@ -13,6 +13,7 @@ import { formatTime, getTodayISODate, getCurrentDayName, getCurrentTimeHHMM } fr
 import { getShiftHoursForDay } from '../../utils/scheduleUtils';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { AttendancePolicy, AttendanceError } from '../attendance/attendancePolicy';
+import { checkSelfieDataUrlSize } from '../attendance/selfieWatermark';
 
 export interface CheckInParams {
   userId: string;
@@ -141,6 +142,13 @@ export class AttendanceService {
     };
 
     // 3. Stage write-check-in: Persist check-in record
+    if (photoUrl) {
+      const checkResult = checkSelfieDataUrlSize(photoUrl);
+      if (!checkResult.isValid) {
+        throw new Error(checkResult.error || 'Ukuran foto presensi melebihi batas aman dokumen (maksimal ~400 KB). Silakan ambil ulang swafoto.');
+      }
+    }
+
     try {
       await setDoc(docRef, record);
     } catch (wErr: any) {

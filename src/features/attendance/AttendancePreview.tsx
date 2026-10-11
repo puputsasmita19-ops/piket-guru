@@ -22,6 +22,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
+import { ContextualHelp, Tooltip } from '../../components/common/Tooltip';
 import { LocationService, LocationCoordinates, GeofenceResult } from '../../services/location/locationService';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AttendanceService } from '../../services/firebase/attendanceService';
@@ -715,9 +716,15 @@ export const AttendancePreview: React.FC = () => {
                         )}
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                          Pusat Geofence: {settings.schoolName}
-                        </h4>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                            Pusat Geofence: {settings.schoolName}
+                          </h4>
+                          <ContextualHelp
+                            title="Lokasi & Radius GPS"
+                            content="Verifikasi koordinat GPS. Presensi valid jika perangkat berada dalam radius sekolah yang ditentukan."
+                          />
+                        </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
                           Batas Toleransi: <strong>{settings.allowedRadiusMeters} meter</strong> dari koordinat sekolah
                         </p>
@@ -842,9 +849,15 @@ export const AttendancePreview: React.FC = () => {
                 {/* Shift Selector */}
                 {todayUserSchedules.length > 0 ? (
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Pilih Pos / Shift Piket Anda Hari Ini:
-                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Pilih Pos / Shift Piket Anda Hari Ini:
+                      </label>
+                      <ContextualHelp
+                        title="Jadwal Shift Piket"
+                        content="Pilih status kehadiran atau lokasi piket yang sesuai dengan jadwal tugas Anda hari ini."
+                      />
+                    </div>
                     <select
                       value={selectedScheduleId}
                       onChange={(e) => setSelectedScheduleId(e.target.value)}
@@ -884,9 +897,15 @@ export const AttendancePreview: React.FC = () => {
 
                 {/* Camera Selfie Section */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                    Swafoto Selfie di Pos / Area Tugas:
-                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Swafoto Selfie di Pos / Area Tugas:
+                    </label>
+                    <ContextualHelp
+                      title="Foto Swafoto Presensi"
+                      content="Ambil foto swafoto langsung. Sistem membubuhkan watermark lokasi GPS, nama, dan waktu secara otomatis."
+                    />
+                  </div>
 
                   {capturedPhoto ? (
                     <div className="flex items-center gap-4 p-3 rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-card-bg)]">
@@ -1166,7 +1185,13 @@ export const AttendancePreview: React.FC = () => {
             setCapturedSelfie(evidence);
             setCheckInStatus({ tone: 'info', message: 'Swafoto berwatermark siap & tersimpan sebagai draf. Segera tekan Kirim Presensi Masuk.' });
             if (currentUser?.id) {
-              DraftService.saveDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO, evidence).catch(console.warn);
+              DraftService.saveDraft(currentUser.id, 'ATTENDANCE_CHECKIN', todayISO, evidence).catch((err: any) => {
+                console.warn('[ATTENDANCE] Error saving selfie draft:', err);
+                setCheckInStatus({
+                  tone: 'error',
+                  message: err?.message || 'Draf foto melebihi batas aman. Silakan ambil ulang swafoto.',
+                });
+              });
             }
           }
           pendingSelfieRef.current = null;
