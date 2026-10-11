@@ -620,7 +620,7 @@ export const UserManagementView: React.FC = () => {
       </Card>
 
       {/* TABLE WITH SCROLL MODEL & STICKY HEADER */}
-      <Card>
+      <Card data-tour="users-table">
         <CardContent className="p-0">
           <div className="overflow-x-auto max-h-[560px] overflow-y-auto scrollbar-thin">
             {isGuru ? (

@@ -148,7 +148,7 @@ export const DutyBookPreview: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6">
+    <div data-tour="duty-book-container" className="space-y-6">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -240,7 +240,7 @@ export const DutyBookPreview: React.FC = () => {
       </Card>
 
       {/* JURNAL LIST CARDS */}
-      <div className="space-y-4">
+      <div data-tour="my-history-section" className="space-y-4">
         {filtered.length > 0 ? (
           filtered.map((item) => {
             const displayInfo = getDutyBookDisplayStatus(item.status);

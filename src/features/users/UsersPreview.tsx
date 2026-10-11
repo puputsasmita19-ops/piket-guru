@@ -17,7 +17,7 @@ export const UsersPreview: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState<MainUserTab>('users');
 
   return (
-    <div className="space-y-6">
+    <div data-tour="users-container" className="space-y-6">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

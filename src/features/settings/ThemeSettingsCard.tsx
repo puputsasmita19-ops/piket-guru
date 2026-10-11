@@ -27,7 +27,7 @@ export const ThemeSettingsCard: React.FC = () => {
     pastelThemesList,
   } = useTheme();
 
-  const { showOnLogin, setShowOnLogin, openGuideModal } = useGuide();
+  const { showOnLogin, setShowOnLogin, startGuideTour } = useGuide();
 
   const currentThemeMeta = pastelThemesList.find((p) => p.id === pastelTheme) || pastelThemesList[0];
 
@@ -285,7 +285,7 @@ export const ThemeSettingsCard: React.FC = () => {
               variant="outline"
               size="sm"
               leftIcon={<HelpCircle className="w-4 h-4" />}
-              onClick={openGuideModal}
+              onClick={startGuideTour}
             >
               Mulai Panduan Interaktif Sekarang
             </Button>

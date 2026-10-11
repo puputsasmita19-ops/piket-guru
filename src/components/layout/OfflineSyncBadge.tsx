@@ -5,7 +5,17 @@ import { SyncQueueService, SyncQueueStatus } from '../../services/offline/syncQu
 import { OfflineSyncPanel } from './OfflineSyncPanel';
 import { OfflineSyncModal } from './OfflineSyncModal';
 
-export const OfflineSyncBadge: React.FC = () => {
+interface OfflineSyncBadgeProps {
+  isOpen?: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
+}
+
+export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
+  isOpen: controlledIsOpen,
+  onToggle,
+  onClose: controlledOnClose,
+}) => {
   const { currentUser, isOffline, isOfflineSession } = useAuth();
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -18,8 +28,10 @@ export const OfflineSyncBadge: React.FC = () => {
     items: [],
   });
 
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [internalPanelOpen, setInternalPanelOpen] = useState(false);
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
+
+  const isPanelOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalPanelOpen;
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -34,13 +46,21 @@ export const OfflineSyncBadge: React.FC = () => {
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsPanelOpen(false);
+        if (controlledOnClose) {
+          controlledOnClose();
+        } else {
+          setInternalPanelOpen(false);
+        }
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsPanelOpen(false);
+        if (controlledOnClose) {
+          controlledOnClose();
+        } else {
+          setInternalPanelOpen(false);
+        }
         triggerButtonRef.current?.focus();
       }
     };
@@ -54,7 +74,7 @@ export const OfflineSyncBadge: React.FC = () => {
       document.removeEventListener('touchstart', handleClickOutside);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isPanelOpen]);
+  }, [isPanelOpen, controlledOnClose]);
 
   if (!currentUser) return null;
 
@@ -86,15 +106,27 @@ export const OfflineSyncBadge: React.FC = () => {
     pendingCount > 0 ? ` ${pendingCount} data belum terkirim.` : ''
   } Klik untuk membaca rincian status koneksi.`;
 
+  const handleTogglePanel = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalPanelOpen(!internalPanelOpen);
+    }
+  };
+
   const handleClosePanel = () => {
-    setIsPanelOpen(false);
+    if (controlledOnClose) {
+      controlledOnClose();
+    } else {
+      setInternalPanelOpen(false);
+    }
     setTimeout(() => {
       triggerButtonRef.current?.focus();
     }, 50);
   };
 
   const handleOpenQueueModal = () => {
-    setIsPanelOpen(false);
+    handleClosePanel();
     setIsQueueModalOpen(true);
   };
 
@@ -103,10 +135,14 @@ export const OfflineSyncBadge: React.FC = () => {
       <button
         ref={triggerButtonRef}
         type="button"
-        onClick={() => setIsPanelOpen(!isPanelOpen)}
+        onClick={handleTogglePanel}
         aria-expanded={isPanelOpen}
         aria-haspopup="true"
-        className="p-2.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95"
+        className={`p-2.5 sm:p-2 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+          isPanelOpen
+            ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
+            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
+        }`}
         title={`Status koneksi: ${shortLabel}`}
         aria-label={accessibleLabel}
       >
@@ -118,6 +154,8 @@ export const OfflineSyncBadge: React.FC = () => {
               ? 'text-rose-600 dark:text-rose-400'
               : isOffline || isOfflineSession
               ? 'text-amber-600 dark:text-amber-400'
+              : isPanelOpen
+              ? 'text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
               : 'text-slate-600 dark:text-slate-300'
           }`}
         />
