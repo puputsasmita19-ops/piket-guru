@@ -34,6 +34,7 @@ import {
   ALL_TV_PANELS,
   DEFAULT_LOBBY_TV_CONFIG,
   sanitizeLobbyTvConfig,
+  areLobbyTvConfigsEqual,
   stripHtml,
 } from '../../types/lobbyTv.types';
 import { SchoolSettings, ScheduleItem } from '../../types';
@@ -77,6 +78,11 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
   React.useEffect(() => {
     setDraftConfig(sanitizeLobbyTvConfig(settings.lobbyTv));
   }, [settings.lobbyTv]);
+
+  // Track if current working draft diverges from persisted server configuration
+  const hasUnsavedChanges = React.useMemo(() => {
+    return !areLobbyTvConfigsEqual(draftConfig, settings.lobbyTv);
+  }, [draftConfig, settings.lobbyTv]);
 
   const [newTickerInput, setNewTickerInput] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -217,11 +223,16 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
             <Tv className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
               Pengaturan Mode TV Lobi (Kiosk Display)
               <Badge variant={draftConfig.enabled ? 'success' : 'neutral'} size="sm">
                 {draftConfig.enabled ? 'Siaga Aktif' : 'Nonaktif'}
               </Badge>
+              {hasUnsavedChanges && (
+                <Badge variant="warning" size="sm" className="animate-pulse">
+                  Draf Belum Disimpan
+                </Badge>
+              )}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Konfigurasi terpusat di server sekolah untuk layar monitor Smart TV di lobi, ruang guru, dan pos utama.
@@ -912,6 +923,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
             visitors={visitors}
             announcements={announcements}
             isPreviewMode={true}
+            hasUnsavedChanges={hasUnsavedChanges}
           />
         </div>
       )}

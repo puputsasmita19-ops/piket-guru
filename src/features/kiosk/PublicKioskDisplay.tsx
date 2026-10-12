@@ -43,6 +43,7 @@ interface PublicKioskDisplayProps {
   visitors?: VisitorRecord[];
   announcements?: AnnouncementRecord[];
   isPreviewMode?: boolean;
+  hasUnsavedChanges?: boolean;
 }
 
 export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
@@ -55,6 +56,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   visitors = [],
   announcements = [],
   isPreviewMode = false,
+  hasUnsavedChanges = false,
 }) => {
   // Sanitize and guarantee safe configuration
   const config: LobbyTvConfig = useMemo(
@@ -382,12 +384,21 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
       {(isPreviewMode || !isOnline) && (
         <div className="relative z-30 px-4 py-1.5 flex items-center justify-between text-xs font-semibold backdrop-blur-md transition-all shadow-xs border-b border-black/10">
           {isPreviewMode ? (
-            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 bg-amber-500/20 px-3 py-0.5 rounded-full mx-auto">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-              <span>
-                Mode Pratinjau Interaktif (Konfigurasi Draf Lokal — Belum Tersimpan di Server)
-              </span>
-            </div>
+            hasUnsavedChanges ? (
+              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 bg-amber-500/20 px-3 py-0.5 rounded-full mx-auto">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+                <span>
+                  Pratinjau TV Lobi (Perubahan Draf Belum Tersimpan)
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 bg-blue-500/20 px-3 py-0.5 rounded-full mx-auto">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                <span>
+                  Pratinjau TV Lobi
+                </span>
+              </div>
+            )
           ) : (
             <div className="flex items-center gap-2 text-rose-800 dark:text-rose-200 bg-rose-500/20 px-3 py-0.5 rounded-full mx-auto">
               <WifiOff className="w-3.5 h-3.5 text-rose-500" />

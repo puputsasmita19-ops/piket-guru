@@ -183,3 +183,51 @@ export function sanitizeLobbyTvConfig(raw?: Partial<LobbyTvConfig> | null): Lobb
     customSubtitle: raw.customSubtitle ? stripHtml(raw.customSubtitle) : DEFAULT_LOBBY_TV_CONFIG.customSubtitle,
   };
 }
+
+/**
+ * Compares two LobbyTvConfig objects for deep structural and value equality.
+ * Sanitizes both objects first to guarantee comparison consistency.
+ * Preserves panel order and ticker messages order as semantic differences.
+ */
+export function areLobbyTvConfigsEqual(
+  a?: Partial<LobbyTvConfig> | null,
+  b?: Partial<LobbyTvConfig> | null
+): boolean {
+  const cleanA = sanitizeLobbyTvConfig(a);
+  const cleanB = sanitizeLobbyTvConfig(b);
+
+  if (cleanA.enabled !== cleanB.enabled) return false;
+  if (cleanA.transition !== cleanB.transition) return false;
+  if (cleanA.transitionDurationMs !== cleanB.transitionDurationMs) return false;
+  if (cleanA.slideIntervalSec !== cleanB.slideIntervalSec) return false;
+  if (cleanA.tickerEnabled !== cleanB.tickerEnabled) return false;
+  if (cleanA.tickerSpeed !== cleanB.tickerSpeed) return false;
+  if (cleanA.tickerFontSize !== cleanB.tickerFontSize) return false;
+  if (cleanA.tickerMode !== cleanB.tickerMode) return false;
+  if (cleanA.showSeconds !== cleanB.showSeconds) return false;
+  if (cleanA.timeFormat !== cleanB.timeFormat) return false;
+  if (cleanA.showDate !== cleanB.showDate) return false;
+  if (cleanA.timezone !== cleanB.timezone) return false;
+  if (cleanA.densityScale !== cleanB.densityScale) return false;
+  if (cleanA.theme !== cleanB.theme) return false;
+  if (cleanA.colorMode !== cleanB.colorMode) return false;
+  if (cleanA.showSchoolIdentity !== cleanB.showSchoolIdentity) return false;
+  if (cleanA.showConnectionStatus !== cleanB.showConnectionStatus) return false;
+  if (cleanA.allowSound !== cleanB.allowSound) return false;
+  if ((cleanA.customSubtitle || '') !== (cleanB.customSubtitle || '')) return false;
+
+  // Compare enabledPanels respecting array length and exact order
+  if (cleanA.enabledPanels.length !== cleanB.enabledPanels.length) return false;
+  for (let i = 0; i < cleanA.enabledPanels.length; i++) {
+    if (cleanA.enabledPanels[i] !== cleanB.enabledPanels[i]) return false;
+  }
+
+  // Compare tickerMessages respecting array length and exact order
+  if (cleanA.tickerMessages.length !== cleanB.tickerMessages.length) return false;
+  for (let i = 0; i < cleanA.tickerMessages.length; i++) {
+    if (cleanA.tickerMessages[i] !== cleanB.tickerMessages[i]) return false;
+  }
+
+  return true;
+}
+
