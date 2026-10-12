@@ -114,26 +114,12 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
   };
 
   return (
-    <>
-      {/* Mobile Subtle Backdrop overlay (Hidden on Desktop) */}
-      <div
-        className="fixed inset-0 z-40 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm sm:hidden transition-opacity duration-150"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      {/* Desktop Invisible Backdrop (No blur, no tint) */}
-      <div
-        className="fixed inset-0 z-40 hidden sm:block bg-transparent"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Compact Notification Panel */}
-      <div
-        role="region"
-        aria-label="Panel Notifikasi Status Koneksi"
-        className="fixed top-16 left-3.5 right-3.5 sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 z-50 w-auto sm:w-[360px] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] p-4 text-xs space-y-3 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto"
-      >
+    <div
+      role="region"
+      aria-label="Panel Notifikasi Status Koneksi"
+      onClick={(e) => e.stopPropagation()}
+      className="fixed top-16 left-3.5 right-3.5 sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 z-50 w-auto sm:w-[360px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] p-4 text-xs space-y-3 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto"
+    >
         {/* Panel Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
@@ -267,6 +253,5 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
           </button>
         </div>
       </div>
-    </>
   );
 };

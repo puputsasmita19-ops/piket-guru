@@ -104,6 +104,7 @@ export const GuideHelpButton: React.FC<GuideHelpButtonProps> = ({
         <div
           role="dialog"
           aria-label="Menu Panduan Penggunaan"
+          onClick={(e) => e.stopPropagation()}
           className="fixed top-16 right-3.5 left-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[320px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 p-4 space-y-4"
         >
           {/* Menu Header */}

@@ -70,6 +70,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const [substitutions, setSubstitutions] = useState<TeacherSubstitutionRecord[]>([]);
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
 
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
+
   // Modals
   const [isAnnModalOpen, setIsAnnModalOpen] = useState(false);
   const [waModalData, setWaModalData] = useState<{
@@ -94,7 +97,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       if (data) setSettings(data);
     });
 
-    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
+    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
+      setSchedules(data);
+      setIsLoadingMetrics(false);
+    });
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
     const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendance);
@@ -102,6 +108,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', setIncidents);
     const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', (data) => {
       setAnnouncements(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setIsLoadingAnnouncements(false);
     });
     const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setStudentTardiness);
     const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setStudentPermits);
@@ -370,9 +377,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-slate-900 dark:text-white">
-              {todaySchedules.length} Guru
-            </div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-24 bg-slate-200 dark:bg-[var(--theme-surface-subtle)] rounded-md animate-pulse my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                {todaySchedules.length} Guru
+              </div>
+            )}
             <div className="text-[11px] text-slate-400 font-mono">Shift {todayName}</div>
           </CardContent>
         </Card>
@@ -386,9 +397,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 <ShieldCheck className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-emerald-600">
-              {attendancePercentage}%
-            </div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-20 bg-slate-200 dark:bg-[var(--theme-surface-subtle)] rounded-md animate-pulse my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold text-emerald-600">
+                {attendancePercentage}%
+              </div>
+            )}
             <div className="text-[11px] text-emerald-600 font-medium">
               {presentCount} dari {todaySchedules.length || 0} Terverifikasi
             </div>
@@ -404,9 +419,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 <BookOpenCheck className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-xl font-bold text-slate-900 dark:text-white truncate">
-              {todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status).label : 'Belum Dibuat'}
-            </div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-28 bg-slate-200 dark:bg-[var(--theme-surface-subtle)] rounded-md animate-pulse my-0.5" />
+            ) : (
+              <div className="text-xl font-bold text-slate-900 dark:text-white truncate">
+                {todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status).label : 'Belum Dibuat'}
+              </div>
+            )}
             <div className="text-[11px] text-purple-600 font-medium">
               {todayDutyBook ? 'Tahap Jurnal' : 'Siap Diisi'}
             </div>
@@ -422,9 +441,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 <AlertTriangle className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-amber-600">
-              {todayIncidents.length} Kejadian
-            </div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-24 bg-slate-200 dark:bg-[var(--theme-surface-subtle)] rounded-md animate-pulse my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold text-amber-600">
+                {todayIncidents.length} Kejadian
+              </div>
+            )}
             <div className="text-[11px] text-amber-600 font-medium">
               {todayIncidents.filter((i) => i.status === 'SELESAI').length} Tuntas Ditangani
             </div>
@@ -519,7 +542,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           }
         />
         <CardContent className="p-4 sm:p-5">
-          {announcements.length > 0 ? (
+          {isLoadingAnnouncements ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
+                <div className="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
+                <div className="h-3 w-1/2 bg-slate-200 dark:bg-slate-700/60 rounded" />
+              </div>
+              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
+                <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
+                <div className="h-3 w-1/3 bg-slate-200 dark:bg-slate-700/60 rounded" />
+              </div>
+            </div>
+          ) : announcements.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {announcements.slice(0, 4).map((ann) => (
                 <div

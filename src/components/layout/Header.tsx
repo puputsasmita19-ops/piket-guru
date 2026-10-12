@@ -97,6 +97,21 @@ export const Header: React.FC<HeaderProps> = ({
   const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
 
   const [activePanel, setActivePanel] = useState<HeaderPanel>('none');
+
+  const handleTogglePanel = (panel: HeaderPanel) => {
+    if (activePanel === panel) {
+      setActivePanel('none');
+      if (panel === 'guide') closeGuideMenu();
+    } else {
+      setActivePanel(panel);
+      if (panel === 'guide') {
+        openGuideMenu();
+      } else {
+        closeGuideMenu();
+      }
+    }
+  };
+
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   const [unsavedCounts, setUnsavedCounts] = useState({ pending: 0, drafts: 0 });
@@ -234,7 +249,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       <header
-        className="shrink-0 sticky top-0 z-30 backdrop-blur-md border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
+        className="shrink-0 sticky top-0 z-40 border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
         style={{ backgroundColor: 'var(--theme-header-bg)' }}
       >
         <div className="max-w-7xl mx-auto w-full px-2 sm:px-4 lg:px-6">
@@ -327,50 +342,29 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Right Section: Icons, Profile & Logout */}
             <div className="flex items-center justify-end gap-1 sm:gap-1.5 md:gap-2 shrink-0">
-              {/* Shared Backdrop: Mobile backdrop-blur-sm overlay; Desktop transparent click-away */}
+              {/* Shared Transparent Backdrop (Below Header z-40, Non-blurring, Header items stay 100% interactive) */}
               {activePanel !== 'none' && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm sm:hidden transition-opacity duration-150"
-                    onClick={() => {
-                      setActivePanel('none');
-                      closeGuideMenu();
-                    }}
-                    aria-hidden="true"
-                  />
-                  <div
-                    className="fixed inset-0 z-40 hidden sm:block bg-transparent"
-                    onClick={() => {
-                      setActivePanel('none');
-                      closeGuideMenu();
-                    }}
-                    aria-hidden="true"
-                  />
-                </>
+                <div
+                  className="fixed inset-0 z-30 bg-transparent"
+                  onClick={() => {
+                    setActivePanel('none');
+                    closeGuideMenu();
+                  }}
+                  aria-hidden="true"
+                />
               )}
 
               {/* 1. Offline Sync & Connection Status Button */}
               <OfflineSyncBadge
                 isOpen={activePanel === 'sync'}
-                onToggle={() => {
-                  if (isGuideMenuOpen) closeGuideMenu();
-                  setActivePanel(activePanel === 'sync' ? 'none' : 'sync');
-                }}
+                onToggle={() => handleTogglePanel('sync')}
                 onClose={() => setActivePanel('none')}
               />
 
               {/* 2. Guide Help Button (Icon Bantuan ?) */}
               <GuideHelpButton
                 isOpen={activePanel === 'guide'}
-                onToggle={() => {
-                  if (activePanel === 'guide') {
-                    setActivePanel('none');
-                    closeGuideMenu();
-                  } else {
-                    setActivePanel('guide');
-                    openGuideMenu();
-                  }
-                }}
+                onToggle={() => handleTogglePanel('guide')}
                 onClose={() => {
                   setActivePanel('none');
                   closeGuideMenu();
@@ -382,10 +376,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <Tooltip content="Pusat Notifikasi" position="bottom">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (isGuideMenuOpen) closeGuideMenu();
-                      setActivePanel(activePanel === 'notifications' ? 'none' : 'notifications');
-                    }}
+                    onClick={() => handleTogglePanel('notifications')}
                     className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'notifications'
                         ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
@@ -405,6 +396,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <div
                     role="dialog"
                     aria-label="Pusat Notifikasi"
+                    onClick={(e) => e.stopPropagation()}
                     className="fixed top-16 left-3.5 right-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[380px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[min(520px,calc(100vh-5rem))] overflow-hidden"
                   >
                     {/* Header Panel */}
@@ -570,10 +562,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <Tooltip content="Pengaturan mode tampilan & warna tema" position="bottom">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (isGuideMenuOpen) closeGuideMenu();
-                      setActivePanel(activePanel === 'theme' ? 'none' : 'theme');
-                    }}
+                    onClick={() => handleTogglePanel('theme')}
                     className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 shrink-0 ${
                       activePanel === 'theme'
                         ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
@@ -594,6 +583,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <div
                     role="dialog"
                     aria-label="Pengaturan Tampilan dan Warna Tema"
+                    onClick={(e) => e.stopPropagation()}
                     className="fixed top-16 left-3.5 right-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[320px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 p-3.5 sm:p-4 text-xs font-medium"
                   >
                     {/* Title Bar */}
@@ -717,10 +707,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (isGuideMenuOpen) closeGuideMenu();
-                      setActivePanel(activePanel === 'user' ? 'none' : 'user');
-                    }}
+                    onClick={() => handleTogglePanel('user')}
                     className={`flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'user'
                         ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
@@ -744,7 +731,10 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
 
                   {activePanel === 'user' && (
-                    <div className="fixed top-16 right-3.5 left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-64 bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="fixed top-16 right-3.5 left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-[calc(100vw-28px)] sm:w-64 max-w-[280px] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] p-3 z-50 animate-in fade-in zoom-in-95 duration-100"
+                    >
                       <div className="border-b border-slate-100 dark:border-[var(--theme-card-border)] pb-2.5 mb-2">
                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
                           {currentUser.fullName}

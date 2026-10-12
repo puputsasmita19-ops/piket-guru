@@ -56,15 +56,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isOfflineSession, setIsOfflineSession] = useState(false);
   const [isTrustedDeviceState, setIsTrustedDeviceState] = useState(() => OfflineStorage.isTrustedDevice());
 
+  // Unified authentication tracking to eliminate duplicate validations and race conditions
+  const sessionEpochRef = React.useRef<number>(1);
+  const inFlightVerificationRef = React.useRef<{
+    uid: string;
+    profile?: UserProfile;
+    epoch: number;
+  } | null>(null);
+
   const setTrustedDevice = useCallback((trusted: boolean) => {
     OfflineStorage.setTrustedDevice(trusted);
     setIsTrustedDeviceState(trusted);
   }, []);
 
   const logout = useCallback(async (options?: { purgeUserData?: boolean }) => {
+    sessionEpochRef.current += 1;
+    inFlightVerificationRef.current = null;
     await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
     setCurrentUser(null);
     setIsOfflineSession(false);
+    setIsLoading(false);
   }, [currentUser?.id]);
 
   // Revalidate session with server when network reconnects
@@ -119,8 +130,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser: User | null) => {
+      const activeEpoch = sessionEpochRef.current;
       if (!fbUser) {
-        if (isMounted) {
+        if (isMounted && activeEpoch === sessionEpochRef.current) {
           await authService.clearSession();
           setCurrentUser(null);
           setIsOfflineSession(false);
@@ -129,18 +141,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      // Check if this exact fbUser was ALREADY verified by in-flight login action (PIN or Google)
+      if (
+        inFlightVerificationRef.current &&
+        inFlightVerificationRef.current.uid === fbUser.uid &&
+        inFlightVerificationRef.current.epoch === activeEpoch
+      ) {
+        if (inFlightVerificationRef.current.profile && isMounted) {
+          setCurrentUser(inFlightVerificationRef.current.profile);
+          setIsOfflineSession(false);
+          setIsLoading(false);
+          SyncQueueService.refreshStatus(inFlightVerificationRef.current.profile.id).catch(() => {});
+        }
+        // Unified: Do not run duplicate parallel validation
+        return;
+      }
+
+      // Otherwise (session restore / page refresh), perform strict profile validation
       try {
         const valRes = await validateFirebaseUserProfile(fbUser);
+        if (activeEpoch !== sessionEpochRef.current) return;
+
         if (!valRes.success || !valRes.profile) {
           console.warn('[AUTH_CONTEXT] User profile validation failed:', valRes.error);
-          if (isMounted) {
+          if (isMounted && activeEpoch === sessionEpochRef.current) {
             await logout();
             setIsLoading(false);
           }
           return;
         }
 
-        if (isMounted) {
+        if (isMounted && activeEpoch === sessionEpochRef.current) {
           setCurrentUser(valRes.profile);
           setIsOfflineSession(!!valRes.isOfflineSession);
           setIsLoading(false);
@@ -148,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err) {
         console.error('[AUTH_CONTEXT] Failed to verify active Firebase session:', err);
-        if (isMounted) {
+        if (isMounted && activeEpoch === sessionEpochRef.current) {
           await logout();
           setIsLoading(false);
         }
@@ -220,12 +251,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLocked?: boolean;
     remainingSeconds?: number;
   }> => {
+    const currentEpoch = ++sessionEpochRef.current;
     try {
       const res = await authService.authenticateWithPin(nipOrUserId, pin);
+      if (currentEpoch !== sessionEpochRef.current) {
+        return { success: false, error: 'Sesi autentikasi dibatalkan.' };
+      }
+
       if (res.success && res.user) {
+        inFlightVerificationRef.current = {
+          uid: res.user.id,
+          profile: res.user,
+          epoch: currentEpoch,
+        };
         setCurrentUser(res.user);
+        setIsOfflineSession(false);
+        setIsLoading(false);
+        SyncQueueService.refreshStatus(res.user.id).catch(() => {});
         return { success: true };
       }
+
       return {
         success: false,
         error: res.error || 'Autentikasi gagal.',
@@ -239,6 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    const currentEpoch = ++sessionEpochRef.current;
     try {
       const { GoogleAuthProvider, signInWithPopup, signOut } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
@@ -246,22 +292,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, provider);
       const fbUser = result.user;
 
-      // R21-04: No client role assignment or client profile creation based on email.
-      // Must validate against trusted server-provisioned profile in database via strict validator.
+      if (currentEpoch !== sessionEpochRef.current) {
+        return { success: false, error: 'Sesi autentikasi dibatalkan.' };
+      }
+
+      inFlightVerificationRef.current = {
+        uid: fbUser.uid,
+        epoch: currentEpoch,
+      };
+
       const valRes = await validateFirebaseUserProfile(fbUser, { isLoginWithGoogle: true });
+      if (currentEpoch !== sessionEpochRef.current) return { success: false };
+
       if (!valRes.success || !valRes.profile) {
+        inFlightVerificationRef.current = null;
         await signOut(auth);
         authService.clearSession();
         setCurrentUser(null);
+        setIsLoading(false);
         return {
           success: false,
           error: valRes.error || 'Akun Google ini tidak terdaftar atau belum diaktifkan dalam database sekolah.',
         };
       }
 
+      inFlightVerificationRef.current = {
+        uid: fbUser.uid,
+        profile: valRes.profile,
+        epoch: currentEpoch,
+      };
       setCurrentUser(valRes.profile);
+      setIsOfflineSession(false);
+      setIsLoading(false);
+      SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
       return { success: true };
     } catch (err: any) {
+      inFlightVerificationRef.current = null;
       const errorCode = err?.code || '';
       const errorMessage = err?.message || '';
 

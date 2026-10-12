@@ -90,8 +90,10 @@ class AuthService {
    * Does NOT query Firestore client-side, enforcing zero unauthenticated client access (SEC-06).
    */
   public async refreshUsersList(): Promise<UserSummaryItem[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch('/api/auth/users-summary');
+      const res = await fetch('/api/auth/users-summary', { signal: controller.signal });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -111,9 +113,15 @@ class AuthService {
         return this.usersList;
       }
       return [];
-    } catch (err) {
-      console.warn('[AUTH] Could not fetch users summary from backend API:', err);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        console.warn('[AUTH] Request users-summary timed out.');
+      } else {
+        console.warn('[AUTH] Could not fetch users summary from backend API:', err);
+      }
       return [];
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -133,6 +141,9 @@ class AuthService {
   public async authenticateWithPin(identifier: string, pin: string): Promise<AuthResult> {
     await this.init();
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const trimmedId = (identifier || '').trim();
       const response = await fetch('/api/auth/login', {
@@ -144,6 +155,7 @@ class AuthService {
           nip: trimmedId,
           pin: pin.trim(),
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -197,11 +209,19 @@ class AuthService {
 
       return { success: true, user: userProfile };
     } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'Permintaan autentikasi memakan waktu terlalu lama. Silakan periksa koneksi internet Anda lalu coba lagi.',
+        };
+      }
       console.error('Authentication network error:', err);
       return {
         success: false,
         error: 'Tidak dapat terhubung ke server autentikasi. Pastikan koneksi server aktif.',
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
