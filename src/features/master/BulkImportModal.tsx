@@ -48,6 +48,9 @@ interface ParsedUserRow {
 }
 
 interface ParsedStudentRow {
+  studentId: string;
+  isGeneratedStudentId?: boolean;
+  nis: string;
   nisn: string;
   nama: string;
   kelas: string;
@@ -57,6 +60,7 @@ interface ParsedStudentRow {
   alamat: string;
   isValid: boolean;
   error?: string;
+  warning?: string;
 }
 
 export const BulkImportModal: React.FC<BulkImportModalProps> = ({
@@ -78,6 +82,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   // Existing database identifiers to detect collisions reliably
   const [existingLoginIds, setExistingLoginIds] = useState<Set<string>>(new Set());
   const [existingNips, setExistingNips] = useState<Set<string>>(new Set());
+  const [existingStudentNis, setExistingStudentNis] = useState<Set<string>>(new Set());
+  const [existingStudentNisn, setExistingStudentNisn] = useState<Set<string>>(new Set());
+  const [existingStudentIds, setExistingStudentIds] = useState<Set<string>>(new Set());
 
   // Load existing records from database when modal opens
   useEffect(() => {
@@ -86,16 +93,20 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     let isMounted = true;
     const loadExisting = async () => {
       try {
-        const [usersSummary, teachers, staff] = await Promise.all([
+        const [usersSummary, teachers, staff, students] = await Promise.all([
           authService.getUsersList().catch(() => [] as UserSummaryItem[]),
           FirestoreService.getAllRaw<TeacherRecord>('teachers').catch(() => [] as TeacherRecord[]),
           FirestoreService.getAllRaw<StaffRecord>('staff').catch(() => [] as StaffRecord[]),
+          FirestoreService.getAllRaw<StudentRecord>('students').catch(() => [] as StudentRecord[]),
         ]);
 
         if (!isMounted) return;
 
         const loginSet = new Set<string>();
         const nipSet = new Set<string>();
+        const studentNisSet = new Set<string>();
+        const studentNisnSet = new Set<string>();
+        const studentIdSet = new Set<string>();
 
         usersSummary.forEach((u) => {
           if (u.loginId) loginSet.add(u.loginId.trim().toUpperCase());
@@ -113,10 +124,24 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           if (s.nip && s.nip.trim() !== '' && s.nip !== '-') nipSet.add(s.nip.trim());
         });
 
+        students.forEach((std) => {
+          if (std.id) studentIdSet.add(std.id.trim());
+          if (std.studentId) studentIdSet.add(std.studentId.trim());
+          if (std.nis && std.nis.trim() !== '' && std.nis !== '-') {
+            studentNisSet.add(std.nis.trim());
+          }
+          if (std.nisn && std.nisn.trim() !== '' && std.nisn !== '-') {
+            studentNisnSet.add(std.nisn.trim());
+          }
+        });
+
         setExistingLoginIds(loginSet);
         setExistingNips(nipSet);
+        setExistingStudentNis(studentNisSet);
+        setExistingStudentNisn(studentNisnSet);
+        setExistingStudentIds(studentIdSet);
       } catch (err) {
-        console.warn('Could not load existing users for import collision check:', err);
+        console.warn('Could not load existing master data for import collision check:', err);
       }
     };
 
@@ -156,12 +181,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       a.click();
       URL.revokeObjectURL(url);
     } else {
-      const csvHeader = 'NISN,Nama Lengkap,Kelas,Jenis Kelamin,No HP Siswa (Opsional),No HP Orang Tua,Alamat\n';
+      const csvHeader = 'NIS,NISN,Nama Lengkap,Kelas,Jenis Kelamin,No HP Siswa (Opsional),No HP Orang Tua,Alamat\n';
       const csvRows = [
-        '0081234561,Ahmad Pratama,X MIPA 1,L,081298765401,081234567890,Jl. Merdeka No. 10',
-        '0081234562,Dewi Anggraini,X MIPA 1,P,,081234567891,Jl. Melati No. 4',
-        '0081234563,Fajar Nugroho,X IPS 2,L,081298765403,081234567892,Jl. Anggrek No. 12',
-        '0071234564,Siti Nurhaliza,XI MIPA 2,P,,081234567893,Jl. Kenanga No. 8',
+        '1481/080.531,0081234561,Ahmad Pratama,X MIPA 1,L,081298765401,081234567890,Jl. Merdeka No. 10',
+        '1482/080.532,,Dewi Anggraini,X MIPA 1,P,,081234567891,Jl. Melati No. 4',
+        ',0081234563,Fajar Nugroho,X IPS 2,L,081298765403,081234567892,Jl. Anggrek No. 12',
+        ',,Siti Nurhaliza,XI MIPA 2,P,,081234567893,Jl. Kenanga No. 8',
       ].join('\n');
       const blob = new Blob([csvHeader + csvRows], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -475,39 +500,43 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         setParsedUsers(rows);
       } else {
         // Students CSV parsing
-        let colIdxNisn = 0;
-        let colIdxNama = 1;
-        let colIdxKelas = 2;
-        let colIdxJk = 3;
-        let colIdxHpSiswa = -1;
-        let colIdxHpOrtu = 4;
-        let colIdxAlamat = 5;
+        const findIdx = (keywords: string[]) =>
+          firstLineCols.findIndex((h) => keywords.some((k) => h.includes(k)));
 
-        if (isFirstLineHeader) {
-          const findIdx = (keywords: string[]) =>
-            firstLineCols.findIndex((h) => keywords.some((k) => h.includes(k)));
+        let colIdxNis = findIdx(['nis/nisn', 'nis_nisn', 'nis', 'nomor induk siswa', 'no induk']);
+        let colIdxNisn = findIdx(['nisn', 'nomor induk siswa nasional', 'no nisn']);
 
-          const nIdx = findIdx(['nisn']);
-          const nmIdx = findIdx(['nama']);
-          const klIdx = findIdx(['kelas', 'rombel']);
-          const jkIdx = findIdx(['jenis kelamin', 'gender', 'jk', 'l/p']);
-          const hpSiswaIdx = findIdx(['hp siswa', 'nomor hp siswa', 'telepon siswa', 'no hp siswa']);
-          const hpOrtuIdx = findIdx(['hp orang tua', 'hp ortu', 'no hp ortu', 'wali', 'orang tua']);
-          const almtIdx = findIdx(['alamat', 'domisili']);
-
-          if (nIdx !== -1) colIdxNisn = nIdx;
-          if (nmIdx !== -1) colIdxNama = nmIdx;
-          if (klIdx !== -1) colIdxKelas = klIdx;
-          if (jkIdx !== -1) colIdxJk = jkIdx;
-          if (hpSiswaIdx !== -1) colIdxHpSiswa = hpSiswaIdx;
-          if (hpOrtuIdx !== -1) colIdxHpOrtu = hpOrtuIdx;
-          if (almtIdx !== -1) colIdxAlamat = almtIdx;
+        // Check if a single column header says 'nisn' or 'nis/nisn'
+        // If colIdxNis and colIdxNisn point to the exact same column, resolve disambiguation
+        if (colIdxNis === colIdxNisn && colIdxNis !== -1) {
+          colIdxNis = -1; // keep colIdxNisn as candidate
         }
 
-        const rows: ParsedStudentRow[] = dataLines.map((line) => {
+        const colIdxNama = findIdx(['nama lengkap', 'nama siswa', 'nama']);
+        const colIdxKelas = findIdx(['kelas', 'rombel', 'rombongan']);
+        const colIdxJk = findIdx(['jenis kelamin', 'gender', 'jk', 'l/p', 'l / p']);
+        const colIdxHpSiswa = findIdx(['hp siswa', 'nomor hp siswa', 'telepon siswa', 'no hp siswa']);
+        const colIdxHpOrtu = findIdx(['hp orang tua', 'hp ortu', 'no hp ortu', 'no hp orang tua', 'wali', 'orang tua', 'kontak ortu']);
+        const colIdxAlamat = findIdx(['alamat', 'domisili', 'tempat tinggal']);
+
+        // First pass: extract raw student column data
+        interface RawStudentItem {
+          rawNis: string;
+          rawNisn: string;
+          nama: string;
+          kelas: string;
+          gender: string;
+          noHpSiswa: string;
+          noHpOrangTua: string;
+          alamat: string;
+          originalIndex: number;
+        }
+
+        const rawStudentItems: RawStudentItem[] = dataLines.map((line, idx) => {
           const cols = splitLine(line);
 
-          let nisn = '';
+          let rawNis = '';
+          let rawNisn = '';
           let nama = '';
           let kelas = '';
           let gender = 'L';
@@ -515,69 +544,215 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           let noHpOrangTua = '-';
           let alamat = '';
 
-          if (isFirstLineHeader && colIdxHpSiswa !== -1) {
-            nisn = cols[colIdxNisn] || '';
-            nama = cols[colIdxNama] || '';
-            kelas = cols[colIdxKelas] || 'X MIPA 1';
-            gender = (cols[colIdxJk] || 'L').toUpperCase().trim();
-            noHpSiswa = (cols[colIdxHpSiswa] || '').trim();
-            noHpOrangTua = cols[colIdxHpOrtu] || '-';
-            alamat = cols[colIdxAlamat] || '';
-          } else if (cols.length >= 7) {
-            nisn = cols[0] || '';
-            nama = cols[1] || '';
-            kelas = cols[2] || 'X MIPA 1';
-            gender = (cols[3] || 'L').toUpperCase().trim();
-            noHpSiswa = (cols[4] || '').trim();
-            noHpOrangTua = cols[5] || '-';
-            alamat = cols[6] || '';
+          if (isFirstLineHeader) {
+            // Check if user has explicit separate NIS and NISN columns
+            if (colIdxNis !== -1 && colIdxNisn !== -1 && colIdxNis !== colIdxNisn) {
+              rawNis = cols[colIdxNis] || '';
+              rawNisn = cols[colIdxNisn] || '';
+            } else if (colIdxNisn !== -1) {
+              // Only NISN column found
+              rawNisn = cols[colIdxNisn] || '';
+            } else if (colIdxNis !== -1) {
+              // Only NIS column found
+              rawNis = cols[colIdxNis] || '';
+            } else {
+              // Default fallback first col
+              rawNisn = cols[0] || '';
+            }
+
+            nama = colIdxNama !== -1 ? cols[colIdxNama] || '' : cols[1] || '';
+            kelas = colIdxKelas !== -1 ? cols[colIdxKelas] || 'X MIPA 1' : cols[2] || 'X MIPA 1';
+            gender = colIdxJk !== -1 ? (cols[colIdxJk] || 'L').toUpperCase().trim() : (cols[3] || 'L').toUpperCase().trim();
+            noHpSiswa = colIdxHpSiswa !== -1 ? (cols[colIdxHpSiswa] || '').trim() : '';
+            noHpOrangTua = colIdxHpOrtu !== -1 ? cols[colIdxHpOrtu] || '-' : cols[4] || '-';
+            alamat = colIdxAlamat !== -1 ? cols[colIdxAlamat] || '' : cols[5] || '';
           } else {
-            nisn = cols[0] || '';
-            nama = cols[1] || '';
-            kelas = cols[2] || 'X MIPA 1';
-            gender = (cols[3] || 'L').toUpperCase().trim();
-            noHpSiswa = '';
-            noHpOrangTua = cols[4] || '-';
-            alamat = cols[5] || '';
+            // No header line: positional fallback
+            if (cols.length >= 8) {
+              rawNis = cols[0] || '';
+              rawNisn = cols[1] || '';
+              nama = cols[2] || '';
+              kelas = cols[3] || 'X MIPA 1';
+              gender = (cols[4] || 'L').toUpperCase().trim();
+              noHpSiswa = (cols[5] || '').trim();
+              noHpOrangTua = cols[6] || '-';
+              alamat = cols[7] || '';
+            } else if (cols.length === 7) {
+              rawNisn = cols[0] || '';
+              nama = cols[1] || '';
+              kelas = cols[2] || 'X MIPA 1';
+              gender = (cols[3] || 'L').toUpperCase().trim();
+              noHpSiswa = (cols[4] || '').trim();
+              noHpOrangTua = cols[5] || '-';
+              alamat = cols[6] || '';
+            } else {
+              rawNisn = cols[0] || '';
+              nama = cols[1] || '';
+              kelas = cols[2] || 'X MIPA 1';
+              gender = (cols[3] || 'L').toUpperCase().trim();
+              noHpSiswa = '';
+              noHpOrangTua = cols[4] || '-';
+              alamat = cols[5] || '';
+            }
           }
 
+          return {
+            rawNis: rawNis.trim(),
+            rawNisn: rawNisn.trim(),
+            nama: nama.trim(),
+            kelas: kelas.trim() || 'X MIPA 1',
+            gender,
+            noHpSiswa,
+            noHpOrangTua: noHpOrangTua.trim() || '-',
+            alamat: alamat.trim(),
+            originalIndex: idx,
+          };
+        });
+
+        // Detect legacy CSV issue: single column titled "NISN" containing internal numbers like "1481/080.531"
+        let remappedToNisCount = 0;
+        const normalizedItems = rawStudentItems.map((item) => {
+          let nis = item.rawNis;
+          let nisn = item.rawNisn;
+          let warning = '';
+
+          // If NIS is empty but NISN contains non-numeric chars (like slash, dots, hyphens)
+          // or is not exactly 10 digits numeric, it's an internal school NIS misfiled into NISN column
+          if (!nis && nisn && !/^\d{10}$/.test(nisn)) {
+            // e.g. "1481/080.531" or "080/SMK/12"
+            nis = nisn;
+            nisn = '';
+            remappedToNisCount++;
+            warning = `Nomor "${nis}" otomatis dipetakan ke NIS (Nomor Induk Siswa internal). NISN dikosongkan karena NISN nasional harus tepat 10 digit angka.`;
+          }
+
+          return {
+            ...item,
+            nis,
+            nisn,
+            warning,
+          };
+        });
+
+        // Track allocated identifiers to detect duplicates within CSV and vs Firestore
+        const allocatedStudentIds = new Set<string>(existingStudentIds);
+        const nisCounts = new Map<string, number>();
+        const nisnCounts = new Map<string, number>();
+
+        normalizedItems.forEach((item) => {
+          if (item.nis && item.nis !== '-') {
+            nisCounts.set(item.nis, (nisCounts.get(item.nis) || 0) + 1);
+          }
+          if (item.nisn && item.nisn !== '-') {
+            nisnCounts.set(item.nisn, (nisnCounts.get(item.nisn) || 0) + 1);
+          }
+        });
+
+        // Second pass: validate fields and synthesize unique studentId
+        let generatedSeq = 1;
+        const rows: ParsedStudentRow[] = normalizedItems.map((item) => {
+          let isValid = true;
+          let error = '';
+          let warning = item.warning || '';
+
+          // 1. Validate full name (required)
+          if (!item.nama) {
+            isValid = false;
+            error = 'Nama Siswa wajib diisi';
+          }
+          // 2. Validate class (required)
+          else if (!item.kelas) {
+            isValid = false;
+            error = 'Kelas wajib diisi';
+          }
+
+          // 3. Validate NISN if present (must be exactly 10 numeric digits, preserving leading zeroes)
+          if (isValid && item.nisn && item.nisn !== '-') {
+            if (!/^\d{10}$/.test(item.nisn)) {
+              isValid = false;
+              error = `NISN "${item.nisn}" tidak valid. NISN nasional wajib tepat 10 digit angka (contoh: 0081234561).`;
+            } else if ((nisnCounts.get(item.nisn) || 0) > 1) {
+              isValid = false;
+              error = `NISN "${item.nisn}" duplikat dalam berkas CSV`;
+            } else if (existingStudentNisn.has(item.nisn)) {
+              // Existing in DB: flag warning for update or error if conflicting
+              warning = warning
+                ? `${warning}; Siswa dengan NISN "${item.nisn}" sudah terdaftar di database (akan diperbarui)`
+                : `Siswa dengan NISN "${item.nisn}" sudah terdaftar di database (akan diperbarui)`;
+            }
+          }
+
+          // 4. Validate NIS if present
+          if (isValid && item.nis && item.nis !== '-') {
+            if ((nisCounts.get(item.nis) || 0) > 1) {
+              isValid = false;
+              error = `NIS "${item.nis}" duplikat dalam berkas CSV`;
+            } else if (existingStudentNis.has(item.nis)) {
+              warning = warning
+                ? `${warning}; NIS "${item.nis}" sudah ada di database (akan diperbarui)`
+                : `NIS "${item.nis}" sudah ada di database (akan diperbarui)`;
+            }
+          }
+
+          // 5. Validate Student Phone format if filled
+          if (isValid && item.noHpSiswa && !/^(\+62|62|0)8[0-9]{7,13}$/.test(item.noHpSiswa)) {
+            isValid = false;
+            error = `Format No. HP Siswa "${item.noHpSiswa}" tidak valid (gunakan 08... / +628...)`;
+          }
+
+          // 6. Gender parsing
+          let gender = item.gender;
           if (gender !== 'L' && gender !== 'P') {
             gender = gender.startsWith('P') ? 'P' : 'L';
           }
           const jenisKelamin = gender as 'L' | 'P';
 
-          let isValid = true;
-          let error = '';
-          if (!nisn) {
-            isValid = false;
-            error = 'NISN tidak boleh kosong';
-          } else if (!nama) {
-            isValid = false;
-            error = 'Nama Siswa tidak boleh kosong';
-          } else if (!kelas) {
-            isValid = false;
-            error = 'Kelas tidak boleh kosong';
-          } else if (noHpSiswa && !/^(\+62|62|0)8[0-9]{7,13}$/.test(noHpSiswa)) {
-            isValid = false;
-            error = `Format No. HP Siswa "${noHpSiswa}" tidak valid`;
+          // 7. Internal studentId generation (stable, unique, independent of NIS/NISN)
+          // Priority: std-nisn if valid 10 digits, or std-cleanNIS, or std-generatedSeq
+          let studentId = '';
+          let isGeneratedStudentId = false;
+
+          if (item.nisn && /^\d{10}$/.test(item.nisn)) {
+            studentId = `std-${item.nisn}`;
+          } else if (item.nis && item.nis !== '-') {
+            // Sanitize NIS for safe document ID
+            const sanitizedNis = item.nis.replace(/[^a-zA-Z0-9_-]/g, '-');
+            studentId = `std-nis-${sanitizedNis}`;
           }
 
+          // Fallback if empty or collision
+          if (!studentId || allocatedStudentIds.has(studentId)) {
+            while (allocatedStudentIds.has(`std-${String(generatedSeq).padStart(3, '0')}`)) {
+              generatedSeq++;
+            }
+            studentId = `std-${String(generatedSeq).padStart(3, '0')}`;
+            isGeneratedStudentId = true;
+            generatedSeq++;
+          }
+
+          allocatedStudentIds.add(studentId);
+
           return {
-            nisn,
-            nama,
-            kelas,
+            studentId,
+            isGeneratedStudentId,
+            nis: item.nis,
+            nisn: item.nisn,
+            nama: item.nama,
+            kelas: item.kelas,
             jenisKelamin,
-            noHpSiswa,
-            noHpOrangTua,
-            alamat,
+            noHpSiswa: item.noHpSiswa,
+            noHpOrangTua: item.noHpOrangTua,
+            alamat: item.alamat,
             isValid,
             error,
+            warning,
           };
         });
+
         setParsedStudents(rows);
       }
     },
-    [existingLoginIds, existingNips]
+    [existingLoginIds, existingNips, existingStudentNis, existingStudentNisn, existingStudentIds]
   );
 
   // Re-parse when existing IDs are loaded or updated
@@ -585,7 +760,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     if (rawText) {
       parseCsvText(rawText, importType, existingLoginIds, existingNips);
     }
-  }, [existingLoginIds, existingNips, rawText, importType, parseCsvText]);
+  }, [existingLoginIds, existingNips, existingStudentNis, existingStudentNisn, existingStudentIds, rawText, importType, parseCsvText]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -769,14 +944,16 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         for (let i = 0; i < validRows.length; i++) {
           const row = validRows[i];
           try {
-            const studentId = `std-${row.nisn}`;
+            const docId = row.studentId;
             const studentRecord: StudentRecord = {
-              id: studentId,
-              nisn: row.nisn,
+              id: docId,
+              studentId: row.studentId,
+              nis: row.nis || undefined,
+              nisn: row.nisn || undefined,
               nama: row.nama,
               kelas: row.kelas,
               jenisKelamin: row.jenisKelamin,
-              noHpSiswa: (row.noHpSiswa || '').trim(),
+              noHpSiswa: (row.noHpSiswa || '').trim() || undefined,
               noHpOrangTua: row.noHpOrangTua,
               alamat: row.alamat,
               isActive: true,
@@ -786,7 +963,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               updatedBy: currentUser.fullName,
             };
 
-            await FirestoreService.setDocument('students', studentId, studentRecord);
+            await FirestoreService.setDocument('students', docId, studentRecord);
             successCount++;
           } catch (err) {
             console.error('Error importing student row:', err);
@@ -883,7 +1060,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             <p className="text-[11px] text-blue-700 dark:text-blue-300">
               {importType === 'USERS_TEACHERS'
                 ? 'Kolom: ID Login (opsional/otomatis), NIP (opsional), Nama Lengkap (wajib), Role (GURU/ADMIN/dll), Email, No HP, Mapel, Pangkat, Status, PIN Awal (6 digit, default: 123456).'
-                : 'Kolom: NISN, Nama Lengkap, Kelas, Jenis Kelamin (L/P), No HP Orang Tua, Alamat.'}
+                : 'Kolom: NIS (internal sekolah, opsional), NISN (nasional 10 digit, opsional), Nama Lengkap (wajib), Kelas (wajib), Jenis Kelamin (L/P), No HP Orang Tua, Alamat.'}
             </p>
           </div>
           <Button
@@ -934,7 +1111,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               placeholder={
                 importType === 'USERS_TEACHERS'
                   ? 'Atau tempel baris CSV di sini...\nContoh (ID Login, NIP [opsional], Nama, Role, Email, No HP, Mapel, Pangkat, Status, PIN):\nGURU-001,198501012010011001,Dra. Siti Aminah,GURU,siti@sekolah.sch.id,081234567891,Bahasa Indonesia,Pembina / IVa,PNS,123456\nGURU-002,,Budi Santoso S.Pd,GURU,budi@sekolah.sch.id,081234567892,Matematika,-,Honorer,123456'
-                  : 'Atau tempel baris CSV di sini...\nContoh:\n0081234561,Ahmad Pratama,X MIPA 1,L,081234567890,Jl. Merdeka No. 10'
+                  : 'Atau tempel baris CSV di sini...\nContoh (NIS, NISN, Nama, Kelas, L/P, HP Siswa, HP Ortu, Alamat):\n1481/080.531,0081234561,Ahmad Pratama,X MIPA 1,L,081298765401,081234567890,Jl. Merdeka No. 10\n1482/080.532,,Dewi Anggraini,X MIPA 1,P,,081234567891,Jl. Melati No. 4\n,0081234563,Fajar Nugroho,X IPS 2,L,081298765403,081234567892,Jl. Anggrek No. 12'
               }
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-mono text-[11px] focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
@@ -1023,7 +1200,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 shadow-xs">
                     <tr>
                       <th className="p-2">Status</th>
-                      <th className="p-2">NISN</th>
+                      <th className="p-2">ID Siswa</th>
+                      <th className="p-2">NIS (Sekolah)</th>
+                      <th className="p-2">NISN (Nasional)</th>
                       <th className="p-2">Nama Siswa</th>
                       <th className="p-2">Kelas</th>
                       <th className="p-2">L/P</th>
@@ -1039,9 +1218,16 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                       >
                         <td className="p-2 whitespace-nowrap">
                           {s.isValid ? (
-                            <div className="flex items-center gap-1 text-emerald-600 font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              <span className="text-[10px]">Valid</span>
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1 text-emerald-600 font-semibold">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                <span className="text-[10px]">Valid</span>
+                              </div>
+                              {s.warning && (
+                                <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium max-w-[130px] truncate" title={s.warning}>
+                                  ⚠️ {s.warning}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <div className="flex items-center gap-1 text-rose-600 font-bold" title={s.error}>
@@ -1050,7 +1236,20 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                             </div>
                           )}
                         </td>
-                        <td className="p-2 font-mono whitespace-nowrap">{s.nisn || '-'}</td>
+                        <td className="p-2 font-mono whitespace-nowrap text-slate-800 dark:text-slate-200">
+                          {s.studentId}
+                          {s.isGeneratedStudentId && (
+                            <span className="ml-1 px-1 py-0.2 rounded text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              Auto
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2 font-mono whitespace-nowrap font-medium text-slate-700 dark:text-slate-300">
+                          {s.nis || <span className="text-slate-400 dark:text-slate-500 italic">-</span>}
+                        </td>
+                        <td className="p-2 font-mono whitespace-nowrap text-slate-900 dark:text-slate-100 font-semibold">
+                          {s.nisn || <span className="text-slate-400 dark:text-slate-500 italic">-</span>}
+                        </td>
                         <td className="p-2 font-bold whitespace-nowrap">{s.nama || '-'}</td>
                         <td className="p-2 whitespace-nowrap">{s.kelas || '-'}</td>
                         <td className="p-2 whitespace-nowrap">{s.jenisKelamin}</td>

@@ -304,7 +304,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
     setStudentId(std.id);
     setNamaSiswa(std.nama);
     setStudentSearchTerm(std.nama);
-    setNisn(std.nisn || '');
+    setNisn(std.nisn || std.nis || '');
     setKelas(std.kelas || '');
     if (std.noHpOrangTua) {
       setNoHpOrangTua(std.noHpOrangTua);
@@ -322,7 +322,14 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
     if (!studentSearchTerm.trim()) return studentDirectory.slice(0, 8);
     const q = studentSearchTerm.toLowerCase();
     return studentDirectory
-      .filter((s) => s.nama.toLowerCase().includes(q) || s.nisn?.toLowerCase().includes(q) || s.kelas?.toLowerCase().includes(q))
+      .filter(
+        (s) =>
+          s.nama.toLowerCase().includes(q) ||
+          (s.nis && s.nis.toLowerCase().includes(q)) ||
+          (s.nisn && s.nisn.toLowerCase().includes(q)) ||
+          (s.studentId && s.studentId.toLowerCase().includes(q)) ||
+          (s.kelas && s.kelas.toLowerCase().includes(q))
+      )
       .slice(0, 10);
   }, [studentDirectory, studentSearchTerm]);
 
@@ -591,7 +598,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                        {std.nisn ? `NISN: ${std.nisn}` : 'NISN: -'} • {std.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                        {std.nisn ? `NISN: ${std.nisn}` : std.nis ? `NIS: ${std.nis}` : `ID: ${std.studentId || std.id}`} • {std.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
                       </div>
                     </div>
                   ))}

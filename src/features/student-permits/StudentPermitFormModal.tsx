@@ -117,7 +117,9 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
       .filter(
         (s) =>
           s.nama.toLowerCase().includes(q) ||
+          (s.nis && s.nis.toLowerCase().includes(q)) ||
           (s.nisn && s.nisn.includes(q)) ||
+          (s.studentId && s.studentId.toLowerCase().includes(q)) ||
           (s.kelas && s.kelas.toLowerCase().includes(q))
       )
       .slice(0, 12);
@@ -128,7 +130,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
     setStudentId(std.id);
     setNamaSiswa(std.nama);
     setStudentSearchTerm(std.nama);
-    setNisN(std.nisn || '');
+    setNisN(std.nisn || std.nis || '');
     setKelas(std.kelas || '');
     if (std.noHpOrangTua) {
       setNoHpOrangTua(std.noHpOrangTua);
@@ -581,7 +583,9 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                             </span>
                           </div>
                           <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center justify-between gap-2">
-                            <span>{s.nisn ? `NISN: ${s.nisn}` : 'Tanpa NISN'}</span>
+                            <span>
+                              {s.nisn ? `NISN: ${s.nisn}` : s.nis ? `NIS: ${s.nis}` : 'Tanpa NIS/NISN'}
+                            </span>
                             <span>{s.noHpOrangTua ? `📞 ${s.noHpOrangTua}` : 'No HP -'}</span>
                           </div>
                         </div>

@@ -202,7 +202,9 @@ export const UserManagementView: React.FC = () => {
   // Save Student (Siswa)
   const handleSaveStudent = async (data: {
     id?: string;
-    nisn: string;
+    studentId?: string;
+    nis?: string;
+    nisn?: string;
     nama: string;
     kelas: string;
     jenisKelamin: 'L' | 'P';
@@ -215,7 +217,9 @@ export const UserManagementView: React.FC = () => {
     const studentId = data.id || `std-${Date.now()}`;
     const studentRecord: StudentRecord = {
       id: studentId,
-      nisn: data.nisn,
+      studentId: data.studentId || studentId,
+      nis: data.nis || undefined,
+      nisn: data.nisn || undefined,
       nama: data.nama,
       kelas: data.kelas,
       jenisKelamin: data.jenisKelamin,
@@ -241,8 +245,9 @@ export const UserManagementView: React.FC = () => {
       recordId: studentId,
       details: `${data.id ? 'Memperbarui' : 'Menambahkan'} data siswa ${data.nama} (Kelas ${data.kelas})`,
     });
+    const idInfo = data.nisn ? `NISN: ${data.nisn}` : data.nis ? `NIS: ${data.nis}` : `ID: ${studentId}`;
     setFeedbackSuccess(
-      `Data siswa ${data.nama} (${data.nisn}) berhasil ${data.id ? 'diperbarui' : 'disimpan'} ke database.`
+      `Data siswa ${data.nama} (${idInfo}) berhasil ${data.id ? 'diperbarui' : 'disimpan'} ke database.`
     );
     setTimeout(() => setFeedbackSuccess(null), 6000);
   };
@@ -250,7 +255,8 @@ export const UserManagementView: React.FC = () => {
   // Export Students CSV
   const handleExportStudentsCsv = () => {
     const headers = [
-      'NISN',
+      'NIS (Sekolah)',
+      'NISN (Nasional)',
       'Nama Lengkap Siswa',
       'Kelas',
       'Jenis Kelamin',
@@ -260,7 +266,8 @@ export const UserManagementView: React.FC = () => {
       'Status Siswa',
     ];
     const rows = filteredStudents.map((s) => [
-      s.nisn,
+      s.nis || '-',
+      s.nisn ? `'${s.nisn}` : '-',
       s.nama,
       s.kelas,
       s.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan',
@@ -334,7 +341,9 @@ export const UserManagementView: React.FC = () => {
       (studentStatusFilter === 'NONAKTIF' && s.isActive === false);
     const matchSearch =
       s.nama.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      s.nisn.includes(studentSearch) ||
+      (s.nis && s.nis.toLowerCase().includes(studentSearch.toLowerCase())) ||
+      (s.nisn && s.nisn.includes(studentSearch)) ||
+      (s.studentId && s.studentId.toLowerCase().includes(studentSearch.toLowerCase())) ||
       s.kelas.toLowerCase().includes(studentSearch.toLowerCase()) ||
       (s.noHpSiswa && s.noHpSiswa.includes(studentSearch)) ||
       (s.noHpOrangTua && s.noHpOrangTua.includes(studentSearch));
@@ -819,8 +828,22 @@ export const UserManagementView: React.FC = () => {
                               <div className="font-bold text-slate-900 dark:text-white">
                                 {st.nama}
                               </div>
-                              <div className="text-[11px] font-mono text-slate-500">
-                                NISN. {st.nisn}
+                              <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap mt-0.5">
+                                {st.nisn ? (
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                    NISN: {st.nisn}
+                                  </span>
+                                ) : null}
+                                {st.nis ? (
+                                  <span>
+                                    {st.nisn ? '• ' : ''}NIS: {st.nis}
+                                  </span>
+                                ) : null}
+                                {!st.nisn && !st.nis && (
+                                  <span className="text-slate-400 italic">
+                                    ID: {st.studentId || st.id}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1193,7 +1216,10 @@ export const UserManagementView: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
-                  NISN: {selectedDetailStudent.nisn} • Kelas: {selectedDetailStudent.kelas || 'Belum ditentukan'}
+                  {selectedDetailStudent.nisn ? `NISN: ${selectedDetailStudent.nisn} • ` : ''}
+                  {selectedDetailStudent.nis ? `NIS: ${selectedDetailStudent.nis} • ` : ''}
+                  {!selectedDetailStudent.nisn && !selectedDetailStudent.nis ? `ID: ${selectedDetailStudent.studentId || selectedDetailStudent.id} • ` : ''}
+                  Kelas: {selectedDetailStudent.kelas || 'Belum ditentukan'}
                 </p>
               </div>
             </div>

@@ -71,7 +71,9 @@ export interface RoomRecord extends BaseRecord {
 }
 
 export interface StudentRecord extends BaseRecord {
-  nisn: string;
+  studentId?: string; // ID unik internal sistem (e.g. std-001)
+  nis?: string;       // Nomor Induk Siswa internal sekolah (dapat mengandung '/', '-', '.')
+  nisn?: string;      // Nomor Induk Siswa Nasional (10 digit angka jika ada)
   nama: string;
   kelas: string;
   jenisKelamin: 'L' | 'P';
@@ -79,6 +81,25 @@ export interface StudentRecord extends BaseRecord {
   noHpSiswa?: string;
   alamat?: string;
   isActive: boolean;
+}
+
+/**
+ * Helper to get clean student identifier badge & display label (NIS / NISN / ID)
+ */
+export function getStudentIdentifierInfo(student?: Partial<StudentRecord>): {
+  label: string;
+  value: string;
+  displayBadge: string;
+} {
+  if (!student) return { label: 'ID Siswa', value: '-', displayBadge: '-' };
+  if (student.nisn && student.nisn.trim() !== '' && student.nisn !== '-') {
+    return { label: 'NISN', value: student.nisn.trim(), displayBadge: `NISN. ${student.nisn.trim()}` };
+  }
+  if (student.nis && student.nis.trim() !== '' && student.nis !== '-') {
+    return { label: 'NIS', value: student.nis.trim(), displayBadge: `NIS. ${student.nis.trim()}` };
+  }
+  const idVal = student.studentId || student.id || '-';
+  return { label: 'ID Siswa', value: idVal, displayBadge: `ID: ${idVal}` };
 }
 
 export interface IncidentCategoryRecord extends BaseRecord {

@@ -365,14 +365,18 @@ export const MasterDataTabs: React.FC = () => {
     const formData = new FormData(form);
 
     const id = editingStudent ? editingStudent.id : `std-${Date.now()}`;
+    const rawNis = (formData.get('nis') as string)?.trim();
+    const rawNisn = (formData.get('nisn') as string)?.trim();
     const payload: StudentRecord = {
       id,
-      nisn: (formData.get('nisn') as string) || '-',
-      nama: formData.get('nama') as string,
-      kelas: formData.get('kelas') as string,
+      studentId: editingStudent?.studentId || id,
+      nis: rawNis || undefined,
+      nisn: rawNisn && /^\d{10}$/.test(rawNisn) ? rawNisn : undefined,
+      nama: (formData.get('nama') as string).trim(),
+      kelas: (formData.get('kelas') as string).trim(),
       jenisKelamin: (formData.get('jenisKelamin') as 'L' | 'P') || 'L',
-      noHpOrangTua: (formData.get('noHpOrangTua') as string) || '-',
-      alamat: (formData.get('alamat') as string) || '',
+      noHpOrangTua: (formData.get('noHpOrangTua') as string)?.trim() || '-',
+      alamat: (formData.get('alamat') as string)?.trim() || '',
       isActive: true,
       createdAt: editingStudent ? editingStudent.createdAt : new Date().toISOString(),
       createdBy: editingStudent ? editingStudent.createdBy : currentUser?.fullName || 'ADMIN',
@@ -748,7 +752,9 @@ export const MasterDataTabs: React.FC = () => {
                 .filter(
                   (st) =>
                     st.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    st.nisn.includes(searchQuery) ||
+                    (st.nis && st.nis.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (st.nisn && st.nisn.includes(searchQuery)) ||
+                    (st.studentId && st.studentId.toLowerCase().includes(searchQuery.toLowerCase())) ||
                     st.kelas.toLowerCase().includes(searchQuery.toLowerCase())
                 )
                 .map((st) => (
@@ -767,8 +773,11 @@ export const MasterDataTabs: React.FC = () => {
                             {st.kelas}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                          NISN: {st.nisn} • Gender: {st.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                          {st.nisn ? <span>NISN: {st.nisn}</span> : null}
+                          {st.nis ? <span>{st.nisn ? '• ' : ''}NIS: {st.nis}</span> : null}
+                          {!st.nisn && !st.nis ? <span>ID: {st.studentId || st.id}</span> : null}
+                          <span>• Gender: {st.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</span>
                         </div>
                         <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                           📞 No HP Ortu: {st.noHpOrangTua || '-'}
@@ -1314,25 +1323,39 @@ export const MasterDataTabs: React.FC = () => {
         <form onSubmit={handleSaveStudent} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">NISN Siswa</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                NIS Siswa (Nomor Induk Sekolah)
+              </label>
               <input
-                required
-                name="nisn"
-                defaultValue={editingStudent?.nisn}
-                placeholder="10 digit NISN"
+                name="nis"
+                defaultValue={editingStudent?.nis}
+                placeholder="Contoh: 1481/080.531 (opsional)"
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Lengkap Siswa</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                NISN Siswa (Identitas Nasional)
+              </label>
               <input
-                required
-                name="nama"
-                defaultValue={editingStudent?.nama}
-                placeholder="Contoh: Muhammad Rizky Pratama"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
+                name="nisn"
+                defaultValue={editingStudent?.nisn}
+                placeholder="10 digit angka (opsional)"
+                maxLength={10}
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
               />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nama Lengkap Siswa *</label>
+            <input
+              required
+              name="nama"
+              defaultValue={editingStudent?.nama}
+              placeholder="Contoh: Muhammad Rizky Pratama"
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

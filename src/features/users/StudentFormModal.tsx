@@ -9,7 +9,9 @@ interface StudentFormModalProps {
   onClose: () => void;
   onSave: (student: {
     id?: string;
-    nisn: string;
+    studentId?: string;
+    nis?: string;
+    nisn?: string;
     nama: string;
     kelas: string;
     jenisKelamin: 'L' | 'P';
@@ -27,6 +29,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   onSave,
   editingStudent,
 }) => {
+  const [nis, setNis] = useState('');
   const [nisn, setNisn] = useState('');
   const [nama, setNama] = useState('');
   const [kelas, setKelas] = useState('X MIPA 1');
@@ -40,6 +43,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 
   useEffect(() => {
     if (editingStudent) {
+      setNis(editingStudent.nis || '');
       setNisn(editingStudent.nisn || '');
       setNama(editingStudent.nama || '');
       setKelas(editingStudent.kelas || 'X MIPA 1');
@@ -49,6 +53,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setAlamat(editingStudent.alamat || '');
       setIsActive(editingStudent.isActive !== false);
     } else {
+      setNis('');
       setNisn('');
       setNama('');
       setKelas('X MIPA 1');
@@ -63,14 +68,21 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nisn.trim()) {
-      setError('NISN siswa wajib diisi');
-      return;
-    }
     if (!nama.trim()) {
       setError('Nama lengkap siswa wajib diisi');
       return;
     }
+    if (!kelas.trim()) {
+      setError('Kelas / Rombel wajib diisi');
+      return;
+    }
+
+    const cleanNisn = nisn.trim();
+    if (cleanNisn && !/^\d{10}$/.test(cleanNisn)) {
+      setError('NISN nasional wajib tepat 10 digit angka (contoh: 0081234567). Jika memiliki format nomor seperti 1481/080.531, masukkan ke kolom NIS Sekolah.');
+      return;
+    }
+
     if (!noHpOrangTua.trim()) {
       setError('Nomor HP / WhatsApp orang tua/wali wajib diisi untuk notifikasi piket');
       return;
@@ -91,7 +103,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     try {
       await onSave({
         id: editingStudent?.id,
-        nisn: nisn.trim(),
+        studentId: editingStudent?.studentId,
+        nis: nis.trim() || undefined,
+        nisn: cleanNisn || undefined,
         nama: nama.trim(),
         kelas: kelas.trim(),
         jenisKelamin,
@@ -124,21 +138,44 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              Nomor Induk Siswa Nasional (NISN) *
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                NIS (Nomor Induk Sekolah)
+              </label>
+              <span className="text-[10px] text-slate-400 font-semibold">(Opsional)</span>
+            </div>
             <div className="relative">
               <Hash className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                required
+                value={nis}
+                onChange={(e) => setNis(e.target.value)}
+                placeholder="Contoh: 1481/080.531"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                NISN (Identitas Nasional)
+              </label>
+              <span className="text-[10px] text-slate-400 font-semibold">(10 Digit, Opsional)</span>
+            </div>
+            <div className="relative">
+              <Hash className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
                 value={nisn}
                 onChange={(e) => setNisn(e.target.value)}
-                placeholder="Contoh: 0081234567"
+                placeholder="Tepat 10 digit, e.g. 0081234567"
+                maxLength={10}
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
               />
             </div>
           </div>
+        </div>
 
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -153,7 +190,6 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
             />
           </div>
-        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2 space-y-1">
