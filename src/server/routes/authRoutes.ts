@@ -433,6 +433,52 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
 });
 
 /**
+ * Server-authoritative audit log recorder for auth operations
+ */
+export async function recordServerAuditLog(entry: {
+  userId?: string;
+  userName?: string;
+  role?: string;
+  loginId?: string;
+  action: string;
+  module: string;
+  status?: string;
+  target?: string;
+  recordId?: string;
+  details: string;
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  if (!adminDb) return;
+  try {
+    const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const logDoc: Record<string, any> = {
+      id,
+      timestamp: new Date().toISOString(),
+      userId: entry.userId || 'system',
+      userName: entry.userName || 'Sistem',
+      role: entry.role || 'GURU',
+      action: entry.action,
+      module: entry.module,
+      status: entry.status || 'SUCCESS',
+      details: entry.details,
+    };
+    if (entry.loginId) logDoc.loginId = entry.loginId;
+    if (entry.target) logDoc.target = entry.target;
+    if (entry.recordId) logDoc.recordId = entry.recordId;
+    if (entry.ipAddress) logDoc.ipAddress = entry.ipAddress;
+    if (entry.userAgent) logDoc.userAgent = entry.userAgent;
+    if (entry.metadata) {
+      logDoc.metadata = entry.metadata;
+    }
+    await adminDb.collection('auditLogs').doc(id).set(logDoc);
+  } catch (err) {
+    console.warn('[SERVER_AUDIT] Failed to record audit log:', err);
+  }
+}
+
+/**
  * POST /api/auth/login
  * Verifies ID Login / NIP and PIN on server-side using OWASP adaptive scrypt and rate limiting.
  * Supports loginId and legacy NIP. Rejects ambiguous identities clearly.
@@ -531,6 +577,19 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     // Handle ambiguous matches: reject clearly, NEVER pick the first account (Requirement 4)
     if (matchedDocs.size > 1) {
       await AuthRateLimiter.recordFailure(rawIdentifier, ip);
+      void recordServerAuditLog({
+        userId: 'ambiguous',
+        userName: 'Identitas Ganda',
+        role: 'GURU',
+        action: 'LOGIN',
+        module: 'SECURITY',
+        status: 'BLOCKED',
+        target: rawIdentifier,
+        details: `Percobaan login ditolak: Identitas "${rawIdentifier}" ambigu di database`,
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+        metadata: { attemptedIdentifier: rawIdentifier, reason: 'AMBIGUOUS_LOGIN_IDENTITY', ip },
+      });
       res.status(409).json({
         success: false,
         error: 'Identitas login ambigu: ditemukan lebih dari satu akun yang cocok. Harap gunakan ID Login unik Anda.',
@@ -542,6 +601,19 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     // Handle no matching user
     if (matchedDocs.size === 0) {
       const failInfo = await AuthRateLimiter.recordFailure(rawIdentifier, ip);
+      void recordServerAuditLog({
+        userId: 'anonymous',
+        userName: 'Tamu / Anonim',
+        role: 'GURU',
+        action: 'LOGIN',
+        module: 'USERS',
+        status: 'FAILED',
+        target: rawIdentifier,
+        details: `Percobaan login PIN gagal: Identitas "${rawIdentifier}" tidak terdaftar di sistem`,
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+        metadata: { attemptedIdentifier: rawIdentifier, reason: 'USER_NOT_FOUND', ip },
+      });
       if (isRequestAborted(req) || isResponseClosed(res)) {
         if (!isResponseClosed(res)) {
           res.status(503).json({
@@ -569,6 +641,20 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     // Check account-level lockout: all aliases share this unified account check (Requirement 5)
     const accountLock = await AuthRateLimiter.isLocked(userId);
     if (accountLock.locked) {
+      void recordServerAuditLog({
+        userId,
+        userName: userData.fullName || 'Pengguna',
+        role: userData.role || 'GURU',
+        loginId: userData.loginId || '',
+        action: 'LOGIN',
+        module: 'SECURITY',
+        status: 'BLOCKED',
+        target: userData.fullName || userId,
+        details: 'Percobaan login PIN ditolak: Akun terkunci sementara karena batas percobaan PIN terlampaui',
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+        metadata: { reason: 'ACCOUNT_LOCKED', lockoutSeconds: accountLock.remainingSeconds, ip },
+      });
       res.status(429).json({
         success: false,
         error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${accountLock.remainingSeconds} detik.`,
@@ -579,6 +665,20 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     }
 
     if (userData.isActive !== true) {
+      void recordServerAuditLog({
+        userId,
+        userName: userData.fullName || 'Pengguna',
+        role: userData.role || 'GURU',
+        loginId: userData.loginId || '',
+        action: 'LOGIN',
+        module: 'SECURITY',
+        status: 'BLOCKED',
+        target: userData.fullName || userId,
+        details: 'Percobaan login PIN ditolak: Akun dinonaktifkan oleh administrator',
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+        metadata: { reason: 'ACCOUNT_DISABLED', ip },
+      });
       res.status(403).json({
         success: false,
         error: 'Akun Anda dinonaktifkan oleh administrator.',
@@ -643,6 +743,26 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       if (userData.nip && userData.nip !== rawIdentifier && userData.nip !== userId) {
         await AuthRateLimiter.recordFailure(userData.nip, ip);
       }
+
+      void recordServerAuditLog({
+        userId,
+        userName: userData.fullName || 'Pengguna',
+        role: userData.role || 'GURU',
+        loginId: userData.loginId || '',
+        action: 'LOGIN',
+        module: 'USERS',
+        status: 'FAILED',
+        target: userData.fullName || userId,
+        details: 'Percobaan login PIN gagal: PIN tidak sesuai',
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+        metadata: {
+          reason: 'INVALID_PIN',
+          remainingAttempts: failInfo.remainingAttempts,
+          isLocked: failInfo.locked,
+          ip,
+        },
+      });
 
       if (isRequestAborted(req) || isResponseClosed(res)) {
         if (!isResponseClosed(res)) {
@@ -868,6 +988,22 @@ authRouter.post('/create-user', requireAuth, requireAdmin, async (req: Request, 
     const createdData = createdSnap.data() || {};
     const safeUser = sanitizeUserProfile({ id: userId, ...createdData });
 
+    const caller = (req as any).user;
+    const callerData = (req as any).callerData || {};
+    void recordServerAuditLog({
+      userId: caller?.uid,
+      userName: callerData.fullName || caller?.email || 'Admin',
+      role: 'ADMIN',
+      action: 'CREATE',
+      module: 'USERS',
+      status: 'SUCCESS',
+      recordId: userId,
+      target: fullName,
+      details: `Menambahkan akun pengguna baru: ${fullName} (ID Login: ${normalizedLoginId}, Role: ${role})`,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] || '',
+    });
+
     res.json({
       success: true,
       user: safeUser,
@@ -968,6 +1104,29 @@ authRouter.post('/update-user', requireAuth, requireAdmin, async (req: Request, 
     });
 
     const updatedSnap = await userRef.get();
+    const caller = (req as any).user;
+    const callerData = (req as any).callerData || {};
+    const updatedData = updatedSnap.data() || {};
+    const targetLoginId = newNormalizedLoginId || existingData.loginId || '';
+    void recordServerAuditLog({
+      userId: caller?.uid || 'admin',
+      userName: callerData.fullName || caller?.email || 'Admin',
+      role: 'ADMIN',
+      action: updates.isActive !== undefined && updates.isActive !== existingData.isActive ? 'STATUS_CHANGE' : 'UPDATE',
+      module: 'USERS',
+      status: 'SUCCESS',
+      recordId: userId,
+      target: updatedData.fullName || userId,
+      details: updates.isActive !== undefined && updates.isActive !== existingData.isActive
+        ? `Mengubah status aktif akun ${updatedData.fullName || userId} menjadi ${updates.isActive ? 'AKTIF' : 'NONAKTIF'}`
+        : `Memperbarui data profil pengguna: ${updatedData.fullName || userId} (ID Login: ${targetLoginId || '-'})`,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] || '',
+      metadata: {
+        updatedFields: Object.keys(updates),
+      },
+    });
+
     res.json({
       success: true,
       user: sanitizeUserProfile({ id: userId, ...updatedSnap.data() }),
@@ -1105,17 +1264,22 @@ authRouter.post('/delete-user', requireAuth, requireAdmin, async (req: Request, 
 
     // 3. Log Audit
     const callerData = (req as any).callerData || {};
-    await adminDb.collection('audit_logs').add({
+    await recordServerAuditLog({
       userId: caller.uid,
       userName: callerData.fullName || caller.email || 'Admin',
       role: 'ADMIN',
       action: 'DELETE',
       module: 'USERS',
+      status: 'SUCCESS',
       recordId: targetUserId,
+      target: existingData.fullName || targetUserId,
       details: `Menghapus akun pengguna ${existingData.fullName || targetUserId} (ID Login: ${targetLoginId || '-'}) beserta kredensial dan reservasi ID.`,
-      timestamp: new Date().toISOString(),
-      authCleanupStatus,
-      reservationDeleted,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] || '',
+      metadata: {
+        authCleanupStatus,
+        reservationDeleted,
+      },
     });
 
     res.json({
@@ -1254,15 +1418,18 @@ authRouter.post('/clean-orphan-reservation', requireAuth, requireAdmin, async (r
     });
 
     const callerData = (req as any).callerData || {};
-    await adminDb.collection('audit_logs').add({
+    await recordServerAuditLog({
       userId: caller.uid,
       userName: callerData.fullName || caller.email || 'Admin',
       role: 'ADMIN',
       action: 'DELETE',
       module: 'USERS',
+      status: 'SUCCESS',
       recordId: normLoginId,
+      target: `Reservasi ID: ${normLoginId}`,
       details: `Membersihkan reservasi ID Login yatim: ${normLoginId}`,
-      timestamp: new Date().toISOString(),
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] || '',
     });
 
     res.json({
@@ -1541,6 +1708,21 @@ authRouter.post(
       }
       if (!isOldValid) {
         const failInfo = await AuthRateLimiter.recordFailureWithAction(userId, `changePin:${userId}`, ip);
+        void recordServerAuditLog({
+          userId,
+          userName: userData.fullName || 'Pengguna',
+          role: userData.role || 'GURU',
+          loginId: userData.loginId || '',
+          action: 'SECURITY',
+          module: 'USERS',
+          status: 'FAILED',
+          target: userData.fullName || userId,
+          details: 'Percobaan ubah PIN gagal: PIN lama tidak sesuai',
+          ipAddress: ip,
+          userAgent: req.headers['user-agent'] || '',
+          metadata: { reason: 'INVALID_OLD_PIN', remainingAttempts: failInfo.remainingAttempts, isLocked: failInfo.locked, ip },
+        });
+
         if (isRequestAborted(req) || isResponseClosed(res)) {
           if (!isResponseClosed(res)) {
             res.status(503).json({
@@ -1589,6 +1771,20 @@ authRouter.post(
 
       // Revoke Firebase refresh tokens with retry & transparent reporting (R6-03)
       const refreshRevocation = await revokeRefreshTokensWithRetry(userId);
+
+      void recordServerAuditLog({
+        userId,
+        userName: userData.fullName || 'Pengguna',
+        role: userData.role || 'GURU',
+        loginId: userData.loginId || '',
+        action: 'SECURITY',
+        module: 'USERS',
+        status: 'SUCCESS',
+        target: userData.fullName || userId,
+        details: `Pengguna ${userData.fullName || userId} berhasil mengubah PIN keamanan mandiri`,
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+      });
 
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) res.status(503).json({ success: false, error: 'Sesi permintaan dibatalkan sebelum balasan.', code: 'RATE_LIMIT_LEASE_LOST' });
@@ -1688,12 +1884,26 @@ authRouter.post(
       await AuthRateLimiter.recordActionSuccess('changePin', targetUserId, ip);
       await AuthRateLimiter.recordActionSuccess('resetPin', targetUserId, ip);
 
+      const callerData = (req as any).callerData || {};
+      void recordServerAuditLog({
+        userId: caller.uid,
+        userName: callerData.fullName || caller.email || 'Admin',
+        role: 'ADMIN',
+        action: 'SECURITY',
+        module: 'USERS',
+        status: 'SUCCESS',
+        recordId: targetUserId,
+        target: targetData.fullName || targetUserId,
+        details: `Admin ${callerData.fullName || 'Admin'} mereset PIN keamanan untuk akun ${targetData.fullName || targetUserId} (ID Login: ${targetData.loginId || '-'})`,
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || '',
+      });
+
       if (isRequestAborted(req)) {
         if (!isResponseClosed(res)) res.status(503).json({ success: false, error: 'Sesi permintaan dibatalkan sebelum balasan.', code: 'RATE_LIMIT_LEASE_LOST' });
         return;
       }
 
-      console.log(`[AUDIT] Admin ${caller.uid} successfully reset PIN for user ${targetUserId}`);
       res.json({
         success: true,
         message: 'PIN pengguna berhasil direset.',
@@ -1710,3 +1920,67 @@ authRouter.post(
     }
   }
 );
+
+/**
+ * POST /api/auth/record-login
+ * Records verified login event into auditLogs with server-verified ID token
+ */
+authRouter.post('/record-login', requireAuth, async (req: Request, res: Response) => {
+  const caller = (req as any).user;
+  const callerData = (req as any).callerData || {};
+  const method = String(req.body?.method || 'PIN').toUpperCase();
+  const ip = getClientIp(req);
+  const userAgent = req.headers['user-agent'] || '';
+
+  await recordServerAuditLog({
+    userId: caller.uid,
+    userName: callerData.fullName || caller.email || 'Pengguna',
+    role: callerData.role || 'GURU',
+    loginId: callerData.loginId || '',
+    action: 'LOGIN',
+    module: 'USERS',
+    status: 'SUCCESS',
+    target: callerData.fullName || caller.uid,
+    details: `Login berhasil melalui ${method === 'GOOGLE' ? 'Google Authentication' : 'PIN Kredensial'}`,
+    ipAddress: ip,
+    userAgent,
+    metadata: {
+      authMethod: method,
+      email: caller.email || callerData.email || '',
+      ip,
+    },
+  });
+
+  res.json({ success: true });
+});
+
+/**
+ * POST /api/auth/record-login-failure
+ * Records unauthenticated client failure (e.g. Google popup closed, popup blocked, network failure)
+ */
+authRouter.post('/record-login-failure', async (req: Request, res: Response) => {
+  const { method, reason, details, status, email } = req.body || {};
+  const ip = getClientIp(req);
+  const userAgent = req.headers['user-agent'] || '';
+
+  await recordServerAuditLog({
+    userId: 'anonymous',
+    userName: email ? `Akun Google (${email})` : 'Tamu / Anonim',
+    role: 'GURU',
+    action: 'LOGIN',
+    module: reason === 'POPUP_BLOCKED' ? 'SECURITY' : 'USERS',
+    status: status || 'FAILED',
+    target: email || 'Autentikasi Eksternal',
+    details: details || `Login ${method || 'Google'} gagal: ${reason || 'Tidak diketahui'}`,
+    ipAddress: ip,
+    userAgent,
+    metadata: {
+      authMethod: method || 'GOOGLE',
+      reason: reason || 'UNKNOWN',
+      email: email || '',
+      ip,
+    },
+  });
+
+  res.json({ success: true });
+});

@@ -58,8 +58,10 @@ import { StudentTardyRecord } from '../../types/studentTardy.types';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { VisitorRecord } from '../../types/visitor.types';
 import { AnnouncementRecord } from '../../types/announcement.types';
+import { StudentTardySettingsCard } from './StudentTardySettingsCard';
+import { LessonPeriodSettingsCard } from './LessonPeriodSettingsCard';
 
-type SettingsTab = 'school' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
+type SettingsTab = 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
 const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
@@ -773,6 +775,28 @@ export const SettingsView: React.FC = () => {
           >
             <MapPin className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
             Profil & GPS
+          </button>
+          <button
+            onClick={() => setActiveTab('student_tardy')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeTab === 'student_tardy'
+                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-rose-500" />
+            Keterlambatan Siswa
+          </button>
+          <button
+            onClick={() => setActiveTab('lesson_periods')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeTab === 'lesson_periods'
+                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+            Jam Pelajaran (JP)
           </button>
           <button
             onClick={() => setActiveTab('lobby_tv')}
@@ -2171,6 +2195,22 @@ export const SettingsView: React.FC = () => {
             </CardContent>
           </Card>
         </form>
+      )}
+
+      {/* TAB: PENGATURAN KETERLAMBATAN SISWA (ADMIN) */}
+      {activeTab === 'student_tardy' && (
+        <StudentTardySettingsCard
+          settings={settings}
+          onUpdated={(newSettings) => setSettings(newSettings)}
+        />
+      )}
+
+      {/* TAB: PENGATURAN JAM PELAJARAN (ADMIN) */}
+      {activeTab === 'lesson_periods' && (
+        <LessonPeriodSettingsCard
+          settings={settings}
+          onUpdated={(newSettings) => setSettings(newSettings)}
+        />
       )}
 
       {/* TAB 2: SECURITY & SYSTEM DIAGNOSTICS */}

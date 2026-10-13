@@ -32,7 +32,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [nis, setNis] = useState('');
   const [nisn, setNisn] = useState('');
   const [nama, setNama] = useState('');
-  const [kelas, setKelas] = useState('X MIPA 1');
+  const [kelas, setKelas] = useState('');
   const [jenisKelamin, setJenisKelamin] = useState<'L' | 'P'>('L');
   const [noHpOrangTua, setNoHpOrangTua] = useState('');
   const [noHpSiswa, setNoHpSiswa] = useState('');
@@ -46,7 +46,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setNis(editingStudent.nis || '');
       setNisn(editingStudent.nisn || '');
       setNama(editingStudent.nama || '');
-      setKelas(editingStudent.kelas || 'X MIPA 1');
+      setKelas(editingStudent.kelas || '');
       setJenisKelamin(editingStudent.jenisKelamin || 'L');
       setNoHpOrangTua(editingStudent.noHpOrangTua || '');
       setNoHpSiswa(editingStudent.noHpSiswa || '');
@@ -56,7 +56,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setNis('');
       setNisn('');
       setNama('');
-      setKelas('X MIPA 1');
+      setKelas('');
       setJenisKelamin('L');
       setNoHpOrangTua('');
       setNoHpSiswa('');
@@ -186,7 +186,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               required
               value={kelas}
               onChange={(e) => setKelas(e.target.value)}
-              placeholder="Contoh: X MIPA 1, XI IPS 2"
+              placeholder="Contoh: X-A, XI-MIPA-1"
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
             />
           </div>

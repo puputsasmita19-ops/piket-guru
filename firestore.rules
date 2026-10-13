@@ -432,7 +432,16 @@ service cloud.firestore {
 
     match /studentTardiness/{tardyId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      allow create: if isStaff();
+      // Admin can update all fields including correction; non-admin staff can only update standard records without altering admin correction fields
+      allow update: if isValidActiveUser() && (
+        isAdmin() ||
+        (
+          isStaff() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isCorrectedByAdmin', 'adminCorrection', 'menitTerlambatAsli']) &&
+          resource.data.get('isCorrectedByAdmin', false) == false
+        )
+      );
       allow delete: if isAdmin();
     }
 

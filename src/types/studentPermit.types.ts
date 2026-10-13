@@ -11,13 +11,16 @@ export type StudentPermitStatus = 'SEDANG_KELUAR' | 'SUDAH_KEMBALI' | 'SELESAI_P
 
 export interface StudentPermitRecord extends BaseEntityMetadata {
   id: string;
+  groupId?: string; // ID grup untuk menghubungkan satu pengajuan massal
+  isGroupSubmission?: boolean;
   studentId?: string; // ID siswa terhubung dari master students
   tanggal: string; // YYYY-MM-DD
   jamKeluar: string; // HH:mm WIB
   jamKembali?: string; // HH:mm WIB (if returning)
+  targetReturnTime?: string; // Estimasi jam kembali (untuk izin keluar sebentar)
   namaSiswa: string;
   nisn: string;
-  kelas: string; // e.g. "X MIPA 1", "XII IPS 2"
+  kelas: string; // e.g. "X-A", "XI-MIPA-2"
   jenisIzin: StudentPermitType;
   keteranganLainnya?: string; // Wajib diisi jika jenisIzin === 'LAINNYA', maks 300 char
   alasan: string;
@@ -33,6 +36,64 @@ export interface StudentPermitRecord extends BaseEntityMetadata {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+}
+
+/**
+ * Item rincian izin siswa dalam satu pengajuan massal
+ */
+export interface StudentPermitItemInput {
+  requestId?: string; // Client-side deterministic ID untuk retry idempotency
+  studentId: string;
+  namaSiswa: string;
+  nisn?: string;
+  kelas: string;
+  noHpOrangTua?: string;
+  // Kustomisasi spesifik per siswa (opsional)
+  isCustomized?: boolean;
+  jamKeluar?: string;
+  targetReturnTime?: string;
+  alasan?: string;
+  penjemput?: 'ORANG_TUA' | 'SENDIRI' | 'GURU_PEMBINA' | 'WALI';
+  namaPenjemput?: string;
+  noHpKhusus?: string;
+}
+
+/**
+ * Payload pengajuan massal beberapa siswa dalam satu surat / sesi pengajuan
+ */
+export interface BatchStudentPermitPayload {
+  groupId: string;
+  tanggal: string;
+  jamKeluarUmum: string;
+  targetReturnTimeUmum?: string;
+  jenisIzinUmum: StudentPermitType;
+  keteranganLainnyaUmum?: string;
+  alasanUmum: string;
+  penjemputUmum: 'ORANG_TUA' | 'SENDIRI' | 'GURU_PEMBINA' | 'WALI';
+  namaPenjemputUmum?: string;
+  guruPengajarName?: string;
+  catatanPetugas?: string;
+  students: StudentPermitItemInput[];
+}
+
+/**
+ * Hasil eksekusi per siswa dalam penerbitan izin massal
+ */
+export interface BatchPermitResultItem {
+  studentId: string;
+  namaSiswa: string;
+  kelas: string;
+  success: boolean;
+  permitId?: string;
+  error?: string;
+}
+
+export interface BatchPermitResult {
+  groupId: string;
+  total: number;
+  successCount: number;
+  failureCount: number;
+  items: BatchPermitResultItem[];
 }
 
 export const STUDENT_PERMIT_TYPES: { code: StudentPermitType; label: string; icon: string }[] = [

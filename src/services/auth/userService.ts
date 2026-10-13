@@ -233,6 +233,142 @@ export class UserService {
   }
 
   /**
+   * Manages 4 additional duty permissions for users with backend ADMIN verification,
+   * fresh database read to prevent race conditions, duplicate prevention, and detailed audit logging.
+   */
+  public static async updateAdditionalPermissions(
+    userId: string,
+    action: 'APPLY' | 'REVOKE',
+    selectedPermIds: string[],
+    adminUser: UserProfile
+  ): Promise<{
+    changed: boolean;
+    previousPermissions: string[];
+    newPermissions: string[];
+    added: string[];
+    removed: string[];
+    retained: string[];
+    hasWildcard: boolean;
+    user: UserProfile;
+  }> {
+    if (!adminUser || adminUser.role !== 'ADMIN') {
+      throw new Error('Operasi ditolak: Anda tidak memiliki wewenang Administrator untuk mengubah hak akses pengguna.');
+    }
+
+    // 1. Fresh read from database to ensure up-to-date permissions
+    const freshUser = await FirestoreService.getById<UserProfile>('users', userId);
+    if (!freshUser) {
+      throw new Error('Pengguna tidak ditemukan di database.');
+    }
+
+    const currentPermissions = freshUser.permissions || [];
+    const hasWildcard = currentPermissions.includes('*');
+
+    let newPermissions: string[] = [];
+    let added: string[] = [];
+    let removed: string[] = [];
+
+    if (action === 'APPLY') {
+      added = selectedPermIds.filter((p) => !currentPermissions.includes(p));
+      if (added.length === 0) {
+        return {
+          changed: false,
+          previousPermissions: currentPermissions,
+          newPermissions: currentPermissions,
+          added: [],
+          removed: [],
+          retained: currentPermissions,
+          hasWildcard,
+          user: freshUser,
+        };
+      }
+      newPermissions = Array.from(new Set([...currentPermissions, ...selectedPermIds]));
+    } else {
+      // REVOKE
+      removed = selectedPermIds.filter((p) => currentPermissions.includes(p));
+      if (removed.length === 0 && !hasWildcard) {
+        return {
+          changed: false,
+          previousPermissions: currentPermissions,
+          newPermissions: currentPermissions,
+          added: [],
+          removed: [],
+          retained: currentPermissions,
+          hasWildcard,
+          user: freshUser,
+        };
+      }
+      newPermissions = currentPermissions.filter((p) => !selectedPermIds.includes(p));
+    }
+
+    const retained = newPermissions.filter((p) => !added.includes(p));
+
+    // 2. Server-side ADMIN role verification via authenticated backend API
+    const apiRes = await authService.updateUserProfile(userId, {
+      permissions: newPermissions,
+    });
+
+    if (!apiRes.success) {
+      if (apiRes.code === 'FORBIDDEN_NOT_ADMIN') {
+        throw new Error('Operasi ditolak oleh server backend: Hanya akun Administrator yang berwenang mengubah hak akses pengguna.');
+      }
+      // If server returned network error or backend offline fallback
+      await FirestoreService.setDocument('users', userId, {
+        ...freshUser,
+        permissions: newPermissions,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // 3. Log comprehensive audit trail
+    const permNamesMap: Record<string, string> = {
+      'student_tardy.view': 'Siswa Terlambat',
+      'student_permits.view': 'Izin Siswa & Gerbang',
+      'substitutions.view': 'Guru Inval/Pengganti',
+      'visitors.view': 'Buku Tamu Digital',
+    };
+
+    const addedLabels = added.map((id) => permNamesMap[id] || id);
+    const removedLabels = removed.map((id) => permNamesMap[id] || id);
+
+    let auditDetails = '';
+    if (action === 'APPLY') {
+      auditDetails = `Menerapkan hak akses tambahan untuk ${freshUser.fullName} (ID Login: ${freshUser.loginId || '-'}, Role: ${freshUser.role}): Ditambahkan [${addedLabels.join(', ')}]. Total izin: ${currentPermissions.length} -> ${newPermissions.length}`;
+    } else {
+      auditDetails = `Mencabut hak akses tambahan untuk ${freshUser.fullName} (ID Login: ${freshUser.loginId || '-'}, Role: ${freshUser.role}): Dicabut [${removedLabels.join(', ')}]. Total izin: ${currentPermissions.length} -> ${newPermissions.length}${
+        hasWildcard ? ' (Perhatian: Pengguna memiliki izin wildcard *, akses efektif tetap penuh)' : ''
+      }`;
+    }
+
+    await FirestoreService.logAudit({
+      userId: adminUser.id,
+      userName: adminUser.fullName,
+      role: adminUser.role,
+      action: 'UPDATE',
+      module: 'USERS',
+      recordId: userId,
+      details: auditDetails,
+    });
+
+    const updatedUser: UserProfile = {
+      ...freshUser,
+      permissions: newPermissions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return {
+      changed: true,
+      previousPermissions: currentPermissions,
+      newPermissions,
+      added,
+      removed,
+      retained,
+      hasWildcard,
+      user: updatedUser,
+    };
+  }
+
+  /**
    * Toggle active/inactive status with monotonic session revocation
    * Reactivating an account requires activation so old tokens cannot be revived.
    */

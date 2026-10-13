@@ -37,6 +37,8 @@ export function getSubstitutionReasonDisplay(item: {
   return baseLabel;
 }
 
+import { PeriodScheduleSnapshot } from './period.types';
+
 export type SubstitutionStatus =
   | 'MENUNGGU_GURU_INVAL'
   | 'TERTUGASKAN'
@@ -45,16 +47,21 @@ export type SubstitutionStatus =
 
 export interface TeacherSubstitutionRecord extends BaseEntityMetadata {
   id: string;
+  groupId?: string; // ID grup untuk menghubungkan satu input massal beberapa guru / penugasan
+  batchRequestId?: string; // Identitas request idempotent untuk mencegah duplikasi saat retry
   tanggal: string; // YYYY-MM-DD
   guruBerhalanganId: string;
   guruBerhalanganName: string;
   mataPelajaran: string;
   alasan: AbsenceReason;
   keteranganAlasan?: string;
-  kelas: string; // e.g. "X MIPA 1"
-  jamPelajaran: string; // e.g. "JP 1 - 3 (07.15 - 09.30)"
+  kelas: string; // e.g. "X-A" (dari master kelas aktif)
+  jamPelajaran: string; // e.g. "JP 1 - 2 (07:15 - 08:45)"
+  selectedPeriodNumbers?: number[]; // [1, 2]
+  periodSnapshot?: PeriodScheduleSnapshot[]; // Snapshot JP dan waktunya agar riwayat lama tidak berubah otomatis
+  sourceClassOrigin?: string; // e.g. "Data Siswa Aktif"
   guruPenggantiId?: string;
-  guruPenggantiName?: string; // Guru inval yang ditugaskan
+  guruPenggantiName?: string; // Guru inval yang ditugaskan (opsional)
   materiDanTugasSiswa: string; // Tugas atau instruksi yang ditinggalkan
   status: SubstitutionStatus;
   catatanPiket?: string;
@@ -65,3 +72,22 @@ export interface TeacherSubstitutionRecord extends BaseEntityMetadata {
   updatedAt: string;
   updatedBy: string;
 }
+
+export interface BatchSubstitutionItemResult {
+  substitutionId?: string;
+  guruBerhalanganId: string;
+  guruBerhalanganName: string;
+  kelas: string;
+  jamPelajaran: string;
+  guruPenggantiName?: string;
+  success: boolean;
+  error?: string;
+  record?: TeacherSubstitutionRecord;
+}
+
+export interface BatchSubstitutionResponse {
+  results: BatchSubstitutionItemResult[];
+  allSuccessful: boolean;
+  groupId: string;
+}
+

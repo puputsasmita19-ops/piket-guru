@@ -182,16 +182,202 @@ export class StudentPermitService {
   }
 
   /**
+   * Check for currently active outside permits for a list of student IDs on a given date.
+   * Only permits with status === 'SEDANG_KELUAR' are considered active conflicts.
+   * Students with finished permits (SUDAH_KEMBALI or SELESAI_PULANG) are allowed.
+   */
+  public static async getActivePermitsForStudents(
+    studentIds: string[],
+    tanggal: string
+  ): Promise<Record<string, StudentPermitRecord>> {
+    if (!studentIds || studentIds.length === 0) return {};
+
+    const allPermits = await FirestoreService.getAllRaw<StudentPermitRecord>('studentPermits');
+    const result: Record<string, StudentPermitRecord> = {};
+
+    for (const p of allPermits) {
+      if (p.tanggal === tanggal && p.status === 'SEDANG_KELUAR' && p.studentId && studentIds.includes(p.studentId)) {
+        result[p.studentId] = p;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Create multiple student permits linked by a common groupId.
+   * Handles per-student isolation, validation against active permits, and partial failure reporting.
+   */
+  public static async createBatchPermits(
+    payload: import('../../types/studentPermit.types').BatchStudentPermitPayload,
+    user: UserProfile
+  ): Promise<import('../../types/studentPermit.types').BatchPermitResult> {
+    const {
+      groupId,
+      tanggal,
+      jamKeluarUmum,
+      targetReturnTimeUmum,
+      jenisIzinUmum,
+      keteranganLainnyaUmum,
+      alasanUmum,
+      penjemputUmum,
+      namaPenjemputUmum,
+      guruPengajarName,
+      catatanPetugas,
+      students,
+    } = payload;
+
+    const studentIds = students.map((s) => s.studentId).filter(Boolean);
+    const activeConflicts = await this.getActivePermitsForStudents(studentIds, tanggal);
+
+    const now = new Date().toISOString();
+    const resultItems: import('../../types/studentPermit.types').BatchPermitResultItem[] = [];
+
+    // Tentukan status awal berdasarkan jenis izin
+    const initialStatus: import('../../types/studentPermit.types').StudentPermitStatus =
+      jenisIzinUmum === 'KELUAR_SEBENTAR' || jenisIzinUmum === 'DISPENSASI_LOMBA'
+        ? 'SEDANG_KELUAR'
+        : 'SELESAI_PULANG';
+
+    for (const std of students) {
+      const permitId = std.requestId || `pmt-${tanggal}-${groupId}-${std.studentId.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+      // Check conflict: Siswa masih berstatus SEDANG_KELUAR
+      const activeConflict = activeConflicts[std.studentId];
+      if (activeConflict && activeConflict.id !== permitId) {
+        resultItems.push({
+          studentId: std.studentId,
+          namaSiswa: std.namaSiswa,
+          kelas: std.kelas,
+          success: false,
+          error: `Siswa masih memiliki izin aktif (${activeConflict.jamKeluar} WIB) dengan status belum kembali.`,
+        });
+        continue;
+      }
+
+      try {
+        // Idempotency: Jika dokumen dengan ID ini sudah tercatat di Firestore, kembalikan tanpa duplikasi
+        const existingDoc = await FirestoreService.getById<StudentPermitRecord>('studentPermits', permitId);
+        if (existingDoc) {
+          resultItems.push({
+            studentId: std.studentId,
+            namaSiswa: std.namaSiswa,
+            kelas: std.kelas,
+            success: true,
+            permitId,
+          });
+          continue;
+        }
+
+        // Resolusi nilai individual vs umum
+        const jamKeluar = std.isCustomized && std.jamKeluar ? std.jamKeluar : jamKeluarUmum;
+        const targetReturn = std.isCustomized && std.targetReturnTime ? std.targetReturnTime : targetReturnTimeUmum;
+        const alasan = std.isCustomized && std.alasan ? std.alasan : alasanUmum;
+        const penjemput = std.isCustomized && std.penjemput ? std.penjemput : penjemputUmum;
+        const rawNamaPenjemput = std.isCustomized && std.namaPenjemput !== undefined ? std.namaPenjemput : namaPenjemputUmum;
+        const resolvedNamaPenjemput =
+          rawNamaPenjemput?.trim() ||
+          (penjemput === 'SENDIRI'
+            ? 'Pulang Mandiri'
+            : penjemput === 'GURU_PEMBINA'
+            ? 'Guru Pembina'
+            : 'Orang Tua / Wali');
+
+        // Nomor kontak tidak boleh disalin dari siswa lain; gunakan data siswa sendiri
+        const noHpOrangTua = (std.noHpKhusus || std.noHpOrangTua || '').trim();
+
+        const record: StudentPermitRecord = {
+          id: permitId,
+          groupId,
+          isGroupSubmission: students.length > 1,
+          studentId: std.studentId,
+          tanggal,
+          jamKeluar,
+          targetReturnTime: targetReturn || undefined,
+          namaSiswa: std.namaSiswa,
+          nisn: std.nisn?.trim() || '-',
+          kelas: std.kelas,
+          jenisIzin: jenisIzinUmum,
+          keteranganLainnya: jenisIzinUmum === 'LAINNYA' ? keteranganLainnyaUmum : undefined,
+          alasan,
+          penjemput,
+          namaPenjemput: resolvedNamaPenjemput,
+          noHpOrangTua,
+          guruPengajarName: guruPengajarName?.trim() || undefined,
+          petugasPiketName: user.fullName || 'Petugas Piket',
+          petugasPiketId: user.id || 'usr-piket',
+          status: initialStatus,
+          catatanPetugas: catatanPetugas?.trim() || undefined,
+          dataSource: 'PRODUCTION',
+          isDemo: false,
+          createdAt: now,
+          createdBy: user.fullName,
+          updatedAt: now,
+          updatedBy: user.fullName,
+        };
+
+        await FirestoreService.setDocument('studentPermits', permitId, record);
+        await FirestoreService.logAudit({
+          userId: user.id,
+          userName: user.fullName,
+          role: user.role,
+          action: 'CREATE',
+          module: 'PERMITS',
+          recordId: permitId,
+          details: `Penerbitan surat izin (Grup ${groupId}): ${record.namaSiswa} (${record.kelas}) - ${record.jenisIzin}`,
+        });
+
+        resultItems.push({
+          studentId: std.studentId,
+          namaSiswa: std.namaSiswa,
+          kelas: std.kelas,
+          success: true,
+          permitId,
+        });
+      } catch (err: any) {
+        console.warn(`[StudentPermitService] Error creating permit for ${std.namaSiswa}:`, err);
+        resultItems.push({
+          studentId: std.studentId,
+          namaSiswa: std.namaSiswa,
+          kelas: std.kelas,
+          success: false,
+          error: err.message || 'Gagal menyimpan ke basis data.',
+        });
+      }
+    }
+
+    const successCount = resultItems.filter((i) => i.success).length;
+    const failureCount = resultItems.length - successCount;
+
+    return {
+      groupId,
+      total: students.length,
+      successCount,
+      failureCount,
+      items: resultItems,
+    };
+  }
+
+  /**
    * Mark student as returned to school (check-in back)
    */
   public static async markReturned(
     permitId: string,
-    user: UserProfile
+    user: UserProfile,
+    customReturnTime?: string
   ): Promise<void> {
     const existing = await FirestoreService.getById<StudentPermitRecord>('studentPermits', permitId);
     if (!existing) return;
 
-    const returnTime = formatTime(new Date());
+    const returnTime = customReturnTime || formatTime(new Date());
+
+    // Validasi urutan waktu: jam kembali tidak boleh sebelum jam keluar
+    if (existing.jamKeluar && returnTime < existing.jamKeluar) {
+      throw new Error(
+        `Jam kembali (${returnTime} WIB) tidak boleh lebih awal dari jam keluar (${existing.jamKeluar} WIB).`
+      );
+    }
+
     const updated: StudentPermitRecord = {
       ...existing,
       jamKembali: returnTime,
@@ -210,6 +396,30 @@ export class StudentPermitService {
       recordId: permitId,
       details: `Siswa ${existing.namaSiswa} (${existing.kelas}) telah kembali masuk sekolah pukul ${returnTime} WIB`,
     });
+  }
+
+  /**
+   * Mark multiple selected students as returned in bulk.
+   * Petugas selects specific students, specifies the return time in WIB, and updates each independently.
+   */
+  public static async markMultipleReturned(
+    permitIds: string[],
+    returnTime: string,
+    user: UserProfile
+  ): Promise<{ successCount: number; errors: string[] }> {
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const id of permitIds) {
+      try {
+        await this.markReturned(id, user, returnTime);
+        successCount++;
+      } catch (err: any) {
+        errors.push(`ID ${id}: ${err.message || 'Gagal memperbarui'}`);
+      }
+    }
+
+    return { successCount, errors };
   }
 
   /**

@@ -172,6 +172,217 @@ export class SubstitutionService {
   }
 
   /**
+   * Deteksi apakah guru pengganti sudah memiliki penugasan lain pada tanggal dan JP yang bertabrakan.
+   */
+  public static checkSubstituteConflict(params: {
+    tanggal: string;
+    substituteId: string;
+    periodNumbers?: number[];
+    jamPelajaran?: string;
+    excludeSubstitutionId?: string;
+    existingSubstitutions: TeacherSubstitutionRecord[];
+  }): { hasConflict: boolean; conflictingRecord?: TeacherSubstitutionRecord; reason?: string } {
+    const { tanggal, substituteId, periodNumbers = [], jamPelajaran, excludeSubstitutionId, existingSubstitutions } = params;
+
+    if (!substituteId || substituteId.trim() === '') {
+      return { hasConflict: false };
+    }
+
+    for (const sub of existingSubstitutions) {
+      if (excludeSubstitutionId && sub.id === excludeSubstitutionId) continue;
+      if (sub.tanggal !== tanggal) continue;
+
+      // Cek apakah guru ini ditugaskan sebagai guru pengganti di catatan lain
+      if (sub.guruPenggantiId === substituteId) {
+        // Cek overlap JP
+        const subPeriods = sub.selectedPeriodNumbers || [];
+        const hasPeriodOverlap =
+          periodNumbers.length > 0 && subPeriods.length > 0
+            ? periodNumbers.some((p) => subPeriods.includes(p))
+            : sub.jamPelajaran === jamPelajaran;
+
+        if (hasPeriodOverlap) {
+          return {
+            hasConflict: true,
+            conflictingRecord: sub,
+            reason: `Guru pengganti sudah ditugaskan di Kelas ${sub.kelas} pada ${sub.jamPelajaran} (menggantikan ${sub.guruBerhalanganName}).`,
+          };
+        }
+      }
+    }
+
+    return { hasConflict: false };
+  }
+
+  /**
+   * Menyimpan sekumpulan penugasan guru berhalangan dan inval secara massal (Batch).
+   * - Menghubungkan semua rincian input dengan satu groupId
+   * - Mencegah penugasan duplikat pada guru, tanggal, kelas, dan JP yang sama
+   * - Memastikan guru pengganti tidak sama dengan guru berhalangan
+   * - Mendeteksi bentrok jadwal guru pengganti
+   * - Mendukung status 'MENUNGGU_GURU_INVAL' jika pengganti belum dipilih
+   * - Menggunakan batchRequestId tetap untuk memastikan idempotensi saat retry
+   * - Menghasilkan laporan sukses/gagal per rincian
+   */
+  public static async saveBatchSubstitutions(params: {
+    items: Array<Omit<TeacherSubstitutionRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'id'> & { id?: string }>;
+    user: UserProfile;
+    batchRequestId: string;
+    groupId?: string;
+  }): Promise<import('../../types/substitution.types').BatchSubstitutionResponse> {
+    const { items, user, batchRequestId } = params;
+    const groupId = params.groupId || `grp-${new Date().toISOString().split('T')[0]}-${batchRequestId.slice(0, 8)}`;
+
+    const existingRecords = await FirestoreService.getAll<TeacherSubstitutionRecord>('substitutions');
+    const results: import('../../types/substitution.types').BatchSubstitutionItemResult[] = [];
+
+    // Lacak penugasan yang baru saja berhasil disimpan dalam batch ini untuk mendeteksi konflik internal antar rincian
+    const savedInBatch: TeacherSubstitutionRecord[] = [];
+
+    for (const item of items) {
+      try {
+        // 1. Validasi: Guru pengganti tidak boleh sama dengan guru yang berhalangan
+        if (item.guruPenggantiId && item.guruPenggantiId === item.guruBerhalanganId) {
+          results.push({
+            substitutionId: item.id,
+            guruBerhalanganId: item.guruBerhalanganId,
+            guruBerhalanganName: item.guruBerhalanganName,
+            kelas: item.kelas,
+            jamPelajaran: item.jamPelajaran,
+            guruPenggantiName: item.guruPenggantiName,
+            success: false,
+            error: `Guru pengganti tidak boleh sama dengan guru yang berhalangan (${item.guruBerhalanganName}).`,
+          });
+          continue;
+        }
+
+        // 2. Deteksi duplikasi: Guru yang sama sudah tercatat berhalangan di tanggal, kelas, dan JP yang sama
+        const duplicate = existingRecords.find((r) => {
+          if (r.tanggal !== item.tanggal) return false;
+          if (r.guruBerhalanganId !== item.guruBerhalanganId) return false;
+          if (r.kelas !== item.kelas) return false;
+
+          const rPeriods = r.selectedPeriodNumbers || [];
+          const itemPeriods = item.selectedPeriodNumbers || [];
+          if (itemPeriods.length > 0 && rPeriods.length > 0) {
+            return itemPeriods.some((p) => rPeriods.includes(p));
+          }
+          return r.jamPelajaran === item.jamPelajaran;
+        });
+
+        // Jika duplikat memiliki batchRequestId yang sama persis, ini adalah retry sukses sebelumnya (idempotent)
+        if (duplicate && duplicate.batchRequestId === batchRequestId) {
+          results.push({
+            substitutionId: duplicate.id,
+            guruBerhalanganId: item.guruBerhalanganId,
+            guruBerhalanganName: item.guruBerhalanganName,
+            kelas: item.kelas,
+            jamPelajaran: item.jamPelajaran,
+            guruPenggantiName: item.guruPenggantiName,
+            success: true,
+            record: duplicate,
+          });
+          savedInBatch.push(duplicate);
+          continue;
+        }
+
+        // Jika duplikat ada pada catatan ID lain yang sudah tersimpan sebelumnya
+        if (duplicate && (!item.id || duplicate.id !== item.id)) {
+          results.push({
+            substitutionId: item.id,
+            guruBerhalanganId: item.guruBerhalanganId,
+            guruBerhalanganName: item.guruBerhalanganName,
+            kelas: item.kelas,
+            jamPelajaran: item.jamPelajaran,
+            guruPenggantiName: item.guruPenggantiName,
+            success: false,
+            error: `Penugasan untuk guru ${item.guruBerhalanganName} di Kelas ${item.kelas} pada ${item.jamPelajaran} sudah tercatat sebelumnya.`,
+          });
+          continue;
+        }
+
+        // 3. Deteksi bentrok jadwal guru pengganti (baik terhadap catatan server maupun antar item dalam batch)
+        if (item.guruPenggantiId) {
+          const allToCheck = [...existingRecords, ...savedInBatch];
+          const conflict = this.checkSubstituteConflict({
+            tanggal: item.tanggal,
+            substituteId: item.guruPenggantiId,
+            periodNumbers: item.selectedPeriodNumbers,
+            jamPelajaran: item.jamPelajaran,
+            excludeSubstitutionId: item.id,
+            existingSubstitutions: allToCheck,
+          });
+
+          if (conflict.hasConflict) {
+            results.push({
+              substitutionId: item.id,
+              guruBerhalanganId: item.guruBerhalanganId,
+              guruBerhalanganName: item.guruBerhalanganName,
+              kelas: item.kelas,
+              jamPelajaran: item.jamPelajaran,
+              guruPenggantiName: item.guruPenggantiName,
+              success: false,
+              error: `Bentrok penugasan: Guru pengganti ${item.guruPenggantiName} sudah memiliki tugas lain pada waktu yang sama (${conflict.reason || 'jadwal bertabrakan'}).`,
+            });
+            continue;
+          }
+        }
+
+        // 4. Generate deterministic ID berdasarkan kombinasi stabil untuk idempotent retry
+        const cleanClass = item.kelas.replace(/[^a-zA-Z0-9]/g, '');
+        const periodKey = (item.selectedPeriodNumbers || []).join('-') || 'all';
+        const deterministicId =
+          item.id || `inv-${item.tanggal}-${item.guruBerhalanganId}-${cleanClass}-${periodKey}-${batchRequestId.slice(0, 8)}`;
+
+        const status: SubstitutionStatus = item.guruPenggantiId
+          ? (item.status || 'TERTUGASKAN')
+          : 'MENUNGGU_GURU_INVAL';
+
+        const savedRecord = await this.createSubstitution(
+          {
+            ...item,
+            id: deterministicId,
+            groupId,
+            batchRequestId,
+            status,
+          },
+          user
+        );
+
+        savedInBatch.push(savedRecord);
+        results.push({
+          substitutionId: savedRecord.id,
+          guruBerhalanganId: item.guruBerhalanganId,
+          guruBerhalanganName: item.guruBerhalanganName,
+          kelas: item.kelas,
+          jamPelajaran: item.jamPelajaran,
+          guruPenggantiName: item.guruPenggantiName,
+          success: true,
+          record: savedRecord,
+        });
+      } catch (err: any) {
+        results.push({
+          substitutionId: item.id,
+          guruBerhalanganId: item.guruBerhalanganId,
+          guruBerhalanganName: item.guruBerhalanganName,
+          kelas: item.kelas,
+          jamPelajaran: item.jamPelajaran,
+          guruPenggantiName: item.guruPenggantiName,
+          success: false,
+          error: err?.message || 'Gagal menyimpan penugasan rincian ini.',
+        });
+      }
+    }
+
+    const allSuccessful = results.length > 0 && results.every((r) => r.success);
+    return {
+      results,
+      allSuccessful,
+      groupId,
+    };
+  }
+
+  /**
    * Delete substitution record
    */
   public static async deleteSubstitution(substitutionId: string, user: UserProfile): Promise<void> {
@@ -187,3 +398,4 @@ export class SubstitutionService {
     });
   }
 }
+

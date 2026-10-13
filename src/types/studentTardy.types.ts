@@ -19,12 +19,31 @@ export type DisciplineAction =
 
 export type TardyStatus = 'DALAM_PEMBINAAN' | 'SELESAI_MASUK_KELAS' | 'PEMANGGILAN_ORTU';
 
+export interface TardyRuleSnapshot {
+  entryLimit: string; // e.g. "07:00" WIB
+  toleranceMinutes: number; // e.g. 5 menit
+}
+
+export interface TardyAdminCorrection {
+  correctedAt: string; // ISO Date String
+  correctedByAdminId: string;
+  correctedByAdminName: string;
+  reason: string;
+  previousJamDatang?: string;
+  newJamDatang?: string;
+  previousMenitTerlambat: number;
+  newMenitTerlambat: number;
+  previousPoinPelanggaran?: number;
+  newPoinPelanggaran?: number;
+}
+
 export interface StudentTardyRecord extends BaseEntityMetadata {
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamDatang: string; // HH:mm WIB
-  menitTerlambat: number; // Durasi keterlambatan dalam menit
-  studentId?: string; // ID unik siswa dari master data
+  menitTerlambat: number; // Durasi keterlambatan dalam menit (koreksi atau hasil hitung)
+  menitTerlambatAsli?: number; // Hasil perhitungan otomatis asli sebelum koreksi admin
+  studentId?: string; // ID unik siswa dari master data (student.id)
   namaSiswa: string;
   nisn: string;
   kelas: string; // e.g. "X MIPA 1"
@@ -40,6 +59,10 @@ export interface StudentTardyRecord extends BaseEntityMetadata {
   catatanPetugas?: string;
   petugasPiketName: string;
   petugasPiketId: string;
+  ruleSnapshot?: TardyRuleSnapshot; // Snapshot aturan sekolah saat pencatatan
+  isCorrectedByAdmin?: boolean; // Flag penanda apakah catatan ini telah dikoreksi admin
+  adminCorrection?: TardyAdminCorrection; // Rincian audit koreksi admin
+  batchRequestId?: string; // ID unik batch input multi siswa untuk idempotensi & retry
   createdAt: string;
   createdBy: string;
   updatedAt: string;
@@ -93,4 +116,100 @@ export function getDisciplineActionDisplay(
     return `Lain-lain — ${tardy.keteranganPembinaan.trim()}`;
   }
   return DISCIPLINE_ACTION_LABELS[action] || action.replace(/_/g, ' ');
+}
+
+export interface TardyCalculationResult {
+  minutesLate: number | null;
+  isLate: boolean;
+  displayText: string;
+  entryLimitUsed: string;
+  toleranceUsed: number;
+}
+
+/**
+ * Calculates student tardiness minutes and status consistently according to school rules.
+ * - Minimum output 0 minutes.
+ * - If arrival time is empty, returns null with displayText "Isi jam tiba untuk menghitung".
+ * - Checks arrival time against entry limit (WIB) and tolerance minutes.
+ */
+export function calculateStudentTardiness(
+  jamDatang: string | undefined | null,
+  entryLimit: string = '07:00',
+  toleranceMinutes: number = 0
+): TardyCalculationResult {
+  const cleanLimit = (entryLimit || '07:00').trim();
+  const tolerance = Math.max(0, Math.floor(Number(toleranceMinutes) || 0));
+
+  if (!jamDatang || !jamDatang.trim() || !jamDatang.includes(':')) {
+    return {
+      minutesLate: null,
+      isLate: false,
+      displayText: 'Isi jam tiba untuk menghitung',
+      entryLimitUsed: cleanLimit,
+      toleranceUsed: tolerance,
+    };
+  }
+
+  const [arrivalHStr, arrivalMStr] = jamDatang.trim().split(':');
+  const arrivalH = parseInt(arrivalHStr, 10);
+  const arrivalM = parseInt(arrivalMStr, 10);
+
+  if (isNaN(arrivalH) || isNaN(arrivalM)) {
+    return {
+      minutesLate: null,
+      isLate: false,
+      displayText: 'Isi jam tiba untuk menghitung',
+      entryLimitUsed: cleanLimit,
+      toleranceUsed: tolerance,
+    };
+  }
+
+  const [limitHStr, limitMStr] = cleanLimit.split(':');
+  const limitH = parseInt(limitHStr, 10) || 7;
+  const limitM = parseInt(limitMStr, 10) || 0;
+
+  const arrivalTotalMinutes = arrivalH * 60 + arrivalM;
+  const limitTotalMinutes = limitH * 60 + limitM;
+
+  const diff = arrivalTotalMinutes - limitTotalMinutes;
+
+  if (diff <= 0) {
+    return {
+      minutesLate: 0,
+      isLate: false,
+      displayText: '0 Menit (Tepat Waktu)',
+      entryLimitUsed: cleanLimit,
+      toleranceUsed: tolerance,
+    };
+  }
+
+  if (diff <= tolerance) {
+    return {
+      minutesLate: 0,
+      isLate: false,
+      displayText: `0 Menit (Dalam Toleransi ${tolerance} Mnt)`,
+      entryLimitUsed: cleanLimit,
+      toleranceUsed: tolerance,
+    };
+  }
+
+  // Arrival exceeded both limit and tolerance
+  const actualMinutesLate = diff;
+  return {
+    minutesLate: actualMinutesLate,
+    isLate: true,
+    displayText: `${actualMinutesLate} Menit Terlambat`,
+    entryLimitUsed: cleanLimit,
+    toleranceUsed: tolerance,
+  };
+}
+
+/**
+ * Standard violation points scale based on minutes late
+ */
+export function calculateTardyViolationPoints(minutesLate: number): number {
+  if (minutesLate <= 0) return 0;
+  if (minutesLate <= 15) return 5;
+  if (minutesLate <= 30) return 10;
+  return 15;
 }

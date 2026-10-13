@@ -110,49 +110,60 @@ export interface IncidentCategoryRecord extends BaseRecord {
   isActive: boolean;
 }
 
+export type AuditLogAction =
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'IMPORT'
+  | 'EXPORT'
+  | 'UPLOAD'
+  | 'BACKUP'
+  | 'RESTORE'
+  | 'ATTENDANCE'
+  | 'STATUS_CHANGE'
+  | 'SECURITY'
+  | 'EMERGENCY';
+
+export type AuditLogModule =
+  | 'USERS'
+  | 'AUTH'
+  | 'TEACHERS'
+  | 'STAFF'
+  | 'ROOMS'
+  | 'CATEGORIES'
+  | 'SCHEDULES'
+  | 'ATTENDANCE'
+  | 'DUTY_BOOK'
+  | 'INCIDENTS'
+  | 'REPORTS'
+  | 'SETTINGS'
+  | 'SYSTEM'
+  | 'PERMITS'
+  | 'TARDINESS'
+  | 'SUBSTITUTIONS'
+  | 'VISITORS'
+  | 'ANNOUNCEMENTS'
+  | 'SECURITY'
+  | 'BELL';
+
+export type AuditLogStatus = 'SUCCESS' | 'FAILED' | 'BLOCKED' | 'BERHASIL' | 'GAGAL' | 'DITOLAK';
+
 export interface AuditLogRecord {
   id: string;
   userId: string;
   userName: string;
   role: UserRole;
-  action:
-    | 'LOGIN'
-    | 'LOGOUT'
-    | 'CREATE'
-    | 'UPDATE'
-    | 'DELETE'
-    | 'IMPORT'
-    | 'EXPORT'
-    | 'UPLOAD'
-    | 'BACKUP'
-    | 'RESTORE'
-    | 'ATTENDANCE'
-    | 'STATUS_CHANGE'
-    | 'SECURITY'
-    | 'EMERGENCY';
-  module:
-    | 'USERS'
-    | 'TEACHERS'
-    | 'STAFF'
-    | 'ROOMS'
-    | 'CATEGORIES'
-    | 'SCHEDULES'
-    | 'ATTENDANCE'
-    | 'DUTY_BOOK'
-    | 'INCIDENTS'
-    | 'REPORTS'
-    | 'SETTINGS'
-    | 'SYSTEM'
-    | 'PERMITS'
-    | 'TARDINESS'
-    | 'SUBSTITUTIONS'
-    | 'VISITORS'
-    | 'ANNOUNCEMENTS'
-    | 'SECURITY'
-    | 'BELL';
+  loginId?: string;
+  action: AuditLogAction;
+  module: AuditLogModule;
+  status?: AuditLogStatus;
+  target?: string;
   recordId?: string;
   details: string;
   timestamp: string;
   ipAddress?: string;
+  userAgent?: string;
   metadata?: Record<string, any>;
 }

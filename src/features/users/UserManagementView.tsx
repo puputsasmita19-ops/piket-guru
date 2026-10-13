@@ -734,21 +734,19 @@ export const UserManagementView: React.FC = () => {
                         {isAdmin && (
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {user.role === 'GURU' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60"
-                                  leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
-                                  onClick={() => {
-                                    setGuruDutyTargetUser(user);
-                                    setIsApplyGuruDutyModalOpen(true);
-                                  }}
-                                  title="Terapkan Hak Akses Piket Guru (Dashboard, Jadwal, Presensi, Buku Piket)"
-                                >
-                                  Terapkan Hak Akses
-                                </Button>
-                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60"
+                                leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                                onClick={() => {
+                                  setGuruDutyTargetUser(user);
+                                  setIsApplyGuruDutyModalOpen(true);
+                                }}
+                                title="Kelola 4 Hak Akses Tambahan (Siswa Terlambat, Izin Siswa & Gerbang, Guru Inval, Buku Tamu)"
+                              >
+                                Kelola 4 Hak Akses
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1175,7 +1173,7 @@ export const UserManagementView: React.FC = () => {
         defaultType={bulkImportDefaultType}
       />
 
-      {/* APPLY GURU DUTY PERMISSIONS MODAL */}
+      {/* KELOLA 4 HAK AKSES TAMBAHAN MODAL */}
       <ApplyGuruDutyPermissionsModal
         isOpen={isApplyGuruDutyModalOpen}
         onClose={() => {
@@ -1183,7 +1181,10 @@ export const UserManagementView: React.FC = () => {
           setGuruDutyTargetUser(null);
         }}
         user={guruDutyTargetUser}
-        onApply={handleApplyGuruDutyPermissions}
+        onSuccess={(msg) => {
+          setFeedbackSuccess(msg);
+          setTimeout(() => setFeedbackSuccess(null), 7000);
+        }}
       />
 
       {/* STUDENT DETAIL MODAL */}

@@ -22,8 +22,11 @@ export interface VisitorRecord extends BaseEntityMetadata {
   noHp: string;
   nomorIdentitas: string; // KTP / SIM / NIP
   nomorBadge: string; // No. Badge Tamu (e.g. TAMU-01)
-  tujuanBertemu: string; // Nama Guru / Kepala Sekolah / Staf
-  tujuanUserId?: string;
+  tujuanBertemu: string; // Snapshot Nama Guru / Kepala Sekolah / Staf / Unit (tetap kompatibel)
+  tujuanUserId?: string; // ID Login/User tujuan jika ada
+  tujuanRecipientId?: string; // ID master guru/staf/unit yang dipilih
+  tujuanTargetType?: 'TEACHER' | 'STAFF' | 'UNIT' | 'USER' | 'CUSTOM'; // Tipe pihak tujuan
+  tujuanDetail?: string; // Keterangan tambahan pembeda (misal: Mata Pelajaran, NIP, atau Divisi)
   keperluan: string; // Alasan kunjungan
   fotoUrl?: string; // Foto Tamu / Dokumen
   status: VisitorStatus;

@@ -16,6 +16,7 @@ import {
   Eye,
   Edit2,
   Camera,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -24,6 +25,7 @@ import { Modal } from '../../components/common/Modal';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { StudentTardyFormModal } from './StudentTardyFormModal';
 import { StudentTardyDetailModal } from './StudentTardyDetailModal';
+import { StudentTardyCorrectionModal } from './StudentTardyCorrectionModal';
 import { StudentTardyAdmitPrintModal } from './StudentTardyAdmitPrintModal';
 import {
   StudentTardyRecord,
@@ -43,6 +45,7 @@ import { formatIndonesianDate } from '../../utils/dateUtils';
 export const StudentTardyPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const isStrictAdmin = currentUser?.role === 'ADMIN';
 
   const [tardyList, setTardyList] = useState<StudentTardyRecord[]>([]);
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
@@ -54,6 +57,7 @@ export const StudentTardyPreview: React.FC = () => {
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingTardy, setEditingTardy] = useState<StudentTardyRecord | null>(null);
+  const [correctingTardy, setCorrectingTardy] = useState<StudentTardyRecord | null>(null);
   const [detailTardy, setDetailTardy] = useState<StudentTardyRecord | null>(null);
   const [printTardy, setPrintTardy] = useState<StudentTardyRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<StudentTardyRecord | null>(null);
@@ -99,6 +103,24 @@ export const StudentTardyPreview: React.FC = () => {
   const handleSaveTardy = async (data: Partial<StudentTardyRecord>, isEdit?: boolean) => {
     if (!currentUser) return;
     await StudentTardyService.saveTardyStudent(data, currentUser, Boolean(isEdit));
+  };
+
+  // Admin late correction handler
+  const handleSaveCorrection = async (params: {
+    tardyId: string;
+    newJamDatang?: string;
+    manualMinutesLate?: number;
+    reason: string;
+  }) => {
+    if (!currentUser) return;
+    await StudentTardyService.correctTardyRecord({
+      ...params,
+      adminUser: currentUser,
+      ruleSnapshot: {
+        entryLimit: settings?.studentTardyConfig?.entryLimit || settings?.workHours?.start || '07:00',
+        toleranceMinutes: settings?.studentTardyConfig?.toleranceMinutes ?? 0,
+      },
+    });
   };
 
   // Complete Discipline & Admit to Class
@@ -348,6 +370,15 @@ Terima kasih atas kerja sama dan bimbingannya di rumah. 🙏`;
                       <div className="text-[11px] text-rose-600 font-bold">
                         {item.jamDatang} WIB (+{item.menitTerlambat} menit)
                       </div>
+                      {item.isCorrectedByAdmin && (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                          title={`Dihitung sistem asli: ${item.menitTerlambatAsli ?? item.menitTerlambat} mnt`}
+                        >
+                          <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>Dikoreksi admin</span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-4 max-w-xs">
@@ -435,6 +466,18 @@ Terima kasih atas kerja sama dan bimbingannya di rumah. 🙏`;
                           </button>
                         )}
 
+                        {/* Koreksi Keterlambatan (Khusus Admin) */}
+                        {isStrictAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setCorrectingTardy(item)}
+                            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                            title="Koreksi Keterlambatan (Khusus Admin)"
+                          >
+                            <SlidersHorizontal className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {/* Notify Parent WA */}
                         <button
                           type="button"
@@ -515,10 +558,21 @@ Terima kasih atas kerja sama dan bimbingannya di rumah. 🙏`;
           setEditingTardy(t);
           setIsFormModalOpen(true);
         }}
+        onCorrect={(t) => setCorrectingTardy(t)}
+        isAdmin={isStrictAdmin}
         onAdmit={handleAdmitToClass}
         onSendWa={handleSendWaToParent}
         onPrint={(t) => setPrintTardy(t)}
         canEdit={detailTardy ? canEditRecord(detailTardy) : false}
+      />
+
+      {/* ADMIN CORRECTION MODAL */}
+      <StudentTardyCorrectionModal
+        isOpen={!!correctingTardy}
+        onClose={() => setCorrectingTardy(null)}
+        tardy={correctingTardy}
+        settings={settings}
+        onSaveCorrection={handleSaveCorrection}
       />
 
       {/* ADMIT PRINT MODAL */}

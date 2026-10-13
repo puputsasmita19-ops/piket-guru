@@ -132,6 +132,10 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
     showLetterhead: true,
     showSignatures: true,
   },
+  studentTardyConfig: {
+    entryLimit: '07:00',
+    toleranceMinutes: 0,
+  },
   workHours: {
     start: '06:30',
     end: '15:30',

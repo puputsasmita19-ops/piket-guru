@@ -35,11 +35,13 @@ import { SubstitutionService } from '../../services/firebase/substitutionService
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigation } from '../../contexts/NavigationContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export const SubstitutionPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
+  const { setActiveTab } = useNavigation();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const canEdit = Boolean(
     currentUser?.role &&
@@ -370,7 +372,14 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                 <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium">Kelas & Waktu</span>
-                    <span className="font-bold text-blue-600 dark:text-blue-400">{item.kelas}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-blue-600 dark:text-blue-400">{item.kelas}</span>
+                      {item.groupId && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                          Massal
+                        </span>
+                      )}
+                    </div>
                     <span className="block text-[11px] text-slate-600 dark:text-slate-400 font-mono">{item.jamPelajaran}</span>
                   </div>
                   <div>
@@ -510,8 +519,18 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                     </td>
 
                     <td className="p-4">
-                      <div className="font-bold text-blue-600 dark:text-blue-400">
-                        {item.kelas}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                          {item.kelas}
+                        </span>
+                        {item.groupId && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                            title="Dibuat dalam satu input massal"
+                          >
+                            Massal
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-500 font-mono">
                         {item.jamPelajaran}
@@ -658,6 +677,8 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
         teachers={teachers}
         isLoadingTeachers={isLoadingTeachers}
         teachersError={teachersError}
+        settings={settings}
+        onNavigateToSettings={() => setActiveTab('settings')}
       />
 
       {/* PRINT SLIP MODAL */}

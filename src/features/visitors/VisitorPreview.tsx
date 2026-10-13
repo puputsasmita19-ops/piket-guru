@@ -31,8 +31,8 @@ import {
   VisitorCategory,
   getVisitorCategoryDisplay,
 } from '../../types/visitor.types';
-import { TeacherRecord } from '../../types/master.types';
-import { SchoolSettings } from '../../types';
+import { TeacherRecord, StaffRecord } from '../../types/master.types';
+import { SchoolSettings, UserProfile } from '../../types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { VisitorService } from '../../services/firebase/visitorService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
@@ -51,6 +51,8 @@ export const VisitorPreview: React.FC = () => {
 
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
+  const [staffList, setStaffList] = useState<StaffRecord[]>([]);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,10 +92,14 @@ export const VisitorPreview: React.FC = () => {
     });
 
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
+    const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaffList);
+    const unsubUsers = FirestoreService.subscribeToCollection<UserProfile>('users', setUsersList);
 
     return () => {
       unsubVis();
       unsubTeachers();
+      unsubStaff();
+      unsubUsers();
     };
   }, []);
 
@@ -624,6 +630,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
         onSave={handleSaveVisitor}
         editingVisitor={editingVisitor}
         teachers={teachers}
+        staffList={staffList}
+        usersList={usersList}
       />
 
       {/* PRINT PASS MODAL */}

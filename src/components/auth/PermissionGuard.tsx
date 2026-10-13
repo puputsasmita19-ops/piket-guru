@@ -6,6 +6,8 @@ import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { Card, CardContent } from '../common/Card';
 import { Button } from '../common/Button';
 
+import { AuditService } from '../../services/audit/auditService';
+
 interface PermissionGuardProps {
   permission: PermissionKey;
   children: React.ReactNode;
@@ -17,8 +19,30 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
   children,
   fallback,
 }) => {
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { setActiveTab } = useNavigation();
+  const loggedRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!hasPermission(permission) && loggedRef.current !== permission && currentUser) {
+      loggedRef.current = permission;
+      void AuditService.log({
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        role: currentUser.role,
+        loginId: currentUser.loginId,
+        action: 'SECURITY',
+        module: 'SECURITY',
+        status: 'BLOCKED',
+        target: permission,
+        details: `Percobaan akses dibatasi: Pengguna tidak memiliki hak akses "${permission}"`,
+        metadata: {
+          attemptedPermission: permission,
+          userRole: currentUser.role,
+        },
+      });
+    }
+  }, [permission, hasPermission, currentUser]);
 
   if (!hasPermission(permission)) {
     if (fallback) return <>{fallback}</>;

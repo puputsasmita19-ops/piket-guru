@@ -20,6 +20,8 @@ import {
   Image as ImageIcon,
   Edit2,
   Eye,
+  ShieldAlert,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface StudentTardyDetailModalProps {
@@ -27,10 +29,12 @@ interface StudentTardyDetailModalProps {
   onClose: () => void;
   tardy: StudentTardyRecord | null;
   onEdit?: (tardy: StudentTardyRecord) => void;
+  onCorrect?: (tardy: StudentTardyRecord) => void;
   onAdmit?: (tardy: StudentTardyRecord) => void;
   onSendWa?: (tardy: StudentTardyRecord) => void;
   onPrint?: (tardy: StudentTardyRecord) => void;
   canEdit?: boolean;
+  isAdmin?: boolean;
 }
 
 export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = ({
@@ -38,10 +42,12 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
   onClose,
   tardy,
   onEdit,
+  onCorrect,
   onAdmit,
   onSendWa,
   onPrint,
   canEdit = false,
+  isAdmin = false,
 }) => {
   const [isPreviewPhotoOpen, setIsPreviewPhotoOpen] = useState(false);
 
@@ -58,7 +64,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
         <div className="space-y-4">
           {/* Header Status & Action Badges */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge
                 variant={
                   tardy.status === 'SELESAI_MASUK_KELAS'
@@ -75,6 +81,14 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
                   ? 'Panggilan Orang Tua'
                   : 'Dalam Pembinaan'}
               </Badge>
+
+              {tardy.isCorrectedByAdmin && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  Dikoreksi Admin
+                </span>
+              )}
+
               <span
                 className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold ${
                   tardy.frekuensiBulanIni >= 3
@@ -86,7 +100,22 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {isAdmin && onCorrect && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-50"
+                  leftIcon={<SlidersHorizontal className="w-3.5 h-3.5" />}
+                  onClick={() => {
+                    onClose();
+                    onCorrect(tardy);
+                  }}
+                >
+                  Koreksi Keterlambatan
+                </Button>
+              )}
+
               {canEdit && onEdit && (
                 <Button
                   variant="outline"
@@ -104,6 +133,28 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
             </div>
           </div>
 
+          {/* Admin Correction Notice Box if corrected */}
+          {tardy.isCorrectedByAdmin && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-100">
+                <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Riwayat Koreksi Resmi oleh Administrator</span>
+              </div>
+              <div className="space-y-0.5 text-[11px] leading-relaxed">
+                <p>
+                  Pengoreksi: <strong>{tardy.adminCorrection?.correctedByAdminName || 'Admin'}</strong>
+                  {tardy.adminCorrection?.correctedAt && ` • ${formatIndonesianDate(tardy.adminCorrection.correctedAt)}`}
+                </p>
+                <p>
+                  Hasil Perhitungan Asli: <strong>{tardy.menitTerlambatAsli ?? tardy.adminCorrection?.previousMenitTerlambat ?? tardy.menitTerlambat} menit</strong> &rarr; Setelah Koreksi: <strong>{tardy.menitTerlambat} menit</strong>
+                </p>
+                <p className="italic text-amber-800 dark:text-amber-300">
+                  Alasan: "{tardy.adminCorrection?.reason || '-'}"
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Student Info Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
@@ -116,6 +167,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
               </div>
               <div className="text-slate-400 font-mono">
                 {tardy.nisn && tardy.nisn !== '-' ? `NISN: ${tardy.nisn}` : 'NISN: -'}
+                {tardy.studentId && ` • ID: ${tardy.studentId}`}
               </div>
             </div>
 
@@ -125,7 +177,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
                 {formatIndonesianDate(tardy.tanggal)}
               </div>
               <div className="font-mono text-rose-600 dark:text-rose-400 font-bold">
-                Tiba: {tardy.jamDatang} WIB (+{tardy.menitTerlambat} menit terlambat)
+                Tiba: {tardy.jamDatang} WIB ({tardy.menitTerlambat > 0 ? `+${tardy.menitTerlambat} menit terlambat` : '0 menit / Tepat Waktu'})
               </div>
               <div className="text-slate-500 text-[11px]">
                 Petugas: <strong>{tardy.petugasPiketName}</strong>

@@ -180,6 +180,13 @@ export interface LoginSupportContact {
   initialMessage?: string;
 }
 
+export interface StudentTardyConfig {
+  entryLimit: string; // e.g. "07:00" WIB
+  toleranceMinutes: number; // e.g. 5 menit
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 export interface SchoolSettings {
   id?: string;
   schoolName: string;
@@ -215,6 +222,8 @@ export interface SchoolSettings {
   academicSemester?: AcademicSemesterConfig;
   printConfig?: PrintLayoutConfig;
   lobbyTv?: import('./lobbyTv.types').LobbyTvConfig;
+  studentTardyConfig?: StudentTardyConfig;
+  lessonPeriodConfig?: import('./period.types').LessonPeriodConfig;
   workHours: {
     start: string;
     end: string;
@@ -244,3 +253,4 @@ export type NavigationTab =
   | 'settings';
 
 export * from './lobbyTv.types';
+export * from './period.types';

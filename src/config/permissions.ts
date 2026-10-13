@@ -110,6 +110,42 @@ export const GURU_PIKET_CORE_PERMISSIONS: string[] = [
   PERMISSIONS.VISITORS_VIEW,
 ];
 
+export interface AdditionalDutyPermissionItem {
+  id: string;
+  name: string;
+  menuName: string;
+  description: string;
+}
+
+export const FOUR_ADDITIONAL_PERMISSIONS: AdditionalDutyPermissionItem[] = [
+  {
+    id: PERMISSIONS.STUDENT_TARDY_VIEW,
+    name: 'Siswa Terlambat',
+    menuName: 'Siswa Terlambat',
+    description: 'Pencatatan siswa terlambat, tiket masuk kelas & pembinaan',
+  },
+  {
+    id: PERMISSIONS.STUDENT_PERMITS_VIEW,
+    name: 'Izin Siswa & Gerbang',
+    menuName: 'Izin Siswa & Gerbang',
+    description: 'Penerbitan surat izin keluar gerbang (Gate Pass) & verifikasi pos satpam',
+  },
+  {
+    id: PERMISSIONS.SUBSTITUTIONS_VIEW,
+    name: 'Guru Inval/Pengganti',
+    menuName: 'Guru Inval/Pengganti',
+    description: 'Pengelolaan penugasan guru pengganti piket untuk kelas dengan guru absen',
+  },
+  {
+    id: PERMISSIONS.VISITORS_VIEW,
+    name: 'Buku Tamu Digital',
+    menuName: 'Buku Tamu Digital',
+    description: 'Pencatatan registrasi kunjungan tamu masuk sekolah & verifikasi checkout',
+  },
+];
+
+export const FOUR_ADDITIONAL_PERMISSION_IDS: string[] = FOUR_ADDITIONAL_PERMISSIONS.map((p) => p.id);
+
 export const ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
   ADMIN: ['*'],
   KEPALA_SEKOLAH: [

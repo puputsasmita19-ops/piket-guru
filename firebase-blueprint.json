@@ -229,6 +229,28 @@
         "radiusMeters": { "type": "number" }
       },
       "required": ["schoolName", "schoolLatitude", "schoolLongitude", "radiusMeters"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable forensic audit trail of all system activities and security events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "role": { "type": "string" },
+        "loginId": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "status": { "type": "string" },
+        "target": { "type": "string" },
+        "recordId": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "userAgent": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "role", "action", "module", "details", "timestamp"]
     }
   },
   "firestore": {
@@ -283,6 +305,10 @@
     "/settings/{settingId}": {
       "schema": "SchoolSettings",
       "description": "School operational settings and coordinates"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Forensic audit trail logs of system operations and security events"
     }
   }
 }

@@ -16,8 +16,11 @@ import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { useTheme, PastelTheme } from '../../contexts/ThemeContext';
 import { useGuide } from '../../contexts/GuideContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { AuditService } from '../../services/audit/auditService';
 
 export const ThemeSettingsCard: React.FC = () => {
+  const { currentUser } = useAuth();
   const {
     theme,
     setTheme,
@@ -30,6 +33,43 @@ export const ThemeSettingsCard: React.FC = () => {
   const { showOnLogin, setShowOnLogin, startGuideTour } = useGuide();
 
   const currentThemeMeta = pastelThemesList.find((p) => p.id === pastelTheme) || pastelThemesList[0];
+
+  const handleSelectPastelTheme = (id: PastelTheme) => {
+    const targetMeta = pastelThemesList.find((p) => p.id === id);
+    setPastelTheme(id);
+    if (currentUser) {
+      void AuditService.log({
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        role: currentUser.role,
+        loginId: currentUser.loginId,
+        action: 'UPDATE',
+        module: 'SETTINGS',
+        status: 'SUCCESS',
+        target: 'Tema Warna Sekolah',
+        details: `Mengubah tema visual warna pastel menjadi "${targetMeta?.name || id}"`,
+        metadata: { themeId: id, themeName: targetMeta?.name },
+      });
+    }
+  };
+
+  const handleSelectMode = (mode: 'light' | 'dark' | 'system') => {
+    setTheme(mode);
+    if (currentUser) {
+      void AuditService.log({
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        role: currentUser.role,
+        loginId: currentUser.loginId,
+        action: 'UPDATE',
+        module: 'SETTINGS',
+        status: 'SUCCESS',
+        target: 'Mode Kecerahan Tampilan',
+        details: `Mengubah mode tampilan antarmuka menjadi "${mode === 'light' ? 'Mode Terang' : mode === 'dark' ? 'Mode Gelap' : 'Sesuai Sistem'}"`,
+        metadata: { mode },
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -47,7 +87,7 @@ export const ThemeSettingsCard: React.FC = () => {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setPastelTheme(item.id)}
+                  onClick={() => handleSelectPastelTheme(item.id)}
                   className={`group relative p-4.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-3.5 active:scale-[0.98] ${
                     isSelected
                       ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] shadow-md'
@@ -165,7 +205,7 @@ export const ThemeSettingsCard: React.FC = () => {
             {/* Option 1: Light */}
             <button
               type="button"
-              onClick={() => setTheme('light')}
+              onClick={() => handleSelectMode('light')}
               className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-4 active:scale-[0.98] ${
                 theme === 'light'
                   ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] shadow-md'
@@ -191,7 +231,7 @@ export const ThemeSettingsCard: React.FC = () => {
             {/* Option 2: Dark */}
             <button
               type="button"
-              onClick={() => setTheme('dark')}
+              onClick={() => handleSelectMode('dark')}
               className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-4 active:scale-[0.98] ${
                 theme === 'dark'
                   ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] shadow-md'
@@ -217,7 +257,7 @@ export const ThemeSettingsCard: React.FC = () => {
             {/* Option 3: System */}
             <button
               type="button"
-              onClick={() => setTheme('system')}
+              onClick={() => handleSelectMode('system')}
               className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-4 active:scale-[0.98] ${
                 theme === 'system'
                   ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] shadow-md'

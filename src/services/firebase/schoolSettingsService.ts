@@ -3,6 +3,7 @@ import { auth, db } from './firebase';
 import type { SchoolSettings } from '../../types';
 import { LobbyTvConfig, sanitizeLobbyTvConfig } from '../../types/lobbyTv.types';
 import { LocationService, type LocationCoordinates } from '../location/locationService';
+import { AuditService } from '../audit/auditService';
 
 export interface SchoolSettingsSaveResult {
   settings: SchoolSettings;
@@ -67,6 +68,16 @@ export class SchoolSettingsService {
       // Expected data does not invent a server timestamp if readback is unavailable.
       delete expected.schoolLocationSavedAt;
     });
+
+    void AuditService.log({
+      userId: uid,
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: 'Koordinat GPS Sekolah',
+      details: `Menyimpan dan mengunci titik GPS sekolah (${draft.schoolLat.toFixed(6)}, ${draft.schoolLng.toFixed(6)}) dengan radius ${draft.allowedRadiusMeters} meter untuk acuan presensi`,
+    });
+
     return this.receipt(expected);
   }
   public static async unlockLocation(userId: string): Promise<SchoolSettingsSaveResult> {
@@ -83,6 +94,16 @@ export class SchoolSettingsService {
       expected = { ...current, schoolLocationLocked: false, schoolLocationUnlockedBy: uid };
       delete expected.schoolLocationUnlockedAt;
     });
+
+    void AuditService.log({
+      userId: uid,
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: 'Koordinat GPS Sekolah',
+      details: 'Membuka kunci koordinat GPS sekolah tanpa mengubah titik tersimpan',
+    });
+
     return this.receipt(expected);
   }
   public static async saveProfile(draft: SchoolSettings, userId: string): Promise<SchoolSettingsSaveResult> {
@@ -99,6 +120,16 @@ export class SchoolSettingsService {
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
     });
+
+    void AuditService.log({
+      userId,
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: draft.schoolName || 'Profil Sekolah',
+      details: `Memperbarui profil, identitas, dan jam kerja instansi: ${draft.schoolName || ''}`,
+    });
+
     return this.receipt(expected);
   }
 
@@ -139,6 +170,167 @@ export class SchoolSettingsService {
       // Local cache failure non-fatal
     }
 
+    void AuditService.log({
+      userId: uid,
+      userName: userData?.fullName || 'Administrator',
+      role: 'ADMIN',
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: 'TV Lobi Sekolah',
+      details: 'Memperbarui konfigurasi TV Lobi sekolah (layout, pengumuman, dan tampilan monitor)',
+    });
+
+    return this.receipt(expected);
+  }
+
+  /**
+   * Authoritative Student Tardiness configuration persistence in settings/school_config.
+   * - Sets student entry limit and tolerance minutes.
+   * - Strict ADMIN-only RBAC enforced at the storage/service layer.
+   * - Does NOT modify teacher attendance hours or workHours.
+   */
+  public static async saveStudentTardyConfig(
+    tardyConfig: { entryLimit: string; toleranceMinutes: number },
+    userId: string
+  ): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+
+    // Storage-layer access control check: verify user exists and holds active ADMIN role
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists()) {
+      throw new Error('Akses ditolak: Pengguna tidak ditemukan pada database.');
+    }
+    const userData = userSnap.data();
+    if (userData?.role !== 'ADMIN' || userData?.isActive !== true) {
+      throw new Error('Akses ditolak: Hanya pengguna dengan hak akses Administrator yang dapat mengubah Pengaturan Keterlambatan Siswa.');
+    }
+
+    const cleanLimit = (tardyConfig.entryLimit || '07:00').trim();
+    if (!/^[0-2][0-9]:[0-5][0-9]$/.test(cleanLimit)) {
+      throw new Error('Format batas jam masuk siswa harus berupa format jam:menit yang valid (HH:mm, contoh 07:00).');
+    }
+
+    const tolerance = Math.max(0, Math.floor(Number(tardyConfig.toleranceMinutes) || 0));
+    if (isNaN(tolerance) || tolerance < 0 || tolerance > 120) {
+      throw new Error('Toleransi keterlambatan harus berupa bilangan bulat tidak negatif (0 - 120 menit).');
+    }
+
+    const payload = {
+      entryLimit: cleanLimit,
+      toleranceMinutes: tolerance,
+      updatedAt: new Date().toISOString(),
+      updatedBy: userData?.fullName || 'Administrator',
+    };
+
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) {
+        throw new Error('Konfigurasi sekolah belum diinisialisasi di server. Simpan profil sekolah terlebih dahulu.');
+      }
+      const current = snap.data() as SchoolSettings;
+      transaction.set(ref, { studentTardyConfig: payload, updatedAt: serverTimestamp() }, { merge: true });
+      expected = { ...current, studentTardyConfig: payload } as SchoolSettings;
+    });
+
+    try {
+      localStorage.setItem('piket_guru_school_config', JSON.stringify(expected));
+    } catch {}
+
+    void AuditService.log({
+      userId: uid,
+      userName: userData?.fullName || 'Administrator',
+      role: 'ADMIN',
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: 'Keterlambatan Siswa',
+      details: `Memperbarui konfigurasi jam masuk siswa: batas ${cleanLimit}, toleransi ${tolerance} menit`,
+    });
+
+    return this.receipt(expected);
+  }
+
+  /**
+   * Menyimpan konfigurasi Jam Pelajaran (JP) sekolah.
+   * Khusus Administrator:
+   * - Validasi jam selesai setelah jam mulai
+   * - Validasi nomor JP tidak ganda pada jadwal hari yang sama
+   * - Validasi interval waktu tidak bertabrakan
+   * - Akses dicek di Firestore rules dan backend
+   */
+  public static async savePeriodScheduleConfig(
+    periodConfig: import('../../types/period.types').LessonPeriodConfig,
+    userId: string
+  ): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+
+    // Storage-layer access control check: verifikasi admin aktif
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists()) {
+      throw new Error('Akses ditolak: Pengguna tidak ditemukan pada database.');
+    }
+    const userData = userSnap.data();
+    if (userData?.role !== 'ADMIN' || userData?.isActive !== true) {
+      throw new Error('Akses ditolak: Hanya pengguna dengan hak akses Administrator yang dapat mengubah Pengaturan Jam Pelajaran (JP).');
+    }
+
+    // Validasi aturan JP
+    const { validateLessonPeriodConfig } = await import('../../types/period.types');
+    const validation = validateLessonPeriodConfig(periodConfig);
+    if (!validation.isValid) {
+      throw new Error(`Validasi Jam Pelajaran gagal:\n- ${validation.errors.join('\n- ')}`);
+    }
+
+    const payload: import('../../types/period.types').LessonPeriodConfig = {
+      effectiveDate: periodConfig.effectiveDate.trim(),
+      periods: periodConfig.periods.map((p) => ({
+        id: p.id || `jp-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        periodNumber: Number(p.periodNumber),
+        name: p.name?.trim() || `JP ${p.periodNumber}`,
+        startTime: p.startTime.trim(),
+        endTime: p.endTime.trim(),
+        days: p.days,
+        effectiveStartDate: p.effectiveStartDate || periodConfig.effectiveDate.trim(),
+        isActive: Boolean(p.isActive),
+        notes: p.notes?.trim() || '',
+      })),
+      updatedAt: new Date().toISOString(),
+      updatedBy: userData?.fullName || 'Administrator',
+    };
+
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) {
+        throw new Error('Konfigurasi sekolah belum diinisialisasi di server. Simpan profil sekolah terlebih dahulu.');
+      }
+      const current = snap.data() as SchoolSettings;
+      transaction.set(ref, { lessonPeriodConfig: payload, updatedAt: serverTimestamp() }, { merge: true });
+      expected = { ...current, lessonPeriodConfig: payload } as SchoolSettings;
+    });
+
+    try {
+      localStorage.setItem('piket_guru_school_config', JSON.stringify(expected));
+    } catch {}
+
+    void AuditService.log({
+      userId: uid,
+      userName: userData?.fullName || 'Administrator',
+      role: 'ADMIN',
+      action: 'UPDATE',
+      module: 'SETTINGS',
+      status: 'SUCCESS',
+      target: 'Jam Pelajaran (JP)',
+      details: `Memperbarui jadwal jam pelajaran sekolah (${periodConfig.periods.length} JP) berlaku mulai ${periodConfig.effectiveDate}`,
+    });
+
     return this.receipt(expected);
   }
 }
+

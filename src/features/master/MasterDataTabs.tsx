@@ -35,9 +35,10 @@ import {
 } from '../../types/master.types';
 import { StudentService } from '../../services/firebase/studentService';
 import { BulkImportModal, ImportType } from './BulkImportModal';
-import { UserRole } from '../../types';
-import { ROLE_LABELS } from '../../config/constants';
+import { UserRole, SchoolSettings } from '../../types';
+import { ROLE_LABELS, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { AuditForensicViewer } from '../settings/AuditForensicViewer';
 
 type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'audit';
 
@@ -925,42 +926,7 @@ export const MasterDataTabs: React.FC = () => {
 
       {/* TAB 5: AUDIT LOGS (CR-005: Scroll model) */}
       {activeTab === 'audit' && (
-        <Card>
-          <CardHeader
-            title="Jejak Audit Aktivitas Sistem"
-            subtitle={`Pencatatan real-time aksi pengguna, perubahan data, dan keamanan (${auditLogs.length} Entri)`}
-          />
-          <CardContent className="p-0">
-            <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin">
-              {auditLogs.length > 0 ? (
-                auditLogs.map((log) => (
-                  <div key={log.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={log.action === 'DELETE' ? 'danger' : log.action === 'CREATE' ? 'success' : log.action === 'UPDATE' ? 'warning' : 'primary'}
-                          size="sm"
-                        >
-                          {log.action}
-                        </Badge>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">[{log.module}]</span>
-                        <span className="text-slate-600 dark:text-slate-400">{log.details}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 font-mono">
-                        Oleh: <strong>{log.userName}</strong> ({ROLE_LABELS[log.role]})
-                      </div>
-                    </div>
-                    <div className="text-slate-400 font-mono text-[11px] whitespace-nowrap">
-                      {formatIndonesianDate(log.timestamp)} • {formatTime(log.timestamp)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-slate-400">Belum ada catatan audit log.</div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <AuditForensicViewer logs={auditLogs} settings={DEFAULT_SCHOOL_SETTINGS} />
       )}
 
       {/* TEACHER MODAL (ADD / EDIT) */}
@@ -1364,8 +1330,8 @@ export const MasterDataTabs: React.FC = () => {
               <input
                 required
                 name="kelas"
-                defaultValue={editingStudent?.kelas || 'X MIPA 1'}
-                placeholder="Contoh: X MIPA 1"
+                defaultValue={editingStudent?.kelas || ''}
+                placeholder="Contoh: X-A, XI-MIPA-1"
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
               />
             </div>

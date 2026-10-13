@@ -9,6 +9,7 @@ import { FirestoreService } from '../services/firebase/firestoreService';
 
 import { OfflineStorage } from '../services/offline/offlineStorage';
 import { SyncQueueService } from '../services/offline/syncQueueService';
+import { AuditService } from '../services/audit/auditService';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
@@ -30,7 +31,7 @@ interface AuthContextType {
     remainingSeconds?: number;
   }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  logout: (options?: { purgeUserData?: boolean }) => Promise<void>;
+  logout: (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => Promise<void>;
   refreshProfile: () => Promise<void>;
   changePin: (
     oldPin: string,
@@ -69,14 +70,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsTrustedDeviceState(trusted);
   }, []);
 
-  const logout = useCallback(async (options?: { purgeUserData?: boolean }) => {
+  const logout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
     sessionEpochRef.current += 1;
     inFlightVerificationRef.current = null;
+
+    if (currentUser) {
+      if (options?.reason === 'INACTIVITY_TIMEOUT') {
+        void AuditService.log({
+          action: 'LOGOUT',
+          module: 'USERS',
+          status: 'SUCCESS',
+          details: 'Sesi berakhir otomatis karena inaktivitas pengguna (30 menit)',
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          role: currentUser.role,
+          loginId: currentUser.loginId,
+          metadata: { reason: 'INACTIVITY_TIMEOUT' },
+        });
+      } else if (options?.reason === 'ACCOUNT_DEACTIVATED') {
+        void AuditService.log({
+          action: 'SECURITY',
+          module: 'USERS',
+          status: 'BLOCKED',
+          details: 'Sesi dicabut: Akun dinonaktifkan oleh administrator',
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          role: currentUser.role,
+          loginId: currentUser.loginId,
+          metadata: { reason: 'ACCOUNT_DEACTIVATED' },
+        });
+      } else {
+        void AuditService.log({
+          action: 'LOGOUT',
+          module: 'USERS',
+          status: 'SUCCESS',
+          details: 'Logout manual dari aplikasi',
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          role: currentUser.role,
+          loginId: currentUser.loginId,
+        });
+      }
+    }
+
     await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
     setCurrentUser(null);
     setIsOfflineSession(false);
     setIsLoading(false);
-  }, [currentUser?.id]);
+  }, [currentUser]);
 
   // Revalidate session with server when network reconnects
   const revalidateSessionOnline = useCallback(async (): Promise<boolean> => {
@@ -201,7 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If account has been deactivated, immediately log out
         if (profile.isActive === false) {
           console.warn('[AUTH_CONTEXT] Account has been deactivated by administrator.');
-          logout();
+          logout({ reason: 'ACCOUNT_DEACTIVATED' });
           return;
         }
 
@@ -226,7 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resetTimer = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        logout();
+        logout({ reason: 'INACTIVITY_TIMEOUT' });
       }, INACTIVITY_TIMEOUT_MS);
     };
 
@@ -268,6 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsOfflineSession(false);
         setIsLoading(false);
         SyncQueueService.refreshStatus(res.user.id).catch(() => {});
+        void AuditService.recordLogin('PIN');
         return { success: true };
       }
 
@@ -310,6 +352,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authService.clearSession();
         setCurrentUser(null);
         setIsLoading(false);
+        void AuditService.recordLoginFailure({
+          method: 'GOOGLE',
+          reason: 'UNREGISTERED_ACCOUNT',
+          status: 'BLOCKED',
+          email: fbUser.email || undefined,
+          details: `Login Google ditolak: Akun ${fbUser.email || fbUser.uid} tidak terdaftar atau nonaktif dalam database sekolah`,
+        });
         return {
           success: false,
           error: valRes.error || 'Akun Google ini tidak terdaftar atau belum diaktifkan dalam database sekolah.',
@@ -325,6 +374,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsOfflineSession(false);
       setIsLoading(false);
       SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
+      void AuditService.recordLogin('GOOGLE');
       return { success: true };
     } catch (err: any) {
       inFlightVerificationRef.current = null;
@@ -339,6 +389,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         errorMessage.includes('popup-closed-by-user')
       ) {
         console.info('[AUTH_CONTEXT] Google Sign-In popup ditutup atau dibatalkan oleh pengguna.');
+        void AuditService.recordLoginFailure({
+          method: 'GOOGLE',
+          reason: 'POPUP_CLOSED_BY_USER',
+          status: 'FAILED',
+          details: 'Login dengan Google dibatalkan: Jendela pop-up ditutup oleh pengguna',
+        });
         return {
           success: false,
           error: 'Login dengan Google dibatalkan karena jendela pop-up ditutup.',
@@ -347,6 +403,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (errorCode === 'auth/popup-blocked' || errorMessage.includes('popup-blocked')) {
         console.warn('[AUTH_CONTEXT] Google Sign-In popup diblokir oleh peramban.');
+        void AuditService.recordLoginFailure({
+          method: 'GOOGLE',
+          reason: 'POPUP_BLOCKED',
+          status: 'FAILED',
+          details: 'Login Google dibatalkan: Pop-up diblokir oleh peramban',
+        });
         return {
           success: false,
           error: 'Jendela pop-up login Google diblokir oleh peramban Anda. Harap izinkan pop-up untuk situs ini.',
@@ -355,6 +417,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (errorCode === 'auth/network-request-failed') {
         console.warn('[AUTH_CONTEXT] Jaringan terputus saat autentikasi Google.');
+        void AuditService.recordLoginFailure({
+          method: 'GOOGLE',
+          reason: 'NETWORK_ERROR',
+          status: 'FAILED',
+          details: 'Login Google gagal: Terjadi gangguan jaringan koneksi internet',
+        });
         return {
           success: false,
           error: 'Gagal terhubung ke layanan Google. Silakan periksa koneksi internet Anda.',
@@ -363,6 +431,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (errorCode === 'auth/unauthorized-domain') {
         console.warn('[AUTH_CONTEXT] Domain belum terdaftar di Firebase Auth.');
+        void AuditService.recordLoginFailure({
+          method: 'GOOGLE',
+          reason: 'UNAUTHORIZED_DOMAIN',
+          status: 'FAILED',
+          details: 'Login Google gagal: Domain belum diizinkan pada konsol Firebase Auth',
+        });
         return {
           success: false,
           error: 'Domain aplikasi ini belum diizinkan pada konsol Firebase Authentication sekolah.',
@@ -370,6 +444,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.error('[AUTH_CONTEXT] Google Sign-In error:', err);
+      void AuditService.recordLoginFailure({
+        method: 'GOOGLE',
+        reason: errorCode || 'AUTH_ERROR',
+        status: 'FAILED',
+        details: `Login Google gagal: ${err?.message || 'Kesalahan autentikasi'}`,
+      });
       return { success: false, error: err.message || 'Gagal masuk dengan Google.' };
     }
   };

@@ -1,19 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
+import { Badge } from '../../components/common/Badge';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
 import {
   StudentTardyRecord,
   TardyReason,
   DisciplineAction,
   TardyStatus,
+  calculateStudentTardiness,
+  calculateTardyViolationPoints,
+  getTardyReasonDisplay,
+  getDisciplineActionDisplay,
 } from '../../types/studentTardy.types';
 import { StudentRecord } from '../../types/master.types';
 import { SchoolSettings } from '../../types';
 import { StudentTardyService } from '../../services/firebase/studentTardyService';
 import { StudentService } from '../../services/firebase/studentService';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatTime } from '../../utils/dateUtils';
+import { formatTime, formatIndonesianDate } from '../../utils/dateUtils';
 import {
   Calendar,
   Clock,
@@ -31,6 +36,12 @@ import {
   HelpCircle,
   Save,
   FileText,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  ShieldAlert,
+  X,
 } from 'lucide-react';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
@@ -43,11 +54,17 @@ interface StudentTardyFormModalProps {
   settings?: SchoolSettings;
 }
 
-const CLASS_LIST = [
-  'X MIPA 1', 'X MIPA 2', 'X MIPA 3', 'X IPS 1', 'X IPS 2',
-  'XI MIPA 1', 'XI MIPA 2', 'XI MIPA 3', 'XI IPS 1', 'XI IPS 2',
-  'XII MIPA 1', 'XII MIPA 2', 'XII MIPA 3', 'XII IPS 1', 'XII IPS 2',
-];
+export interface SelectedStudentEntry {
+  student: StudentRecord;
+  frekuensiBulanIni: number;
+  isCustomized: boolean;
+  jamDatang?: string;
+  alasan?: TardyReason;
+  keteranganAlasan?: string;
+  pembinaan?: DisciplineAction;
+  keteranganPembinaan?: string;
+  catatanPetugas?: string;
+}
 
 export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   isOpen,
@@ -58,37 +75,71 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 }) => {
   const { currentUser } = useAuth();
 
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [jamDatang, setJamDatang] = useState(formatTime(new Date()));
-  const [studentId, setStudentId] = useState<string | undefined>(undefined);
-  const [namaSiswa, setNamaSiswa] = useState('');
-  const [nisn, setNisn] = useState('');
-  const [kelas, setKelas] = useState('');
-  const [alasan, setAlasan] = useState<TardyReason>('BANGUN_KESIANGAN');
-  const [keteranganAlasan, setKeteranganAlasan] = useState('');
-  const [pembinaan, setPembinaan] = useState<DisciplineAction>('LITERASI_PERPUSTAKAAN');
-  const [keteranganPembinaan, setKeteranganPembinaan] = useState('');
-  const [poinPelanggaran, setPoinPelanggaran] = useState(5);
-  const [frekuensiBulanIni, setFrekuensiBulanIni] = useState(1);
-  const [noHpOrangTua, setNoHpOrangTua] = useState('');
-  const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
-  const [catatanPetugas, setCatatanPetugas] = useState('');
+  // Settings for student entry limit & tolerance
+  const entryLimitTime = useMemo(() => {
+    return (
+      settings?.studentTardyConfig?.entryLimit ||
+      settings?.workHours?.start ||
+      '07:00'
+    );
+  }, [settings]);
 
+  const toleranceMinutes = useMemo(() => {
+    return settings?.studentTardyConfig?.toleranceMinutes ?? 0;
+  }, [settings]);
+
+  // Master Student Directory
   const [studentDirectory, setStudentDirectory] = useState<StudentRecord[]>([]);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
+
+  // Multi-Student Selected List
+  const [selectedStudents, setSelectedStudents] = useState<SelectedStudentEntry[]>([]);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+
+  // Shared defaults
+  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [sharedJamDatang, setSharedJamDatang] = useState(formatTime(new Date()));
+  const [sharedAlasan, setSharedAlasan] = useState<TardyReason>('BANGUN_KESIANGAN');
+  const [sharedKeteranganAlasan, setSharedKeteranganAlasan] = useState('');
+  const [sharedPembinaan, setSharedPembinaan] = useState<DisciplineAction>('LITERASI_PERPUSTAKAAN');
+  const [sharedKeteranganPembinaan, setSharedKeteranganPembinaan] = useState('');
+  const [sharedCatatanPetugas, setSharedCatatanPetugas] = useState('');
+  const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
+
+  // Single edit mode fallback states
+  const [singleStudentName, setSingleStudentName] = useState('');
+  const [singleStudentKelas, setSingleStudentKelas] = useState('');
+  const [singleStudentNisn, setSingleStudentNisn] = useState('');
+  const [singleStudentPhone, setSingleStudentPhone] = useState('');
+  const [singleStudentPoin, setSingleStudentPoin] = useState(5);
+  const [singleStudentFreq, setSingleStudentFreq] = useState(1);
+
+  // Modals & UI states
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isPreviewPhotoOpen, setIsPreviewPhotoOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [availableDraft, setAvailableDraft] = useState<{ updatedAt: string; data: any; attachments?: { [key: string]: Blob } } | null>(null);
 
-  const draftKey = editingTardy?.id || 'new-tardy';
+  // Summary & Batch Save Result Modal
+  const [showSummaryConfirm, setShowSummaryConfirm] = useState(false);
+  const [batchResults, setBatchResults] = useState<{
+    results: Array<{
+      studentId: string;
+      namaSiswa: string;
+      kelas: string;
+      success: boolean;
+      record?: StudentTardyRecord;
+      error?: string;
+    }>;
+    allSuccessful: boolean;
+  } | null>(null);
 
-  // Search input state for student picker
-  const [studentSearchTerm, setStudentSearchTerm] = useState('');
-  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
+  // Request ID for idempotent retry
+  const batchRequestIdRef = useRef<string>('');
 
-  // Load student directory
+  // Load student directory on mount
   useEffect(() => {
     StudentService.bootstrapIfEmpty().then(() => {
       StudentService.getAllStudents().then((data) => {
@@ -97,399 +148,359 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
     });
   }, []);
 
-  // Initialize or reset form state on open / editingTardy change
+  // Initialize or reset form state
   useEffect(() => {
     if (isOpen) {
-      if (editingTardy) {
-        setTanggal(editingTardy.tanggal);
-        setJamDatang(editingTardy.jamDatang);
-        setStudentId(editingTardy.studentId);
-        setNamaSiswa(editingTardy.namaSiswa);
-        setStudentSearchTerm(editingTardy.namaSiswa);
-        setNisn(editingTardy.nisn && editingTardy.nisn !== '-' ? editingTardy.nisn : '');
-        setKelas(editingTardy.kelas);
-        setAlasan(editingTardy.alasan);
-        setKeteranganAlasan(editingTardy.keteranganAlasan || '');
-        setPembinaan(editingTardy.pembinaan);
-        setKeteranganPembinaan(editingTardy.keteranganPembinaan || '');
-        setPoinPelanggaran(editingTardy.poinPelanggaran || 5);
-        setFrekuensiBulanIni(editingTardy.frekuensiBulanIni || 1);
-        setNoHpOrangTua(editingTardy.noHpOrangTua || '');
-        setFotoUrl(editingTardy.fotoUrl);
-        setCatatanPetugas(editingTardy.catatanPetugas || '');
-      } else {
-        const nowTime = formatTime(new Date());
-        setTanggal(new Date().toISOString().split('T')[0]);
-        setJamDatang(nowTime);
-        setStudentId(undefined);
-        setNamaSiswa('');
-        setStudentSearchTerm('');
-        setNisn('');
-        setKelas('');
-        setAlasan('BANGUN_KESIANGAN');
-        setKeteranganAlasan('');
-        setPembinaan('LITERASI_PERPUSTAKAAN');
-        setKeteranganPembinaan('');
-        setPoinPelanggaran(5);
-        setFrekuensiBulanIni(1);
-        setNoHpOrangTua('');
-        setFotoUrl(undefined);
-        setCatatanPetugas('');
-      }
+      batchRequestIdRef.current = `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      setShowSummaryConfirm(false);
+      setBatchResults(null);
       setErrorMessage(null);
       setFieldErrors({});
-      setIsSubmitting(false);
       setIsStudentDropdownOpen(false);
-      setAvailableDraft(null);
+      setExpandedStudentId(null);
 
-      // Check for saved uncommitted draft
-      if (currentUser?.id && !editingTardy) {
-        DraftService.getDraft(currentUser.id, 'STUDENT_TARDY', draftKey).then((saved) => {
-          if (saved && saved.data) {
-            setAvailableDraft({ updatedAt: saved.updatedAt, data: saved.data, attachments: saved.attachments });
-          }
-        });
+      if (editingTardy) {
+        // Single Edit Mode
+        setTanggal(editingTardy.tanggal);
+        setSharedJamDatang(editingTardy.jamDatang);
+        setSingleStudentName(editingTardy.namaSiswa);
+        setSingleStudentKelas(editingTardy.kelas);
+        setSingleStudentNisn(editingTardy.nisn && editingTardy.nisn !== '-' ? editingTardy.nisn : '');
+        setSingleStudentPhone(editingTardy.noHpOrangTua || '');
+        setSharedAlasan(editingTardy.alasan);
+        setSharedKeteranganAlasan(editingTardy.keteranganAlasan || '');
+        setSharedPembinaan(editingTardy.pembinaan);
+        setSharedKeteranganPembinaan(editingTardy.keteranganPembinaan || '');
+        setSingleStudentPoin(editingTardy.poinPelanggaran || 5);
+        setSingleStudentFreq(editingTardy.frekuensiBulanIni || 1);
+        setFotoUrl(editingTardy.fotoUrl);
+        setSharedCatatanPetugas(editingTardy.catatanPetugas || '');
+        setSelectedStudents([]);
+      } else {
+        // Multi Student Mode
+        const nowTime = formatTime(new Date());
+        setTanggal(new Date().toISOString().split('T')[0]);
+        setSharedJamDatang(nowTime);
+        setSharedAlasan('BANGUN_KESIANGAN');
+        setSharedKeteranganAlasan('');
+        setSharedPembinaan('LITERASI_PERPUSTAKAAN');
+        setSharedKeteranganPembinaan('');
+        setSharedCatatanPetugas('');
+        setFotoUrl(undefined);
+        setSelectedStudents([]);
+        setStudentSearchTerm('');
       }
     }
-  }, [isOpen, editingTardy, currentUser?.id, draftKey]);
+  }, [isOpen, editingTardy]);
 
-  // Debounced auto-save draft while typing
-  useEffect(() => {
-    if (!isOpen || !currentUser?.id || editingTardy) return;
-    if (!namaSiswa.trim() && !kelas.trim() && !fotoUrl) return;
-
-    const saveAsync = async () => {
-      const attachments: { [key: string]: Blob } = {};
-      let cleanFotoUrl = fotoUrl;
-
-      if (fotoUrl && fotoUrl.startsWith('data:')) {
-        try {
-          const blob = await DraftService.dataUrlToBlob(fotoUrl);
-          attachments['tardy_photo'] = blob;
-          cleanFotoUrl = 'attachment:tardy_photo';
-        } catch {}
-      }
-
-      DraftService.saveDraftDebounced(currentUser.id, 'STUDENT_TARDY', draftKey, {
-        tanggal,
-        jamDatang,
-        studentId,
-        namaSiswa,
-        nisn,
-        kelas,
-        alasan,
-        keteranganAlasan,
-        pembinaan,
-        keteranganPembinaan,
-        poinPelanggaran,
-        frekuensiBulanIni,
-        noHpOrangTua,
-        fotoUrl: cleanFotoUrl,
-        catatanPetugas,
-      }, attachments);
-    };
-
-    saveAsync().catch(() => {});
-  }, [
-    isOpen,
-    currentUser?.id,
-    editingTardy,
-    tanggal,
-    jamDatang,
-    studentId,
-    namaSiswa,
-    nisn,
-    kelas,
-    alasan,
-    keteranganAlasan,
-    pembinaan,
-    keteranganPembinaan,
-    poinPelanggaran,
-    frekuensiBulanIni,
-    noHpOrangTua,
-    fotoUrl,
-    catatanPetugas,
-    draftKey,
-  ]);
-
-  const handleRestoreDraft = async () => {
-    if (!availableDraft?.data) return;
-    const d = availableDraft.data;
-    if (d.tanggal) setTanggal(d.tanggal);
-    if (d.jamDatang) setJamDatang(d.jamDatang);
-    if (d.studentId !== undefined) setStudentId(d.studentId);
-    if (d.namaSiswa) {
-      setNamaSiswa(d.namaSiswa);
-      setStudentSearchTerm(d.namaSiswa);
-    }
-    if (d.nisn !== undefined) setNisn(d.nisn);
-    if (d.kelas) setKelas(d.kelas);
-    if (d.alasan) setAlasan(d.alasan);
-    if (d.keteranganAlasan !== undefined) setKeteranganAlasan(d.keteranganAlasan);
-    if (d.pembinaan) setPembinaan(d.pembinaan);
-    if (d.keteranganPembinaan !== undefined) setKeteranganPembinaan(d.keteranganPembinaan);
-    if (d.poinPelanggaran !== undefined) setPoinPelanggaran(d.poinPelanggaran);
-    if (d.frekuensiBulanIni !== undefined) setFrekuensiBulanIni(d.frekuensiBulanIni);
-    if (d.noHpOrangTua !== undefined) setNoHpOrangTua(d.noHpOrangTua);
-    if (d.catatanPetugas !== undefined) setCatatanPetugas(d.catatanPetugas);
-
-    if (d.fotoUrl?.startsWith('attachment:') && availableDraft.attachments?.['tardy_photo']) {
-      try {
-        const dataUrl = await DraftService.blobToDataUrl(availableDraft.attachments['tardy_photo']);
-        setFotoUrl(dataUrl);
-      } catch {}
-    } else if (d.fotoUrl) {
-      setFotoUrl(d.fotoUrl);
-    }
-
-    setAvailableDraft(null);
-  };
-
-  const handleDiscardDraft = async () => {
-    if (!currentUser?.id) return;
-    await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
-    setAvailableDraft(null);
-  };
-
-  // Determine school bell entry limit (e.g. "07:00")
-  const entryLimitTime = useMemo(() => {
-    return settings?.workHours?.start || settings?.workHours?.checkInEnd || '07:00';
-  }, [settings]);
-
-  // Accurate minutes late calculation
-  const minutesLate = useMemo(() => {
-    if (!jamDatang || !jamDatang.trim() || !jamDatang.includes(':')) {
-      return 0;
-    }
-    const [arrivalHStr, arrivalMStr] = jamDatang.split(':');
-    const arrivalH = parseInt(arrivalHStr, 10);
-    const arrivalM = parseInt(arrivalMStr, 10);
-    if (isNaN(arrivalH) || isNaN(arrivalM)) {
-      return 0;
-    }
-
-    const [limitHStr, limitMStr] = entryLimitTime.split(':');
-    const limitH = parseInt(limitHStr, 10) || 7;
-    const limitM = parseInt(limitMStr, 10) || 0;
-
-    const arrivalInMinutes = arrivalH * 60 + arrivalM;
-    const limitInMinutes = limitH * 60 + limitM;
-
-    return Math.max(0, arrivalInMinutes - limitInMinutes);
-  }, [jamDatang, entryLimitTime]);
-
-  // Update tardy frequency count
-  const refreshFrequencyCount = async (targetStudentId?: string, targetName?: string, targetKelas?: string) => {
-    const sId = targetStudentId || studentId;
-    const name = targetName || namaSiswa;
-    const kl = targetKelas || kelas;
-
-    if (sId || (name && name.trim())) {
-      const count = await StudentTardyService.getStudentTardyCountThisMonth(
-        sId || name,
-        kl,
-        tanggal,
-        editingTardy ? editingTardy.id : undefined
-      );
-      const newFreq = count + 1;
-      setFrekuensiBulanIni(newFreq);
-      if (newFreq >= 3 && pembinaan === 'LITERASI_PERPUSTAKAAN') {
-        setPembinaan('SURAT_PERINGATAN_ORTU');
-        setPoinPelanggaran(15);
-      }
-    }
-  };
-
-  const handleSelectStudentFromDirectory = (std: StudentRecord) => {
-    setStudentId(std.id);
-    setNamaSiswa(std.nama);
-    setStudentSearchTerm(std.nama);
-    setNisn(std.nisn || std.nis || '');
-    setKelas(std.kelas || '');
-    if (std.noHpOrangTua) {
-      setNoHpOrangTua(std.noHpOrangTua);
-    }
-    setIsStudentDropdownOpen(false);
-
-    if (fieldErrors.namaSiswa) setFieldErrors((prev) => ({ ...prev, namaSiswa: '' }));
-    if (fieldErrors.kelas) setFieldErrors((prev) => ({ ...prev, kelas: '' }));
-
-    refreshFrequencyCount(std.id, std.nama, std.kelas);
-  };
-
-  // Filter student directory for autocomplete
+  // Autocomplete student filter
   const filteredStudents = useMemo(() => {
     if (!studentSearchTerm.trim()) return studentDirectory.slice(0, 8);
     const q = studentSearchTerm.toLowerCase();
     return studentDirectory
-      .filter(
-        (s) =>
-          s.nama.toLowerCase().includes(q) ||
-          (s.nis && s.nis.toLowerCase().includes(q)) ||
-          (s.nisn && s.nisn.toLowerCase().includes(q)) ||
-          (s.studentId && s.studentId.toLowerCase().includes(q)) ||
-          (s.kelas && s.kelas.toLowerCase().includes(q))
-      )
+      .filter((s) => {
+        const nameMatch = s.nama.toLowerCase().includes(q);
+        const nisMatch = s.nis ? s.nis.toLowerCase().includes(q) : false;
+        const nisnMatch = s.nisn ? s.nisn.toLowerCase().includes(q) : false;
+        const studentIdMatch = s.id ? s.id.toLowerCase().includes(q) : false;
+        const kelasMatch = s.kelas ? s.kelas.toLowerCase().includes(q) : false;
+        return nameMatch || nisMatch || nisnMatch || studentIdMatch || kelasMatch;
+      })
       .slice(0, 10);
   }, [studentDirectory, studentSearchTerm]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    // Validate fields
-    const errors: Record<string, string> = {};
-    const missing: string[] = [];
-
-    if (!tanggal) {
-      errors.tanggal = 'Tanggal kejadian wajib diisi';
-      missing.push('Tanggal');
-    }
-    if (!jamDatang || !jamDatang.trim()) {
-      errors.jamDatang = 'Jam tiba di gerbang wajib diisi';
-      missing.push('Jam Tiba');
-    }
-    if (!namaSiswa || !namaSiswa.trim()) {
-      errors.namaSiswa = 'Nama siswa wajib dipilih atau diisi';
-      missing.push('Nama Siswa');
-    }
-    if (!kelas || !kelas.trim()) {
-      errors.kelas = 'Kelas siswa wajib dipilih atau diisi';
-      missing.push('Kelas Siswa');
-    }
-
-    // Reason validation for 'LAINNYA'
-    if (alasan === 'LAINNYA') {
-      const trimmedAlasan = keteranganAlasan.trim();
-      if (!trimmedAlasan) {
-        errors.keteranganAlasan = 'Keterangan alasan lainnya wajib diisi';
-        missing.push('Keterangan Alasan');
-      } else if (trimmedAlasan.length > 300) {
-        errors.keteranganAlasan = 'Keterangan alasan lainnya tidak boleh lebih dari 300 karakter';
-      }
-    }
-
-    // Discipline validation for 'LAINNYA'
-    if (pembinaan === 'LAINNYA') {
-      const trimmedPembinaan = keteranganPembinaan.trim();
-      if (!trimmedPembinaan) {
-        errors.keteranganPembinaan = 'Keterangan pembinaan lainnya wajib diisi';
-        missing.push('Keterangan Pembinaan');
-      } else if (trimmedPembinaan.length > 300) {
-        errors.keteranganPembinaan = 'Keterangan pembinaan lainnya tidak boleh lebih dari 300 karakter';
-      }
-    }
-
-    if (missing.length > 0 || Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      setErrorMessage(
-        missing.length > 0
-          ? `Bagian wajib belum lengkap: ${missing.join(', ')}. Harap lengkapi sebelum menyimpan.`
-          : 'Terdapat isian yang belum sesuai. Harap periksa kembali formulir.'
-      );
+  // Add student to multi-select list
+  const handleAddStudent = async (std: StudentRecord) => {
+    // Prevent duplicate selection by unique studentId
+    if (selectedStudents.some((entry) => entry.student.id === std.id)) {
+      setErrorMessage(`Siswa "${std.nama}" (${std.kelas}) sudah terpilih dalam daftar.`);
+      setIsStudentDropdownOpen(false);
       return;
     }
 
     setErrorMessage(null);
-    setFieldErrors({});
+    setStudentSearchTerm('');
+    setIsStudentDropdownOpen(false);
+
+    // Fetch individual monthly frequency for this student
+    const count = await StudentTardyService.getStudentTardyCountThisMonth(
+      std.id,
+      std.kelas,
+      tanggal
+    );
+
+    const newEntry: SelectedStudentEntry = {
+      student: std,
+      frekuensiBulanIni: count + 1,
+      isCustomized: false,
+    };
+
+    setSelectedStudents((prev) => [...prev, newEntry]);
+  };
+
+  // Re-fetch individual monthly frequency when tanggal changes
+  useEffect(() => {
+    if (selectedStudents.length === 0) return;
+    let isCancelled = false;
+
+    Promise.all(
+      selectedStudents.map(async (entry) => {
+        const count = await StudentTardyService.getStudentTardyCountThisMonth(
+          entry.student.id,
+          entry.student.kelas,
+          tanggal
+        );
+        return {
+          ...entry,
+          frekuensiBulanIni: count + 1,
+        };
+      })
+    ).then((updated) => {
+      if (!isCancelled) {
+        setSelectedStudents(updated);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tanggal]);
+
+  // Remove student from selected list
+  const handleRemoveStudent = (studentId: string) => {
+    setSelectedStudents((prev) => prev.filter((s) => s.student.id !== studentId));
+    if (expandedStudentId === studentId) {
+      setExpandedStudentId(null);
+    }
+  };
+
+  // Update customization for individual student
+  const handleUpdateStudentCustomization = (
+    studentId: string,
+    updates: Partial<SelectedStudentEntry>
+  ) => {
+    setSelectedStudents((prev) =>
+      prev.map((s) => (s.student.id === studentId ? { ...s, ...updates, isCustomized: true } : s))
+    );
+  };
+
+  // Reset student customization back to shared values
+  const handleResetStudentCustomization = (studentId: string) => {
+    setSelectedStudents((prev) =>
+      prev.map((s) =>
+        s.student.id === studentId
+          ? {
+              ...s,
+              isCustomized: false,
+              jamDatang: undefined,
+              alasan: undefined,
+              keteranganAlasan: undefined,
+              pembinaan: undefined,
+              keteranganPembinaan: undefined,
+              catatanPetugas: undefined,
+            }
+          : s
+      )
+    );
+  };
+
+  // Shared arrival calculation preview
+  const sharedCalc = useMemo(() => {
+    return calculateStudentTardiness(sharedJamDatang, entryLimitTime, toleranceMinutes);
+  }, [sharedJamDatang, entryLimitTime, toleranceMinutes]);
+
+  // Count of students with customized arrival time
+  const customizedTimesCount = useMemo(() => {
+    return selectedStudents.filter((s) => s.isCustomized && s.jamDatang).length;
+  }, [selectedStudents]);
+
+  // Validate form before submission
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!tanggal) {
+      errors.tanggal = 'Tanggal kejadian wajib diisi.';
+    }
+
+    if (editingTardy) {
+      if (!sharedJamDatang || !sharedJamDatang.trim()) {
+        errors.jamDatang = 'Jam tiba di gerbang wajib diisi.';
+      }
+      if (!singleStudentName.trim()) {
+        errors.namaSiswa = 'Nama siswa wajib diisi.';
+      }
+      if (!singleStudentKelas.trim()) {
+        errors.kelas = 'Kelas siswa wajib diisi.';
+      }
+    } else {
+      if (selectedStudents.length === 0) {
+        errors.students = 'Pilih minimal satu siswa dari pencarian master siswa.';
+      }
+      if (!sharedJamDatang || !sharedJamDatang.trim()) {
+        errors.sharedJamDatang = 'Jam tiba bersama wajib diisi.';
+      }
+    }
+
+    if (sharedAlasan === 'LAINNYA' && !sharedKeteranganAlasan.trim()) {
+      errors.sharedKeteranganAlasan = 'Keterangan alasan lainnya wajib diisi.';
+    }
+
+    if (sharedPembinaan === 'LAINNYA' && !sharedKeteranganPembinaan.trim()) {
+      errors.sharedKeteranganPembinaan = 'Keterangan pembinaan lainnya wajib diisi.';
+    }
+
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setErrorMessage(Object.values(errors)[0]);
+      return false;
+    }
+
+    setErrorMessage(null);
+    return true;
+  };
+
+  // Open summary before save
+  const handleInitiateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    if (editingTardy) {
+      // In single edit mode, submit directly
+      executeSingleSave();
+    } else {
+      // In multi-student mode, show confirmation summary
+      setShowSummaryConfirm(true);
+    }
+  };
+
+  // Execute single save for editing an existing record
+  const executeSingleSave = async () => {
+    if (!currentUser || !editingTardy) return;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
-      const defaultStatus: TardyStatus = frekuensiBulanIni >= 3 ? 'PEMANGGILAN_ORTU' : 'DALAM_PEMBINAAN';
-      const status: TardyStatus = editingTardy ? editingTardy.status : defaultStatus;
+      const calc = calculateStudentTardiness(sharedJamDatang, entryLimitTime, toleranceMinutes);
+      const minutesLate = calc.minutesLate ?? 0;
+      const points = calculateTardyViolationPoints(minutesLate);
 
       const payload: Partial<StudentTardyRecord> = {
-        ...(editingTardy ? { id: editingTardy.id } : {}),
+        id: editingTardy.id,
         tanggal,
-        jamDatang: jamDatang.trim(),
+        jamDatang: sharedJamDatang,
         menitTerlambat: minutesLate,
-        studentId: studentId || undefined,
-        namaSiswa: namaSiswa.trim(),
-        nisn: nisn.trim() || '-',
-        kelas: kelas.trim(),
-        alasan,
-        keteranganAlasan: alasan === 'LAINNYA' ? keteranganAlasan.trim() : undefined,
-        pembinaan,
-        keteranganPembinaan: pembinaan === 'LAINNYA' ? keteranganPembinaan.trim() : undefined,
-        poinPelanggaran,
-        frekuensiBulanIni,
-        fotoUrl: fotoUrl || undefined,
-        noHpOrangTua: noHpOrangTua.trim(),
-        status,
-        catatanPetugas: catatanPetugas.trim() || undefined,
-        petugasPiketName: editingTardy?.petugasPiketName || currentUser?.fullName || 'Petugas Piket',
-        petugasPiketId: editingTardy?.petugasPiketId || currentUser?.id || 'usr-piket',
-        createdAt: editingTardy?.createdAt,
-        createdBy: editingTardy?.createdBy,
+        namaSiswa: singleStudentName.trim(),
+        kelas: singleStudentKelas.trim(),
+        nisn: singleStudentNisn.trim() || '-',
+        noHpOrangTua: singleStudentPhone.trim(),
+        alasan: sharedAlasan,
+        keteranganAlasan: sharedAlasan === 'LAINNYA' ? sharedKeteranganAlasan.trim() : undefined,
+        pembinaan: sharedPembinaan,
+        keteranganPembinaan: sharedPembinaan === 'LAINNYA' ? sharedKeteranganPembinaan.trim() : undefined,
+        poinPelanggaran: points,
+        frekuensiBulanIni: singleStudentFreq,
+        fotoUrl,
+        catatanPetugas: sharedCatatanPetugas.trim() || undefined,
+        ruleSnapshot: {
+          entryLimit: entryLimitTime,
+          toleranceMinutes,
+        },
       };
 
-      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-
-      if (isOffline && currentUser) {
-        try {
-          const recId = payload.id || `trd-${payload.tanggal}-${Date.now().toString(36)}`;
-          await SyncQueueService.enqueue(
-            currentUser,
-            'TARDY_REPORT',
-            'studentTardiness',
-            recId,
-            { ...payload, id: recId }
-          );
-          await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
-          onClose();
-        } catch (err: any) {
-          setErrorMessage(`Gagal menyimpan antrean offline: ${err.message}`);
-        } finally {
-          setIsSubmitting(false);
-        }
-        return;
-      }
-
-      try {
-        await onSave(payload, Boolean(editingTardy));
-        if (currentUser) {
-          await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
-        }
-        onClose();
-      } catch (err: any) {
-        const isNetwork =
-          err?.message?.includes('Failed to fetch') ||
-          err?.message?.includes('network') ||
-          err?.code === 'unavailable' ||
-          (typeof navigator !== 'undefined' && !navigator.onLine);
-
-        if (isNetwork && currentUser) {
-          try {
-            const recId = payload.id || `trd-${payload.tanggal}-${Date.now().toString(36)}`;
-            await SyncQueueService.enqueue(
-              currentUser,
-              'TARDY_REPORT',
-              'studentTardiness',
-              recId,
-              { ...payload, id: recId }
-            );
-            await DraftService.deleteDraft(currentUser.id, 'STUDENT_TARDY', draftKey);
-            onClose();
-            return;
-          } catch {}
-        }
-        throw err;
-      }
+      await onSave(payload, true);
+      onClose();
     } catch (err: any) {
-      console.warn('[StudentTardyFormModal] Save tardy error:', err);
-      const isPermDenied =
-        err.code === 'permission-denied' ||
-        err.message?.includes('permission-denied') ||
-        err.message?.includes('Missing or insufficient permissions');
-
-      setErrorMessage(
-        isPermDenied
-          ? 'Tidak memiliki izin menyimpan catatan keterlambatan siswa.'
-          : err.message || 'Gagal menyimpan catatan keterlambatan.'
-      );
+      setErrorMessage(err?.message || 'Gagal menyimpan perubahan.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Execute batch save for multi-student input
+  const executeBatchSave = async () => {
+    if (!currentUser) return;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    const ruleSnapshot = {
+      entryLimit: entryLimitTime,
+      toleranceMinutes,
+    };
+
+    const payloads = selectedStudents.map((entry) => {
+      const effectiveJam = entry.isCustomized && entry.jamDatang ? entry.jamDatang : sharedJamDatang;
+      const effectiveAlasan = entry.isCustomized && entry.alasan ? entry.alasan : sharedAlasan;
+      const effectiveKetAlasan = entry.isCustomized && entry.keteranganAlasan !== undefined
+        ? entry.keteranganAlasan
+        : sharedKeteranganAlasan;
+      const effectivePembinaan = entry.isCustomized && entry.pembinaan ? entry.pembinaan : sharedPembinaan;
+      const effectiveKetPembinaan = entry.isCustomized && entry.keteranganPembinaan !== undefined
+        ? entry.keteranganPembinaan
+        : sharedKeteranganPembinaan;
+      const effectiveCatatan = entry.isCustomized && entry.catatanPetugas !== undefined
+        ? entry.catatanPetugas
+        : sharedCatatanPetugas;
+
+      const calc = calculateStudentTardiness(effectiveJam, entryLimitTime, toleranceMinutes);
+      const minutesLate = calc.minutesLate ?? 0;
+      const points = calculateTardyViolationPoints(minutesLate);
+
+      return {
+        studentId: entry.student.id,
+        namaSiswa: entry.student.nama,
+        kelas: entry.student.kelas,
+        nisn: entry.student.nisn || entry.student.nis || '-',
+        noHpOrangTua: entry.student.noHpOrangTua || '',
+        tanggal,
+        jamDatang: effectiveJam,
+        menitTerlambat: minutesLate,
+        menitTerlambatAsli: minutesLate,
+        alasan: effectiveAlasan,
+        keteranganAlasan: effectiveAlasan === 'LAINNYA' ? effectiveKetAlasan.trim() : undefined,
+        pembinaan: effectivePembinaan,
+        keteranganPembinaan: effectivePembinaan === 'LAINNYA' ? effectiveKetPembinaan.trim() : undefined,
+        poinPelanggaran: points,
+        frekuensiBulanIni: entry.frekuensiBulanIni,
+        fotoUrl,
+        catatanPetugas: effectiveCatatan.trim() || undefined,
+        ruleSnapshot,
+      };
+    });
+
+    try {
+      const batchRes = await StudentTardyService.saveBatchTardyStudents(
+        payloads,
+        currentUser,
+        batchRequestIdRef.current
+      );
+
+      setBatchResults(batchRes);
+      setShowSummaryConfirm(false);
+
+      if (batchRes.allSuccessful) {
+        // Notify parent refresh
+        if (batchRes.results[0]?.record) {
+          await onSave(batchRes.results[0].record, false);
+        }
+        onClose();
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Gagal menyimpan catatan siswa.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Retry only the failed students
+  const handleRetryFailedStudents = () => {
+    if (!batchResults) return;
+    const failedIds = new Set(
+      batchResults.results.filter((r) => !r.success).map((r) => r.studentId)
+    );
+    // Keep only the failed students in selected list
+    setSelectedStudents((prev) => prev.filter((s) => failedIds.has(s.student.id)));
+    setBatchResults(null);
+    setShowSummaryConfirm(true);
   };
 
   return (
@@ -497,274 +508,405 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={editingTardy ? 'Ubah Catatan Siswa Terlambat' : 'Catat Siswa Terlambat di Pos Gerbang'}
+        title={
+          editingTardy
+            ? 'Ubah Catatan Siswa Terlambat'
+            : 'Catat Siswa Terlambat di Pos Gerbang'
+        }
         maxWidth="2xl"
       >
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 sm:gap-6">
-          {/* Uncommitted Local Draft Banner */}
-          {availableDraft && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="text-xs">
-                  <p className="font-bold">Ditemukan draf isian siswa terlambat tersimpan di perangkat ini</p>
-                  <p className="text-amber-700 dark:text-amber-400">
-                    Terakhir diperbarui pada {new Date(availableDraft.updatedAt).toLocaleTimeString('id-ID')} WIB
-                  </p>
-                </div>
+        <form onSubmit={handleInitiateSubmit} noValidate className="space-y-5">
+          {/* ========================================================================= */}
+          {/* BAGIAN 1: PEMILIHAN SISWA (MULTI-SELECT DENGAN PENCARIAN MASTER DATA)      */}
+          {/* ========================================================================= */}
+          {!editingTardy ? (
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-blue-500" />
+                  <span>Pilih Siswa (Bisa Pilih Beberapa Sekaligus) *</span>
+                </label>
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                  {selectedStudents.length} Siswa Terpilih
+                </span>
               </div>
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={handleRestoreDraft}
-                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
-                >
-                  Lanjutkan Draf
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDiscardDraft}
-                  className="px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1"
-                  title="Buang Draf"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Buang</span>
-                </button>
+
+              {/* Search Autocomplete Input */}
+              <div className="relative">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={studentSearchTerm}
+                    onFocus={() => setIsStudentDropdownOpen(true)}
+                    onChange={(e) => {
+                      setStudentSearchTerm(e.target.value);
+                      setIsStudentDropdownOpen(true);
+                      if (fieldErrors.students) setFieldErrors((p) => ({ ...p, students: '' }));
+                    }}
+                    placeholder="Ketik nama, NIS, NISN, atau kelas untuk mencari & menambah siswa..."
+                    className="w-full min-h-[44px] pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+
+                {/* Dropdown Options */}
+                {isStudentDropdownOpen && filteredStudents.length > 0 && (
+                  <div className="absolute z-40 left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredStudents.map((std) => {
+                      const isAlreadySelected = selectedStudents.some(
+                        (s) => s.student.id === std.id
+                      );
+                      return (
+                        <div
+                          key={std.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            if (!isAlreadySelected) handleAddStudent(std);
+                          }}
+                          className={`p-3 text-xs transition-colors flex items-center justify-between gap-2 ${
+                            isAlreadySelected
+                              ? 'bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed opacity-60'
+                              : 'hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <span className="truncate">{std.nama}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+                                {std.kelas}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              {std.nisn ? `NISN: ${std.nisn}` : std.nis ? `NIS: ${std.nis}` : `ID: ${std.id}`}
+                              {std.noHpOrangTua ? ` • WA Ortu: ${std.noHpOrangTua}` : ' • (Tanpa no HP)'}
+                            </div>
+                          </div>
+
+                          {isAlreadySelected ? (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded shrink-0">
+                              Sudah Dipilih
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-1 rounded border border-blue-200 dark:border-blue-800 shrink-0">
+                              + Tambah
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Students List (Ringkasan Siswa Terpilih) */}
+              {selectedStudents.length > 0 ? (
+                <div className="space-y-2 pt-2">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    Daftar Siswa Terpilih:
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {selectedStudents.map((entry, idx) => {
+                      const effectiveJam =
+                        entry.isCustomized && entry.jamDatang ? entry.jamDatang : sharedJamDatang;
+                      const calc = calculateStudentTardiness(
+                        effectiveJam,
+                        entryLimitTime,
+                        toleranceMinutes
+                      );
+                      const isExpanded = expandedStudentId === entry.student.id;
+
+                      return (
+                        <div
+                          key={entry.student.id}
+                          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-xs space-y-2 shadow-xs"
+                        >
+                          {/* Row Header */}
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-900 dark:text-white truncate block">
+                                  {entry.student.nama}
+                                </span>
+                                <div className="text-[10px] text-slate-500 font-mono">
+                                  Kelas: <strong>{entry.student.kelas}</strong>
+                                  {entry.student.noHpOrangTua && ` • Ortu: ${entry.student.noHpOrangTua}`}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Status Badge */}
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                  calc.minutesLate === null
+                                    ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                    : calc.isLate
+                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                }`}
+                              >
+                                {calc.displayText}
+                              </span>
+
+                              {/* Frekuensi Badge */}
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                  entry.frekuensiBulanIni >= 3
+                                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                Ke-{entry.frekuensiBulanIni}
+                              </span>
+
+                              {/* Sesuaikan Button */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedStudentId(isExpanded ? null : entry.student.id)
+                                }
+                                className={`p-1.5 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                                  entry.isCustomized
+                                    ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                                }`}
+                                title="Sesuaikan nilai individual untuk siswa ini"
+                              >
+                                <Sliders className="w-3 h-3" />
+                                <span className="hidden sm:inline">
+                                  {entry.isCustomized ? 'Disesuaikan' : 'Sesuaikan'}
+                                </span>
+                                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStudent(entry.student.id)}
+                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer transition-colors"
+                                title="Hapus dari daftar"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Accordion: Penyesuaian Individual per Siswa */}
+                          {isExpanded && (
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl animate-in fade-in">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Penyesuaian Khusus: {entry.student.nama}
+                                </span>
+                                {entry.isCustomized && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetStudentCustomization(entry.student.id)}
+                                    className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
+                                  >
+                                    Reset ke Nilai Bersama
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                    Jam Tiba Individual:
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={entry.jamDatang || sharedJamDatang}
+                                    onChange={(e) =>
+                                      handleUpdateStudentCustomization(entry.student.id, {
+                                        jamDatang: e.target.value,
+                                      })
+                                    }
+                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-xs font-bold"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                    Alasan Individual:
+                                  </label>
+                                  <select
+                                    value={entry.alasan || sharedAlasan}
+                                    onChange={(e) =>
+                                      handleUpdateStudentCustomization(entry.student.id, {
+                                        alasan: e.target.value as TardyReason,
+                                      })
+                                    }
+                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                                  >
+                                    <option value="BANGUN_KESIANGAN">Bangun Kesiangan</option>
+                                    <option value="MACET_LALULINTAS">Macet Lalu Lintas</option>
+                                    <option value="KENDARAAN_MOGOK">Kendaraan Mogok</option>
+                                    <option value="HUJAN_LEBAT">Hujan Lebat</option>
+                                    <option value="MEMBANTU_ORANG_TUA">Membantu Orang Tua</option>
+                                    <option value="LAINNYA">Lain-lain</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                    Bentuk Pembinaan:
+                                  </label>
+                                  <select
+                                    value={entry.pembinaan || sharedPembinaan}
+                                    onChange={(e) =>
+                                      handleUpdateStudentCustomization(entry.student.id, {
+                                        pembinaan: e.target.value as DisciplineAction,
+                                      })
+                                    }
+                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                                  >
+                                    <option value="LITERASI_PERPUSTAKAAN">Literasi Perpustakaan</option>
+                                    <option value="PEMBERSIHAN_LINGKUNGAN">Kebersihan Lingkungan</option>
+                                    <option value="LITERASI_ROHANI_IBADAH">Tadarus / Ibadah</option>
+                                    <option value="IKRAR_KEDISIPLINAN">Ikrar Kedisiplinan</option>
+                                    <option value="PEMBINAAN_GURU_BK">Konseling Guru BK</option>
+                                    <option value="SURAT_PERINGATAN_ORTU">Panggilan Orang Tua</option>
+                                    <option value="LAINNYA">Lain-lain</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-500">
+                  Belum ada siswa yang dipilih. Cari dan pilih siswa di atas untuk mencatat keterlambatan.
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Mode Single Edit untuk Catatan yang Sudah Ada */
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Identitas Siswa yang Diperbarui:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                    Nama Siswa *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={singleStudentName}
+                    onChange={(e) => setSingleStudentName(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                    Kelas *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={singleStudentKelas}
+                    onChange={(e) => setSingleStudentKelas(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  />
+                </div>
               </div>
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* 1. BARIS IDENTITAS: NAMA SISWA & KELAS                                    */}
+          {/* BAGIAN 2: NILAI AWAL BERSAMA (TANGGAL, JAM TIBA, ATURAN & SELISIH)        */}
           {/* ========================================================================= */}
-          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 w-full">
-            {/* Nama Siswa */}
-            <div className="min-w-0 w-full relative">
-              <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 break-words">
-                  <User className="w-4 h-4 text-blue-500 shrink-0" />
-                  <span>Nama Lengkap Siswa *</span>
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-rose-500" />
+                <span>Nilai Awal Bersama (Berlaku untuk Semua Siswa Terpilih)</span>
+              </span>
+              <span className="text-[11px] text-slate-500 font-mono">
+                Batas Bel: {entryLimitTime} WIB {toleranceMinutes > 0 ? `(Tol: ${toleranceMinutes} mnt)` : ''}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Tanggal Kejadian */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5">
+                  <Calendar className="w-4 h-4 text-blue-500" />
+                  <span>Tanggal Kejadian *</span>
                 </label>
-                {studentDirectory.length > 0 && (
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 shrink-0">
-                    <Sparkles className="w-3 h-3" />
-                    {studentDirectory.length} Siswa Terdaftar
-                  </span>
-                )}
-              </div>
-
-              <div className="relative w-full min-w-0">
                 <input
-                  type="text"
+                  type="date"
                   required
-                  value={studentSearchTerm}
-                  onFocus={() => setIsStudentDropdownOpen(true)}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setStudentSearchTerm(val);
-                    setNamaSiswa(val);
-                    setIsStudentDropdownOpen(true);
-                    if (fieldErrors.namaSiswa) setFieldErrors((prev) => ({ ...prev, namaSiswa: '' }));
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setIsStudentDropdownOpen(false), 250);
-                    refreshFrequencyCount();
-                  }}
-                  placeholder="Ketik nama atau NISN siswa..."
-                  className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                    fieldErrors.namaSiswa
-                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                      : 'border-slate-200 dark:border-slate-800'
-                  } bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none`}
+                  value={tanggal}
+                  onChange={(e) => setTanggal(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
                 />
-                <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
 
-              {/* Autocomplete Dropdown */}
-              {isStudentDropdownOpen && filteredStudents.length > 0 && (
-                <div className="absolute z-40 left-0 right-0 top-full mt-1.5 max-h-52 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredStudents.map((std) => (
-                    <div
-                      key={std.id}
-                      onMouseDown={() => handleSelectStudentFromDirectory(std)}
-                      className="p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer text-xs transition-colors"
-                    >
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between gap-2">
-                        <span className="truncate">{std.nama}</span>
-                        <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-2 py-0.5 rounded shrink-0">
-                          {std.kelas}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                        {std.nisn ? `NISN: ${std.nisn}` : std.nis ? `NIS: ${std.nis}` : `ID: ${std.studentId || std.id}`} • {std.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {fieldErrors.namaSiswa && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.namaSiswa}</p>
-              )}
+              {/* Jam Tiba di Gerbang */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5">
+                  <Clock className="w-4 h-4 text-rose-500" />
+                  <span>Jam Tiba Bersama (WIB) *</span>
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={sharedJamDatang}
+                  onChange={(e) => setSharedJamDatang(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                />
+              </div>
             </div>
 
-            {/* Kelas Siswa */}
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5 break-words">
-                <GraduationCap className="w-4 h-4 text-blue-500 shrink-0" />
-                <span>Kelas Siswa *</span>
-              </label>
-              <input
-                type="text"
-                required
-                list="tardy-classes-list"
-                value={kelas}
-                onChange={(e) => {
-                  setKelas(e.target.value);
-                  if (fieldErrors.kelas) setFieldErrors((prev) => ({ ...prev, kelas: '' }));
-                }}
-                onBlur={() => refreshFrequencyCount()}
-                placeholder="Pilih/Ketik Kelas..."
-                className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                  fieldErrors.kelas
-                    ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                    : 'border-slate-200 dark:border-slate-800'
-                } bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-              />
-              <datalist id="tardy-classes-list">
-                {CLASS_LIST.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-              {fieldErrors.kelas && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.kelas}</p>
-              )}
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* 2. BARIS WAKTU: TANGGAL KEJADIAN & JAM TIBA (LEBAR PENUH FORMULIR)        */}
-          {/* ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {/* Tanggal Kejadian */}
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5 break-words">
-                <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
-                <span>Tanggal Kejadian *</span>
-              </label>
-              <input
-                type="date"
-                required
-                value={tanggal}
-                onChange={(e) => {
-                  setTanggal(e.target.value);
-                  refreshFrequencyCount(studentId, namaSiswa, kelas);
-                }}
-                className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                  fieldErrors.tanggal
-                    ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                    : 'border-slate-200 dark:border-slate-800'
-                } bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-              />
-              {fieldErrors.tanggal && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.tanggal}</p>
-              )}
-            </div>
-
-            {/* Jam Tiba di Gerbang */}
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5 break-words">
-                <Clock className="w-4 h-4 text-rose-500 shrink-0" />
-                <span>Jam Tiba di Gerbang (WIB) *</span>
-              </label>
-              <input
-                type="time"
-                required
-                value={jamDatang}
-                onChange={(e) => {
-                  setJamDatang(e.target.value);
-                  if (fieldErrors.jamDatang) setFieldErrors((prev) => ({ ...prev, jamDatang: '' }));
-                }}
-                className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                  fieldErrors.jamDatang
-                    ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                    : 'border-slate-200 dark:border-slate-800'
-                } bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-              />
-              {fieldErrors.jamDatang && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.jamDatang}</p>
-              )}
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* 3. BARIS RINGKASAN: KARTU SELISIH & FREKUENSI (PISAH DARI INPUT WAKTU)    */}
-          {/* ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {/* Kartu Selisih Keterlambatan */}
+            {/* Pratinjau Perhitungan Keterlambatan Bersama */}
             <div
-              className={`min-w-0 w-full p-4 rounded-2xl border transition-all flex flex-col justify-center box-border ${
-                minutesLate > 0
-                  ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
-                  : 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+              className={`p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                sharedCalc.minutesLate === null
+                  ? 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  : sharedCalc.isLate
+                  ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200'
+                  : 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-200'
               }`}
             >
-              <span className="text-[11px] font-semibold opacity-80 block mb-1">
-                Selisih Keterlambatan
-              </span>
-              <div className="text-base sm:text-lg font-mono font-extrabold flex items-center justify-between gap-2 flex-wrap">
-                <span>{minutesLate > 0 ? `+${minutesLate} Menit` : '0 Menit (Tepat Waktu)'}</span>
-                <span className="text-xs font-normal opacity-75 font-sans">
-                  Batas Bel: {entryLimitTime} WIB
+              <div>
+                <span className="font-bold block">Status Perhitungan Keterlambatan Bersama:</span>
+                <span className="text-[11px] opacity-80">
+                  Batas Jam Masuk: {entryLimitTime} WIB &bull; Toleransi: {toleranceMinutes} Menit
                 </span>
               </div>
-            </div>
-
-            {/* Kartu Keterlambatan Ke- */}
-            <div
-              className={`min-w-0 w-full p-4 rounded-2xl border transition-all flex flex-col justify-center box-border ${
-                frekuensiBulanIni >= 3
-                  ? 'bg-amber-100/80 dark:bg-amber-950/50 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-200'
-                  : 'bg-slate-100/80 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-              }`}
-            >
-              <span className="text-[11px] font-semibold opacity-80 block mb-1">
-                Frekuensi Bulan Berjalan ({tanggal.substring(0, 7)})
-              </span>
-              <div className="text-base sm:text-lg font-mono font-extrabold flex items-center justify-between gap-2 flex-wrap">
-                <span>Keterlambatan Ke-{frekuensiBulanIni}</span>
-                {frekuensiBulanIni >= 3 && (
-                  <span className="text-xs px-2.5 py-0.5 rounded-md bg-rose-600 text-white font-sans font-bold shadow-xs">
-                    ⚠️ Kritis (≥3x)
-                  </span>
-                )}
+              <div className="font-mono font-extrabold text-sm sm:text-base">
+                {sharedCalc.displayText}
               </div>
             </div>
           </div>
 
           {/* ========================================================================= */}
-          {/* 4. BARIS ALASAN KETERLAMBATAN & WHATSAPP ORANG TUA                         */}
+          {/* BAGIAN 3: ALASAN BERSAMA & BENTUK PEMBINAAN BERSAMA                       */}
           {/* ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 break-words">
-                Alasan Keterlambatan *
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                Alasan Keterlambatan Bersama *
               </label>
               <select
-                value={alasan}
+                value={sharedAlasan}
                 onChange={(e) => {
-                  const newAlasan = e.target.value as TardyReason;
-                  setAlasan(newAlasan);
-                  if (newAlasan !== 'LAINNYA') {
-                    setKeteranganAlasan('');
-                    if (fieldErrors.keteranganAlasan) {
-                      setFieldErrors((prev) => ({ ...prev, keteranganAlasan: '' }));
-                    }
-                  }
+                  const a = e.target.value as TardyReason;
+                  setSharedAlasan(a);
+                  if (a !== 'LAINNYA') setSharedKeteranganAlasan('');
                 }}
-                className="w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
               >
                 <option value="BANGUN_KESIANGAN">⏰ Bangun Kesiangan</option>
                 <option value="MACET_LALULINTAS">🚗 Terjebak Macet Lalu Lintas</option>
@@ -775,79 +917,18 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               </select>
             </div>
 
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5 break-words">
-                <Phone className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span>No. WhatsApp Orang Tua</span>
-              </label>
-              <input
-                type="tel"
-                value={noHpOrangTua}
-                onChange={(e) => setNoHpOrangTua(e.target.value)}
-                placeholder="Contoh: 081234567890 (Opsional)"
-                className="w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* DYNAMIC FIELD: Keterangan Alasan Lainnya (Lebar Penuh) */}
-          {alasan === 'LAINNYA' && (
-            <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2 animate-fadeIn w-full box-border">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <label className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 break-words">
-                  <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Keterangan Alasan Lainnya *</span>
-                </label>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {keteranganAlasan.length}/300
-                </span>
-              </div>
-              <input
-                type="text"
-                maxLength={300}
-                value={keteranganAlasan}
-                onChange={(e) => {
-                  setKeteranganAlasan(e.target.value);
-                  if (fieldErrors.keteranganAlasan) {
-                    setFieldErrors((prev) => ({ ...prev, keteranganAlasan: '' }));
-                  }
-                }}
-                placeholder="Tuliskan alasan keterlambatan lainnya secara spesifik..."
-                className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                  fieldErrors.keteranganAlasan
-                    ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                    : 'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900'
-                } text-xs text-slate-900 dark:text-white placeholder:text-slate-400 box-border focus:ring-2 focus:ring-amber-500 focus:outline-none`}
-              />
-              {fieldErrors.keteranganAlasan && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
-                  {fieldErrors.keteranganAlasan}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* 5. BARIS BENTUK PEMBINAAN & POIN PELANGGARAN                              */}
-          {/* ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 w-full">
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 break-words">
-                Bentuk Pembinaan Kedisiplinan Piket *
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                Bentuk Pembinaan Kedisiplinan Bersama *
               </label>
               <select
-                value={pembinaan}
+                value={sharedPembinaan}
                 onChange={(e) => {
-                  const newPemb = e.target.value as DisciplineAction;
-                  setPembinaan(newPemb);
-                  if (newPemb !== 'LAINNYA') {
-                    setKeteranganPembinaan('');
-                    if (fieldErrors.keteranganPembinaan) {
-                      setFieldErrors((prev) => ({ ...prev, keteranganPembinaan: '' }));
-                    }
-                  }
+                  const p = e.target.value as DisciplineAction;
+                  setSharedPembinaan(p);
+                  if (p !== 'LAINNYA') setSharedKeteranganPembinaan('');
                 }}
-                className="w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
               >
                 <option value="LITERASI_PERPUSTAKAAN">📚 Literasi Membaca Buku di Perpustakaan</option>
                 <option value="PEMBERSIHAN_LINGKUNGAN">🧹 Kerja Bakti / Kebersihan Lingkungan Sekolah</option>
@@ -858,166 +939,125 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 <option value="LAINNYA">📝 Lain-lain</option>
               </select>
             </div>
-
-            <div className="min-w-0 w-full">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 break-words">
-                Poin Pelanggaran
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={50}
-                value={poinPelanggaran}
-                onChange={(e) => setPoinPelanggaran(parseInt(e.target.value, 10) || 5)}
-                className="w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-center text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
           </div>
 
-          {/* DYNAMIC FIELD: Keterangan Pembinaan Lainnya (Lebar Penuh) */}
-          {pembinaan === 'LAINNYA' && (
-            <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2 animate-fadeIn w-full box-border">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <label className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 break-words">
-                  <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Keterangan Pembinaan Lainnya *</span>
-                </label>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {keteranganPembinaan.length}/300
-                </span>
-              </div>
+          {/* Keterangan Alasan Lainnya jika LAINNYA */}
+          {sharedAlasan === 'LAINNYA' && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-1.5 text-xs">
+              <label className="font-bold text-amber-900 dark:text-amber-200 block">
+                Keterangan Alasan Bersama Lainnya *
+              </label>
               <input
                 type="text"
+                required
                 maxLength={300}
-                value={keteranganPembinaan}
-                onChange={(e) => {
-                  setKeteranganPembinaan(e.target.value);
-                  if (fieldErrors.keteranganPembinaan) {
-                    setFieldErrors((prev) => ({ ...prev, keteranganPembinaan: '' }));
-                  }
-                }}
-                placeholder="Tuliskan bentuk pembinaan kedisiplinan lainnya..."
-                className={`w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border ${
-                  fieldErrors.keteranganPembinaan
-                    ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                    : 'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900'
-                } text-xs text-slate-900 dark:text-white placeholder:text-slate-400 box-border focus:ring-2 focus:ring-amber-500 focus:outline-none`}
+                value={sharedKeteranganAlasan}
+                onChange={(e) => setSharedKeteranganAlasan(e.target.value)}
+                placeholder="Tuliskan alasan keterlambatan lainnya secara spesifik..."
+                className="w-full p-2.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs"
               />
-              {fieldErrors.keteranganPembinaan && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
-                  {fieldErrors.keteranganPembinaan}
-                </p>
-              )}
+            </div>
+          )}
+
+          {/* Keterangan Pembinaan Lainnya jika LAINNYA */}
+          {sharedPembinaan === 'LAINNYA' && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-1.5 text-xs">
+              <label className="font-bold text-amber-900 dark:text-amber-200 block">
+                Keterangan Pembinaan Bersama Lainnya *
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={300}
+                value={sharedKeteranganPembinaan}
+                onChange={(e) => setSharedKeteranganPembinaan(e.target.value)}
+                placeholder="Tuliskan bentuk pembinaan kedisiplinan lainnya..."
+                className="w-full p-2.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs"
+              />
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* 6. BARIS CATATAN PETUGAS PIKET (LEBAR PENUH)                              */}
+          {/* BAGIAN 4: CATATAN & FOTO DOKUMENTASI GERBANG                             */}
           {/* ========================================================================= */}
-          <div className="w-full min-w-0">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 break-words">
+          <div>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
               Catatan Petugas Piket (Opsional)
             </label>
             <input
               type="text"
-              value={catatanPetugas}
-              onChange={(e) => setCatatanPetugas(e.target.value)}
-              placeholder="Contoh: Siswa kooperatif, berjanji tidak mengulangi keterlambatan..."
-              className="w-full max-w-full min-h-[48px] h-12 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white box-border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={sharedCatatanPetugas}
+              onChange={(e) => setSharedCatatanPetugas(e.target.value)}
+              placeholder="Contoh: Siswa diarahkan ke perpustakaan untuk literasi sebelum masuk kelas jam ke-2..."
+              className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
             />
           </div>
 
-          {/* ========================================================================= */}
-          {/* 7. BARIS FOTO DOKUMENTASI GERBANG (LEBAR PENUH)                           */}
-          {/* ========================================================================= */}
-          <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800 w-full min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 break-words">
-                <Camera className="w-4 h-4 text-blue-500 shrink-0" />
-                <span>Foto Dokumentasi Siswa di Pos Gerbang</span>
-              </label>
+          {/* Foto Dokumentasi */}
+          <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-blue-500 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                  Foto Dokumentasi di Pos Gerbang
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  {fotoUrl ? 'Foto terlampir' : 'Opsional sebagai bukti visual'}
+                </span>
+              </div>
+            </div>
 
-              {!fotoUrl && (
+            <div className="flex items-center gap-2">
+              {fotoUrl ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setIsPreviewPhotoOpen(true)}
+                  >
+                    Lihat Foto
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setIsCameraOpen(true)}
+                  >
+                    Ganti
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setFotoUrl(undefined)}
+                  >
+                    Hapus
+                  </Button>
+                </>
+              ) : (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs min-h-[40px] px-3.5"
-                  leftIcon={<Camera className="w-4 h-4" />}
+                  className="text-xs"
+                  leftIcon={<Camera className="w-3.5 h-3.5" />}
                   onClick={() => setIsCameraOpen(true)}
                 >
-                  + Ambil / Unggah Foto
+                  Ambil Foto Gerbang
                 </Button>
               )}
             </div>
-
-            {fotoUrl ? (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 w-full box-border">
-                <div
-                  onClick={() => setIsPreviewPhotoOpen(true)}
-                  className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 cursor-pointer group shadow-sm shrink-0"
-                  title="Klik untuk memperbesar foto"
-                >
-                  <img src={fotoUrl} alt="Foto Siswa Terlambat" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
-                    <Eye className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="flex-1 space-y-1.5 min-w-0 w-full">
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Foto dokumentasi terlampir</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Foto tersimpan aman di database sebagai bukti kehadiran pos.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-8 px-3"
-                      leftIcon={<Eye className="w-3.5 h-3.5" />}
-                      onClick={() => setIsPreviewPhotoOpen(true)}
-                    >
-                      Lihat
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-8 px-3"
-                      leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-                      onClick={() => setIsCameraOpen(true)}
-                    >
-                      Ambil Ulang
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      className="text-xs h-8 px-3"
-                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                      onClick={() => setFotoUrl(undefined)}
-                    >
-                      Hapus
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-400 italic">
-                Belum ada foto dokumentasi terlampir (opsional).
-              </p>
-            )}
           </div>
 
-          {/* Error Message */}
+          {/* Error Alert */}
           {errorMessage && (
-            <div role="alert" className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span className="font-medium">{errorMessage}</span>
+              <span>{errorMessage}</span>
             </div>
           )}
 
@@ -1027,7 +1067,6 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-[48px] h-12 px-5 text-xs font-semibold"
               onClick={onClose}
               disabled={isSubmitting}
             >
@@ -1037,15 +1076,151 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               type="submit"
               variant="primary"
               size="sm"
-              className="min-h-[48px] h-12 px-6 font-bold shadow-md text-xs"
               isLoading={isSubmitting}
-              leftIcon={editingTardy ? <Save className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+              leftIcon={<Clock className="w-4 h-4" />}
             >
-              {editingTardy ? 'Simpan Perubahan' : 'Catat & Mulai Pembinaan'}
+              {editingTardy
+                ? 'Simpan Perubahan'
+                : `Simpan Catatan (${selectedStudents.length} Siswa)`}
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL KONFIRMASI RINGKASAN SEBELUM SIMPAN (REQUIREMENT 4)                  */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={showSummaryConfirm}
+        onClose={() => setShowSummaryConfirm(false)}
+        title="Konfirmasi Ringkasan Pencatatan Siswa Terlambat"
+        maxWidth="md"
+      >
+        <div className="space-y-4 text-xs">
+          <p className="text-slate-600 dark:text-slate-400">
+            Periksa ringkasan berikut sebelum menyimpan. Setiap siswa akan dicatat secara individual di database untuk akurasi rekapitulasi dan pembinaan:
+          </p>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Jumlah Siswa:</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono">
+                {selectedStudents.length} Siswa
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Tanggal Kejadian:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {formatIndonesianDate(tanggal)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Batas Masuk & Toleransi:</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono">
+                {entryLimitTime} WIB (Tol: {toleranceMinutes} mnt)
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Jam Tiba:</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono">
+                {customizedTimesCount > 0
+                  ? `${sharedJamDatang} WIB (${customizedTimesCount} siswa disesuaikan)`
+                  : `${sharedJamDatang} WIB (Bersama)`}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Alasan & Pembinaan:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {getTardyReasonDisplay({ alasan: sharedAlasan })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSummaryConfirm(false)}
+              disabled={isSubmitting}
+            >
+              Kembali Periksa
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              isLoading={isSubmitting}
+              leftIcon={<Save className="w-4 h-4" />}
+              onClick={executeBatchSave}
+            >
+              Konfirmasi & Simpan Semua
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL HASIL PENYIMPANAN BATCH & RETRY (REQUIREMENT 4)                      */}
+      {/* ========================================================================= */}
+      {batchResults && !batchResults.allSuccessful && (
+        <Modal
+          isOpen={true}
+          onClose={() => setBatchResults(null)}
+          title="Hasil Penyimpanan Sebagian Siswa"
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 text-amber-900 dark:text-amber-200">
+              Beberapa catatan siswa gagal disimpan (misalnya karena duplikasi kejadian pada tanggal yang sama). Anda dapat mencoba lagi hanya untuk siswa yang gagal.
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {batchResults.results.map((res) => (
+                <div
+                  key={res.studentId}
+                  className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                    res.success
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <div>
+                    <span className="font-bold block">{res.namaSiswa} ({res.kelas})</span>
+                    {res.error && <span className="text-[11px] text-rose-600 block">{res.error}</span>}
+                  </div>
+                  <span className="font-bold text-[10px] uppercase">
+                    {res.success ? 'Berhasil' : 'Gagal'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBatchResults(null);
+                  onClose();
+                }}
+              >
+                Tutup
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                onClick={handleRetryFailedStudents}
+              >
+                Coba Lagi Siswa yang Gagal
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Camera Capture Modal */}
       <CameraCaptureModal

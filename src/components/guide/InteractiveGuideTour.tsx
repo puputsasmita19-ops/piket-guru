@@ -34,7 +34,7 @@ export interface TourStep {
   requiredPermission?: PermissionKey;
 }
 
-const ADMIN_STEPS: TourStep[] = [
+export const ADMIN_STEPS: TourStep[] = [
   {
     id: 'admin-nav',
     targetTab: 'dashboard',
@@ -96,7 +96,7 @@ const ADMIN_STEPS: TourStep[] = [
   },
 ];
 
-const GURU_STEPS: TourStep[] = [
+export const GURU_STEPS: TourStep[] = [
   {
     id: 'guru-attendance',
     targetTab: 'attendance',

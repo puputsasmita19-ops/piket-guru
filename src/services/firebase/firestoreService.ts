@@ -18,9 +18,10 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { AuditLogRecord } from '../../types/master.types';
+import { AuditLogRecord, AuditLogStatus } from '../../types/master.types';
 import { isOperationalRecord, UserRole } from '../../types';
 import { OfflineStorage } from '../offline/offlineStorage';
+import { AuditService } from '../audit/auditService';
 
 const getLocalItem = (key: string): string | null => {
   if (typeof localStorage !== 'undefined') {
@@ -415,48 +416,34 @@ export class FirestoreService {
 
   /**
    * Append-only Audit Log recorder.
-   * Records cannot be updated or deleted in compliance with security rules.
+   * Delegates to AuditService with offline queue, privacy sanitization, and status tracking.
    */
   public static async logAudit(entry: {
     userId: string;
     userName: string;
     role: UserRole | string;
+    loginId?: string;
     action: AuditLogRecord['action'];
     module: AuditLogRecord['module'] | string;
+    status?: AuditLogStatus;
+    target?: string;
     recordId?: string;
     details: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    try {
-      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const rawAuditLog: Record<string, any> = {
-        id,
-        timestamp: new Date().toISOString(),
-        userId: entry.userId,
-        userName: entry.userName,
-        role: entry.role as any,
-        action: entry.action,
-        module: entry.module as any,
-        details: entry.details,
-      };
-
-      if (entry.recordId !== undefined && entry.recordId !== null) {
-        rawAuditLog.recordId = entry.recordId;
-      }
-
-      if (entry.metadata !== undefined && entry.metadata !== null) {
-        const sanitizedMeta = sanitizeFirestorePayload(entry.metadata);
-        if (typeof sanitizedMeta === 'object' && Object.keys(sanitizedMeta).length > 0) {
-          rawAuditLog.metadata = sanitizedMeta;
-        }
-      }
-
-      const logRecord = sanitizeFirestorePayload(rawAuditLog);
-      const docRef = doc(db, 'auditLogs', id);
-      await setDoc(docRef, logRecord);
-    } catch (err) {
-      console.warn('Failed to record audit log:', err);
-    }
+    await AuditService.log({
+      userId: entry.userId,
+      userName: entry.userName,
+      role: entry.role,
+      loginId: entry.loginId,
+      action: entry.action,
+      module: entry.module as any,
+      status: entry.status || 'SUCCESS',
+      target: entry.target,
+      recordId: entry.recordId,
+      details: entry.details,
+      metadata: entry.metadata,
+    });
   }
 
   /**
@@ -501,6 +488,8 @@ export class FirestoreService {
       role: auditEntry.role as any,
       action: auditEntry.action,
       module: auditEntry.module as any,
+      status: (auditEntry as any).status || 'SUCCESS',
+      target: (auditEntry as any).target || (data as any)?.fullName || (data as any)?.name || (data as any)?.nama || id,
       recordId: auditEntry.recordId || id,
       details: auditEntry.details,
     };
