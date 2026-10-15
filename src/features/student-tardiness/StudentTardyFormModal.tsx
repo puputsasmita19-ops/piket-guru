@@ -411,6 +411,28 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         },
       };
 
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline) {
+        let attachments: { [key: string]: Blob } | undefined = undefined;
+        if (fotoUrl && fotoUrl.startsWith('data:image/')) {
+          const blob = await DraftService.dataUrlToBlob(fotoUrl);
+          attachments = { tardy_photo: blob };
+        }
+
+        await SyncQueueService.enqueue(
+          currentUser,
+          'TARDY_REPORT',
+          'studentTardiness',
+          payload.id!,
+          payload,
+          attachments
+        );
+
+        onClose();
+        return;
+      }
+
       await onSave(payload, true);
       onClose();
     } catch (err: any) {
@@ -470,6 +492,43 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         ruleSnapshot,
       };
     });
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
+      try {
+        for (let i = 0; i < selectedStudents.length; i++) {
+          const entry = selectedStudents[i];
+          const payload = payloads[i];
+          const recId = `trd-${tanggal}-${entry.student.id}-${batchRequestIdRef.current.slice(0, 8)}`;
+
+          let attachments: { [key: string]: Blob } | undefined = undefined;
+          const studentPhoto = entry.fotoUrl || (selectedStudents.length === 1 ? fotoUrl : undefined);
+          if (studentPhoto && studentPhoto.startsWith('data:image/')) {
+            const blob = await DraftService.dataUrlToBlob(studentPhoto);
+            attachments = { tardy_photo: blob };
+          }
+
+          await SyncQueueService.enqueue(
+            currentUser,
+            'TARDY_REPORT',
+            'studentTardiness',
+            recId,
+            { ...payload, id: recId, batchRequestId: batchRequestIdRef.current },
+            attachments
+          );
+        }
+
+        setShowSummaryConfirm(false);
+        onClose();
+        return;
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Gagal menyimpan antrean offline.');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     try {
       const batchRes = await StudentTardyService.saveBatchTardyStudents(

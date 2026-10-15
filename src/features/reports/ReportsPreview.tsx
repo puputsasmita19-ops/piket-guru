@@ -35,6 +35,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { MonthlyReportPrintModal } from './MonthlyReportPrintModal';
 import { PhotoRecapPrintModal } from './PhotoRecapPrintModal';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import {
@@ -154,7 +155,7 @@ const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
             <span className="text-[10px] text-slate-500">Berkas lokal/arsip tidak ditemukan</span>
           </div>
         ) : (
-          <img
+          <AuthenticatedImage
             src={photo.photoUrl}
             alt={photo.title}
             onError={() => setHasError(true)}
@@ -2303,7 +2304,7 @@ export const ReportsPreview: React.FC = () => {
         >
           <div className="space-y-4">
             <div className="rounded-2xl overflow-hidden bg-black flex items-center justify-center p-2 border border-slate-800">
-              <img
+              <AuthenticatedImage
                 src={previewPhotoItem.photoUrl}
                 alt={previewPhotoItem.title}
                 className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl"

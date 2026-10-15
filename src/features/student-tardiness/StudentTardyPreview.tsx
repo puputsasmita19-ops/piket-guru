@@ -42,6 +42,7 @@ import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate } from '../../utils/dateUtils';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 
 export const StudentTardyPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -443,7 +444,7 @@ Terima kasih atas kerja sama dan bimbingannya di rumah. 🙏`;
                           className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 cursor-pointer group shadow-xs shrink-0"
                           title="Klik untuk memperbesar foto"
                         >
-                          <img src={item.fotoUrl} alt="Bukti Foto" className="w-full h-full object-cover" />
+                          <AuthenticatedImage src={item.fotoUrl} alt="Bukti Foto" className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
                             <Eye className="w-3.5 h-3.5" />
                           </div>
@@ -646,7 +647,7 @@ Terima kasih atas kerja sama dan bimbingannya di rumah. 🙏`;
           maxWidth="md"
         >
           <div className="space-y-3 text-center">
-            <img
+            <AuthenticatedImage
               src={previewPhotoUrl}
               alt="Foto Siswa Terlambat"
               className="w-full max-h-[75vh] object-contain rounded-xl border border-slate-200 dark:border-slate-800 shadow-md"

@@ -6,6 +6,7 @@ import { PhotoRecapItem } from '../../types/watermark.types';
 import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
 import { AuditService } from '../../services/audit/auditService';
 import { useAuth } from '../../contexts/AuthContext';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import {
   Printer,
   Download,
@@ -284,14 +285,10 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                         photosPerPage === 2 ? 'h-[340px]' : 'h-[175px]'
                       }`}
                     >
-                      <img
+                      <AuthenticatedImage
                         src={photo.photoUrl}
                         alt={photo.title}
                         className="w-full h-full object-contain"
-                        onError={(e) => {
-                          // Graceful fallback for broken/missing photos
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
                       />
                       <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-slate-900/80 text-white text-[9px] font-bold">
                         {getModuleBadgeLabel(photo.sourceModule)}

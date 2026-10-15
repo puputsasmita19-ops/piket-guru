@@ -1,6 +1,7 @@
 import { FirestoreService } from './firestoreService';
 import { StudentTardyRecord, TardyStatus } from '../../types/studentTardy.types';
 import { UserProfile } from '../../types';
+import { processPhotoForStorage, isDriveStorageActive } from '../drive/photoUploadHelper';
 
 export class StudentTardyService {
   /**
@@ -120,7 +121,8 @@ export class StudentTardyService {
   }
 
   /**
-   * Save (create or update) a tardy student record atomically
+   * Save (create or update) a tardy student record atomically.
+   * Uploads attached photo to Google Drive when Drive storage is active.
    */
   public static async saveTardyStudent(
     data: Partial<StudentTardyRecord>,
@@ -141,6 +143,29 @@ export class StudentTardyService {
 
     const now = new Date().toISOString();
 
+    // Process photo upload to Google Drive if Drive storage is enabled
+    let finalFotoUrl: string | undefined = data.fotoUrl || undefined;
+    if (finalFotoUrl && (finalFotoUrl.startsWith('data:image/') || finalFotoUrl.length > 200) && !finalFotoUrl.startsWith('/api/drive/photo/')) {
+      const driveActive = await isDriveStorageActive();
+      if (driveActive) {
+        try {
+          const clientPhotoId = `tardy-${data.studentId || id}-${data.tanggal || now.split('T')[0]}`;
+          const processed = await processPhotoForStorage(
+            finalFotoUrl,
+            'attendance',
+            clientPhotoId,
+            id
+          );
+          if (processed.photoUrl) {
+            finalFotoUrl = processed.photoUrl;
+          }
+        } catch (err: any) {
+          console.error('[STUDENT_TARDY_SERVICE] Google Drive photo upload failed:', err);
+          throw new Error(`Gagal menyimpan foto siswa terlambat ke Google Drive: ${err?.message || 'Kesalahan koneksi'}`);
+        }
+      }
+    }
+
     const rawPayload: StudentTardyRecord = {
       id,
       tanggal: data.tanggal || now.split('T')[0],
@@ -159,7 +184,7 @@ export class StudentTardyService {
       keteranganPembinaan: data.pembinaan === 'LAINNYA' && data.keteranganPembinaan ? data.keteranganPembinaan.trim() : undefined,
       poinPelanggaran: typeof data.poinPelanggaran === 'number' ? data.poinPelanggaran : 5,
       frekuensiBulanIni: typeof data.frekuensiBulanIni === 'number' ? data.frekuensiBulanIni : 1,
-      fotoUrl: data.fotoUrl || undefined,
+      fotoUrl: finalFotoUrl,
       noHpOrangTua: (data.noHpOrangTua || '').trim(),
       status: data.status || 'DALAM_PEMBINAAN',
       catatanPetugas: data.catatanPetugas ? data.catatanPetugas.trim() : undefined,

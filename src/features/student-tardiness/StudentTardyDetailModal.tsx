@@ -9,6 +9,7 @@ import {
 } from '../../types/studentTardy.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import {
   Clock,
   User,
@@ -228,7 +229,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
                   onClick={() => setIsPreviewPhotoOpen(true)}
                   className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 cursor-pointer group shadow-sm shrink-0"
                 >
-                  <img
+                  <AuthenticatedImage
                     src={tardy.fotoUrl}
                     alt="Dokumentasi Siswa"
                     className="w-full h-full object-cover"
@@ -318,7 +319,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
           maxWidth="md"
         >
           <div className="space-y-3 text-center">
-            <img
+            <AuthenticatedImage
               src={tardy.fotoUrl}
               alt="Foto Siswa Terlambat"
               className="w-full max-h-[75vh] object-contain rounded-xl border border-slate-200 dark:border-slate-800 shadow-md"
