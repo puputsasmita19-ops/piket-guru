@@ -70,7 +70,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsTrustedDeviceState(trusted);
   }, []);
 
-  const logout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
+  // State for pending unsynced offline data modal confirmation on logout
+  const [pendingLogoutPrompt, setPendingLogoutPrompt] = useState<{
+    counts: { syncQueueCount: number; draftsCount: number; total: number };
+    options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' };
+  } | null>(null);
+
+  const execLogout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
     sessionEpochRef.current += 1;
     inFlightVerificationRef.current = null;
 
@@ -117,7 +123,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
     setIsOfflineSession(false);
     setIsLoading(false);
+    setPendingLogoutPrompt(null);
   }, [currentUser]);
+
+  const logout = useCallback(async (options?: { force?: boolean; purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
+    if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED') {
+      try {
+        const counts = await OfflineStorage.getPendingCount(currentUser.id);
+        if (counts.total > 0) {
+          setPendingLogoutPrompt({ counts, options });
+          return;
+        }
+      } catch (err) {
+        console.warn('[AUTH_CONTEXT] Error inspecting pending counts on logout:', err);
+      }
+    }
+    await execLogout(options);
+  }, [currentUser, execLogout]);
 
   // Revalidate session with server when network reconnects
   const revalidateSessionOnline = useCallback(async (): Promise<boolean> => {
@@ -506,6 +528,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+
+      {/* Pending Unsynced Offline Data Confirmation Modal on Logout */}
+      {pendingLogoutPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
+              <div className="p-2.5 bg-amber-100 dark:bg-amber-950/80 rounded-xl">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Perhatian: Data Unsynced</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Data offline belum tersimpan ke server</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/50 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <p className="font-semibold">Sesi logout mendeteksi data yang belum tersinkronisasi:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11.5px] font-medium">
+                {pendingLogoutPrompt.counts.syncQueueCount > 0 && (
+                  <li><strong>{pendingLogoutPrompt.counts.syncQueueCount}</strong> transaksi antrean pengiriman offline</li>
+                )}
+                {pendingLogoutPrompt.counts.draftsCount > 0 && (
+                  <li><strong>{pendingLogoutPrompt.counts.draftsCount}</strong> draf formulir tersimpan</li>
+                )}
+              </ul>
+              <p className="text-[10.5px] text-amber-700 dark:text-amber-400 pt-1">
+                Harap coba sinkronkan data sekarang atau batalkan logout agar transaksi tidak hilang.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (currentUser) {
+                    await SyncQueueService.triggerSync(currentUser);
+                    const freshCounts = await OfflineStorage.getPendingCount(currentUser.id);
+                    if (freshCounts.total === 0) {
+                      execLogout(pendingLogoutPrompt.options);
+                    } else {
+                      setPendingLogoutPrompt((prev) => prev ? { ...prev, counts: freshCounts } : null);
+                    }
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                Coba Sinkronkan Sekarang
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingLogoutPrompt(null)}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  Batal Logout
+                </button>
+                <button
+                  type="button"
+                  onClick={() => execLogout({ ...pendingLogoutPrompt.options, purgeUserData: true })}
+                  className="flex-1 py-2.5 px-4 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  Hapus & Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 };

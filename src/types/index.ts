@@ -224,6 +224,7 @@ export interface SchoolSettings {
   lobbyTv?: import('./lobbyTv.types').LobbyTvConfig;
   studentTardyConfig?: StudentTardyConfig;
   lessonPeriodConfig?: import('./period.types').LessonPeriodConfig;
+  documentationWatermark?: import('./watermark.types').DocumentationWatermarkConfig;
   workHours: {
     start: string;
     end: string;
@@ -254,3 +255,4 @@ export type NavigationTab =
 
 export * from './lobbyTv.types';
 export * from './period.types';
+export * from './watermark.types';

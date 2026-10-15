@@ -29,6 +29,10 @@ import {
 } from 'lucide-react';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
+import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
+import { processMultiplePhotosForStorage } from '../../services/drive/photoUploadHelper';
+import { SchoolSettings } from '../../types';
+import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
 interface IncidentFormModalProps {
   isOpen: boolean;
@@ -46,6 +50,14 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   categories,
 }) => {
   const { currentUser, hasPermission } = useAuth();
+
+  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
+    try {
+      const cached = localStorage.getItem('piket_guru_school_config');
+      if (cached) return { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(cached) };
+    } catch {}
+    return DEFAULT_SCHOOL_SETTINGS;
+  });
 
   const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
   const [waktu, setWaktu] = useState<string>(formatTime(new Date()));
@@ -336,9 +348,21 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
 
     const selectedCat = effectiveCategories.find((c) => c.code === kategori);
     const isLainnya = kategori === 'LAINNYA';
+    const incidentId = editingIncident ? editingIncident.id : `inc-${tanggal}-${Date.now()}`;
+
+    let processedPhotos = photos;
+    if (photos.length > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        processedPhotos = await processMultiplePhotosForStorage(photos, 'incidents', incidentId);
+      } catch (pErr: any) {
+        setErrorMessage(pErr.message || 'Gagal menyimpan foto kejadian ke Google Drive. Draf Anda tetap aman.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     const payload: IncidentRecord = {
-      id: editingIncident ? editingIncident.id : `inc-${tanggal}-${Date.now()}`,
+      id: incidentId,
       tanggal,
       waktu: waktu.trim(),
       kategori,
@@ -354,7 +378,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       pelaporId: editingIncident?.pelaporId || currentUser?.id,
       pelaporName: editingIncident?.pelaporName || currentUser?.fullName || 'Petugas Piket',
       status,
-      ...(photos.length > 0 ? { photos } : {}),
+      ...(processedPhotos.length > 0 ? { photos: processedPhotos } : {}),
       createdAt: editingIncident ? editingIncident.createdAt : new Date().toISOString(),
       createdBy: editingIncident ? editingIncident.createdBy : currentUser?.fullName || 'Petugas',
       updatedAt: new Date().toISOString(),
@@ -839,6 +863,33 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleAddPhoto}
+        title="Dokumentasi Laporan Kejadian"
+        subtitle="Foto otomatis diberi watermark panel bawah resmi (kategori kejadian, lokasi, waktu WIB, dan GPS jika tersedia)"
+        watermarkProcessor={async (canvas, capturedAt, isUpload) => {
+          const coords = await detectLocationForWatermark();
+          const selectedCat = categories.find((c) => c.code === kategori);
+          const catLabel = selectedCat ? selectedCat.name : kategori;
+          const briefIdentity = `Kejadian: ${catLabel}${lokasi ? ` • Lokasi: ${lokasi}` : ''}`;
+
+          return stampDocumentationPhoto(
+            canvas,
+            {
+              module: 'INCIDENT',
+              schoolName: schoolSettings.schoolName,
+              schoolLogoUrl: schoolSettings.logoUrl,
+              officerName: currentUser?.fullName || 'Petugas Piket',
+              officerId: currentUser?.id,
+              documentationTime: capturedAt,
+              eventDate: tanggal,
+              eventTime: waktu,
+              isUploadedPhoto: isUpload,
+              briefIdentity,
+              coords,
+              notes: uraian ? uraian.slice(0, 75) : undefined,
+            },
+            schoolSettings.documentationWatermark
+          );
+        }}
       />
     </>
   );

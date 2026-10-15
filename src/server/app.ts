@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { authRouter } from './routes/authRoutes.js';
+import { driveRouter } from './routes/driveRoutes.js';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ export function createApp(): Express {
 
   // Mount API routes
   app.use('/api/auth', authRouter);
+  app.use('/api/drive', driveRouter);
 
   // Serve audit artifacts explicitly
   app.use('/artifacts', express.static(path.resolve(__dirname, '../../public/artifacts')));

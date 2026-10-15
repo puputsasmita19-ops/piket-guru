@@ -625,6 +625,28 @@ export class OfflineStorage {
   }
 
   /**
+   * Returns exact counts of pending syncQueue items and unsaved drafts for a user.
+   * Protects offline data from silent deletion during logout.
+   */
+  public static async getPendingCount(userId: string): Promise<{ syncQueueCount: number; draftsCount: number; total: number }> {
+    if (!userId) return { syncQueueCount: 0, draftsCount: 0, total: 0 };
+    try {
+      const queueItems = await this.getSyncItemsByUser(userId);
+      const pendingQueue = queueItems.filter(
+        (i) => i.status === 'PENDING_NETWORK' || i.status === 'SENDING' || i.status === 'NEEDS_ACTION'
+      );
+      const drafts = await this.listDraftsByUser(userId);
+      return {
+        syncQueueCount: pendingQueue.length,
+        draftsCount: drafts.length,
+        total: pendingQueue.length + drafts.length,
+      };
+    } catch {
+      return { syncQueueCount: 0, draftsCount: 0, total: 0 };
+    }
+  }
+
+  /**
    * Cleans display read cache ONLY for the active user without touching form drafts or sync queue items.
    * Ensures draft resilience while allowing users to free up display cache memory.
    */
@@ -653,3 +675,4 @@ export class OfflineStorage {
     }
   }
 }
+

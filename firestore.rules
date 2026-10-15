@@ -139,7 +139,9 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /users/{userId} {
       // Unauthenticated reads strictly forbidden
-      allow read: if isValidActiveUser();
+      // Authenticated users can read their own profile (or test presence if unprovisioned)
+      // and valid active users can read other profiles for rosters/directories.
+      allow read: if (isOwner(userId) && (!userExists(userId) || isValidActiveUser())) || isValidActiveUser();
 
       // Creation only by Admin, without credential fields, ID matching
       allow create: if isAdmin() &&

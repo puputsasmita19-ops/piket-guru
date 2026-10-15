@@ -33,6 +33,7 @@ import {
 } from '../../types/visitor.types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { SchoolSettings, UserProfile } from '../../types';
+import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { VisitorService } from '../../services/firebase/visitorService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
@@ -58,6 +59,7 @@ export const VisitorPreview: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [categoryFilter, setCategoryFilter] = useState<string>('SEMUA');
+  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -87,21 +89,54 @@ export const VisitorPreview: React.FC = () => {
       if (data) setSettings(data);
     });
 
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', (data) => {
-      setVisitors(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    });
-
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaffList);
     const unsubUsers = FirestoreService.subscribeToCollection<UserProfile>('users', setUsersList);
 
     return () => {
-      unsubVis();
       unsubTeachers();
       unsubStaff();
       unsubUsers();
     };
   }, []);
+
+  // Bounded subscription based on periodFilter
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
+    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
+
+    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+    const prevMonth = curMonth === 0 ? 12 : curMonth;
+    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
+
+    let constraints: any[] = [];
+    if (periodFilter === 'today') {
+      constraints = [where('tanggal', '==', todayISO)];
+    } else if (periodFilter === 'this_month') {
+      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
+    } else if (periodFilter === 'last_month') {
+      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
+    } else {
+      constraints = [limit(60)];
+    }
+
+    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      (data) => {
+        setVisitors(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      },
+      undefined,
+      constraints
+    );
+
+    return () => unsubVis();
+  }, [periodFilter, todayISO]);
 
   // Create or Update Visitor
   const handleSaveVisitor = async (data: any, isEdit?: boolean) => {
@@ -312,6 +347,17 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
             </div>
 
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              <select
+                value={periodFilter}
+                onChange={(e) => setPeriodFilter(e.target.value)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
+              >
+                <option value="this_month">Periode: Bulan Ini</option>
+                <option value="today">Periode: Hari Ini</option>
+                <option value="last_month">Periode: Bulan Lalu</option>
+                <option value="recent">Periode: 60 Terbaru</option>
+              </select>
+
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}

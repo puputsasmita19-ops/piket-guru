@@ -21,6 +21,7 @@ import { Badge } from '../../components/common/Badge';
 import { CampusMapViewer } from './CampusMapViewer';
 import { EmergencyBroadcastModal } from './EmergencyBroadcastModal';
 import { SchoolBellService } from '../../services/audio/bellService';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import {
   ScheduleItem,
@@ -55,11 +56,36 @@ export const CommandCenterPreview: React.FC = () => {
     });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendance);
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
-    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setPermits);
-    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setTardyList);
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', setIncidents);
+    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
+      'attendance',
+      setAttendance,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      setVisitors,
+      undefined,
+      [where('status', '==', 'SEDANG_BERKUNJUNG')]
+    );
+    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+      'studentPermits',
+      setPermits,
+      undefined,
+      [where('status', '==', 'SEDANG_KELUAR')]
+    );
+    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+      'studentTardiness',
+      setTardyList,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
+      'incidents',
+      setIncidents,
+      undefined,
+      [where('status', 'in', ['BARU', 'INVESTIGASI', 'PENANGANAN'])]
+    );
 
     return () => {
       unsubSched();

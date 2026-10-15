@@ -24,6 +24,7 @@ import { Modal } from '../../components/common/Modal';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
 import { ContextualHelp, Tooltip } from '../../components/common/Tooltip';
 import { LocationService, LocationCoordinates, GeofenceResult } from '../../services/location/locationService';
+import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AttendanceService } from '../../services/firebase/attendanceService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -106,6 +107,8 @@ export const AttendancePreview: React.FC = () => {
 
   // Active Tab: Presensi Mandiri vs Rekap Kehadiran
   const [activeTab, setActiveTab] = useState<'presensi' | 'riwayat'>('presensi');
+  const [riwayatPeriod, setRiwayatPeriod] = useState<'today' | 'this_month' | 'last_month' | 'all'>('this_month');
+  const [riwayatPage, setRiwayatPage] = useState<number>(1);
 
   const todayName = getCurrentDayName();
   const todayISO = getTodayISODate();
@@ -117,9 +120,8 @@ export const AttendancePreview: React.FC = () => {
     isAdmin
   );
 
-  // 1. Load Settings & Subscriptions
+  // 1. Load Settings & Master Rosters (strictly once on mount, no coords dependency)
   useEffect(() => {
-    // Realtime subscription to authoritative school configuration
     const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>(
       'settings',
       'school_config',
@@ -127,18 +129,6 @@ export const AttendancePreview: React.FC = () => {
         if (data) {
           setSettings(data);
           setSettingsReady(true);
-          // Recalculate distance immediately against latest school coordinates
-          if (coords) {
-            const freshGeo = LocationService.evaluateGeofence(
-              coords.latitude,
-              coords.longitude,
-              coords.accuracy,
-              data.schoolLat,
-              data.schoolLng,
-              data.allowedRadiusMeters
-            );
-            setGeofence(freshGeo);
-          }
         }
       }
     );
@@ -150,12 +140,6 @@ export const AttendancePreview: React.FC = () => {
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
 
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', (data) => {
-      setAttendanceList(
-        data.sort((a, b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk))
-      );
-    });
-
     return () => {
       LocationService.clearCurrentWatcher();
       if (slowTxTimerRef.current) {
@@ -165,9 +149,56 @@ export const AttendancePreview: React.FC = () => {
       unsubSched();
       unsubTeachers();
       unsubStaff();
+    };
+  }, []);
+
+  // 2. Load Attendance Records bounded strictly by active view & selected period
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
+    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
+
+    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+    const prevMonth = curMonth === 0 ? 12 : curMonth;
+    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
+
+    let constraints: any[] = [];
+    if (activeTab === 'presensi') {
+      // In presensi tab: only fetch today's check-ins
+      constraints = [where('tanggal', '==', todayISO)];
+    } else {
+      // In riwayat tab: scope to user's selected period
+      if (riwayatPeriod === 'today') {
+        constraints = [where('tanggal', '==', todayISO)];
+      } else if (riwayatPeriod === 'this_month') {
+        constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
+      } else if (riwayatPeriod === 'last_month') {
+        constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
+      } else {
+        constraints = [limit(50)];
+      }
+    }
+
+    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
+      'attendance',
+      (data) => {
+        setAttendanceList(
+          data.sort((a, b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk))
+        );
+      },
+      undefined,
+      constraints
+    );
+
+    return () => {
       unsubAtt();
     };
-  }, [coords]);
+  }, [activeTab, riwayatPeriod, todayISO]);
 
   useEffect(() => {
     // A photo must never survive an account or school-location change.
@@ -1125,6 +1156,54 @@ export const AttendancePreview: React.FC = () => {
           <CardHeader
             title="Rekap Riwayat Presensi Guru Piket"
             subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
+            action={
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setRiwayatPeriod('today'); setRiwayatPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
+                    riwayatPeriod === 'today'
+                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Hari Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRiwayatPeriod('this_month'); setRiwayatPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
+                    riwayatPeriod === 'this_month'
+                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Bulan Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRiwayatPeriod('last_month'); setRiwayatPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
+                    riwayatPeriod === 'last_month'
+                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Bulan Lalu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRiwayatPeriod('all'); setRiwayatPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
+                    riwayatPeriod === 'all'
+                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  50 Terbaru
+                </button>
+              </div>
+            }
           />
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -1143,11 +1222,11 @@ export const AttendancePreview: React.FC = () => {
                 {attendanceList.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-400">
-                      Belum ada rekaman data presensi piket.
+                      Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
                 ) : (
-                  attendanceList.map((item) => (
+                  attendanceList.slice((riwayatPage - 1) * 15, riwayatPage * 15).map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                       <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
                         {formatIndonesianDate(item.tanggal)}
@@ -1190,6 +1269,34 @@ export const AttendancePreview: React.FC = () => {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {attendanceList.length > 15 && (
+              <div className="flex items-center justify-between p-4 border-t border-slate-200 dark:border-slate-800 text-xs">
+                <span className="text-slate-500">
+                  Menampilkan {(riwayatPage - 1) * 15 + 1} - {Math.min(riwayatPage * 15, attendanceList.length)} dari {attendanceList.length} data
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={riwayatPage <= 1}
+                    onClick={() => setRiwayatPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
+                  >
+                    Sebelumnya
+                  </button>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    Halaman {riwayatPage} / {Math.ceil(attendanceList.length / 15)}
+                  </span>
+                  <button
+                    disabled={riwayatPage >= Math.ceil(attendanceList.length / 15)}
+                    onClick={() => setRiwayatPage((p) => Math.min(Math.ceil(attendanceList.length / 15), p + 1))}
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
+                  >
+                    Berikutnya
+                  </button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

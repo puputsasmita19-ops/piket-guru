@@ -19,6 +19,8 @@ import { StudentTardyService } from '../../services/firebase/studentTardyService
 import { StudentService } from '../../services/firebase/studentService';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatTime, formatIndonesianDate } from '../../utils/dateUtils';
+import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
+import { DEFAULT_DOCUMENTATION_WATERMARK_CONFIG } from '../../types/watermark.types';
 import {
   Calendar,
   Clock,
@@ -64,6 +66,7 @@ export interface SelectedStudentEntry {
   pembinaan?: DisciplineAction;
   keteranganPembinaan?: string;
   catatanPetugas?: string;
+  fotoUrl?: string;
 }
 
 export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
@@ -74,6 +77,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   settings,
 }) => {
   const { currentUser } = useAuth();
+  const [targetStudentIdForPhoto, setTargetStudentIdForPhoto] = useState<string | null>(null);
 
   // Settings for student entry limit & tolerance
   const entryLimitTime = useMemo(() => {
@@ -461,7 +465,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         keteranganPembinaan: effectivePembinaan === 'LAINNYA' ? effectiveKetPembinaan.trim() : undefined,
         poinPelanggaran: points,
         frekuensiBulanIni: entry.frekuensiBulanIni,
-        fotoUrl,
+        fotoUrl: entry.fotoUrl || (selectedStudents.length === 1 ? fotoUrl : undefined),
         catatanPetugas: effectiveCatatan.trim() || undefined,
         ruleSnapshot,
       };
@@ -662,6 +666,26 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                               >
                                 Ke-{entry.frekuensiBulanIni}
                               </span>
+
+                              {/* Foto Khusus Siswa Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetStudentIdForPhoto(entry.student.id);
+                                  setIsCameraOpen(true);
+                                }}
+                                className={`p-1.5 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                                  entry.fotoUrl
+                                    ? 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-200'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                                }`}
+                                title={entry.fotoUrl ? 'Foto siswa terlampir (klik untuk ganti)' : 'Ambil foto dokumentasi khusus siswa ini'}
+                              >
+                                <Camera className="w-3 h-3 text-blue-500" />
+                                <span className="hidden sm:inline">
+                                  {entry.fotoUrl ? 'Foto Ada' : 'Foto'}
+                                </span>
+                              </button>
 
                               {/* Sesuaikan Button */}
                               <button
@@ -999,58 +1023,85 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               <Camera className="w-4 h-4 text-blue-500 shrink-0" />
               <div className="text-xs">
                 <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                  Foto Dokumentasi di Pos Gerbang
+                  Foto Dokumentasi Siswa Terlambat
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  {fotoUrl ? 'Foto terlampir' : 'Opsional sebagai bukti visual'}
+                  {selectedStudents.length > 1
+                    ? 'Mode banyak siswa: Lampirkan foto pada kartu masing-masing siswa di daftar atas agar watermark tercantum sesuai nama siswa yang bersangkutan.'
+                    : fotoUrl
+                    ? 'Foto terlampir dengan watermark resmi'
+                    : 'Opsional sebagai bukti visual kedatangan di pos gerbang'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {fotoUrl ? (
-                <>
+            {selectedStudents.length <= 1 ? (
+              <div className="flex items-center gap-2">
+                {fotoUrl ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setIsPreviewPhotoOpen(true)}
+                    >
+                      Lihat Foto
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        if (selectedStudents.length === 1) {
+                          setTargetStudentIdForPhoto(selectedStudents[0].student.id);
+                        }
+                        setIsCameraOpen(true);
+                      }}
+                    >
+                      Ganti
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setFotoUrl(undefined);
+                        if (selectedStudents.length === 1) {
+                          setSelectedStudents((prev) =>
+                            prev.map((s) => ({ ...s, fotoUrl: undefined }))
+                          );
+                        }
+                      }}
+                    >
+                      Hapus
+                    </Button>
+                  </>
+                ) : (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     className="text-xs"
-                    onClick={() => setIsPreviewPhotoOpen(true)}
+                    leftIcon={<Camera className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      if (selectedStudents.length === 1) {
+                        setTargetStudentIdForPhoto(selectedStudents[0].student.id);
+                      }
+                      setIsCameraOpen(true);
+                    }}
                   >
-                    Lihat Foto
+                    Ambil Foto Siswa
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => setIsCameraOpen(true)}
-                  >
-                    Ganti
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => setFotoUrl(undefined)}
-                  >
-                    Hapus
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  leftIcon={<Camera className="w-3.5 h-3.5" />}
-                  onClick={() => setIsCameraOpen(true)}
-                >
-                  Ambil Foto Gerbang
-                </Button>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
+                Pilih foto per siswa di daftar atas
+              </span>
+            )}
           </div>
 
           {/* Error Alert */}
@@ -1225,10 +1276,56 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       {/* Camera Capture Modal */}
       <CameraCaptureModal
         isOpen={isCameraOpen}
-        onClose={() => setIsCameraOpen(false)}
-        onCapture={(img) => {
-          setFotoUrl(img);
+        onClose={() => {
           setIsCameraOpen(false);
+          setTargetStudentIdForPhoto(null);
+        }}
+        onCapture={(img) => {
+          if (targetStudentIdForPhoto) {
+            setSelectedStudents((prev) =>
+              prev.map((s) => (s.student.id === targetStudentIdForPhoto ? { ...s, fotoUrl: img } : s))
+            );
+            setTargetStudentIdForPhoto(null);
+          } else {
+            setFotoUrl(img);
+          }
+          setIsCameraOpen(false);
+        }}
+        title={
+          targetStudentIdForPhoto
+            ? `Foto Siswa: ${selectedStudents.find((s) => s.student.id === targetStudentIdForPhoto)?.student.nama || 'Siswa'}`
+            : 'Foto Dokumentasi Siswa Terlambat'
+        }
+        subtitle="Foto otomatis dibubuhi watermark resmi panel bawah (identitas siswa, kelas, waktu tiba WIB, dan GPS jika ada)"
+        watermarkProcessor={async (canvas, capturedAt, isUpload) => {
+          const coords = await detectLocationForWatermark();
+          const targetStudent = targetStudentIdForPhoto
+            ? selectedStudents.find((s) => s.student.id === targetStudentIdForPhoto)
+            : selectedStudents.length === 1
+            ? selectedStudents[0]
+            : null;
+          const studentName = targetStudent ? targetStudent.student.nama : singleStudentName;
+          const studentKelas = targetStudent ? targetStudent.student.kelas : singleStudentKelas;
+          const briefIdentity = `Siswa: ${studentName || 'Siswa'}${studentKelas ? ` • Kelas: ${studentKelas}` : ''}`;
+
+          return stampDocumentationPhoto(
+            canvas,
+            {
+              module: 'STUDENT_TARDY',
+              schoolName: settings?.schoolName || 'Sekolah',
+              schoolLogoUrl: settings?.logoUrl,
+              officerName: currentUser?.fullName || 'Petugas Piket',
+              officerId: currentUser?.id,
+              documentationTime: capturedAt,
+              eventDate: tanggal,
+              eventTime: targetStudent?.jamDatang || sharedJamDatang,
+              isUploadedPhoto: isUpload,
+              briefIdentity,
+              coords,
+              notes: targetStudent?.alasan || sharedAlasan,
+            },
+            settings?.documentationWatermark || DEFAULT_DOCUMENTATION_WATERMARK_CONFIG
+          );
         }}
       />
 

@@ -579,9 +579,23 @@ class AuthService {
       }
     }
 
-    // Purge user data if requested or if on shared/untrusted device
-    if (targetUid && (options?.purgeUserData || !OfflineStorage.isTrustedDevice())) {
-      OfflineStorage.purgeUserData(targetUid).catch(() => {});
+    // Always clear read display cache on logout to avoid leaking read data on shared devices
+    if (targetUid) {
+      OfflineStorage.clearDisplayCacheOnly(targetUid).catch(() => {});
+    }
+
+    // Purge queue & drafts ONLY if explicitly confirmed or if there are zero pending items
+    if (targetUid) {
+      if (options?.purgeUserData === true) {
+        OfflineStorage.purgeUserData(targetUid).catch(() => {});
+      } else if (options?.purgeUserData !== false) {
+        // Safe check: if 0 pending items, okay to purge user data on untrusted device
+        OfflineStorage.getPendingCount(targetUid).then((counts) => {
+          if (counts.total === 0 && !OfflineStorage.isTrustedDevice()) {
+            OfflineStorage.purgeUserData(targetUid).catch(() => {});
+          }
+        }).catch(() => {});
+      }
     }
   }
 }

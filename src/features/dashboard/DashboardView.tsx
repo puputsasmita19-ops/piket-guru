@@ -29,6 +29,7 @@ import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { AnnouncementFormModal } from './AnnouncementFormModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS } from '../../config/permissions';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AnnouncementService } from '../../services/firebase/announcementService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
@@ -103,17 +104,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     });
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendance);
-    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', setDutyBooks);
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', setIncidents);
-    const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', (data) => {
-      setAnnouncements(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      setIsLoadingAnnouncements(false);
-    });
-    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setStudentTardiness);
-    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setStudentPermits);
-    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions);
-    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
+    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
+      'attendance',
+      setAttendance,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
+      'dutyBooks',
+      setDutyBooks,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
+      'incidents',
+      setIncidents,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>(
+      'announcements',
+      (data) => {
+        setAnnouncements(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setIsLoadingAnnouncements(false);
+      },
+      undefined,
+      [where('isActive', '==', true)]
+    );
+    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+      'studentTardiness',
+      setStudentTardiness,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+      'studentPermits',
+      setStudentPermits,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      setSubstitutions,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      setVisitors,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
 
     return () => {
       unsubSched();

@@ -16,6 +16,7 @@ import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { ContextualHelp } from '../../components/common/Tooltip';
 import { PublicKioskDisplay } from './PublicKioskDisplay';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { ScheduleItem, SchoolSettings } from '../../types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
@@ -24,7 +25,7 @@ import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { VisitorRecord } from '../../types/visitor.types';
 import { AnnouncementRecord } from '../../types/announcement.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTime, getTodayISODate } from '../../utils/dateUtils';
 
 export const KioskPreview: React.FC = () => {
   const [isKioskOpen, setIsKioskOpen] = useState(false);
@@ -48,12 +49,38 @@ export const KioskPreview: React.FC = () => {
       }
     );
 
+    const todayISO = getTodayISODate();
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
-    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions);
-    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setTardiness);
-    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setPermits);
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
-    const unsubAnnounce = FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', setAnnouncements);
+    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      setSubstitutions,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+      'studentTardiness',
+      setTardiness,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+      'studentPermits',
+      setPermits,
+      undefined,
+      [where('status', '==', 'SEDANG_KELUAR')]
+    );
+    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      setVisitors,
+      undefined,
+      [where('status', '==', 'SEDANG_BERKUNJUNG')]
+    );
+    const unsubAnnounce = FirestoreService.subscribeToCollection<AnnouncementRecord>(
+      'announcements',
+      setAnnouncements,
+      undefined,
+      [where('isActive', '==', true)]
+    );
 
     return () => {
       unsubSettings();

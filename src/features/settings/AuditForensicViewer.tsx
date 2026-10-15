@@ -351,10 +351,10 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
             <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">
               {metrics.total}
             </span>
-            <span className="text-[11px] text-slate-400">dari {logs.length}</span>
+            <span className="text-[11px] text-slate-400">dari {logs.length} (50 Log Terbaru)</span>
           </div>
           <div className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-            {metrics.timeRangeText}
+            {metrics.timeRangeText} (Halaman 1)
           </div>
         </div>
 

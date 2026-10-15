@@ -1,4 +1,11 @@
-import { DayOfWeek, UserRole, SchoolSettings, LoginSupportContact, DEFAULT_LOBBY_TV_CONFIG } from '../types';
+import {
+  DayOfWeek,
+  UserRole,
+  SchoolSettings,
+  LoginSupportContact,
+  DEFAULT_LOBBY_TV_CONFIG,
+  DEFAULT_DOCUMENTATION_WATERMARK_CONFIG,
+} from '../types';
 
 export const APP_NAME = 'PIKET GURU';
 export const APP_SUBTITLE = 'Jadwal & Buku Piket Digital Sekolah';
@@ -136,6 +143,7 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
     entryLimit: '07:00',
     toleranceMinutes: 0,
   },
+  documentationWatermark: DEFAULT_DOCUMENTATION_WATERMARK_CONFIG,
   workHours: {
     start: '06:30',
     end: '15:30',

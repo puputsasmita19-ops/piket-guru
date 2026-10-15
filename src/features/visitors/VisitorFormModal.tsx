@@ -38,6 +38,10 @@ import {
 } from 'lucide-react';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
+import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
+import { processPhotoForStorage } from '../../services/drive/photoUploadHelper';
+import { SchoolSettings } from '../../types';
+import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
 export interface RecipientOption {
   id: string; // Unique option ID (e.g. `teacher:tch-1`, `staff:stf-1`, `unit:tu`, `user:usr-1`)
@@ -86,6 +90,14 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
   isLoadingMaster = false,
 }) => {
   const { currentUser } = useAuth();
+
+  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
+    try {
+      const cached = localStorage.getItem('piket_guru_school_config');
+      if (cached) return { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(cached) };
+    } catch {}
+    return DEFAULT_SCHOOL_SETTINGS;
+  });
 
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [jamMasuk, setJamMasuk] = useState(formatTime(new Date()));
@@ -687,6 +699,20 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      let finalFotoUrl = fotoUrl;
+      const visitorId = editingVisitor?.id || `vst-${tanggal}-${Date.now()}`;
+
+      if (fotoUrl && fotoUrl.startsWith('data:') && typeof navigator !== 'undefined' && navigator.onLine) {
+        try {
+          const processed = await processPhotoForStorage(fotoUrl, 'visitors', visitorId);
+          finalFotoUrl = processed.photoUrl;
+        } catch (pErr: any) {
+          setErrorMessage(pErr.message || 'Gagal menyimpan foto tamu ke Google Drive. Draf Anda tetap aman.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const payload: Partial<VisitorRecord> = {
         ...(editingVisitor ? { id: editingVisitor.id } : {}),
         tanggal,
@@ -705,7 +731,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         tujuanTargetType: selectedRecipient?.targetType || (editingVisitor ? editingVisitor.tujuanTargetType : 'CUSTOM'),
         tujuanDetail: selectedRecipient?.subtitle || (editingVisitor ? editingVisitor.tujuanDetail : undefined),
         keperluan: keperluan.trim(),
-        fotoUrl: fotoUrl || undefined,
+        fotoUrl: finalFotoUrl || undefined,
         status: editingVisitor ? editingVisitor.status : 'SEDANG_BERKUNJUNG',
         catatanPetugas: catatanPetugas.trim() || undefined,
         petugasPiketName: editingVisitor?.petugasPiketName || currentUser?.fullName || 'Petugas Piket',
@@ -1458,6 +1484,31 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onCapture={(img) => setFotoUrl(img)}
+        title="Dokumentasi Tamu Sekolah"
+        subtitle="Foto otomatis diberi watermark panel bawah resmi (identitas tamu, instansi, waktu WIB, dan GPS jika ada)"
+        watermarkProcessor={async (canvas, capturedAt, isUpload) => {
+          const coords = await detectLocationForWatermark();
+          const briefIdentity = `Tamu: ${namaTamu || 'Tamu Umum'}${instansiAsal ? ` • Instansi: ${instansiAsal}` : ''}${tujuanBertemu ? ` • Bertemu: ${tujuanBertemu}` : ''}`;
+
+          return stampDocumentationPhoto(
+            canvas,
+            {
+              module: 'VISITOR',
+              schoolName: schoolSettings.schoolName,
+              schoolLogoUrl: schoolSettings.logoUrl,
+              officerName: currentUser?.fullName || 'Petugas Piket',
+              officerId: currentUser?.id,
+              documentationTime: capturedAt,
+              eventDate: tanggal,
+              eventTime: jamMasuk,
+              isUploadedPhoto: isUpload,
+              briefIdentity,
+              coords,
+              notes: keperluan ? keperluan.slice(0, 75) : undefined,
+            },
+            schoolSettings.documentationWatermark
+          );
+        }}
       />
     </>
   );

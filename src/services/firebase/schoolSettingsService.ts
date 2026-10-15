@@ -37,8 +37,29 @@ export class SchoolSettingsService {
     return auth.currentUser.uid;
   }
   public static async load(): Promise<SchoolSettings | null> {
-    const snap = await getDocFromServer(doc(db, 'settings', 'school_config'));
-    return snap.exists() ? { ...snap.data(), id: snap.id } as SchoolSettings : null;
+    try {
+      const snap = await getDocFromServer(doc(db, 'settings', 'school_config'));
+      if (snap.exists()) {
+        const data = { ...snap.data(), id: snap.id } as SchoolSettings;
+        try {
+          localStorage.setItem('piket_guru_school_config', JSON.stringify(data));
+        } catch {
+          // localStorage non-fatal
+        }
+        return data;
+      }
+    } catch {
+      // Offline fallback: load from last available localStorage cache
+      try {
+        const cached = localStorage.getItem('piket_guru_school_config');
+        if (cached) {
+          return JSON.parse(cached) as SchoolSettings;
+        }
+      } catch {
+        // Cache parse error
+      }
+    }
+    return null;
   }
   private static async receipt(expected: SchoolSettings): Promise<SchoolSettingsSaveResult> {
     try {
@@ -120,6 +141,12 @@ export class SchoolSettingsService {
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
     });
+
+    try {
+      localStorage.setItem('piket_guru_school_config', JSON.stringify(expected));
+    } catch {
+      // Local cache failure non-fatal
+    }
 
     void AuditService.log({
       userId,

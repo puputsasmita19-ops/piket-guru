@@ -14,6 +14,7 @@ import { getShiftHoursForDay } from '../../utils/scheduleUtils';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { AttendancePolicy, AttendanceError } from '../attendance/attendancePolicy';
 import { checkSelfieDataUrlSize } from '../attendance/selfieWatermark';
+import { processPhotoForStorage } from '../drive/photoUploadHelper';
 
 export interface CheckInParams {
   userId: string;
@@ -136,6 +137,18 @@ export class AttendanceService {
     // In BEBAS mode without a schedule, scheduleId is stored as null (never a fake general-duty doc)
     const storedScheduleId = scheduleId ? scheduleId.trim() : null;
 
+    let finalPhotoUrl = photoUrl;
+    if (photoUrl) {
+      if (photoUrl.startsWith('data:')) {
+        const checkResult = checkSelfieDataUrlSize(photoUrl);
+        if (!checkResult.isValid) {
+          throw new Error(checkResult.error || 'Ukuran foto presensi melebihi batas aman dokumen. Silakan ambil ulang swafoto.');
+        }
+      }
+      const processed = await processPhotoForStorage(photoUrl, 'attendance', `att-${tanggal}-${userId}`);
+      finalPhotoUrl = processed.photoUrl;
+    }
+
     const record: AttendanceRecord = {
       id: attendanceId,
       scheduleId: storedScheduleId,
@@ -148,21 +161,13 @@ export class AttendanceService {
       accuracy: Math.round(coords.accuracy * 10) / 10,
       distance: Math.round(authoritativeGeofence.distanceMeters),
       status,
-      photoUrl: photoUrl || undefined,
+      photoUrl: finalPhotoUrl || undefined,
       attendanceModeAtCheckIn: effectiveMode,
       dataSource: 'PRODUCTION',
       isDemo: false,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-
-    // 3. Stage write-check-in: Persist check-in record
-    if (photoUrl) {
-      const checkResult = checkSelfieDataUrlSize(photoUrl);
-      if (!checkResult.isValid) {
-        throw new Error(checkResult.error || 'Ukuran foto presensi melebihi batas aman dokumen (maksimal ~400 KB). Silakan ambil ulang swafoto.');
-      }
-    }
 
     try {
       await setDoc(docRef, record);

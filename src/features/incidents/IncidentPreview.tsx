@@ -24,6 +24,7 @@ import { IncidentFormModal } from './IncidentFormModal';
 import { IncidentDetailModal } from './IncidentDetailModal';
 import { IncidentRecord, IncidentStatus, IncidentSeverity, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { IncidentCategoryRecord } from '../../types/master.types';
+import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { IncidentService } from '../../services/firebase/incidentService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -38,6 +39,8 @@ export const IncidentPreview: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters & Views
+  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | 'all'>('this_month');
+  const [page, setPage] = useState<number>(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [categoryFilter, setCategoryFilter] = useState<string>('SEMUA');
@@ -53,27 +56,62 @@ export const IncidentPreview: React.FC = () => {
 
   const [deleteConfirm, setDeleteConfirm] = useState<IncidentRecord | null>(null);
 
-  // Load Subscriptions
+  // Load Master Categories (once on mount)
   useEffect(() => {
     IncidentService.bootstrapIfEmpty().then(() => {
       setIsLoading(false);
     });
 
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', (data) => {
-      setIncidents(
-        data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-      );
-    });
+    const unsubCat = FirestoreService.subscribeToCollection<IncidentCategoryRecord>(
+      'incidentCategories',
+      setCategories
+    );
 
-    const unsubCat = FirestoreService.subscribeToCollection<IncidentCategoryRecord>('incidentCategories', (data) => {
-      setCategories(data);
-    });
-
-    return () => {
-      unsubInc();
-      unsubCat();
-    };
+    return () => unsubCat();
   }, []);
+
+  // Load Incidents bounded strictly by selected period
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
+    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
+
+    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+    const prevMonth = curMonth === 0 ? 12 : curMonth;
+    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
+
+    let constraints: any[] = [];
+    if (periodFilter === 'this_month') {
+      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
+    } else if (periodFilter === 'last_month') {
+      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
+    } else {
+      constraints = [limit(60)];
+    }
+
+    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
+      'incidents',
+      (data) => {
+        setIncidents(
+          data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
+        );
+      },
+      undefined,
+      constraints
+    );
+
+    return () => unsubInc();
+  }, [periodFilter]);
+
+  // Reset page when any filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [periodFilter, statusFilter, categoryFilter, severityFilter, searchQuery]);
 
   // Save / Update
   const handleSaveIncident = async (record: IncidentRecord) => {

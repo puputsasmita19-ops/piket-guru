@@ -71,8 +71,8 @@ export async function validateFirebaseUserProfile(
         };
       }
     } else {
-      // Definite security or permission rejection by Firestore
-      console.error('[AUTH_VALIDATOR] Strict profile lookup error (permission/security):', errorMsg);
+      // Definite security or permission rejection by Firestore (gracefully handled)
+      console.warn('[AUTH_VALIDATOR] Strict profile lookup rejected (permission/security):', errorMsg);
       await authService.clearSession();
       return {
         success: false,

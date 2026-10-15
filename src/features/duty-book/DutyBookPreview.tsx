@@ -17,6 +17,7 @@ import { DutyBookFormModal } from './DutyBookFormModal';
 import { DutyBookPrintModal } from './DutyBookPrintModal';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { DutyBookStatus, ScheduleItem, SchoolSettings } from '../../types';
+import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { DutyBookService } from '../../services/firebase/dutyBookService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,6 +35,7 @@ export const DutyBookPreview: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
+  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Modal States
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -53,21 +55,54 @@ export const DutyBookPreview: React.FC = () => {
       if (data) setSettings(data);
     });
 
-    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', (data) => {
-      setDutyBooks(
-        data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-      );
-    });
-
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
       setSchedules(data);
     });
 
     return () => {
-      unsubBooks();
       unsubSched();
     };
   }, []);
+
+  // Bounded subscription based on periodFilter
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
+    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
+
+    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+    const prevMonth = curMonth === 0 ? 12 : curMonth;
+    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
+
+    let constraints: any[] = [];
+    if (periodFilter === 'today') {
+      constraints = [where('tanggal', '==', todayISO)];
+    } else if (periodFilter === 'this_month') {
+      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
+    } else if (periodFilter === 'last_month') {
+      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
+    } else {
+      constraints = [limit(60)];
+    }
+
+    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
+      'dutyBooks',
+      (data) => {
+        setDutyBooks(
+          data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
+        );
+      },
+      undefined,
+      constraints
+    );
+
+    return () => unsubBooks();
+  }, [periodFilter, todayISO]);
 
   // Save Draft (Guru or Admin)
   const handleSaveDutyBook = async (record: DutyBookRecord, originalUpdatedAt?: string) => {
@@ -224,6 +259,17 @@ export const DutyBookPreview: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <select
+                value={periodFilter}
+                onChange={(e) => setPeriodFilter(e.target.value)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold text-[var(--theme-primary)]"
+              >
+                <option value="this_month">Periode: Bulan Ini</option>
+                <option value="today">Periode: Hari Ini</option>
+                <option value="last_month">Periode: Bulan Lalu</option>
+                <option value="recent">Periode: 60 Terbaru</option>
+              </select>
+
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}

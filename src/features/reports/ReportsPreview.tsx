@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FileBarChart2,
   Calendar,
@@ -20,11 +20,22 @@ import {
   ShieldAlert,
   CalendarRange,
   ChevronDown,
+  Image as ImageIcon,
+  CheckSquare,
+  Square,
+  Sparkles,
+  Camera,
+  ImageOff,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { Modal } from '../../components/common/Modal';
 import { MonthlyReportPrintModal } from './MonthlyReportPrintModal';
+import { PhotoRecapPrintModal } from './PhotoRecapPrintModal';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import {
   ReportService,
@@ -42,6 +53,8 @@ import {
   AttendanceRecord,
   SchoolSettings,
 } from '../../types';
+import { PhotoRecapItem } from '../../types/watermark.types';
+import { isPhotoAlreadyWatermarked } from '../../services/watermark/watermarkService';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { TeacherRecord, IncidentCategoryRecord } from '../../types/master.types';
@@ -50,7 +63,7 @@ import { StudentPermitRecord, getStudentPermitTypeDisplay } from '../../types/st
 import { TeacherSubstitutionRecord, getSubstitutionReasonDisplay } from '../../types/substitution.types';
 import { VisitorRecord, getVisitorCategoryDisplay } from '../../types/visitor.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
+import { formatIndonesianDate, getTodayISODate, formatTime } from '../../utils/dateUtils';
 import {
   ReportPeriodMode,
   INDONESIAN_MONTHS,
@@ -69,7 +82,128 @@ type ReportTab =
   | 'studentTardiness'
   | 'studentPermits'
   | 'substitutions'
-  | 'visitors';
+  | 'visitors'
+  | 'photoRecap';
+
+interface PhotoCardItemProps {
+  photo: PhotoRecapItem;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onPreview: (photo: PhotoRecapItem) => void;
+}
+
+const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
+  photo,
+  isSelected,
+  onToggleSelect,
+  onPreview,
+}) => {
+  const [hasError, setHasError] = useState(false);
+
+  const getModuleBadge = (mod: string) => {
+    switch (mod) {
+      case 'ATTENDANCE':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-300">Presensi GPS</span>;
+      case 'INCIDENT':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">Laporan Kejadian</span>;
+      case 'STUDENT_TARDY':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">Siswa Terlambat</span>;
+      case 'VISITOR':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">Buku Tamu</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">Dokumentasi</span>;
+    }
+  };
+
+  return (
+    <div
+      className={`rounded-2xl border transition-all overflow-hidden flex flex-col justify-between bg-white dark:bg-slate-900 shadow-xs hover:shadow-md ${
+        isSelected
+          ? 'border-[var(--theme-primary)] ring-2 ring-[var(--theme-primary)]/20'
+          : 'border-slate-200 dark:border-slate-800'
+      }`}
+    >
+      {/* Top Header Card */}
+      <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(photo.id)}
+            className="rounded text-[var(--theme-primary)] focus:ring-0 cursor-pointer"
+          />
+          {getModuleBadge(photo.sourceModule)}
+        </label>
+
+        {photo.isLegacyUnwatermarked && (
+          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 text-[9px] font-bold">
+            Foto Arsip
+          </span>
+        )}
+      </div>
+
+      {/* Image Preview Container (Never distort or crop watermark) */}
+      <div
+        onClick={() => onPreview(photo)}
+        className="relative bg-slate-950 aspect-4/3 flex items-center justify-center overflow-hidden cursor-pointer group"
+      >
+        {hasError ? (
+          <div className="flex flex-col items-center justify-center p-4 text-center text-slate-400">
+            <ImageOff className="w-8 h-8 mb-1.5 text-slate-500" />
+            <span className="text-[11px] font-semibold text-slate-300">Foto tidak dapat dimuat</span>
+            <span className="text-[10px] text-slate-500">Berkas lokal/arsip tidak ditemukan</span>
+          </div>
+        ) : (
+          <img
+            src={photo.photoUrl}
+            alt={photo.title}
+            onError={() => setHasError(true)}
+            className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-102"
+            loading="lazy"
+          />
+        )}
+        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold backdrop-blur-xs">
+          Klik untuk perbesar
+        </div>
+      </div>
+
+      {/* Caption & Metadata */}
+      <div className="p-3.5 space-y-2 text-xs flex-1 flex flex-col justify-between">
+        <div className="space-y-1">
+          <h4 className="font-bold text-slate-900 dark:text-white line-clamp-1" title={photo.title}>
+            {photo.title}
+          </h4>
+          <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-1" title={photo.briefIdentity}>
+            {photo.briefIdentity}
+          </p>
+          {photo.notes && (
+            <p className="text-[10.5px] text-slate-500 line-clamp-2 italic" title={photo.notes}>
+              {photo.notes}
+            </p>
+          )}
+        </div>
+
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1 text-[10px] text-slate-500">
+          <div className="flex items-center justify-between">
+            <span>Kejadian: {formatIndonesianDate(photo.tanggalKejadian)}{photo.waktuKejadian ? ` (${photo.waktuKejadian})` : ''}</span>
+          </div>
+
+          {photo.tanggalDokumentasi && photo.tanggalDokumentasi !== photo.tanggalKejadian && (
+            <div className="text-blue-600 dark:text-blue-400 font-medium">
+              Foto: {formatIndonesianDate(photo.tanggalDokumentasi)}{photo.waktuDokumentasi ? ` (${photo.waktuDokumentasi})` : ''}
+            </div>
+          )}
+
+          {photo.petugasName && (
+            <div className="text-slate-600 dark:text-slate-400 font-medium truncate">
+              Petugas: {photo.petugasName}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const ReportsPreview: React.FC = () => {
   const { currentUser } = useAuth();
@@ -112,44 +246,20 @@ export const ReportsPreview: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ReportTab>('attendance');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Print Modal
+  // Print Modals
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [isPhotoRecapPrintOpen, setIsPhotoRecapPrintOpen] = useState<boolean>(false);
+  const tabListRef = useRef<HTMLDivElement>(null);
 
-  // Subscriptions to all operational collections
-  useEffect(() => {
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) {
-        setSettings(data);
-        if (data.academicSemester?.academicYear) {
-          setSemesterAcademicYear(data.academicSemester.academicYear);
-        }
-      }
-    });
+  // Loading and Error tracking
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
-    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendanceList);
-    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', setDutyBooks);
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>('incidents', setIncidents);
-    const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
-    const unsubCats = FirestoreService.subscribeToCollection<IncidentCategoryRecord>('incidentCategories', setCategories);
-    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setStudentTardiness);
-    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setStudentPermits);
-    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions);
-    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
-
-    return () => {
-      unsubSched();
-      unsubAtt();
-      unsubBooks();
-      unsubInc();
-      unsubTeachers();
-      unsubCats();
-      unsubTardy();
-      unsubPermits();
-      unsubSubs();
-      unsubVisitors();
-    };
-  }, []);
+  // Photo Recap Module Filter & Selection States
+  const [photoModuleFilter, setPhotoModuleFilter] = useState<'ALL' | 'ATTENDANCE' | 'INCIDENT' | 'STUDENT_TARDY' | 'VISITOR'>('ALL');
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [photoRecapPage, setPhotoRecapPage] = useState<number>(1);
+  const [previewPhotoItem, setPreviewPhotoItem] = useState<PhotoRecapItem | null>(null);
 
   // Compute Active Date Range & Period Description based on periodMode
   const { startDate, endDate, periodLabel } = useMemo(() => {
@@ -201,6 +311,129 @@ export const ReportsPreview: React.FC = () => {
     customEndDate,
     settings,
   ]);
+
+  // Master Data Subscription (schedules, teachers, categories, settings)
+  useEffect(() => {
+    let active = true;
+
+    FirestoreService.getById<SchoolSettings>('settings', 'school_config')
+      .then((data) => {
+        if (data && active) {
+          setSettings(data);
+          if (data.academicSemester?.academicYear) {
+            setSemesterAcademicYear(data.academicSemester.academicYear);
+          }
+        }
+      })
+      .catch(console.warn);
+
+    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>(
+      'schedules',
+      (data) => active && setSchedules(data)
+    );
+    const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>(
+      'teachers',
+      (data) => active && setTeachers(data)
+    );
+    const unsubCats = FirestoreService.subscribeToCollection<IncidentCategoryRecord>(
+      'incidentCategories',
+      (data) => active && setCategories(data)
+    );
+
+    return () => {
+      active = false;
+      unsubSched();
+      unsubTeachers();
+      unsubCats();
+    };
+  }, []);
+
+  // Operational Data Subscriptions bounded strictly by computed date range
+  useEffect(() => {
+    let active = true;
+    setIsLoadingData(true);
+    setDataLoadError(null);
+
+    const handleError = (err: any) => {
+      if (!active) return;
+      console.warn('[REPORTS] Error fetching operational reports data:', err);
+      if (err?.code === 'permission-denied') {
+        setDataLoadError('Akses database laporan ditolak (izin akses tidak mencukupi).');
+      } else {
+        setDataLoadError(err?.message || 'Gagal memuat data laporan dari database.');
+      }
+      setIsLoadingData(false);
+    };
+
+    const dateConstraints = [
+      where('tanggal', '>=', startDate),
+      where('tanggal', '<=', endDate),
+    ];
+
+    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
+      'attendance',
+      (data) => {
+        if (active) {
+          setAttendanceList(data);
+          setIsLoadingData(false);
+        }
+      },
+      handleError,
+      dateConstraints
+    );
+    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
+      'dutyBooks',
+      (data) => active && setDutyBooks(data),
+      handleError,
+      dateConstraints
+    );
+    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
+      'incidents',
+      (data) => active && setIncidents(data),
+      handleError,
+      dateConstraints
+    );
+    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+      'studentTardiness',
+      (data) => active && setStudentTardiness(data),
+      handleError,
+      dateConstraints
+    );
+    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+      'studentPermits',
+      (data) => active && setStudentPermits(data),
+      handleError,
+      dateConstraints
+    );
+    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      (data) => active && setSubstitutions(data),
+      handleError,
+      dateConstraints
+    );
+    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      (data) => active && setVisitors(data),
+      handleError,
+      dateConstraints
+    );
+
+    const timer = setTimeout(() => {
+      if (active) setIsLoadingData(false);
+    }, 1200);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      unsubAtt();
+      unsubBooks();
+      unsubInc();
+      unsubTardy();
+      unsubPermits();
+      unsubSubs();
+      unsubVisitors();
+    };
+  }, [startDate, endDate]);
 
   const dateValidation = validateDateRange(startDate, endDate);
 
@@ -337,6 +570,190 @@ export const ReportsPreview: React.FC = () => {
           r.keperluan?.toLowerCase().includes(searchQuery.toLowerCase()))
     );
   }, [visitors, startDate, endDate, searchQuery, dateValidation.isValid]);
+
+  // --- REKAP FOTO DOKUMENTASI (4 MODUL LENGKAP) ---
+  const allPhotoItems = useMemo<PhotoRecapItem[]>(() => {
+    if (!dateValidation.isValid) return [];
+    const items: PhotoRecapItem[] = [];
+
+    // 1. Presensi GPS Guru Piket (Selfie / photoUrl / fotoUrl / selfieUrl)
+    attendanceList.forEach((att) => {
+      const attPhoto = att.photoUrl || (att as any).fotoUrl || (att as any).selfieUrl || (att as any).photo;
+      const jamMasukStr = typeof att.jamMasuk === 'string' ? att.jamMasuk : att.jamMasuk ? String(att.jamMasuk) : '';
+      if (attPhoto && att.tanggal >= startDate && att.tanggal <= endDate) {
+        const isLegacy = !isPhotoAlreadyWatermarked(attPhoto);
+        items.push({
+          id: `att-${att.id}`,
+          sourceModule: 'ATTENDANCE',
+          sourceId: att.id,
+          photoUrl: attPhoto,
+          tanggalKejadian: att.tanggal,
+          waktuKejadian: jamMasukStr ? jamMasukStr.slice(0, 5) : undefined,
+          tanggalDokumentasi: att.tanggal,
+          waktuDokumentasi: jamMasukStr ? `${jamMasukStr.slice(0, 5)} WIB` : undefined,
+          petugasName: att.userName,
+          title: `Presensi Masuk: ${att.userName}`,
+          briefIdentity: `Guru Piket • Status: ${att.status}`,
+          notes: `Presensi GPS${att.accuracy ? ` • Akurasi GPS: ±${Math.round(att.accuracy)} m` : ''}`,
+          isLegacyUnwatermarked: isLegacy,
+        });
+      }
+    });
+
+    // 2. Laporan Kejadian (Insiden)
+    incidents.forEach((inc) => {
+      if (inc.tanggal >= startDate && inc.tanggal <= endDate) {
+        if (Array.isArray(inc.photos) && inc.photos.length > 0) {
+          inc.photos.forEach((photo, pIdx) => {
+            const pUrl = photo.url || (photo as any).photoUrl || (photo as any).fotoUrl || (photo as any).urlFoto;
+            if (!pUrl) return;
+            const docDate = photo.uploadedAt ? photo.uploadedAt.split('T')[0] : inc.tanggal;
+            const docTime = photo.uploadedAt ? photo.uploadedAt.split('T')[1]?.slice(0, 5) : inc.waktu;
+            const isLegacy = !isPhotoAlreadyWatermarked(pUrl);
+            items.push({
+              id: `inc-${inc.id}-${photo.id || pIdx}`,
+              sourceModule: 'INCIDENT',
+              sourceId: inc.id,
+              photoUrl: pUrl,
+              tanggalKejadian: inc.tanggal,
+              waktuKejadian: inc.waktu ? `${inc.waktu} WIB` : undefined,
+              tanggalDokumentasi: docDate,
+              waktuDokumentasi: docTime ? `${docTime} WIB` : undefined,
+              petugasName: inc.pelaporName || 'Petugas Piket',
+              title: `Kejadian: ${inc.kategoriName || inc.kategori}`,
+              briefIdentity: `${inc.kategoriName || inc.kategori}${inc.lokasi ? ` • Lokasi: ${inc.lokasi}` : ''}`,
+              notes: inc.uraian || (inc.tingkatKeparahan ? `Tingkat: ${inc.tingkatKeparahan}` : undefined),
+              isLegacyUnwatermarked: isLegacy,
+            });
+          });
+        } else if ((inc as any).fotoUrl || (inc as any).photoUrl || (inc as any).foto || (inc as any).buktiFoto) {
+          const pUrl = (inc as any).fotoUrl || (inc as any).photoUrl || (inc as any).foto || (inc as any).buktiFoto;
+          const isLegacy = !isPhotoAlreadyWatermarked(pUrl);
+          items.push({
+            id: `inc-${inc.id}-legacy`,
+            sourceModule: 'INCIDENT',
+            sourceId: inc.id,
+            photoUrl: pUrl,
+            tanggalKejadian: inc.tanggal,
+            waktuKejadian: inc.waktu ? `${inc.waktu} WIB` : undefined,
+            tanggalDokumentasi: inc.tanggal,
+            waktuDokumentasi: inc.waktu ? `${inc.waktu} WIB` : undefined,
+            petugasName: inc.pelaporName || 'Petugas Piket',
+            title: `Kejadian: ${inc.kategoriName || inc.kategori}`,
+            briefIdentity: `${inc.kategoriName || inc.kategori}${inc.lokasi ? ` • Lokasi: ${inc.lokasi}` : ''}`,
+            notes: inc.uraian || (inc.tingkatKeparahan ? `Tingkat: ${inc.tingkatKeparahan}` : undefined),
+            isLegacyUnwatermarked: isLegacy,
+          });
+        }
+      }
+    });
+
+    // 3. Siswa Terlambat
+    studentTardiness.forEach((tardy) => {
+      const tardyPhoto = tardy.fotoUrl || (tardy as any).photoUrl || (tardy as any).buktiFoto || (tardy as any).foto;
+      if (tardyPhoto && tardy.tanggal >= startDate && tardy.tanggal <= endDate) {
+        const isLegacy = !isPhotoAlreadyWatermarked(tardyPhoto);
+        items.push({
+          id: `tardy-${tardy.id}`,
+          sourceModule: 'STUDENT_TARDY',
+          sourceId: tardy.id,
+          photoUrl: tardyPhoto,
+          tanggalKejadian: tardy.tanggal,
+          waktuKejadian: tardy.jamDatang ? `${tardy.jamDatang} WIB` : undefined,
+          tanggalDokumentasi: tardy.tanggal,
+          waktuDokumentasi: tardy.jamDatang ? `${tardy.jamDatang} WIB` : undefined,
+          petugasName: tardy.createdBy || 'Petugas Piket',
+          title: `Siswa Terlambat: ${tardy.namaSiswa}`,
+          briefIdentity: `Siswa: ${tardy.namaSiswa} • Kelas: ${tardy.kelas}`,
+          notes: `Terlambat ${tardy.menitTerlambat} mnt • Alasan: ${getTardyReasonDisplay(tardy)}`,
+          isLegacyUnwatermarked: isLegacy,
+        });
+      }
+    });
+
+    // 4. Buku Tamu Digital
+    visitors.forEach((vis) => {
+      const visPhoto = vis.fotoUrl || (vis as any).photoUrl || (vis as any).fotoTamu || (vis as any).foto;
+      if (visPhoto && vis.tanggal >= startDate && vis.tanggal <= endDate) {
+        const isLegacy = !isPhotoAlreadyWatermarked(visPhoto);
+        items.push({
+          id: `vis-${vis.id}`,
+          sourceModule: 'VISITOR',
+          sourceId: vis.id,
+          photoUrl: visPhoto,
+          tanggalKejadian: vis.tanggal,
+          waktuKejadian: vis.jamMasuk ? `${vis.jamMasuk} WIB` : undefined,
+          tanggalDokumentasi: vis.tanggal,
+          waktuDokumentasi: vis.jamMasuk ? `${vis.jamMasuk} WIB` : undefined,
+          petugasName: vis.petugasPiketName || 'Petugas Piket',
+          title: `Buku Tamu: ${vis.namaTamu}`,
+          briefIdentity: `Tamu: ${vis.namaTamu}${vis.instansiAsal ? ` • Asal: ${vis.instansiAsal}` : ''}`,
+          notes: `Tujuan: ${vis.tujuanBertemu || '-'}${vis.keperluan ? ` (${vis.keperluan})` : ''}`,
+          isLegacyUnwatermarked: isLegacy,
+        });
+      }
+    });
+
+    return items.sort((a, b) => {
+      const dateA = a.tanggalKejadian + (a.waktuKejadian || '');
+      const dateB = b.tanggalKejadian + (b.waktuKejadian || '');
+      return dateB.localeCompare(dateA);
+    });
+  }, [attendanceList, incidents, studentTardiness, visitors, startDate, endDate, dateValidation.isValid]);
+
+  const filteredPhotoItems = useMemo(() => {
+    return allPhotoItems.filter((item) => {
+      if (photoModuleFilter !== 'ALL' && item.sourceModule !== photoModuleFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchIdentity = item.briefIdentity.toLowerCase().includes(q);
+        const matchPetugas = item.petugasName?.toLowerCase().includes(q);
+        const matchNotes = item.notes?.toLowerCase().includes(q);
+        const matchDate = item.tanggalKejadian.includes(q);
+        if (!matchTitle && !matchIdentity && !matchPetugas && !matchNotes && !matchDate) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allPhotoItems, photoModuleFilter, searchQuery]);
+
+  const PHOTO_PAGE_SIZE = 12;
+  const totalPhotoPages = Math.ceil(filteredPhotoItems.length / PHOTO_PAGE_SIZE) || 1;
+  const paginatedPhotos = useMemo(() => {
+    const start = (photoRecapPage - 1) * PHOTO_PAGE_SIZE;
+    return filteredPhotoItems.slice(start, start + PHOTO_PAGE_SIZE);
+  }, [filteredPhotoItems, photoRecapPage]);
+
+  // Reset photo recap page on filter change
+  useEffect(() => {
+    setPhotoRecapPage(1);
+  }, [photoModuleFilter, searchQuery, startDate, endDate]);
+
+  const handleToggleSelectPhoto = (id: string) => {
+    setSelectedPhotoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    if (selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0) {
+      setSelectedPhotoIds(new Set());
+    } else {
+      setSelectedPhotoIds(new Set(filteredPhotoItems.map((p) => p.id)));
+    }
+  };
+
+  const selectedPhotosList = useMemo(() => {
+    if (selectedPhotoIds.size === 0) return filteredPhotoItems;
+    return filteredPhotoItems.filter((p) => selectedPhotoIds.has(p.id));
+  }, [filteredPhotoItems, selectedPhotoIds]);
 
   // --- EXPORT TO CSV / EXCEL HANDLERS ---
   const handleExportAttendanceCsv = async () => {
@@ -562,6 +979,9 @@ export const ReportsPreview: React.FC = () => {
         return handleExportSubstitutionsCsv();
       case 'visitors':
         return handleExportVisitorsCsv();
+      case 'photoRecap':
+        setIsPhotoRecapPrintOpen(true);
+        return;
     }
   };
 
@@ -580,87 +1000,108 @@ export const ReportsPreview: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Tombol Berikon Gambar dengan Label "Rekap Foto" pada Area Tindakan Atas Halaman (Dekat Tombol Cetak) */}
           <Button
-            variant="outline"
+            variant={activeTab === 'photoRecap' ? 'primary' : 'outline'}
             size="sm"
-            leftIcon={<Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
-            onClick={() => setIsPrintModalOpen(true)}
+            leftIcon={<ImageIcon className={`w-4 h-4 ${activeTab === 'photoRecap' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />}
+            onClick={() => {
+              setActiveTab('photoRecap');
+            }}
+            className={`font-bold shadow-xs cursor-pointer transition-all ${
+              activeTab === 'photoRecap'
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                : 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
+            }`}
+            title="Buka Rekap Foto Dokumentasi Sekolah"
           >
-            Pratinjau & Cetak Rekap Resmi
+            <span className="flex items-center gap-1.5">
+              <span>Rekap Foto</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                  activeTab === 'photoRecap'
+                    ? 'bg-white text-indigo-700'
+                    : 'bg-indigo-600 text-white'
+                }`}
+              >
+                {allPhotoItems.length}
+              </span>
+            </span>
           </Button>
 
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Download className="w-4 h-4" />}
-            onClick={handleExportActiveTab}
-          >
-            Ekspor Excel Tab Aktif
-          </Button>
+          {activeTab === 'photoRecap' ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<FileBarChart2 className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
+                onClick={() => setActiveTab('attendance')}
+                className="font-semibold cursor-pointer"
+              >
+                Kembali ke Tabel Laporan
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Printer className="w-4 h-4" />}
+                onClick={() => setIsPhotoRecapPrintOpen(true)}
+                disabled={selectedPhotosList.length === 0}
+                className="font-bold cursor-pointer shadow-sm"
+              >
+                Cetak / Ekspor PDF Lampiran Foto ({selectedPhotosList.length})
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
+                onClick={() => setIsPrintModalOpen(true)}
+              >
+                Pratinjau & Cetak Rekap Resmi
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Download className="w-4 h-4" />}
+                onClick={handleExportActiveTab}
+              >
+                Ekspor Excel Tab Aktif
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* FILTER PERIODE REKAP (5 PILIHAN PERIODE LENGKAP) */}
+      {/* FILTER PERIODE REKAP (DROPDOWN PERIODE LAPORAN) */}
       <Card>
         <CardContent className="p-4 sm:p-5 space-y-4">
-          {/* Mode Selector Tabs */}
+          {/* Mode Selector Dropdown */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-              <CalendarRange className="w-4 h-4 text-[var(--theme-primary)]" />
-              <span>Pilihan Periode Rekapitulasi:</span>
+            <div className="flex items-center gap-2">
+              <CalendarRange className="w-4 h-4 text-[var(--theme-primary)] shrink-0" />
+              <label htmlFor="period-mode-select" className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Periode Laporan:
+              </label>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
-              <button
-                onClick={() => setPeriodMode('weekly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  periodMode === 'weekly'
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
+            <div className="w-full sm:w-auto min-w-[220px]">
+              <select
+                id="period-mode-select"
+                aria-label="Periode Laporan"
+                value={periodMode}
+                onChange={(e) => setPeriodMode(e.target.value as ReportPeriodMode)}
+                className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold focus:ring-2 focus:ring-[var(--theme-primary)] focus:outline-none cursor-pointer shadow-xs transition-colors"
               >
-                Mingguan
-              </button>
-              <button
-                onClick={() => setPeriodMode('monthly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  periodMode === 'monthly'
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Bulanan
-              </button>
-              <button
-                onClick={() => setPeriodMode('semester')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  periodMode === 'semester'
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Semester
-              </button>
-              <button
-                onClick={() => setPeriodMode('yearly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  periodMode === 'yearly'
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Tahunan
-              </button>
-              <button
-                onClick={() => setPeriodMode('custom')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  periodMode === 'custom'
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Rentang Khusus
-              </button>
+                <option value="weekly">Mingguan</option>
+                <option value="monthly">Bulanan</option>
+                <option value="semester">Semester</option>
+                <option value="yearly">Tahunan</option>
+                <option value="custom">Rentang Khusus</option>
+              </select>
             </div>
           </div>
 
@@ -863,46 +1304,88 @@ export const ReportsPreview: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* REPORT TABS NAVIGATION (7 TABS TOTAL) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 dark:border-[var(--theme-card-border)] scrollbar-none">
-        {[
-          { id: 'attendance', label: 'Presensi Guru', icon: Users, count: attendanceSummaries.length },
-          { id: 'incidents', label: 'Insiden Kejadian', icon: AlertTriangle, count: totalIncidents },
-          { id: 'dutyBooks', label: 'Jurnal Buku Piket', icon: BookOpenCheck, count: filteredDutyBooks.length },
-          { id: 'studentTardiness', label: 'Keterlambatan Siswa', icon: UserX, count: filteredTardiness.length },
-          { id: 'studentPermits', label: 'Izin Meninggalkan Sekolah', icon: FileText, count: filteredPermits.length },
-          { id: 'substitutions', label: 'Guru Pengganti (Inval)', icon: GraduationCap, count: filteredSubstitutions.length },
-          { id: 'visitors', label: 'Buku Tamu Sekolah', icon: Building, count: filteredVisitors.length },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as ReportTab);
-                setSearchQuery('');
-              }}
-              className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                isActive
-                  ? 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] bg-[var(--theme-primary-light)]/50 dark:bg-[var(--theme-primary-light)]/20 rounded-t-xl'
-                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+      {/* Quick Select for Mobile / Compact screens */}
+      <div className="lg:hidden flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <label htmlFor="quick-report-tab-select" className="text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0 flex items-center gap-1.5">
+          <FileBarChart2 className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
+          <span>Menu Laporan:</span>
+        </label>
+        <select
+          id="quick-report-tab-select"
+          aria-label="Pilih Tampilan Laporan"
+          value={activeTab}
+          onChange={(e) => {
+            setActiveTab(e.target.value as ReportTab);
+            setSearchQuery('');
+          }}
+          className="w-full max-w-[260px] text-xs font-bold p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--theme-primary)] cursor-pointer"
+        >
+          <option value="attendance">Presensi Guru ({attendanceSummaries.length})</option>
+          <option value="incidents">Insiden Kejadian ({totalIncidents})</option>
+          <option value="dutyBooks">Jurnal Buku Piket ({filteredDutyBooks.length})</option>
+          <option value="studentTardiness">Keterlambatan Siswa ({filteredTardiness.length})</option>
+          <option value="studentPermits">Izin Meninggalkan Sekolah ({filteredPermits.length})</option>
+          <option value="substitutions">Guru Pengganti (Inval) ({filteredSubstitutions.length})</option>
+          <option value="visitors">Buku Tamu Sekolah ({filteredVisitors.length})</option>
+          <option value="photoRecap">📷 Rekap Foto Dokumentasi ({allPhotoItems.length})</option>
+        </select>
+      </div>
+
+      {/* REPORT TABS NAVIGATION (8 TABS TOTAL) */}
+      <div className="relative">
+        <div
+          ref={tabListRef}
+          className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-200 dark:border-[var(--theme-card-border)]"
+        >
+          {[
+            { id: 'attendance', label: 'Presensi Guru', icon: Users, count: attendanceSummaries.length },
+            { id: 'incidents', label: 'Insiden Kejadian', icon: AlertTriangle, count: totalIncidents },
+            { id: 'dutyBooks', label: 'Jurnal Buku Piket', icon: BookOpenCheck, count: filteredDutyBooks.length },
+            { id: 'studentTardiness', label: 'Keterlambatan Siswa', icon: UserX, count: filteredTardiness.length },
+            { id: 'studentPermits', label: 'Izin Meninggalkan Sekolah', icon: FileText, count: filteredPermits.length },
+            { id: 'substitutions', label: 'Guru Pengganti (Inval)', icon: GraduationCap, count: filteredSubstitutions.length },
+            { id: 'visitors', label: 'Buku Tamu Sekolah', icon: Building, count: filteredVisitors.length },
+            { id: 'photoRecap', label: 'Rekap Foto', icon: ImageIcon, count: allPhotoItems.length },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const isPhoto = tab.id === 'photoRecap';
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id as ReportTab);
+                  setSearchQuery('');
+                }}
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)]'
-                    : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
+                    ? isPhoto
+                      ? 'border-indigo-600 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 rounded-t-xl font-bold shadow-xs ring-1 ring-indigo-500/30'
+                      : 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] bg-[var(--theme-primary-light)]/50 dark:bg-[var(--theme-primary-light)]/20 rounded-t-xl font-bold'
+                    : isPhoto
+                      ? 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 bg-indigo-50/90 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-bold rounded-t-xl'
+                      : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
+                <Icon className={`w-4 h-4 ${isPhoto ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    isActive
+                      ? isPhoto
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)]'
+                      : isPhoto
+                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+                        : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* TAB 1: ATTENDANCE SUMMARY */}
@@ -1588,6 +2071,294 @@ export const ReportsPreview: React.FC = () => {
         </div>
       )}
 
+      {/* TAB 8: PHOTO RECAP (REKAP FOTO DOKUMENTASI BULANAN) */}
+      {activeTab === 'photoRecap' && (
+        <div className="space-y-4">
+          {/* Top Control Bar: Module Filter & Bulk Selection */}
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-[var(--theme-primary)] shrink-0" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Filter Modul Dokumentasi:
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'ALL', label: 'Semua Modul' },
+                    { id: 'ATTENDANCE', label: 'Presensi GPS' },
+                    { id: 'INCIDENT', label: 'Laporan Kejadian' },
+                    { id: 'STUDENT_TARDY', label: 'Siswa Terlambat' },
+                    { id: 'VISITOR', label: 'Buku Tamu' },
+                  ].map((m) => {
+                    const isMActive = photoModuleFilter === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPhotoModuleFilter(m.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                          isMActive
+                            ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-xs font-bold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={handleSelectAllFiltered}
+                    disabled={filteredPhotoItems.length === 0}
+                    leftIcon={
+                      selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0 ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    {selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0
+                      ? 'Batal Pilih Semua'
+                      : 'Pilih Seluruh Hasil Filter'}
+                  </Button>
+
+                  <span className="text-slate-500 font-medium">
+                    {selectedPhotoIds.size > 0 ? (
+                      <span className="font-bold text-[var(--theme-primary)]">
+                        {selectedPhotoIds.size} dari {filteredPhotoItems.length} foto dipilih
+                      </span>
+                    ) : (
+                      <span>Total {filteredPhotoItems.length} foto tersedia</span>
+                    )}
+                  </span>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  className="font-bold shadow-md text-xs"
+                  leftIcon={<Printer className="w-3.5 h-3.5" />}
+                  onClick={() => setIsPhotoRecapPrintOpen(true)}
+                  disabled={filteredPhotoItems.length === 0}
+                >
+                  Cetak & Ekspor PDF A4 ({selectedPhotosList.length} Foto)
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Photo Cards Grid */}
+          {isLoadingData ? (
+            <Card>
+              <CardContent className="p-12 text-center space-y-3">
+                <div className="w-8 h-8 border-3 border-[var(--theme-primary)] border-t-transparent rounded-full animate-spin mx-auto" />
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Memuat Dokumentasi Foto...
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Sedang mengambil berkas foto dan bukti lapangan dari database sekolah...
+                </p>
+              </CardContent>
+            </Card>
+          ) : dataLoadError ? (
+            <Card>
+              <CardContent className="p-12 text-center space-y-3">
+                <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Gagal Mengambil Data Foto
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {dataLoadError}
+                </p>
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.location.reload()}
+                    className="text-xs font-semibold"
+                  >
+                    Muat Ulang Halaman
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : filteredPhotoItems.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center space-y-3">
+                {allPhotoItems.length === 0 ? (
+                  <>
+                    <ImageIcon className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Belum ada foto pada periode yang dipilih
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      Belum ditemukan foto dokumentasi bukti pada periode {periodLabel} dari modul Presensi GPS, Laporan Kejadian, Siswa Terlambat, maupun Buku Tamu.
+                      Coba sesuaikan pilihan Periode Laporan di bagian atas atau periksa entri data sekolah.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Tidak ada foto yang cocok
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      Ditemukan {allPhotoItems.length} foto pada periode ini, namun tidak ada yang cocok dengan filter modul atau kata kunci "{searchQuery}".
+                    </p>
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setPhotoModuleFilter('ALL');
+                          setSearchQuery('');
+                        }}
+                        className="text-xs font-semibold"
+                      >
+                        Reset Filter &amp; Pencarian
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {paginatedPhotos.map((photo) => (
+                  <PhotoCardItem
+                    key={photo.id}
+                    photo={photo}
+                    isSelected={selectedPhotoIds.has(photo.id)}
+                    onToggleSelect={handleToggleSelectPhoto}
+                    onPreview={setPreviewPhotoItem}
+                  />
+                ))}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPhotoPages > 1 && (
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="text-slate-500">
+                    Menampilkan {(photoRecapPage - 1) * PHOTO_PAGE_SIZE + 1} s.d{' '}
+                    {Math.min(photoRecapPage * PHOTO_PAGE_SIZE, filteredPhotoItems.length)} dari{' '}
+                    {filteredPhotoItems.length} foto
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPhotoRecapPage((p) => Math.max(1, p - 1))}
+                      disabled={photoRecapPage === 1}
+                      leftIcon={<ChevronLeft className="w-3.5 h-3.5" />}
+                    >
+                      Sebelumnya
+                    </Button>
+                    <span className="px-3 py-1 font-mono font-bold text-slate-700 dark:text-slate-300">
+                      Hal {photoRecapPage} / {totalPhotoPages}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPhotoRecapPage((p) => Math.min(totalPhotoPages, p + 1))}
+                      disabled={photoRecapPage === totalPhotoPages}
+                      rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
+                    >
+                      Berikutnya
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SINGLE PHOTO DETAIL ZOOM MODAL */}
+      {previewPhotoItem && (
+        <Modal
+          isOpen={previewPhotoItem !== null}
+          onClose={() => setPreviewPhotoItem(null)}
+          title="Detail Foto Dokumentasi"
+          maxWidth="lg"
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl overflow-hidden bg-black flex items-center justify-center p-2 border border-slate-800">
+              <img
+                src={previewPhotoItem.photoUrl}
+                alt={previewPhotoItem.title}
+                className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2 text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">
+                  {previewPhotoItem.title}
+                </span>
+                {previewPhotoItem.isLegacyUnwatermarked ? (
+                  <Badge variant="warning">Foto Arsip (Non-watermark)</Badge>
+                ) : (
+                  <Badge variant="success">Berwatermark Resmi</Badge>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-[11px] text-slate-600 dark:text-slate-300">
+                <div>
+                  <strong>Identitas:</strong> {previewPhotoItem.briefIdentity}
+                </div>
+                <div>
+                  <strong>Tanggal Kejadian:</strong> {formatIndonesianDate(previewPhotoItem.tanggalKejadian)}
+                  {previewPhotoItem.waktuKejadian ? ` (${previewPhotoItem.waktuKejadian})` : ''}
+                </div>
+                {previewPhotoItem.tanggalDokumentasi && (
+                  <div>
+                    <strong>Tanggal Foto:</strong> {formatIndonesianDate(previewPhotoItem.tanggalDokumentasi)}
+                    {previewPhotoItem.waktuDokumentasi ? ` (${previewPhotoItem.waktuDokumentasi})` : ''}
+                  </div>
+                )}
+                {previewPhotoItem.petugasName && (
+                  <div>
+                    <strong>Petugas Pencatat:</strong> {previewPhotoItem.petugasName}
+                  </div>
+                )}
+              </div>
+
+              {previewPhotoItem.notes && (
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 italic">
+                  <strong>Catatan:</strong> {previewPhotoItem.notes}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button size="sm" variant="outline" onClick={() => setPreviewPhotoItem(null)}>
+                Tutup Pratinjau
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* MONTHLY REPORT PRINT MODAL (ALL MODULES CONNECTED) */}
       <MonthlyReportPrintModal
         isOpen={isPrintModalOpen}
@@ -1603,6 +2374,15 @@ export const ReportsPreview: React.FC = () => {
         substitutionRecords={filteredSubstitutions}
         visitorRecords={filteredVisitors}
         dutyBookRecords={filteredDutyBooks}
+      />
+
+      {/* PHOTO RECAP PRINT MODAL (LAMPIRAN DOKUMENTASI BULANAN A4) */}
+      <PhotoRecapPrintModal
+        isOpen={isPhotoRecapPrintOpen}
+        onClose={() => setIsPhotoRecapPrintOpen(false)}
+        settings={settings}
+        periodLabel={periodLabel}
+        selectedPhotos={selectedPhotosList}
       />
     </div>
   );

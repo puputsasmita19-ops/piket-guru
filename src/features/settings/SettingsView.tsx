@@ -43,6 +43,9 @@ import { BellEmergencyAutomationCard } from './BellEmergencyAutomationCard';
 import { SnapshotManagerCard } from './SnapshotManagerCard';
 import { AuditForensicViewer } from './AuditForensicViewer';
 import { OperationalResetCard } from './OperationalResetCard';
+import { DocumentationWatermarkSettingsCard } from './DocumentationWatermarkSettingsCard';
+import { GoogleDriveSettingsCard } from './GoogleDriveSettingsCard';
+import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
@@ -323,18 +326,50 @@ export const SettingsView: React.FC = () => {
       setUsers(data);
     });
 
-    const unsubLogs = FirestoreService.subscribeToCollection<AuditLogRecord>('auditLogs', (data) => {
-      setAuditLogs(
-        data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      );
-    });
+    const todayISO = new Date().toISOString().split('T')[0];
+
+    const unsubLogs = FirestoreService.subscribeToCollection<AuditLogRecord>(
+      'auditLogs',
+      (data) => {
+        setAuditLogs(
+          data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        );
+      },
+      undefined,
+      [limit(50)]
+    );
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
-    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions);
-    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setTardiness);
-    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setPermits);
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors);
-    const unsubAnnounce = FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', setAnnouncements);
+    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      setSubstitutions,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+      'studentTardiness',
+      setTardiness,
+      undefined,
+      [where('tanggal', '==', todayISO)]
+    );
+    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+      'studentPermits',
+      setPermits,
+      undefined,
+      [where('status', '==', 'SEDANG_KELUAR')]
+    );
+    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
+      'visitors',
+      setVisitors,
+      undefined,
+      [where('status', '==', 'SEDANG_BERKUNJUNG')]
+    );
+    const unsubAnnounce = FirestoreService.subscribeToCollection<AnnouncementRecord>(
+      'announcements',
+      setAnnouncements,
+      undefined,
+      [where('isActive', '==', true)]
+    );
 
     return () => {
       mountedRef.current = false;
@@ -1634,6 +1669,17 @@ export const SettingsView: React.FC = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Card Pengaturan Watermark Dokumentasi Foto */}
+          <DocumentationWatermarkSettingsCard
+            settings={settings}
+            isAdmin={isAdmin}
+            userId={currentUser?.id || ''}
+            onSettingsUpdated={(newSettings) => setSettings(newSettings)}
+          />
+
+          {/* Card Penyimpanan Foto Google Drive (Khusus Admin) */}
+          {isAdmin && <GoogleDriveSettingsCard />}
 
           <Card id="settings-location-section" data-tour="settings-location-card">
             <CardHeader

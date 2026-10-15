@@ -10,18 +10,29 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
+  getCountFromServer,
   onSnapshot,
   serverTimestamp,
   deleteField,
   writeBatch,
   QueryConstraint,
   Unsubscribe,
+  QueryDocumentSnapshot,
+  DocumentSnapshot,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { AuditLogRecord, AuditLogStatus } from '../../types/master.types';
 import { isOperationalRecord, UserRole } from '../../types';
 import { OfflineStorage } from '../offline/offlineStorage';
 import { AuditService } from '../audit/auditService';
+
+export interface PaginatedResult<T> {
+  items: T[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+  totalCount?: number;
+}
 
 const getLocalItem = (key: string): string | null => {
   if (typeof localStorage !== 'undefined') {
@@ -170,6 +181,81 @@ export class FirestoreService {
     const q = query(colRef, ...constraints);
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
+  }
+
+  /**
+   * Efficient database-level cursor pagination using Firestore startAfter and limit.
+   * Fetches pageSize + 1 to determine if next page exists without downloading all data.
+   */
+  public static async getPaginated<T>(
+    collectionName: string,
+    constraints: QueryConstraint[] = [],
+    pageSize: number = 15,
+    lastDocCursor: QueryDocumentSnapshot | null = null,
+    options: QueryDataOptions = { operationalOnly: true }
+  ): Promise<PaginatedResult<T>> {
+    try {
+      const colRef = collection(db, collectionName);
+      const paginationConstraints: QueryConstraint[] = lastDocCursor
+        ? [...constraints, startAfter(lastDocCursor), limit(pageSize + 1)]
+        : [...constraints, limit(pageSize + 1)];
+
+      const q = query(colRef, ...paginationConstraints);
+      const snapshot = await getDocs(q);
+      const rawDocs = snapshot.docs;
+
+      const hasMore = rawDocs.length > pageSize;
+      const targetDocs = hasMore ? rawDocs.slice(0, pageSize) : rawDocs;
+      const lastDoc = targetDocs.length > 0 ? targetDocs[targetDocs.length - 1] : null;
+
+      let items = targetDocs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
+      if (options.operationalOnly !== false) {
+        items = items.filter(isOperationalRecord);
+      }
+
+      return {
+        items,
+        lastDoc,
+        hasMore,
+      };
+    } catch (err: any) {
+      console.error(`Error in getPaginated for ${collectionName}:`, err);
+      // Fallback for offline cached records
+      const currentUid = auth?.currentUser?.uid || 'guest';
+      const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
+      if (cached && Array.isArray(cached.data)) {
+        const filtered = options.operationalOnly !== false ? cached.data.filter(isOperationalRecord) : cached.data;
+        return {
+          items: filtered.slice(0, pageSize),
+          lastDoc: null,
+          hasMore: filtered.length > pageSize,
+          totalCount: filtered.length,
+        };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Lightweight server aggregation query to get total record count without downloading document bodies.
+   * Charges only 1 read per up to 1,000 index entries.
+   */
+  public static async getCollectionCount(
+    collectionName: string,
+    constraints: QueryConstraint[] = []
+  ): Promise<number> {
+    try {
+      const colRef = collection(db, collectionName);
+      const q = query(colRef, ...constraints);
+      const snapshot = await getCountFromServer(q);
+      return snapshot.data().count;
+    } catch (err: any) {
+      console.warn(`[FirestoreService] getCountFromServer failed for ${collectionName} (falling back to local estimate):`, err);
+      // Fallback: estimate from scoped offline cache
+      const currentUid = auth?.currentUser?.uid || 'guest';
+      const cached = await OfflineStorage.getScopedCache<any>(currentUid, collectionName);
+      return cached && Array.isArray(cached.data) ? cached.data.length : 0;
+    }
   }
 
   /**
