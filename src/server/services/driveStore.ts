@@ -20,7 +20,7 @@ export interface DriveConfigDoc {
 export interface DriveUploadOptions {
   buffer: Buffer;
   mimeType: string;
-  module: 'attendance' | 'incidents' | 'studentPermits' | 'visitors' | 'general';
+  module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general';
   clientPhotoId?: string;
   uploadedBy?: string;
   recordId?: string;
@@ -132,7 +132,7 @@ export class DriveStore {
    */
   public static async getConfig(): Promise<DriveConfigDoc> {
     if (!adminDb) {
-      return { status: 'DISCONNECTED', enabled: false };
+      throw new Error('Database konfigurasi Google Drive tidak tersedia.');
     }
     try {
       const snap = await adminDb.collection(CONFIG_COLLECTION).doc(CONFIG_DOC_ID).get();
@@ -141,8 +141,8 @@ export class DriveStore {
       }
       return snap.data() as DriveConfigDoc;
     } catch (err) {
-      console.error('[DRIVE_STORE] Error reading Drive config:', err);
-      return { status: 'DISCONNECTED', enabled: false };
+      console.error('[DRIVE_STORE] Error reading Drive config');
+      throw new Error('Gagal membaca konfigurasi Google Drive.');
     }
   }
 

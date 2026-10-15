@@ -5,6 +5,23 @@ import { adminAuth, adminDb } from '../firebaseAdmin.js';
 
 export const driveRouter = Router();
 
+/** Storage policy only. Connection management and owner information stay admin-only. */
+driveRouter.get('/storage-status', requireAuth, async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const config = await DriveStore.getConfig();
+    const creds = DriveStore.getCredentials();
+    res.json({
+      success: true,
+      configuredInEnv: Boolean(creds.clientId && creds.clientSecret),
+      status: config.status || 'DISCONNECTED',
+      enabled: config.enabled === true,
+    });
+  } catch {
+    res.status(503).json({ success: false, error: 'Kebijakan penyimpanan foto belum dapat dibaca. Coba lagi.' });
+  }
+});
+
 /**
  * GET /api/drive/status
  * Returns connection and activation status for Google Drive Photo Storage.
@@ -212,11 +229,19 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
     return;
   }
 
-  const validModules = ['attendance', 'incidents', 'studentPermits', 'visitors', 'general'];
+  const validModules = ['attendance', 'studentTardiness', 'incidents', 'studentPermits', 'visitors', 'general'];
   if (!module || !validModules.includes(module)) {
     res.status(400).json({ success: false, error: `Modul '${module}' tidak valid.` });
     return;
   }
+
+  // Match the staff roles permitted to create studentTardiness in firestore.rules.
+  if (module === 'studentTardiness' && !['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role)) {
+    res.status(403).json({ success: false, error: 'Akses unggah dokumentasi siswa terlambat ditolak.' });
+    return;
+  }
+
+  console.info('[DRIVE_UPLOAD] started', { module });
 
   try {
     // Strip Base64 header prefix if present (e.g. data:image/jpeg;base64,...)
@@ -245,6 +270,8 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
 
     const photoUrl = `/api/drive/photo/${uploadResult.fileId}`;
 
+    console.info('[DRIVE_UPLOAD] completed', { module, size: uploadResult.size });
+
     res.json({
       success: true,
       fileId: uploadResult.fileId,
@@ -256,7 +283,7 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
       createdAt: uploadResult.createdAt,
     });
   } catch (err: any) {
-    console.error('[DRIVE_ROUTES] Upload error:', err);
+    console.error('[DRIVE_UPLOAD] failed', { module, code: err?.code || err?.response?.status || 'UPLOAD_FAILED' });
     res.status(500).json({
       success: false,
       error: 'Gagal mengunggah foto ke Google Drive: ' + (err.message || 'Kesalahan sistem'),

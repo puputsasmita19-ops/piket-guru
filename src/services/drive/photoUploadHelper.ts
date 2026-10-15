@@ -9,31 +9,24 @@ export interface ProcessedPhotoResult {
 /**
  * Checks if Google Drive Photo Storage is enabled and active.
  */
-let cachedDriveEnabled: { enabled: boolean; lastCheck: number } | null = null;
-
 export async function isDriveStorageActive(): Promise<boolean> {
-  const now = Date.now();
-  // Cache status for 30 seconds to avoid excessive network calls
-  if (cachedDriveEnabled && now - cachedDriveEnabled.lastCheck < 30000) {
-    return cachedDriveEnabled.enabled;
-  }
-
   try {
-    const status = await DriveClientService.getStatus();
-    const isActive = status.configuredInEnv && status.status === 'CONNECTED' && status.enabled === true;
-    cachedDriveEnabled = { enabled: isActive, lastCheck: now };
-    return isActive;
-  } catch (err) {
-    console.warn('[PHOTO_UPLOAD_HELPER] Failed to check Drive status, defaulting to inactive:', err);
-    return false;
+    // Use the minimal authenticated endpoint, not the admin settings endpoint.
+    // Read fresh settings for each save so another tab/admin can enable Drive.
+    const status = await DriveClientService.getStorageStatus();
+    if (!status.success || typeof status.enabled !== 'boolean') {
+      throw new Error('Respons status penyimpanan tidak valid.');
+    }
+    if (!status.enabled) return false;
+    if (!status.configuredInEnv || status.status !== 'CONNECTED') {
+      throw new Error('Penyimpanan Drive aktif tetapi koneksi belum siap. Hubungi administrator.');
+    }
+    return true;
+  } catch (err: any) {
+    // Unknown/unavailable is not the same as explicitly disabled. Do not silently
+    // put large Base64 photos back into Firestore on 403/network/server errors.
+    throw new Error(`Status penyimpanan foto belum dapat dipastikan: ${err?.message || 'Kesalahan koneksi'}. Foto belum dikirim; silakan coba lagi.`);
   }
-}
-
-/**
- * Force invalidates the local cached Drive status.
- */
-export function invalidateDriveStatusCache(): void {
-  cachedDriveEnabled = null;
 }
 
 /**
@@ -43,7 +36,7 @@ export function invalidateDriveStatusCache(): void {
  */
 export async function processPhotoForStorage(
   photoInput: string,
-  module: 'attendance' | 'incidents' | 'studentPermits' | 'visitors' | 'general',
+  module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general',
   clientPhotoId?: string,
   recordId?: string
 ): Promise<ProcessedPhotoResult> {
@@ -72,7 +65,7 @@ export async function processPhotoForStorage(
       recordId,
     });
 
-    if (!uploadRes.success) {
+    if (!uploadRes.success || !uploadRes.fileId || !uploadRes.photoUrl) {
       throw new Error(uploadRes.error || 'Gagal mengunggah foto ke Google Drive.');
     }
 
@@ -84,7 +77,7 @@ export async function processPhotoForStorage(
   } catch (err: any) {
     console.error(`[PHOTO_UPLOAD_HELPER] Upload failed for module ${module}:`, err);
     // Mandatory policy: DO NOT fall back silently to Base64 in Firestore when Drive is enabled!
-    throw new Error(`Gagal menyimpan foto ke Google Drive: ${err.message || 'Kesalahan koneksi'}. Draf/data Anda telah diamankan, silakan coba kirim kembali.`);
+    throw new Error(`Gagal menyimpan foto ke Google Drive: ${err.message || 'Kesalahan koneksi'}. Foto belum terkirim; jangan tutup formulir dan coba simpan kembali.`);
   }
 }
 
@@ -93,7 +86,7 @@ export async function processPhotoForStorage(
  */
 export async function processMultiplePhotosForStorage<T extends { url: string; id?: string }>(
   photos: T[],
-  module: 'attendance' | 'incidents' | 'studentPermits' | 'visitors' | 'general',
+  module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general',
   recordId?: string
 ): Promise<T[]> {
   if (!photos || photos.length === 0) return [];

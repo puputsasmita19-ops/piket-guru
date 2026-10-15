@@ -22,6 +22,13 @@ export function createApp(): Express {
   // Request logger for API calls (sanitized: never log pin/passwords)
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
+      // Drive uploads contain private photos. OAuth requests may contain secrets.
+      // Log only method/path for these routes, never the request body or query.
+      if (req.path.startsWith('/api/drive/')) {
+        console.log(`[API] ${req.method} ${req.path}`);
+        next();
+        return;
+      }
       const sanitizedBody = { ...req.body };
       if (sanitizedBody.pin) sanitizedBody.pin = '[REDACTED]';
       if (sanitizedBody.oldPin) sanitizedBody.oldPin = '[REDACTED]';

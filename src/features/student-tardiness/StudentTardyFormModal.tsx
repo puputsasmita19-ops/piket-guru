@@ -110,6 +110,8 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   const [sharedKeteranganPembinaan, setSharedKeteranganPembinaan] = useState('');
   const [sharedCatatanPetugas, setSharedCatatanPetugas] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
+  // Creation uses each student's own attachment; editing uses the existing record.
+  const displayPhoto = editingTardy ? fotoUrl : selectedStudents.length === 1 ? selectedStudents[0].fotoUrl : undefined;
 
   // Single edit mode fallback states
   const [singleStudentName, setSingleStudentName] = useState('');
@@ -487,7 +489,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         keteranganPembinaan: effectivePembinaan === 'LAINNYA' ? effectiveKetPembinaan.trim() : undefined,
         poinPelanggaran: points,
         frekuensiBulanIni: entry.frekuensiBulanIni,
-        fotoUrl: entry.fotoUrl || (selectedStudents.length === 1 ? fotoUrl : undefined),
+        fotoUrl: entry.fotoUrl,
         catatanPetugas: effectiveCatatan.trim() || undefined,
         ruleSnapshot,
       };
@@ -500,10 +502,10 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         for (let i = 0; i < selectedStudents.length; i++) {
           const entry = selectedStudents[i];
           const payload = payloads[i];
-          const recId = `trd-${tanggal}-${entry.student.id}-${batchRequestIdRef.current.slice(0, 8)}`;
+          const recId = StudentTardyService.getBatchRecordId(tanggal, entry.student.id, batchRequestIdRef.current);
 
           let attachments: { [key: string]: Blob } | undefined = undefined;
-          const studentPhoto = entry.fotoUrl || (selectedStudents.length === 1 ? fotoUrl : undefined);
+          const studentPhoto = entry.fotoUrl;
           if (studentPhoto && studentPhoto.startsWith('data:image/')) {
             const blob = await DraftService.dataUrlToBlob(studentPhoto);
             attachments = { tardy_photo: blob };
@@ -541,10 +543,8 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       setShowSummaryConfirm(false);
 
       if (batchRes.allSuccessful) {
-        // Notify parent refresh
-        if (batchRes.results[0]?.record) {
-          await onSave(batchRes.results[0].record, false);
-        }
+        // Records were already saved by the batch service. The parent listens
+        // to Firestore; calling onSave here would write the first record twice.
         onClose();
       }
     } catch (err: any) {
@@ -1087,7 +1087,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 <span className="text-[11px] text-slate-500">
                   {selectedStudents.length > 1
                     ? 'Mode banyak siswa: Lampirkan foto pada kartu masing-masing siswa di daftar atas agar watermark tercantum sesuai nama siswa yang bersangkutan.'
-                    : fotoUrl
+                    : displayPhoto
                     ? 'Foto terlampir dengan watermark resmi'
                     : 'Opsional sebagai bukti visual kedatangan di pos gerbang'}
                 </span>
@@ -1096,7 +1096,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
             {selectedStudents.length <= 1 ? (
               <div className="flex items-center gap-2">
-                {fotoUrl ? (
+                {displayPhoto ? (
                   <>
                     <Button
                       type="button"
@@ -1145,6 +1145,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                     size="sm"
                     className="text-xs"
                     leftIcon={<Camera className="w-3.5 h-3.5" />}
+                    disabled={!editingTardy && selectedStudents.length === 0}
                     onClick={() => {
                       if (selectedStudents.length === 1) {
                         setTargetStudentIdForPhoto(selectedStudents[0].student.id);
@@ -1389,7 +1390,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       />
 
       {/* Photo Zoom Preview Modal */}
-      {fotoUrl && (
+      {displayPhoto && (
         <Modal
           isOpen={isPreviewPhotoOpen}
           onClose={() => setIsPreviewPhotoOpen(false)}
@@ -1398,7 +1399,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         >
           <div className="space-y-3 text-center">
             <img
-              src={fotoUrl}
+              src={displayPhoto}
               alt="Preview Siswa Terlambat"
               className="w-full max-h-[70vh] object-contain rounded-xl border border-slate-200 dark:border-slate-800 shadow-md"
             />

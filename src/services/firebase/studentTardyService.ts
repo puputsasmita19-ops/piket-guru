@@ -1,9 +1,12 @@
 import { FirestoreService } from './firestoreService';
 import { StudentTardyRecord, TardyStatus } from '../../types/studentTardy.types';
 import { UserProfile } from '../../types';
-import { processPhotoForStorage, isDriveStorageActive } from '../drive/photoUploadHelper';
+import { processPhotoForStorage } from '../drive/photoUploadHelper';
 
 export class StudentTardyService {
+  public static getBatchRecordId(tanggal: string, studentId: string, batchRequestId: string): string {
+    return `trd-${tanggal}-${encodeURIComponent(studentId)}-${encodeURIComponent(batchRequestId)}`;
+  }
   /**
    * Automatic demo student tardiness seeding is disabled in production to protect data integrity.
    */
@@ -129,12 +132,14 @@ export class StudentTardyService {
     user: UserProfile,
     isEdit: boolean = false
   ): Promise<StudentTardyRecord> {
-    const isNew = !isEdit && (!data.id || data.id.startsWith('temp-'));
-    const id = isNew ? `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${Date.now().toString(36)}` : (data.id as string);
+    const id = data.id && !data.id.startsWith('temp-')
+      ? data.id
+      : `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${crypto.randomUUID()}`;
 
     // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
     const existingDoc = await FirestoreService.getById<StudentTardyRecord>('studentTardiness', id);
-    if (isNew && existingDoc) {
+    const isNew = !existingDoc;
+    if (!isEdit && existingDoc && data.batchRequestId && existingDoc.batchRequestId === data.batchRequestId) {
       return existingDoc;
     }
     if (isEdit && existingDoc && data.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > data.updatedAt && existingDoc.updatedBy !== user.fullName) {
@@ -145,14 +150,16 @@ export class StudentTardyService {
 
     // Process photo upload to Google Drive if Drive storage is enabled
     let finalFotoUrl: string | undefined = data.fotoUrl || undefined;
-    if (finalFotoUrl && (finalFotoUrl.startsWith('data:image/') || finalFotoUrl.length > 200) && !finalFotoUrl.startsWith('/api/drive/photo/')) {
-      const driveActive = await isDriveStorageActive();
-      if (driveActive) {
+    if (finalFotoUrl?.startsWith('data:image/')) {
         try {
-          const clientPhotoId = `tardy-${data.studentId || id}-${data.tanggal || now.split('T')[0]}`;
+          // Same record/photo retries reuse the upload; a replacement photo gets
+          // a different identity instead of incorrectly reusing the old image.
+          const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${id}\0${finalFotoUrl}`));
+          const photoHash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+          const clientPhotoId = `tardy-${photoHash}`;
           const processed = await processPhotoForStorage(
             finalFotoUrl,
-            'attendance',
+            'studentTardiness',
             clientPhotoId,
             id
           );
@@ -163,7 +170,6 @@ export class StudentTardyService {
           console.error('[STUDENT_TARDY_SERVICE] Google Drive photo upload failed:', err);
           throw new Error(`Gagal menyimpan foto siswa terlambat ke Google Drive: ${err?.message || 'Kesalahan koneksi'}`);
         }
-      }
     }
 
     const rawPayload: StudentTardyRecord = {
@@ -285,7 +291,7 @@ export class StudentTardyService {
         }
 
         // Generate deterministic document ID based on batchRequestId + studentId for safe retry
-        const deterministicId = item.id || `trd-${itemTanggal}-${item.studentId}-${batchRequestId.slice(0, 8)}`;
+        const deterministicId = item.id || this.getBatchRecordId(itemTanggal, item.studentId, batchRequestId);
 
         const savedRecord = await this.saveTardyStudent(
           {

@@ -13,6 +13,9 @@ export interface DriveStatusResponse {
   lastError: string | null;
 }
 
+export type DriveStorageStatusResponse = Pick<DriveStatusResponse,
+  'success' | 'configuredInEnv' | 'status' | 'enabled'>;
+
 export interface DriveUploadResult {
   success: boolean;
   fileId: string;
@@ -34,6 +37,20 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 export class DriveClientService {
+  /** Minimal storage policy for authenticated staff; contains no owner details. */
+  public static async getStorageStatus(): Promise<DriveStorageStatusResponse> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/drive/storage-status', {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Gagal mengambil kebijakan penyimpanan foto.');
+    }
+    return data;
+  }
   /**
    * Fetches Google Drive storage configuration and connection status.
    */
@@ -143,7 +160,7 @@ export class DriveClientService {
    */
   public static async uploadPhoto(options: {
     base64: string;
-    module: 'attendance' | 'incidents' | 'studentPermits' | 'visitors' | 'general';
+    module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general';
     mimeType?: string;
     clientPhotoId?: string;
     recordId?: string;
