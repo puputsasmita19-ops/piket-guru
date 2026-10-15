@@ -6,15 +6,15 @@ import { encryptToken, decryptToken } from '../crypto/tokenEncryption.js';
 export interface DriveConfigDoc {
   status: 'CONNECTED' | 'NEEDS_RECONNECT' | 'DISCONNECTED';
   enabled: boolean;
-  accountEmail?: string;
-  accountName?: string;
-  encryptedRefreshToken?: string;
-  rootFolderId?: string;
-  rootFolderName?: string;
-  lastConnectedAt?: string;
-  lastTestedAt?: string;
-  lastError?: string;
-  updatedBy?: string;
+  accountEmail?: string | null;
+  accountName?: string | null;
+  encryptedRefreshToken?: string | null;
+  rootFolderId?: string | null;
+  rootFolderName?: string | null;
+  lastConnectedAt?: string | null;
+  lastTestedAt?: string | null;
+  lastError?: string | null;
+  updatedBy?: string | null;
 }
 
 export interface DriveUploadOptions {
@@ -147,26 +147,34 @@ export class DriveStore {
   }
 
   /**
-   * Updates Google Drive configuration doc in Firestore.
+   * Updates Google Drive configuration doc in Firestore safely without undefined properties.
    */
   public static async updateConfig(updates: Partial<DriveConfigDoc>): Promise<void> {
     if (!adminDb) return;
     try {
+      const cleanPayload: Record<string, any> = {
+        updatedAt: new Date().toISOString(),
+      };
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (value !== undefined) {
+          cleanPayload[key] = value;
+        }
+      }
+
       await adminDb.collection(CONFIG_COLLECTION).doc(CONFIG_DOC_ID).set(
-        {
-          ...updates,
-          updatedAt: new Date().toISOString(),
-        },
+        cleanPayload,
         { merge: true }
       );
-    } catch (err) {
-      console.error('[DRIVE_STORE] Error updating Drive config:', err);
+    } catch (err: any) {
+      console.error('[DRIVE_STORE] Error updating Drive config:', err?.message || err);
       throw new Error('Gagal menyimpan konfigurasi Google Drive ke database.');
     }
   }
 
   /**
    * Handles OAuth Callback: exchanges code for tokens, verifies profile, ensures root folder, and saves config.
+   * Separates failures explicitly into token exchange, encryption, folder setup, and Firestore persistence.
    */
   public static async handleOAuthCallback(code: string, state: string, redirectUri?: string): Promise<{ success: boolean; email?: string; error?: string }> {
     const stateVal = this.validateAuthState(state);
@@ -176,40 +184,77 @@ export class DriveStore {
 
     const oauth2Client = this.createOAuth2Client(redirectUri);
 
+    // 1. Exchange authorization code for OAuth tokens
+    let tokens: any;
     try {
-      const { tokens } = await oauth2Client.getToken(code);
-      if (!tokens.refresh_token) {
-        // If refresh token wasn't returned, check if existing refresh token is saved
-        const currentConfig = await this.getConfig();
-        if (!currentConfig.encryptedRefreshToken) {
-          return {
-            success: false,
-            error: 'Google OAuth tidak memberikan Refresh Token. Silakan hubungkan ulang dengan izin konfirmasi penuh.',
-          };
-        }
-      }
+      const tokenRes = await oauth2Client.getToken(code);
+      tokens = tokenRes.tokens;
+    } catch (err: any) {
+      console.error('[DRIVE_STORE] OAuth token exchange failed:', err?.message || err);
+      await this.updateConfig({
+        status: 'NEEDS_RECONNECT',
+        lastError: `Gagal pertukaran token OAuth: ${err?.message || 'Kode otorisasi tidak valid'}`,
+      });
+      return { success: false, error: 'Gagal pertukaran token OAuth: ' + (err?.message || 'Error pertukaran token') };
+    }
 
-      oauth2Client.setCredentials(tokens);
+    // 2. Validate or preserve Refresh Token
+    const existingConfig = await this.getConfig();
+    const rawRefreshToken = tokens.refresh_token || (existingConfig.encryptedRefreshToken ? decryptToken(existingConfig.encryptedRefreshToken) : '');
 
-      // Fetch user email profile from Google
+    if (!rawRefreshToken) {
+      const errMsg = 'Google OAuth tidak memberikan Refresh Token. Silakan hubungkan ulang dengan izin konfirmasi penuh.';
+      await this.updateConfig({
+        status: 'NEEDS_RECONNECT',
+        lastError: errMsg,
+      });
+      return { success: false, error: errMsg };
+    }
+
+    oauth2Client.setCredentials(tokens);
+
+    // 3. Fetch user profile from Google
+    let accountEmail = 'Google Drive Owner';
+    let accountName = '';
+    try {
       const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
       const userInfo = await oauth2.userinfo.get();
-      const accountEmail = userInfo.data.email || 'Google Drive Owner';
-      const accountName = userInfo.data.name || '';
+      accountEmail = userInfo.data.email || 'Google Drive Owner';
+      accountName = userInfo.data.name || '';
+    } catch (err: any) {
+      console.warn('[DRIVE_STORE] Failed to fetch Google user profile:', err?.message || err);
+      accountEmail = existingConfig.accountEmail || 'Google Drive Owner';
+      accountName = existingConfig.accountName || '';
+    }
 
-      // Create or locate Root App Folder in Drive
-      const rootFolderId = await this.ensureFolder(oauth2Client, DEFAULT_ROOT_FOLDER, null);
+    // 4. Ensure Root App Folder in Drive
+    let rootFolderId: string;
+    try {
+      rootFolderId = await this.ensureFolder(oauth2Client, DEFAULT_ROOT_FOLDER, null);
+    } catch (err: any) {
+      console.error('[DRIVE_STORE] Drive root folder creation failed:', err?.message || err);
+      await this.updateConfig({
+        status: 'NEEDS_RECONNECT',
+        lastError: `Gagal membuat folder utama Google Drive: ${err?.message || 'Kesalahan API Drive'}`,
+      });
+      return { success: false, error: `Gagal membuat folder utama Google Drive: ${err?.message || 'Kesalahan API Drive'}` };
+    }
 
-      // Encrypt and store refresh token
-      const existingConfig = await this.getConfig();
-      const rawRefreshToken = tokens.refresh_token || (existingConfig.encryptedRefreshToken ? decryptToken(existingConfig.encryptedRefreshToken) : '');
+    // 5. Encrypt refresh token
+    let encryptedRefreshToken: string;
+    try {
+      encryptedRefreshToken = encryptToken(rawRefreshToken);
+    } catch (err: any) {
+      console.error('[DRIVE_STORE] Token encryption failed:', err?.message || err);
+      await this.updateConfig({
+        status: 'NEEDS_RECONNECT',
+        lastError: `Gagal mengenkripsi Refresh Token: ${err?.message || 'Kesalahan sistem enkripsi'}`,
+      });
+      return { success: false, error: `Gagal mengenkripsi token otorisasi: ${err?.message || 'Kesalahan sistem enkripsi'}` };
+    }
 
-      if (!rawRefreshToken) {
-        return { success: false, error: 'Gagal memperoleh Refresh Token dari Google.' };
-      }
-
-      const encryptedRefreshToken = encryptToken(rawRefreshToken);
-
+    // 6. Save final connected configuration in Firestore
+    try {
       await this.updateConfig({
         status: 'CONNECTED',
         accountEmail,
@@ -218,19 +263,15 @@ export class DriveStore {
         rootFolderId,
         rootFolderName: DEFAULT_ROOT_FOLDER,
         lastConnectedAt: new Date().toISOString(),
-        lastError: undefined,
+        lastError: null,
         updatedBy: stateVal.adminUid,
       });
-
-      return { success: true, email: accountEmail };
     } catch (err: any) {
-      console.error('[DRIVE_STORE] OAuth Callback exchange failed:', err);
-      await this.updateConfig({
-        status: 'NEEDS_RECONNECT',
-        lastError: err.message || 'Gagal melakukan pertukaran authorization code OAuth',
-      });
-      return { success: false, error: 'Gagal menghubungkan Google Drive: ' + (err.message || 'Error pertukaran token') };
+      console.error('[DRIVE_STORE] Firestore config update failed:', err?.message || err);
+      return { success: false, error: `Gagal menyimpan konfigurasi Google Drive: ${err?.message || 'Kesalahan database'}` };
     }
+
+    return { success: true, email: accountEmail };
   }
 
   /**
@@ -254,7 +295,9 @@ export class DriveStore {
     // Listen for token updates (if Google issues a new refresh_token during rotation)
     oauth2Client.on('tokens', (newTokens) => {
       if (newTokens.refresh_token) {
-        this.updateConfig({ encryptedRefreshToken: encryptToken(newTokens.refresh_token) }).catch(() => {});
+        this.updateConfig({ encryptedRefreshToken: encryptToken(newTokens.refresh_token) }).catch((err) => {
+          console.error('[DRIVE_STORE] Failed to save rotated refresh token:', err?.message || err);
+        });
       }
     });
 
@@ -357,33 +400,36 @@ export class DriveStore {
       await this.updateConfig({
         status: 'CONNECTED',
         lastTestedAt: new Date().toISOString(),
-        lastError: undefined,
+        lastError: null,
       });
 
       return {
         success: true,
-        accountEmail: config.accountEmail,
+        accountEmail: config.accountEmail || undefined,
         message: `Koneksi Google Drive (${config.accountEmail}) berfungsi dengan baik. File uji berhasil dibuat dan dibersihkan.`,
       };
     } catch (err: any) {
-      console.error('[DRIVE_STORE] Test connection failed:', err);
+      console.error('[DRIVE_STORE] Test connection failed:', err?.message || err);
 
       let isInvalidGrant = false;
-      const msg = err.message || '';
+      const msg = err?.message || '';
       if (msg.includes('invalid_grant') || msg.includes('Token has been expired or revoked')) {
         isInvalidGrant = true;
       }
 
+      const existingConfig = await this.getConfig();
+      const newStatus = isInvalidGrant ? 'NEEDS_RECONNECT' : (existingConfig.status || 'CONNECTED');
+
       await this.updateConfig({
-        status: isInvalidGrant ? 'NEEDS_RECONNECT' : configStatusFallback(err),
-        lastError: err.message || 'Uji koneksi gagal',
+        status: newStatus,
+        lastError: err?.message || 'Uji koneksi gagal',
       });
 
       return {
         success: false,
         message: isInvalidGrant
           ? 'Izin akses Google Drive telah kadaluwarsa atau dicabut. Silakan lakukan hubungkan ulang.'
-          : `Gagal menguji koneksi Google Drive: ${err.message}`,
+          : `Gagal menguji koneksi Google Drive: ${err?.message || 'Error tidak diketahui'}`,
       };
     }
   }
@@ -425,8 +471,8 @@ export class DriveStore {
             createdAt: new Date().toISOString(),
           };
         }
-      } catch (err) {
-        console.warn('[DRIVE_STORE] Idempotency lookup warning:', err);
+      } catch (err: any) {
+        console.warn('[DRIVE_STORE] Idempotency lookup warning:', err?.message || err);
       }
     }
 
@@ -515,10 +561,10 @@ export class DriveStore {
     await this.updateConfig({
       status: 'DISCONNECTED',
       enabled: false,
-      encryptedRefreshToken: undefined,
-      accountEmail: undefined,
-      accountName: undefined,
-      lastError: undefined,
+      encryptedRefreshToken: null,
+      accountEmail: null,
+      accountName: null,
+      lastError: null,
     });
   }
 }
