@@ -28,7 +28,7 @@ import {
   ImageOff,
   ChevronLeft,
   ChevronRight,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -1142,8 +1142,7 @@ export const ReportsPreview: React.FC = () => {
                       className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium cursor-pointer"
                     >
                       {INDONESIAN_MONTHS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
+                        <option key={m.value} value={m.value}>{m.label}
                         </option>
                       ))}
                     </select>
@@ -1328,7 +1327,7 @@ export const ReportsPreview: React.FC = () => {
           <option value="studentPermits">Izin Meninggalkan Sekolah ({filteredPermits.length})</option>
           <option value="substitutions">Guru Pengganti (Inval) ({filteredSubstitutions.length})</option>
           <option value="visitors">Buku Tamu Sekolah ({filteredVisitors.length})</option>
-          <option value="photoRecap">📷 Rekap Foto Dokumentasi ({allPhotoItems.length})</option>
+          <option value="photoRecap">Rekap Foto Dokumentasi ({allPhotoItems.length})</option>
         </select>
       </div>
 

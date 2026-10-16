@@ -28,7 +28,7 @@ import {
   X,
   ShieldCheck,
   Sparkles,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface LessonPeriodSettingsCardProps {
   settings: SchoolSettings;

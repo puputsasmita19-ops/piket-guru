@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { StudentRecord } from '../../types/master.types';
-import { User, Phone, Smartphone, MapPin, Hash, Sparkles } from 'lucide-react';
+import { User, Phone, Smartphone, MapPin, Hash, Sparkles } from '../../components/icons';
 
 interface StudentFormModalProps {
   isOpen: boolean;

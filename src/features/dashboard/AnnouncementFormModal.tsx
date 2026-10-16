@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { AnnouncementPriority } from '../../types/announcement.types';
-import { Megaphone, Save } from 'lucide-react';
+import { Megaphone, Save } from '../../components/icons';
 
 interface AnnouncementFormModalProps {
   isOpen: boolean;
@@ -71,9 +71,9 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
               onChange={(e) => setPriority(e.target.value as AnnouncementPriority)}
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
             >
-              <option value="INFO">ℹ️ Informasi Biasa</option>
-              <option value="PENTING">⚠️ Penting (Perhatian Khusus)</option>
-              <option value="DARURAT">🚨 Darurat (Segera)</option>
+              <option value="INFO">ℹ Informasi Biasa</option>
+              <option value="PENTING">Penting (Perhatian Khusus)</option>
+              <option value="DARURAT">Darurat (Segera)</option>
             </select>
           </div>
 

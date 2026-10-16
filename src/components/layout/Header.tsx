@@ -20,7 +20,7 @@ import {
   RotateCcw,
   PanelLeftOpen,
   PanelLeftClose,
-} from 'lucide-react';
+} from '../icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';

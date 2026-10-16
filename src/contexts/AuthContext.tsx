@@ -9,6 +9,7 @@ import { FirestoreService } from '../services/firebase/firestoreService';
 
 import { OfflineStorage } from '../services/offline/offlineStorage';
 import { SyncQueueService } from '../services/offline/syncQueueService';
+import { AlertTriangle } from '../components/icons';
 import { AuditService } from '../services/audit/auditService';
 
 interface AuthContextType {
@@ -548,9 +549,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <div className="p-2.5 bg-amber-100 dark:bg-amber-950/80 rounded-xl">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+                <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">Perhatian: Data Unsynced</h3>

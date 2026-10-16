@@ -10,7 +10,7 @@ import {
   Layout,
   Check,
   HelpCircle,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';

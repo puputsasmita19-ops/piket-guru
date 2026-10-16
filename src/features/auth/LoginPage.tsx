@@ -25,7 +25,7 @@ import {
   ExternalLink,
   ShieldAlert,
   MessageSquare,
-} from 'lucide-react';
+} from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { authService, UserSummaryItem } from '../../services/auth/authService';

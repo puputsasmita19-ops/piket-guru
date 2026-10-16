@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { StudentTardyRecord, getTardyReasonDisplay, getDisciplineActionDisplay } from '../../types/studentTardy.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, CheckCircle2 } from 'lucide-react';
+import { Printer, CheckCircle2 } from '../../components/icons';
 
 interface StudentTardyAdmitPrintModalProps {
   isOpen: boolean;

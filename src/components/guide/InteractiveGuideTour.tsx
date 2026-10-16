@@ -14,7 +14,7 @@ import {
   Navigation,
   Compass,
   Info,
-} from 'lucide-react';
+} from '../icons';
 import { useGuide } from '../../contexts/GuideContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';

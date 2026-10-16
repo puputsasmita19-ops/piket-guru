@@ -9,8 +9,8 @@ import {
   AlertTriangle,
   UserCheck,
   FileText,
-  UserX,
-  Clock,
+  UserSwitch,
+  ClockCountdown,
   FileBarChart2,
   Users,
   Settings,
@@ -19,7 +19,7 @@ import {
   Pin,
   PinOff,
   PanelLeftClose,
-} from 'lucide-react';
+} from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavigationTab } from '../../types';
@@ -62,8 +62,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'attendance', label: 'Presensi GPS', icon: MapPin, permission: PERMISSIONS.ATTENDANCE_VIEW },
     { id: 'duty-book', label: 'Buku Piket Digital', icon: BookOpenCheck, permission: PERMISSIONS.DUTYBOOK_VIEW },
     { id: 'incidents', label: 'Laporan Kejadian', icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
-    { id: 'student-tardiness', label: 'Siswa Terlambat', icon: Clock, permission: PERMISSIONS.STUDENT_TARDY_VIEW },
-    { id: 'substitutions', label: 'Guru Inval / Pengganti', icon: UserX, permission: PERMISSIONS.SUBSTITUTIONS_VIEW },
+    { id: 'student-tardiness', label: 'Siswa Terlambat', icon: ClockCountdown, permission: PERMISSIONS.STUDENT_TARDY_VIEW },
+    { id: 'substitutions', label: 'Guru Inval / Pengganti', icon: UserSwitch, permission: PERMISSIONS.SUBSTITUTIONS_VIEW },
     { id: 'student-permits', label: 'Izin Siswa & Gerbang', icon: FileText, permission: PERMISSIONS.STUDENT_PERMITS_VIEW },
     { id: 'visitors', label: 'Buku Tamu Digital', icon: UserCheck, permission: PERMISSIONS.VISITORS_VIEW },
   ];
@@ -189,7 +189,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       key={item.id}
                       onClick={() => handleMenuClick(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
                           ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
@@ -197,13 +198,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
                             isActive
                               ? 'bg-white/20 text-inherit'
-                              : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400 group-hover:bg-white group-hover:text-[var(--theme-primary)]'
+                              : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
                           }`}
                         >
-                          <Icon className="w-4 h-4" />
+                          <Icon className="w-5 h-5" />
                         </div>
                         <span>{item.label}</span>
                       </div>
@@ -234,7 +235,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       key={item.id}
                       onClick={() => handleMenuClick(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
                           ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
@@ -242,13 +244,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
                             isActive
                               ? 'bg-white/20 text-inherit'
-                              : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400 group-hover:bg-white group-hover:text-[var(--theme-primary)]'
+                              : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
                           }`}
                         >
-                          <Icon className="w-4 h-4" />
+                          <Icon className="w-5 h-5" />
                         </div>
                         <span>{item.label}</span>
                       </div>

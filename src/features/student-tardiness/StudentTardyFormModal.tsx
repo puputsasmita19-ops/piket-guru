@@ -44,7 +44,7 @@ import {
   Sliders,
   ShieldAlert,
   X,
-} from 'lucide-react';
+} from '../../components/icons';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 
@@ -992,11 +992,11 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
               >
                 <option value="BANGUN_KESIANGAN">⏰ Bangun Kesiangan</option>
-                <option value="MACET_LALULINTAS">🚗 Terjebak Macet Lalu Lintas</option>
-                <option value="KENDARAAN_MOGOK">🛵 Kendaraan Rusak / Mogok</option>
-                <option value="HUJAN_LEBAT">🌧️ Cuaca Buruk / Hujan Lebat</option>
-                <option value="MEMBANTU_ORANG_TUA">👨‍👩‍👦 Membantu Urusan Orang Tua</option>
-                <option value="LAINNYA">📝 Lain-lain</option>
+                <option value="MACET_LALULINTAS">Terjebak Macet Lalu Lintas</option>
+                <option value="KENDARAAN_MOGOK">Kendaraan Rusak / Mogok</option>
+                <option value="HUJAN_LEBAT">Cuaca Buruk / Hujan Lebat</option>
+                <option value="MEMBANTU_ORANG_TUA">Membantu Urusan Orang Tua</option>
+                <option value="LAINNYA">Lain-lain</option>
               </select>
             </div>
 
@@ -1013,13 +1013,13 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 }}
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
               >
-                <option value="LITERASI_PERPUSTAKAAN">📚 Literasi Membaca Buku di Perpustakaan</option>
-                <option value="PEMBERSIHAN_LINGKUNGAN">🧹 Kerja Bakti / Kebersihan Lingkungan Sekolah</option>
-                <option value="LITERASI_ROHANI_IBADAH">📖 Tadarus / Doa & Pembinaan Rohani</option>
-                <option value="IKRAR_KEDISIPLINAN">🫡 Pengucapan Ikrar Kedisiplinan & Hormat Bendera</option>
-                <option value="PEMBINAAN_GURU_BK">🧑‍💼 Konseling Khusus Guru Bimbingan Konseling</option>
-                <option value="SURAT_PERINGATAN_ORTU">✉️ Penerbitan Surat Panggilan Orang Tua</option>
-                <option value="LAINNYA">📝 Lain-lain</option>
+                <option value="LITERASI_PERPUSTAKAAN">Literasi Membaca Buku di Perpustakaan</option>
+                <option value="PEMBERSIHAN_LINGKUNGAN">Kerja Bakti / Kebersihan Lingkungan Sekolah</option>
+                <option value="LITERASI_ROHANI_IBADAH">Tadarus / Doa & Pembinaan Rohani</option>
+                <option value="IKRAR_KEDISIPLINAN">Pengucapan Ikrar Kedisiplinan & Hormat Bendera</option>
+                <option value="PEMBINAAN_GURU_BK">Konseling Khusus Guru Bimbingan Konseling</option>
+                <option value="SURAT_PERINGATAN_ORTU">Penerbitan Surat Panggilan Orang Tua</option>
+                <option value="LAINNYA">Lain-lain</option>
               </select>
             </div>
           </div>

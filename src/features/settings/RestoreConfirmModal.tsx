@@ -10,7 +10,7 @@ import {
   Database,
   Calendar,
   Layers,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface RestoreConfirmModalProps {
   isOpen: boolean;

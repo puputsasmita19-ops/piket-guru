@@ -1,0 +1,574 @@
+{
+  "Activity": {
+    "source": "Pulse",
+    "weight": "duotone"
+  },
+  "AlertCircle": {
+    "source": "WarningCircle",
+    "weight": "duotone"
+  },
+  "AlertOctagon": {
+    "source": "WarningOctagon",
+    "weight": "duotone"
+  },
+  "AlertTriangle": {
+    "source": "Warning",
+    "weight": "duotone"
+  },
+  "ArrowLeft": {
+    "source": "ArrowLeft",
+    "weight": "bold"
+  },
+  "ArrowRight": {
+    "source": "ArrowRight",
+    "weight": "bold"
+  },
+  "ArrowUp": {
+    "source": "ArrowUp",
+    "weight": "bold"
+  },
+  "Award": {
+    "source": "Medal",
+    "weight": "duotone"
+  },
+  "Bell": {
+    "source": "BellSimple",
+    "weight": "duotone"
+  },
+  "BellRing": {
+    "source": "BellRinging",
+    "weight": "duotone"
+  },
+  "BookOpen": {
+    "source": "BookOpenText",
+    "weight": "duotone"
+  },
+  "BookOpenCheck": {
+    "source": "Notebook",
+    "weight": "duotone"
+  },
+  "Briefcase": {
+    "source": "Briefcase",
+    "weight": "duotone"
+  },
+  "Building": {
+    "source": "Buildings",
+    "weight": "duotone"
+  },
+  "Building2": {
+    "source": "BuildingOffice",
+    "weight": "duotone"
+  },
+  "Calendar": {
+    "source": "CalendarBlank",
+    "weight": "duotone"
+  },
+  "CalendarDays": {
+    "source": "CalendarDots",
+    "weight": "duotone"
+  },
+  "CalendarRange": {
+    "source": "Calendar",
+    "weight": "duotone"
+  },
+  "Camera": {
+    "source": "Camera",
+    "weight": "duotone"
+  },
+  "Check": {
+    "source": "Check",
+    "weight": "bold"
+  },
+  "CheckCheck": {
+    "source": "Checks",
+    "weight": "bold"
+  },
+  "CheckCircle2": {
+    "source": "CheckCircle",
+    "weight": "duotone"
+  },
+  "CheckSquare": {
+    "source": "CheckSquare",
+    "weight": "duotone"
+  },
+  "ChevronDown": {
+    "source": "CaretDown",
+    "weight": "bold"
+  },
+  "ChevronLeft": {
+    "source": "CaretLeft",
+    "weight": "bold"
+  },
+  "ChevronRight": {
+    "source": "CaretRight",
+    "weight": "bold"
+  },
+  "ChevronUp": {
+    "source": "CaretUp",
+    "weight": "bold"
+  },
+  "Clock": {
+    "source": "Clock",
+    "weight": "duotone"
+  },
+  "Cloud": {
+    "source": "Cloud",
+    "weight": "duotone"
+  },
+  "Compass": {
+    "source": "Compass",
+    "weight": "duotone"
+  },
+  "Copy": {
+    "source": "Copy",
+    "weight": "duotone"
+  },
+  "CreditCard": {
+    "source": "IdentificationCard",
+    "weight": "duotone"
+  },
+  "Database": {
+    "source": "Database",
+    "weight": "duotone"
+  },
+  "Delete": {
+    "source": "Backspace",
+    "weight": "bold"
+  },
+  "DoorOpen": {
+    "source": "DoorOpen",
+    "weight": "duotone"
+  },
+  "Download": {
+    "source": "DownloadSimple",
+    "weight": "duotone"
+  },
+  "Edit2": {
+    "source": "PencilSimple",
+    "weight": "duotone"
+  },
+  "Edit3": {
+    "source": "NotePencil",
+    "weight": "duotone"
+  },
+  "ExternalLink": {
+    "source": "ArrowSquareOut",
+    "weight": "bold"
+  },
+  "Eye": {
+    "source": "Eye",
+    "weight": "duotone"
+  },
+  "EyeOff": {
+    "source": "EyeSlash",
+    "weight": "duotone"
+  },
+  "FileBarChart2": {
+    "source": "ChartBar",
+    "weight": "duotone"
+  },
+  "FileCheck": {
+    "source": "ClipboardText",
+    "weight": "duotone"
+  },
+  "FileCheck2": {
+    "source": "ClipboardText",
+    "weight": "duotone"
+  },
+  "FileCode": {
+    "source": "FileCode",
+    "weight": "duotone"
+  },
+  "FileSpreadsheet": {
+    "source": "MicrosoftExcelLogo",
+    "weight": "duotone"
+  },
+  "FileText": {
+    "source": "FileText",
+    "weight": "duotone"
+  },
+  "Filter": {
+    "source": "FunnelSimple",
+    "weight": "duotone"
+  },
+  "Flame": {
+    "source": "Fire",
+    "weight": "duotone"
+  },
+  "FlipHorizontal": {
+    "source": "FlipHorizontal",
+    "weight": "bold"
+  },
+  "GraduationCap": {
+    "source": "GraduationCap",
+    "weight": "duotone"
+  },
+  "Grid": {
+    "source": "GridFour",
+    "weight": "duotone"
+  },
+  "HardDrive": {
+    "source": "HardDrive",
+    "weight": "duotone"
+  },
+  "Hash": {
+    "source": "Hash",
+    "weight": "duotone"
+  },
+  "HeartPulse": {
+    "source": "Heartbeat",
+    "weight": "duotone"
+  },
+  "HelpCircle": {
+    "source": "Question",
+    "weight": "duotone"
+  },
+  "History": {
+    "source": "ClockCounterClockwise",
+    "weight": "duotone"
+  },
+  "Hospital": {
+    "source": "Hospital",
+    "weight": "duotone"
+  },
+  "Image": {
+    "source": "ImageSquare",
+    "weight": "duotone"
+  },
+  "ImageOff": {
+    "source": "ImageBroken",
+    "weight": "duotone"
+  },
+  "Info": {
+    "source": "Info",
+    "weight": "duotone"
+  },
+  "Key": {
+    "source": "Key",
+    "weight": "duotone"
+  },
+  "KeyRound": {
+    "source": "Key",
+    "weight": "duotone"
+  },
+  "Layers": {
+    "source": "Stack",
+    "weight": "duotone"
+  },
+  "Layout": {
+    "source": "Layout",
+    "weight": "duotone"
+  },
+  "LayoutDashboard": {
+    "source": "SquaresFour",
+    "weight": "duotone"
+  },
+  "LayoutGrid": {
+    "source": "DotsNine",
+    "weight": "bold"
+  },
+  "List": {
+    "source": "ListBullets",
+    "weight": "duotone"
+  },
+  "ListOrdered": {
+    "source": "ListNumbers",
+    "weight": "duotone"
+  },
+  "Loader2": {
+    "source": "SpinnerGap",
+    "weight": "bold"
+  },
+  "Lock": {
+    "source": "LockKey",
+    "weight": "duotone"
+  },
+  "LockOpen": {
+    "source": "LockOpen",
+    "weight": "duotone"
+  },
+  "LogIn": {
+    "source": "SignIn",
+    "weight": "duotone"
+  },
+  "LogOut": {
+    "source": "SignOut",
+    "weight": "duotone"
+  },
+  "Mail": {
+    "source": "EnvelopeSimple",
+    "weight": "duotone"
+  },
+  "MapPin": {
+    "source": "MapPinArea",
+    "weight": "duotone"
+  },
+  "Maximize": {
+    "source": "CornersOut",
+    "weight": "duotone"
+  },
+  "Megaphone": {
+    "source": "MegaphoneSimple",
+    "weight": "duotone"
+  },
+  "Menu": {
+    "source": "List",
+    "weight": "bold"
+  },
+  "MessageSquare": {
+    "source": "ChatTeardropText",
+    "weight": "duotone"
+  },
+  "Minimize": {
+    "source": "CornersIn",
+    "weight": "duotone"
+  },
+  "MinusCircle": {
+    "source": "MinusCircle",
+    "weight": "duotone"
+  },
+  "Monitor": {
+    "source": "Desktop",
+    "weight": "duotone"
+  },
+  "Moon": {
+    "source": "MoonStars",
+    "weight": "duotone"
+  },
+  "MoveDown": {
+    "source": "ArrowDown",
+    "weight": "bold"
+  },
+  "MoveUp": {
+    "source": "ArrowUp",
+    "weight": "bold"
+  },
+  "Navigation": {
+    "source": "NavigationArrow",
+    "weight": "duotone"
+  },
+  "Palette": {
+    "source": "Palette",
+    "weight": "duotone"
+  },
+  "PanelLeftClose": {
+    "source": "Sidebar",
+    "weight": "bold"
+  },
+  "PanelLeftOpen": {
+    "source": "SidebarSimple",
+    "weight": "bold"
+  },
+  "Pause": {
+    "source": "Pause",
+    "weight": "bold"
+  },
+  "PenTool": {
+    "source": "PenNib",
+    "weight": "duotone"
+  },
+  "Phone": {
+    "source": "Phone",
+    "weight": "duotone"
+  },
+  "PhoneCall": {
+    "source": "PhoneCall",
+    "weight": "duotone"
+  },
+  "Pin": {
+    "source": "PushPin",
+    "weight": "duotone"
+  },
+  "PinOff": {
+    "source": "PushPinSlash",
+    "weight": "duotone"
+  },
+  "Play": {
+    "source": "Play",
+    "weight": "bold"
+  },
+  "Plus": {
+    "source": "Plus",
+    "weight": "bold"
+  },
+  "PlusCircle": {
+    "source": "PlusCircle",
+    "weight": "duotone"
+  },
+  "Power": {
+    "source": "Power",
+    "weight": "duotone"
+  },
+  "Printer": {
+    "source": "Printer",
+    "weight": "duotone"
+  },
+  "Radio": {
+    "source": "Broadcast",
+    "weight": "duotone"
+  },
+  "RefreshCw": {
+    "source": "ArrowsClockwise",
+    "weight": "bold"
+  },
+  "RotateCcw": {
+    "source": "ArrowCounterClockwise",
+    "weight": "bold"
+  },
+  "Save": {
+    "source": "FloppyDisk",
+    "weight": "duotone"
+  },
+  "School": {
+    "source": "GraduationCap",
+    "weight": "duotone"
+  },
+  "Search": {
+    "source": "MagnifyingGlass",
+    "weight": "bold"
+  },
+  "Send": {
+    "source": "PaperPlaneTilt",
+    "weight": "duotone"
+  },
+  "Server": {
+    "source": "ComputerTower",
+    "weight": "duotone"
+  },
+  "Settings": {
+    "source": "GearSix",
+    "weight": "duotone"
+  },
+  "Settings2": {
+    "source": "SlidersHorizontal",
+    "weight": "duotone"
+  },
+  "Shield": {
+    "source": "Shield",
+    "weight": "duotone"
+  },
+  "ShieldAlert": {
+    "source": "ShieldWarning",
+    "weight": "duotone"
+  },
+  "ShieldCheck": {
+    "source": "ShieldCheck",
+    "weight": "duotone"
+  },
+  "Siren": {
+    "source": "Siren",
+    "weight": "duotone"
+  },
+  "Sliders": {
+    "source": "Sliders",
+    "weight": "duotone"
+  },
+  "SlidersHorizontal": {
+    "source": "SlidersHorizontal",
+    "weight": "duotone"
+  },
+  "Smartphone": {
+    "source": "DeviceMobile",
+    "weight": "duotone"
+  },
+  "Sparkles": {
+    "source": "Sparkle",
+    "weight": "duotone"
+  },
+  "Square": {
+    "source": "Square",
+    "weight": "duotone"
+  },
+  "Sun": {
+    "source": "SunDim",
+    "weight": "duotone"
+  },
+  "Tag": {
+    "source": "Tag",
+    "weight": "duotone"
+  },
+  "Trash2": {
+    "source": "Trash",
+    "weight": "duotone"
+  },
+  "TrendingUp": {
+    "source": "TrendUp",
+    "weight": "duotone"
+  },
+  "Tv": {
+    "source": "TelevisionSimple",
+    "weight": "duotone"
+  },
+  "Type": {
+    "source": "TextT",
+    "weight": "duotone"
+  },
+  "Unlock": {
+    "source": "LockKeyOpen",
+    "weight": "duotone"
+  },
+  "Upload": {
+    "source": "UploadSimple",
+    "weight": "duotone"
+  },
+  "User": {
+    "source": "UserCircle",
+    "weight": "duotone"
+  },
+  "UserCheck": {
+    "source": "UserCheck",
+    "weight": "duotone"
+  },
+  "UserPlus": {
+    "source": "UserPlus",
+    "weight": "duotone"
+  },
+  "UserX": {
+    "source": "UserMinus",
+    "weight": "duotone"
+  },
+  "Users": {
+    "source": "UsersThree",
+    "weight": "duotone"
+  },
+  "Volume2": {
+    "source": "SpeakerHigh",
+    "weight": "duotone"
+  },
+  "VolumeX": {
+    "source": "SpeakerSlash",
+    "weight": "duotone"
+  },
+  "Wand2": {
+    "source": "MagicWand",
+    "weight": "duotone"
+  },
+  "Wifi": {
+    "source": "WifiHigh",
+    "weight": "duotone"
+  },
+  "WifiOff": {
+    "source": "WifiSlash",
+    "weight": "duotone"
+  },
+  "X": {
+    "source": "X",
+    "weight": "bold"
+  },
+  "XCircle": {
+    "source": "XCircle",
+    "weight": "duotone"
+  },
+  "Zap": {
+    "source": "Lightning",
+    "weight": "duotone"
+  },
+  "UserSwitch": {
+    "source": "UserSwitch",
+    "weight": "duotone"
+  },
+  "ClockCountdown": {
+    "source": "ClockCountdown",
+    "weight": "duotone"
+  }
+}

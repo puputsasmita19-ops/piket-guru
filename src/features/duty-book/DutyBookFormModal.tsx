@@ -21,7 +21,7 @@ import {
   FileText,
   Trash2,
   WifiOff,
-} from 'lucide-react';
+} from '../../components/icons';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { ContextualHelp } from '../../components/common/Tooltip';

@@ -1,3 +1,5 @@
+import { Phone } from '../../components/icons';
+import { BookOpen } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
   Users,
@@ -15,7 +17,7 @@ import {
   AlertCircle,
   X,
   FileSpreadsheet,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -656,10 +658,10 @@ export const MasterDataTabs: React.FC = () => {
                             {t.nik && (
                               <span>• NIK: {maskNik(t.nik)}</span>
                             )}
-                            {t.phone && <span>• 📞 {t.phone}</span>}
+                            {t.phone && <span><Phone className="w-3.5 h-3.5 mr-1" />{t.phone}</span>}
                           </div>
                           <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">
-                            📚 Mapel: {t.mataPelajaran}
+                            <BookOpen className="w-3.5 h-3.5 mr-1" /> Mapel: {t.mataPelajaran}
                           </div>
                         </div>
                       </div>
@@ -713,7 +715,7 @@ export const MasterDataTabs: React.FC = () => {
                           NIP. {s.nip} • {s.phone}
                         </div>
                         <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-1">
-                          💼 Divisi: {s.divisi} ({s.jabatan})
+                          <Briefcase className="w-3.5 h-3.5 mr-1" /> Divisi: {s.divisi} ({s.jabatan})
                         </div>
                       </div>
                     </div>
@@ -781,7 +783,7 @@ export const MasterDataTabs: React.FC = () => {
                           <span>• Gender: {st.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</span>
                         </div>
                         <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
-                          📞 No HP Ortu: {st.noHpOrangTua || '-'}
+                          <Phone className="w-3.5 h-3.5 mr-1" /> No HP Ortu: {st.noHpOrangTua || '-'}
                         </div>
                       </div>
                     </div>

@@ -1,3 +1,5 @@
+import { Phone } from '../../components/icons';
+import { MapPin } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
@@ -17,7 +19,7 @@ import {
   CreditCard,
   Edit2,
   Image,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -376,12 +378,12 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. �
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
               >
                 <option value="SEMUA">Semua Kategori</option>
-                <option value="DINAS_INSTANSI">🏢 Dinas / Instansi</option>
-                <option value="ORANG_TUA">👨‍👩‍👧 Orang Tua Siswa</option>
-                <option value="VENDOR_MITRA">🚚 Mitra / Vendor</option>
-                <option value="ALUMNI">🎓 Alumni</option>
-                <option value="UMUM">👤 Tamu Umum</option>
-                <option value="LAINNYA">📝 Lain-lain</option>
+                <option value="DINAS_INSTANSI">Dinas / Instansi</option>
+                <option value="ORANG_TUA">Orang Tua Siswa</option>
+                <option value="VENDOR_MITRA">Mitra / Vendor</option>
+                <option value="ALUMNI">Alumni</option>
+                <option value="UMUM">Tamu Umum</option>
+                <option value="LAINNYA">Lain-lain</option>
               </select>
             </div>
           </div>
@@ -423,20 +425,20 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. �
                     {getVisitorCategoryDisplay(item)}
                   </Badge>
                   <span className="text-[11px] font-mono text-slate-500">
-                    🕒 Masuk: <strong>{item.jamMasuk}</strong>
+                    <Clock className="w-3.5 h-3.5 mr-1" /> Masuk: <strong>{item.jamMasuk}</strong>
                     {item.jamKeluar ? ` • Keluar: ${item.jamKeluar}` : ''}
                   </span>
                 </div>
 
                 <div className="text-xs bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1">
                   <div className="font-semibold text-blue-600 dark:text-blue-400">
-                    📍 Bertemu: <strong>{item.tujuanBertemu}</strong>
+                    <MapPin className="w-3.5 h-3.5 mr-1" /> Bertemu: <strong>{item.tujuanBertemu}</strong>
                   </div>
                   <p className="text-slate-700 dark:text-slate-300 italic">
                     "{item.keperluan}"
                   </p>
                   <div className="text-[11px] text-slate-500 flex items-center justify-between gap-1 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800">
-                    {item.noHp && <span className="font-mono text-emerald-600">📞 {item.noHp}</span>}
+                    {item.noHp && <span className="font-mono text-emerald-600"><Phone className="w-3.5 h-3.5 mr-1" /> {item.noHp}</span>}
                     {item.nomorIdentitas && <span>ID: {item.nomorIdentitas}</span>}
                   </div>
                 </div>
@@ -582,7 +584,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. �
 
                     <td className="p-4 max-w-xs">
                       <div className="font-bold text-blue-600 dark:text-blue-400">
-                        📍 {item.tujuanBertemu}
+                        <MapPin className="w-3.5 h-3.5 mr-1" /> {item.tujuanBertemu}
                       </div>
                       <p className="text-[11px] text-slate-500 truncate mt-0.5" title={item.keperluan}>
                         "{item.keperluan}"

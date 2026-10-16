@@ -24,7 +24,7 @@ import {
   UserCheck,
   GraduationCap,
   Info,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -795,8 +795,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
               >
                 {PASTEL_THEMES.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.tagline})
+                  <option key={t.id} value={t.id}>{t.name} ({t.tagline})
                   </option>
                 ))}
               </select>
@@ -820,8 +819,8 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 }
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
               >
-                <option value="dark">🌙 Mode Gelap (Rekomendasi Panel TV)</option>
-                <option value="light">☀️ Mode Terang (Ruangan Terbuka Terang)</option>
+                <option value="dark">Mode Gelap (Rekomendasi Panel TV)</option>
+                <option value="light">Mode Terang (Ruangan Terbuka Terang)</option>
               </select>
               <p className="text-[10px] text-slate-400">
                 Mode gelap hemat energi dan bebas silau di lobi sekolah.

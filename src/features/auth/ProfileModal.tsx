@@ -4,7 +4,7 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { ROLE_LABELS } from '../../config/constants';
-import { KeyRound, ShieldCheck, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { KeyRound, ShieldCheck, User, CheckCircle2, AlertCircle } from '../../components/icons';
 
 interface ProfileModalProps {
   isOpen: boolean;

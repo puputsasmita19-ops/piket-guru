@@ -21,7 +21,7 @@ import {
   FileText,
   GraduationCap,
   Building,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
@@ -690,7 +690,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                             {item.petugasName}
                           </div>
                           <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                            <span>📍 {item.ruangName}</span>
+                            <span><MapPin className="w-3.5 h-3.5 mr-1" />{item.ruangName}</span>
                             <span>•</span>
                             <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
                           </div>

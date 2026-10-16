@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from '../icons';
 import { Card, CardContent } from '../common/Card';
 
 interface RoleGuardProps {

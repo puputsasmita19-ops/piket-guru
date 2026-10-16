@@ -9,7 +9,7 @@ import {
   FileCheck2,
   Clock,
   ShieldAlert,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';

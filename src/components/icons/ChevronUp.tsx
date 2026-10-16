@@ -1,0 +1,5 @@
+/** Phosphor SVG geometry (MIT). See LICENSE.phosphor.txt. */
+import React from 'react';
+import { createAppIcon } from './createAppIcon';
+
+export const ChevronUp = /* @__PURE__ */ createAppIcon('ChevronUp', () => (<><path d="M216.49,168.49a12,12,0,0,1-17,0L128,97,56.49,168.49a12,12,0,0,1-17-17l80-80a12,12,0,0,1,17,0l80,80A12,12,0,0,1,216.49,168.49Z"></path></>));

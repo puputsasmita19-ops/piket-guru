@@ -4,7 +4,7 @@ import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { EmergencyBanner } from './EmergencyBanner';
 import { ScrollToTop } from '../common/ScrollToTop';
-import { PanelLeftOpen } from 'lucide-react';
+import { PanelLeftOpen } from '../icons';
 
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { InteractiveGuideTour } from '../guide/InteractiveGuideTour';

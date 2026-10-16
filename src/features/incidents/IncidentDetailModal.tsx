@@ -1,3 +1,4 @@
+import { Users } from '../../components/icons';
 import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -19,7 +20,7 @@ import {
   ShieldCheck,
   Edit2,
   MessageSquare,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface IncidentDetailModalProps {
   isOpen: boolean;
@@ -113,11 +114,11 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
           {/* Location & Parties */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-              <span className="font-bold text-slate-500 block mb-1">📍 Lokasi Kejadian:</span>
+              <span className="font-bold text-slate-500 block mb-1"><MapPin className="w-3.5 h-3.5 mr-1" /> Lokasi Kejadian:</span>
               <span className="font-semibold text-slate-900 dark:text-white">{incident.lokasi}</span>
             </div>
             <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-              <span className="font-bold text-slate-500 block mb-1">👥 Pihak Terlibat:</span>
+              <span className="font-bold text-slate-500 block mb-1"><Users className="w-3.5 h-3.5 mr-1" /> Pihak Terlibat:</span>
               <span className="font-semibold text-slate-900 dark:text-white">{incident.pihakTerlibat}</span>
             </div>
           </div>

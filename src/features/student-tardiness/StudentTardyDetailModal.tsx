@@ -23,7 +23,7 @@ import {
   Eye,
   ShieldAlert,
   SlidersHorizontal,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface StudentTardyDetailModalProps {
   isOpen: boolean;
@@ -159,7 +159,7 @@ export const StudentTardyDetailModal: React.FC<StudentTardyDetailModalProps> = (
           {/* Student Info Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
-              <span className="font-bold text-slate-500 block">👤 Identitas Siswa:</span>
+              <span className="font-bold text-slate-500 block"><User className="w-3.5 h-3.5 mr-1" /> Identitas Siswa:</span>
               <div className="font-extrabold text-sm text-slate-900 dark:text-white">
                 {tardy.namaSiswa}
               </div>

@@ -1,3 +1,5 @@
+import { XCircle } from '../../components/icons';
+import { AlertCircle } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
   MapPin,
@@ -16,7 +18,7 @@ import {
   X,
   Radio,
   Trash2,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -813,7 +815,7 @@ export const AttendancePreview: React.FC = () => {
                           {geofence?.distanceMeters ?? '-'} Meter
                         </span>
                         <span className="text-[10px] text-slate-400 block font-medium">
-                          {geofence?.isWithinRadius ? '✓ Dalam Radius' : '✕ Di Luar Radius'}
+                          {geofence?.isWithinRadius ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Dalam Radius</> : <><XCircle className="w-3.5 h-3.5 mr-1" />Di Luar Radius</>}
                         </span>
                       </div>
 
@@ -829,7 +831,7 @@ export const AttendancePreview: React.FC = () => {
                           ± {Math.round(coords.accuracy)} Meter {isProvisional ? '(Sementara)' : ''}
                         </span>
                         <span className="text-[10px] text-slate-400 block font-medium">
-                          {coords.accuracy <= 50 ? '✓ Akurasi Memadai' : '✕ Akurasi Rendah'}
+                          {coords.accuracy <= 50 ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Akurasi Memadai</> : <><AlertCircle className="w-3.5 h-3.5 mr-1" />Akurasi Rendah</>}
                         </span>
                       </div>
 
@@ -919,8 +921,7 @@ export const AttendancePreview: React.FC = () => {
                         <option value="">Tanpa Penugasan Jadwal Tertentu (Mode Bebas)</option>
                       )}
                       {todayUserSchedules.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.ruangName} ({s.jamMulai} - {s.jamSelesai} WIB)
+                        <option key={s.id} value={s.id}>{s.ruangName} ({s.jamMulai} - {s.jamSelesai} WIB)
                         </option>
                       ))}
                     </select>

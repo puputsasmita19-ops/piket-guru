@@ -5,7 +5,7 @@ import {
   MapPin,
   BookOpenCheck,
   LayoutGrid,
-} from 'lucide-react';
+} from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavigationTab } from '../../types';
@@ -66,18 +66,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
                 className={`relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
                   isActive
                     ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-105'
-                    : 'bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)]/80 text-slate-600 dark:text-slate-400 group-hover:bg-[var(--theme-primary-light)] group-hover:text-[var(--theme-primary)]'
+                    : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
                 }`}
               >
-                <Icon className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-150 ${isActive ? 'scale-105' : ''}`} />
-
-                {/* Active indicator dot */}
-                {isActive && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-[var(--theme-card-bg)] bg-emerald-400"
-                    aria-hidden="true"
-                  />
-                )}
+                <Icon className={`w-5 h-5 sm:w-[22px] sm:h-[22px] transition-transform duration-150 ${isActive ? 'scale-105' : ''}`} />
               </div>
 
               {/* Label */}
@@ -110,16 +102,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
             className={`relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
               isMoreActive
                 ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-105'
-                : 'bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)]/80 text-slate-600 dark:text-slate-400 group-hover:bg-[var(--theme-primary-light)] group-hover:text-[var(--theme-primary)]'
+                : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
             }`}
           >
-            <LayoutGrid className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-150 ${isMoreActive ? 'scale-105' : ''}`} />
-            {isMoreActive && (
-              <span
-                className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-[var(--theme-card-bg)] bg-emerald-400"
-                aria-hidden="true"
-              />
-            )}
+            <LayoutGrid className={`w-5 h-5 sm:w-[22px] sm:h-[22px] transition-transform duration-150 ${isMoreActive ? 'scale-105' : ''}`} />
           </div>
 
           <span

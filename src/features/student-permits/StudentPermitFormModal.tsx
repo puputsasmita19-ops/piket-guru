@@ -1,3 +1,6 @@
+import { Navigation } from '../../components/icons';
+import { Plus } from '../../components/icons';
+import { Check } from '../../components/icons';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -38,7 +41,7 @@ import {
   Sliders,
   RefreshCw,
   Send,
-} from 'lucide-react';
+} from '../../components/icons';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 
@@ -808,7 +811,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                         onClick={() => setIsStudentDropdownOpen(false)}
                         className="text-slate-400 hover:text-slate-600 cursor-pointer"
                       >
-                        Tutup ✕
+                        Tutup <X className="w-3.5 h-3.5 ml-1" />
                       </button>
                     </div>
                     {isLoadingStudents ? (
@@ -854,7 +857,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                                 {s.noHpOrangTua && (
                                   <>
                                     <span>•</span>
-                                    <span>📞 {s.noHpOrangTua}</span>
+                                    <span><Phone className="w-3.5 h-3.5 mr-1" />{s.noHpOrangTua}</span>
                                   </>
                                 )}
                               </div>
@@ -866,7 +869,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                               className="text-[11px] h-7 px-2 shrink-0"
                               disabled={isSelected}
                             >
-                              {isSelected ? '✓ Terpilih' : '+ Tambah'}
+                              {isSelected ? <><Check className="w-3 h-3 mr-1" />Terpilih</> : <><Plus className="w-3 h-3 mr-1" />Tambah</>}
                             </Button>
                           </div>
                         );
@@ -991,8 +994,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                   className="w-full h-11 px-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >
                   {STUDENT_PERMIT_TYPES.map((t) => (
-                    <option key={t.code} value={t.code}>
-                      {t.icon} {t.label}
+                    <option key={t.code} value={t.code}>{t.icon} {t.label}
                     </option>
                   ))}
                 </select>
@@ -1078,10 +1080,10 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                 {[
-                  { value: 'ORANG_TUA', label: '👨‍👩‍👦 Orang Tua / Wali' },
-                  { value: 'WALI', label: '👤 Kerabat / Wali' },
-                  { value: 'GURU_PEMBINA', label: '🧑‍🏫 Guru Pembina' },
-                  { value: 'SENDIRI', label: '🚶 Pulang Mandiri' },
+                  { value: 'ORANG_TUA', label: 'Orang Tua / Wali', icon: Users },
+                  { value: 'WALI', label: 'Kerabat / Wali', icon: User },
+                  { value: 'GURU_PEMBINA', label: 'Guru Pembina', icon: GraduationCap },
+                  { value: 'SENDIRI', label: 'Pulang Mandiri', icon: Navigation },
                 ].map((opt) => (
                   <label
                     key={opt.value}
@@ -1099,7 +1101,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                       onChange={() => setPenjemputUmum(opt.value as any)}
                       className="w-3.5 h-3.5 text-emerald-600"
                     />
-                    <span>{opt.label}</span>
+                    <span className="inline-flex items-center gap-1.5"><opt.icon className="w-4 h-4" />{opt.label}</span>
                   </label>
                 ))}
               </div>
@@ -1337,7 +1339,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                               <strong>{namaPenjemputUmum || penjemputUmum}</strong>.
                             </span>
                             <span className="font-mono text-emerald-600">
-                              📞 {entry.student.noHpOrangTua || 'No HP -'}
+                              <Phone className="w-3.5 h-3.5 mr-1" /> {entry.student.noHpOrangTua || 'No HP -'}
                             </span>
                           </div>
                         )}
@@ -1468,7 +1470,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                         <td className="p-3 font-mono font-bold whitespace-nowrap">{jam} WIB</td>
                         <td className="p-3">
                           <div>{namaPenj || penjemput}</div>
-                          <div className="text-[10px] font-mono text-emerald-600">📞 {phone || '-'}</div>
+                          <div className="text-[10px] font-mono text-emerald-600"><Phone className="w-3.5 h-3.5 mr-1" /> {phone || '-'}</div>
                         </td>
                         <td className="p-3 italic text-slate-600 dark:text-slate-300 max-w-xs truncate">
                           "{alasan}"

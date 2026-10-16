@@ -25,7 +25,7 @@ import {
   FileText,
   UserCheck,
   GraduationCap,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface DocumentationWatermarkSettingsCardProps {
   settings: SchoolSettings;

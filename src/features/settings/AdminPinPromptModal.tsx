@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { ShieldAlert, KeyRound, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, KeyRound, AlertTriangle } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/auth/authService';
 

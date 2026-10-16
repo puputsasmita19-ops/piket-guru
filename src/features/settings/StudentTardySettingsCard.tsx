@@ -15,7 +15,7 @@ import {
   Sliders,
   Sparkles,
   HelpCircle,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface StudentTardySettingsCardProps {
   settings: SchoolSettings;

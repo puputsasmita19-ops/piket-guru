@@ -6,7 +6,7 @@ import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types
 import { DAYS_LIST } from '../../config/constants';
 import { getTodayISODate } from '../../utils/dateUtils';
 import { buildOfficerCandidates, OfficerCandidate } from '../../utils/scheduleUtils';
-import { CalendarRange, Sparkles, CheckSquare, Square, AlertTriangle } from 'lucide-react';
+import { CalendarRange, Sparkles, CheckSquare, Square, AlertTriangle } from '../../components/icons';
 
 interface RecurringScheduleModalProps {
   isOpen: boolean;

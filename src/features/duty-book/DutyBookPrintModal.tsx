@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
-import { Printer } from 'lucide-react';
+import { Printer } from '../../components/icons';
 
 interface DutyBookPrintModalProps {
   isOpen: boolean;

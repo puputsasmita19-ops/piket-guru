@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ShieldAlert, LogOut, X } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, LogOut, X } from '../icons';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface UnsavedOfflineWarningModalProps {

@@ -10,7 +10,7 @@ import {
   ShieldAlert,
   ListOrdered,
   Database,
-} from 'lucide-react';
+} from '../icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { SyncQueueService, SyncQueueStatus } from '../../services/offline/syncQueueService';
 import { OfflineStorage } from '../../services/offline/offlineStorage';

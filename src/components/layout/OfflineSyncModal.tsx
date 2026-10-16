@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   Trash2,
   ListOrdered,
-} from 'lucide-react';
+} from '../icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { QueueItem } from '../../services/offline/offlineStorage';

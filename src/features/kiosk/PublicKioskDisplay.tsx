@@ -1,3 +1,5 @@
+import { Megaphone } from '../../components/icons';
+import { MapPin } from '../../components/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Calendar,
@@ -22,7 +24,7 @@ import {
   Play,
   Award,
   BookOpen,
-} from 'lucide-react';
+} from '../../components/icons';
 import { ScheduleItem, SchoolSettings } from '../../types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
@@ -591,7 +593,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
                         {item.petugasName}
                       </div>
                       <div className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold truncate mt-0.5">
-                        📍 {item.ruangName}
+                        <MapPin className="w-4 h-4 mr-1" /> {item.ruangName}
                       </div>
                       <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-1">
                         ⏰ {item.jamMulai} - {item.jamSelesai} WIB
@@ -658,7 +660,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border border-slate-200/70 dark:border-[var(--theme-card-border)] text-xs">
                       <span className="text-slate-400 block font-medium">Guru Pengganti / Inval:</span>
                       <div className="font-bold text-emerald-600 dark:text-emerald-400 text-sm mt-0.5">
-                        🧑‍🏫 {sub.guruPenggantiName || 'Sedang Dikoordinasikan Tim Piket'}
+                        <GraduationCap className="w-4 h-4 mr-1" /> {sub.guruPenggantiName || 'Sedang Dikoordinasikan Tim Piket'}
                       </div>
                     </div>
                   </div>
@@ -974,7 +976,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
             ) : (
               <div className="w-full truncate animate-in fade-in duration-300">
                 <span className={`${tickerFontClass} text-slate-700 dark:text-slate-200 truncate block leading-normal`}>
-                  📢 {config.tickerMessages[staticTickerIndex % config.tickerMessages.length]}
+                  <Megaphone className="w-5 h-5 mr-2" /> {config.tickerMessages[staticTickerIndex % config.tickerMessages.length]}
                 </span>
               </div>
             )}

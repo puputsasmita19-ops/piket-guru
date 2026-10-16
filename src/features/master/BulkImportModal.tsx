@@ -11,7 +11,7 @@ import {
   FileText,
   Check,
   Sparkles,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -1225,7 +1225,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                               </div>
                               {s.warning && (
                                 <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium max-w-[130px] truncate" title={s.warning}>
-                                  ⚠️ {s.warning}
+                                  <AlertTriangle className="w-3.5 h-3.5 mr-1" /> {s.warning}
                                 </span>
                               )}
                             </div>

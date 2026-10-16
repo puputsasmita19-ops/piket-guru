@@ -20,7 +20,7 @@ import {
   PenTool,
   Info,
   RotateCcw,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface MonthlyReportPrintModalProps {
   isOpen: boolean;

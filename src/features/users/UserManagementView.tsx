@@ -1,3 +1,4 @@
+import { X } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
   Users,
@@ -25,7 +26,7 @@ import {
   Layers,
   Eye,
   Download,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -376,7 +377,7 @@ export const UserManagementView: React.FC = () => {
             onClick={() => setActionError(null)}
             className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -391,7 +392,7 @@ export const UserManagementView: React.FC = () => {
             onClick={() => setFeedbackSuccess(null)}
             className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -559,8 +560,7 @@ export const UserManagementView: React.FC = () => {
                   >
                     <option value="SEMUA">Semua Kelas</option>
                     {uniqueClasses.map((cls) => (
-                      <option key={cls} value={cls}>
-                        Kelas {cls}
+                      <option key={cls} value={cls}>Kelas {cls}
                       </option>
                     ))}
                   </select>

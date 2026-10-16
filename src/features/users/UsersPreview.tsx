@@ -7,7 +7,7 @@ import {
   Tag,
   History,
   ShieldCheck,
-} from 'lucide-react';
+} from '../../components/icons';
 import { UserManagementView } from './UserManagementView';
 import { MasterDataTabs } from '../master/MasterDataTabs';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp } from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { Tooltip } from './Tooltip';
 

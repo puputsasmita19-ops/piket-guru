@@ -17,7 +17,7 @@ import {
   Edit2,
   Camera,
   SlidersHorizontal,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';

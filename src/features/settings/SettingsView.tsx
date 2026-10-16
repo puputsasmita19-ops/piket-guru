@@ -32,7 +32,7 @@ import {
   ExternalLink,
   HelpCircle,
   Tv,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { RestoreConfirmModal } from './RestoreConfirmModal';

@@ -12,7 +12,7 @@ import {
   ShieldAlert,
   Info,
   Layers,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface OrphanReservationsModalProps {
   isOpen: boolean;

@@ -17,7 +17,7 @@ import {
   CheckCircle2,
   SlidersHorizontal,
   History,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface StudentTardyCorrectionModalProps {
   isOpen: boolean;

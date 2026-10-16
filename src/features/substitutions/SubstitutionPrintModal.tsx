@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { TeacherSubstitutionRecord, getSubstitutionReasonDisplay } from '../../types/substitution.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, FileSpreadsheet } from 'lucide-react';
+import { Printer, FileSpreadsheet } from '../../components/icons';
 
 interface SubstitutionPrintModalProps {
   isOpen: boolean;

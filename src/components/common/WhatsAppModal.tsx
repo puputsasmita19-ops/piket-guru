@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
-import { MessageSquare, ExternalLink, Copy, Check } from 'lucide-react';
+import { MessageSquare, ExternalLink, Copy, Check } from '../icons';
 
 interface WhatsAppModalProps {
   isOpen: boolean;

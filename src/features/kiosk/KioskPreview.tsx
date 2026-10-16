@@ -1,3 +1,4 @@
+import { Megaphone } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
   Tv,
@@ -11,7 +12,7 @@ import {
   ShieldCheck,
   Building,
   Monitor,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { ContextualHelp } from '../../components/common/Tooltip';
@@ -230,7 +231,7 @@ export const KioskPreview: React.FC = () => {
 
             {/* PREVIEW BOTTOM TICKER */}
             <div className="text-[10px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg truncate border border-slate-800">
-              📢 Selamat Datang di {settings.schoolName} • Harap seluruh tamu mengenakan tanda pengenal resmi di pos piket...
+              <Megaphone className="w-3.5 h-3.5 mr-1" /> Selamat Datang di {settings.schoolName} • Harap seluruh tamu mengenakan tanda pengenal resmi di pos piket...
             </div>
           </div>
         </CardContent>

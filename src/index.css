@@ -629,3 +629,13 @@ button.bg-\[var\(--theme-primary\)\],
     padding: 0 !important;
   }
 }
+
+/* Local vector icons inherit the current theme and never take pointer focus. */
+.app-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+@media print {
+  .app-icon { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

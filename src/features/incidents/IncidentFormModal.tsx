@@ -26,7 +26,7 @@ import {
   AlertCircle,
   HelpCircle,
   FileText,
-} from 'lucide-react';
+} from '../../components/icons';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
@@ -564,8 +564,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium"
               >
                 {effectiveCategories.map((cat) => (
-                  <option key={cat.id} value={cat.code}>
-                    {cat.name}
+                  <option key={cat.id} value={cat.code}>{cat.name}
                   </option>
                 ))}
               </select>

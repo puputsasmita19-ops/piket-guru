@@ -1,3 +1,4 @@
+import { Phone } from '../../components/icons';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText,
@@ -23,7 +24,7 @@ import {
   X,
   Layers,
   ArrowRight,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -609,7 +610,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                           <span>{item.namaSiswa}</span>
                         </div>
                         <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span>🎓 {item.kelas}</span>
+                          <span><GraduationCap className="w-3.5 h-3.5 mr-1" />{item.kelas}</span>
                           {item.nisn && item.nisn !== '-' && <span>• NISN: {item.nisn}</span>}
                           {item.groupId && (
                             <Badge variant="neutral" size="sm" className="font-mono text-[10px]">
@@ -656,7 +657,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                       {getStudentPermitTypeDisplay(item)}
                     </Badge>
                     <span className="text-[11px] font-mono text-slate-500">
-                      🕒 Keluar: <strong>{item.jamKeluar}</strong>
+                      <Clock className="w-3.5 h-3.5 mr-1" /> Keluar: <strong>{item.jamKeluar}</strong>
                       {item.jamKembali ? ` • Kembali: ${item.jamKembali}` : ''}
                     </span>
                   </div>
@@ -666,8 +667,8 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                       "{item.alasan}"
                     </p>
                     <div className="text-[11px] text-slate-500 flex items-center justify-between gap-1 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800">
-                      <span>👥 Pendamping: <strong>{item.namaPenjemput || '-'}</strong> ({item.penjemput})</span>
-                      {item.noHpOrangTua && <span className="font-mono text-emerald-600">📞 {item.noHpOrangTua}</span>}
+                      <span><Users className="w-3.5 h-3.5 mr-1" /> Pendamping: <strong>{item.namaPenjemput || '-'}</strong> ({item.penjemput})</span>
+                      {item.noHpOrangTua && <span className="font-mono text-emerald-600"><Phone className="w-3.5 h-3.5 mr-1" /> {item.noHpOrangTua}</span>}
                     </div>
                   </div>
 

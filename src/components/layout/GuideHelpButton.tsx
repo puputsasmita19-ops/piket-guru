@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { HelpCircle, Play, X, Sparkles, BookOpen } from 'lucide-react';
+import { HelpCircle, Play, X, Sparkles, BookOpen } from '../icons';
 import { useGuide } from '../../contexts/GuideContext';
 import { Tooltip } from '../common/Tooltip';
 

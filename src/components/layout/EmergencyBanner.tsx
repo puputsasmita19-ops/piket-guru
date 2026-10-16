@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertOctagon, Volume2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertOctagon, Volume2, CheckCircle2, ShieldAlert } from '../icons';
 import { EmergencyService } from '../../services/notifications/emergencyService';
 import { EmergencyAlert } from '../../types/security.types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -62,25 +62,25 @@ export const EmergencyBanner: React.FC = () => {
         return {
           bg: 'bg-rose-600 text-white',
           border: 'border-rose-700',
-          label: '🚨 SIAGA GEMPA BUMI / EVAKUASI LAPANGAN',
+          label: 'SIAGA GEMPA BUMI / EVAKUASI LAPANGAN',
         };
       case 'FIRE':
         return {
           bg: 'bg-orange-600 text-white',
           border: 'border-orange-700',
-          label: '🔥 PERINGATAN BAHAYA KEBAKARAN / TITIK KUMPUL',
+          label: 'PERINGATAN BAHAYA KEBAKARAN / TITIK KUMPUL',
         };
       case 'SECURITY':
         return {
           bg: 'bg-amber-600 text-white',
           border: 'border-amber-700',
-          label: '⚠️ SIAGA KEAMANAN / LOCKDOWN KELAS',
+          label: 'SIAGA KEAMANAN / LOCKDOWN KELAS',
         };
       default:
         return {
           bg: 'bg-red-700 text-white',
           border: 'border-red-800',
-          label: '📢 PENGUMUMAN DARURAT SEKOLAH',
+          label: 'PENGUMUMAN DARURAT SEKOLAH',
         };
     }
   };

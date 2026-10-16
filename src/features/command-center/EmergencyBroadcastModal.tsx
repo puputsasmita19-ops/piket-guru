@@ -12,7 +12,7 @@ import {
   Hospital,
   AlertTriangle,
   ExternalLink,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface EmergencyBroadcastModalProps {
   isOpen: boolean;

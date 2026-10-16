@@ -19,7 +19,7 @@ import {
   CheckSquare,
   Square,
   Sparkles,
-} from 'lucide-react';
+} from '../../components/icons';
 import { ContextualHelp } from '../../components/common/Tooltip';
 
 interface UserFormModalProps {
@@ -263,8 +263,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 onChange={(e) => setIsActive(e.target.value === 'AKTIF')}
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
               >
-                <option value="AKTIF">🟢 Akun Aktif (Dapat Login)</option>
-                <option value="NONAKTIF">🔴 Akun Nonaktif (Dibekukan)</option>
+                <option value="AKTIF">Akun Aktif (Dapat Login)</option>
+                <option value="NONAKTIF">Akun Nonaktif (Dibekukan)</option>
               </select>
             </div>
           )}

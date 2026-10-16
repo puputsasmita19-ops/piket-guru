@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
-import { Camera, RefreshCw, FlipHorizontal, Upload, AlertCircle, Check } from 'lucide-react';
+import { Camera, RefreshCw, FlipHorizontal, Upload, AlertCircle, Check } from '../icons';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;

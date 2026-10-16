@@ -31,7 +31,7 @@ import {
   Eye,
   Camera,
   Check,
-} from 'lucide-react';
+} from '../../components/icons';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { ContextualHelp } from '../../components/common/Tooltip';
 

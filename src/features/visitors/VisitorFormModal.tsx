@@ -35,7 +35,7 @@ import {
   Building2,
   Shield,
   Loader2,
-} from 'lucide-react';
+} from '../../components/icons';
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
@@ -964,8 +964,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >
                   {VISITOR_CATEGORIES.map((cat) => (
-                    <option key={cat.code} value={cat.code}>
-                      {cat.icon} {cat.label}
+                    <option key={cat.code} value={cat.code}>{cat.icon} {cat.label}
                     </option>
                   ))}
                 </select>

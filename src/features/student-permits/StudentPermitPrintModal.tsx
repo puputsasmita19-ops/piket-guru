@@ -3,7 +3,7 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { StudentPermitRecord, getStudentPermitTypeDisplay } from '../../types/studentPermit.types';
 import { SchoolSettings } from '../../types';
-import { Printer, FileText, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, FileText, Users, ChevronLeft, ChevronRight } from '../../components/icons';
 
 interface StudentPermitPrintModalProps {
   isOpen: boolean;

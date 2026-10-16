@@ -24,7 +24,7 @@ import {
   Sparkles,
   Info,
   SlidersHorizontal,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface ScheduleFormModalProps {
   isOpen: boolean;
@@ -371,8 +371,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
                   : (settings?.workHours?.dailySchedules?.[d]?.isActive ?? activeDays.includes(d));
 
                 return (
-                  <option key={d} value={d} disabled={isSunday && !isSundayActiveInSettings}>
-                    {d} {isSunday && !isSundayActiveInSettings ? '(Non-aktif di Pengaturan)' : (!isDayActive ? '(Libur Shift)' : '')}
+                  <option key={d} value={d} disabled={isSunday && !isSundayActiveInSettings}>{d} {isSunday && !isSundayActiveInSettings ? '(Non-aktif di Pengaturan)' : (!isDayActive ? '(Libur Shift)' : '')}
                   </option>
                 );
               })}
@@ -439,8 +438,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
                 <option value="">-- Tidak ada akun petugas aktif --</option>
               ) : (
                 candidates.map((c) => (
-                  <option key={c.userId} value={c.userId}>
-                    {c.displayLabel}
+                  <option key={c.userId} value={c.userId}>{c.displayLabel}
                   </option>
                 ))
               )}
@@ -510,8 +508,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
               <option value="">-- Belum ada data pos/ruangan --</option>
             ) : (
               rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.code} - {r.building})
+                <option key={r.id} value={r.id}>{r.name} ({r.code} - {r.building})
                 </option>
               ))
             )}

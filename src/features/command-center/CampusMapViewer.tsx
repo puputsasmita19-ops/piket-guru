@@ -16,7 +16,7 @@ import {
   Clock,
   CheckCircle2,
   X,
-} from 'lucide-react';
+} from '../../components/icons';
 
 export interface CampusPost {
   id: string;

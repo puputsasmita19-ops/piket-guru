@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { UserProfile } from '../../types';
-import { KeyRound, ShieldAlert, Check, RefreshCw } from 'lucide-react';
+import { KeyRound, ShieldAlert, Check, RefreshCw } from '../../components/icons';
 
 interface ResetPinModalProps {
   isOpen: boolean;

@@ -15,7 +15,7 @@ import {
   User,
   LayoutGrid,
   List,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -242,8 +242,7 @@ export const IncidentPreview: React.FC = () => {
               >
                 <option value="SEMUA">Semua Kategori</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.code}>
-                    {c.name}
+                  <option key={c.id} value={c.code}>{c.name}
                   </option>
                 ))}
               </select>

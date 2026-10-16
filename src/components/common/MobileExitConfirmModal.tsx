@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
-import { LogOut, AlertTriangle } from 'lucide-react';
+import { LogOut, AlertTriangle } from '../icons';
 import { useAuth } from '../../contexts/AuthContext';
 
 /**

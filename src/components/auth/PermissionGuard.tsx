@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PermissionKey } from '../../config/permissions';
 import { useNavigation } from '../../contexts/NavigationContext';
-import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from '../icons';
 import { Card, CardContent } from '../common/Card';
 import { Button } from '../common/Button';
 

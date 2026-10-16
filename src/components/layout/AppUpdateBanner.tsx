@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Sparkles, X } from 'lucide-react';
+import { RefreshCw, Sparkles, X } from '../icons';
 import { AppUpdateManager } from '../../services/offline/appUpdateManager';
 
 export const AppUpdateBanner: React.FC = () => {

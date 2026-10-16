@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { VisitorRecord, getVisitorCategoryDisplay } from '../../types/visitor.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, UserCheck, ShieldCheck } from 'lucide-react';
+import { Printer, UserCheck, ShieldCheck } from '../../components/icons';
 
 interface VisitorPassPrintModalProps {
   isOpen: boolean;

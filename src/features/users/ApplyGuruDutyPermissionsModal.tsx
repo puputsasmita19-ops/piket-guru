@@ -29,7 +29,7 @@ import {
   CheckSquare,
   Square,
   Sparkles,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface ManageAdditionalPermissionsModalProps {
   isOpen: boolean;

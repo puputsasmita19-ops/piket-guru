@@ -45,7 +45,7 @@ import {
   X,
   Settings,
   Check,
-} from 'lucide-react';
+} from '../../components/icons';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 interface TeacherAssignmentEntry {
@@ -873,8 +873,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                   className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
                 >
                   {ABSENCE_REASONS.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.icon} {r.label}
+                    <option key={r.code} value={r.code}>{r.icon} {r.label}
                     </option>
                   ))}
                 </select>
@@ -1209,12 +1208,10 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                     }
                                     className="w-full p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
                                   >
-                                    <option value="" disabled>
-                                      -- Pilih Kelas Aktif --
+                                    <option value="" disabled>-- Pilih Kelas Aktif --
                                     </option>
                                     {activeClasses.map((cls) => (
-                                      <option key={cls} value={cls}>
-                                        {cls}
+                                      <option key={cls} value={cls}>{cls}
                                       </option>
                                     ))}
                                   </select>
@@ -1344,7 +1341,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                   .filter((t) => t.id !== st.teacher.id) // Guru pengganti tidak boleh sama dengan guru berhalangan
                                   .map((t) => (
                                     <option key={t.id} value={t.id}>
-                                      🧑‍🏫 {t.fullName} ({t.mataPelajaran || 'Guru'})
+                                      <GraduationCap className="w-3.5 h-3.5 mr-1" /> {t.fullName} ({t.mataPelajaran || 'Guru'})
                                     </option>
                                   ))}
                               </select>

@@ -24,7 +24,7 @@ import {
   ArrowRight,
   Database,
   Info,
-} from 'lucide-react';
+} from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -511,8 +511,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               >
                 <option value="SEMUA">Semua Modul ({logs.length})</option>
                 {Object.values(AUDIT_MODULE_REGISTRY).map((mod) => (
-                  <option key={mod.id} value={mod.id}>
-                    {mod.label} ({mod.id})
+                  <option key={mod.id} value={mod.id}>{mod.label} ({mod.id})
                   </option>
                 ))}
               </select>
@@ -531,8 +530,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               >
                 <option value="SEMUA">Semua Aksi</option>
                 {Object.values(AUDIT_ACTION_REGISTRY).map((act) => (
-                  <option key={act.id} value={act.id}>
-                    {act.label} ({act.id})
+                  <option key={act.id} value={act.id}>{act.label} ({act.id})
                   </option>
                 ))}
               </select>
@@ -550,9 +548,9 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
               >
                 <option value="SEMUA">Semua Status</option>
-                <option value="SUCCESS">✅ Berhasil (Success)</option>
-                <option value="FAILED">❌ Gagal (Failed)</option>
-                <option value="BLOCKED">⚠️ Ditolak / Dibatasi (Blocked)</option>
+                <option value="SUCCESS">Berhasil (Success)</option>
+                <option value="FAILED">Gagal (Failed)</option>
+                <option value="BLOCKED">Ditolak / Dibatasi (Blocked)</option>
               </select>
             </div>
           </div>

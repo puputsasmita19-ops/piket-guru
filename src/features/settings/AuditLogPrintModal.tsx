@@ -3,7 +3,7 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { SchoolSettings } from '../../types';
 import { AuditLogRecord } from '../../types/master.types';
-import { Printer, ShieldCheck } from 'lucide-react';
+import { Printer, ShieldCheck } from '../../components/icons';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 import {
   normalizeAuditStatus,

@@ -1,3 +1,4 @@
+import { School } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -17,7 +18,7 @@ import {
   Image as ImageIcon,
   Grid,
   FileText,
-} from 'lucide-react';
+} from '../../components/icons';
 
 interface PhotoRecapPrintModalProps {
   isOpen: boolean;
@@ -243,7 +244,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                     />
                   ) : (
                     <div className="w-14 h-14 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xl shrink-0">
-                      🏛️
+                      <School className="w-9 h-9" />
                     </div>
                   )}
                   <div className="text-center flex-1">
