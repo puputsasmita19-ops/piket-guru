@@ -1,8 +1,7 @@
 import { UserProfile } from '../../types';
-import { auth } from '../firebase/firebase';
+import { auth } from '../firebase/firebaseAuth';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { OfflineStorage } from '../offline/offlineStorage';
-import { SyncQueueService } from '../offline/syncQueueService';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 
@@ -100,7 +99,7 @@ class AuthService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch('/api/auth/users-summary', { signal: controller.signal });
+      const res = await fetch('/api/auth/users-summary', { signal: controller.signal, priority: 'low' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -158,6 +157,7 @@ class AuthService {
       const trimmedId = (identifier || '').trim();
       const response = await fetch('/api/auth/login', {
         method: 'POST',
+        priority: 'high',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           identifier: trimmedId,

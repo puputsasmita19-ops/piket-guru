@@ -7,8 +7,9 @@ import { GuideProvider } from './contexts/GuideContext';
 import { LoginPage } from './features/auth/LoginPage';
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
 import { PageLoading } from './components/common/PageLoading';
+import { loadAuthenticatedShell } from './appBootstrap';
 
-const AuthenticatedShell = lazy(() => import('./AuthenticatedShell'));
+const AuthenticatedShell = lazy(loadAuthenticatedShell);
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();

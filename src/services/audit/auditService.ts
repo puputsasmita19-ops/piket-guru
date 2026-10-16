@@ -1,11 +1,17 @@
-import { doc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase/firebase';
+import { auth } from '../firebase/firebaseAuth';
 import { AuditLogAction, AuditLogModule, AuditLogRecord, AuditLogStatus } from '../../types/master.types';
 import { UserRole } from '../../types';
 import { normalizeAuditStatus } from './auditEventRegistry';
 
 const AUDIT_QUEUE_STORAGE_KEY = 'piket_guru_audit_offline_queue';
 const SENSITIVE_KEY_REGEX = /(pin|password|token|secret|hash|salt|credential)/i;
+
+async function writeAuditRecord(id: string, record: AuditLogRecord): Promise<void> {
+  const [{ doc, setDoc }, { db }] = await Promise.all([
+    import('firebase/firestore'), import('../firebase/firebase'),
+  ]);
+  await setDoc(doc(db, 'auditLogs', id), record);
+}
 
 /**
  * Strips sensitive fields (PINs, passwords, secrets, tokens, salts) from any metadata object recursively.
@@ -108,8 +114,7 @@ export class AuditService {
 
       // Write to Firestore directly
       try {
-        const docRef = doc(db, 'auditLogs', id);
-        await setDoc(docRef, record);
+        await writeAuditRecord(id, record);
       } catch (writeErr) {
         console.warn('[AUDIT_SERVICE] Firestore write failed, enqueuing locally:', writeErr);
         this.enqueueOffline(record);
@@ -156,8 +161,7 @@ export class AuditService {
 
       for (const item of queue) {
         try {
-          const docRef = doc(db, 'auditLogs', item.id);
-          await setDoc(docRef, item);
+          await writeAuditRecord(item.id, item);
         } catch {
           // Keep in queue if write still fails
           remaining.push(item);

@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { authService } from '../services/auth/authService';
-import { auth } from '../services/firebase/firebase';
+import { auth } from '../services/firebase/firebaseAuth';
 import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
 import { checkUserPermission, PermissionKey } from '../config/permissions';
-import { FirestoreService } from '../services/firebase/firestoreService';
+import { preloadAuthenticatedShell } from '../appBootstrap';
 
 import { OfflineStorage } from '../services/offline/offlineStorage';
 import { SyncQueueService } from '../services/offline/syncQueueService';
@@ -238,6 +238,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Otherwise (session restore / page refresh), perform strict profile validation
+      preloadAuthenticatedShell();
       try {
         const valRes = await validateFirebaseUserProfile(fbUser, { clearInvalidSession: false });
         if (!isMounted || activeEpoch !== sessionEpochRef.current) return;
@@ -276,34 +277,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Ensures permissions or role changes by Admin apply immediately to the active session.
   useEffect(() => {
     if (!currentUser?.id) return;
-    const unsub = FirestoreService.subscribeToDocument<UserProfile>('users', currentUser.id, (profile) => {
-      if (auth.currentUser?.uid !== currentUser.id) return;
-      if (!profile || profile.isActive !== true || profile.requiresActivation === true) {
-        void logout({ reason: 'ACCOUNT_DEACTIVATED' });
-        return;
-      }
-      if (profile) {
-        if ((profile.sessionRevokedAtSeconds || 0) > (currentUserRef.current?.sessionRevokedAtSeconds || 0)) {
-          void revalidateSessionOnline();
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void import('../services/firebase/firestoreService').then(({ FirestoreService }) => {
+      if (cancelled || auth.currentUser?.uid !== currentUser.id) return;
+      unsub = FirestoreService.subscribeToDocument<UserProfile>('users', currentUser.id, (profile) => {
+        if (auth.currentUser?.uid !== currentUser.id) return;
+        if (!profile || profile.isActive !== true || profile.requiresActivation === true) {
+          void logout({ reason: 'ACCOUNT_DEACTIVATED' });
+          return;
         }
+        if (profile) {
+          if ((profile.sessionRevokedAtSeconds || 0) > (currentUserRef.current?.sessionRevokedAtSeconds || 0)) {
+            void revalidateSessionOnline();
+          }
 
-        setCurrentUser((prev) => {
-          if (!prev || prev.id !== profile.id) return prev;
-          return {
-            ...prev,
-            ...profile,
-          };
-        });
-        // Keep the verified offline snapshot current without restarting auth.
-        // A new revocation marker must first pass token-time revalidation.
-        const verified = currentUserRef.current;
-        if (verified?.id === profile.id && (profile.sessionRevokedAtSeconds || 0) <= (verified.sessionRevokedAtSeconds || 0)) {
-          void OfflineStorage.saveVerifiedProfile({ ...verified, ...profile }).catch(() => {});
+          setCurrentUser((prev) => {
+            if (!prev || prev.id !== profile.id) return prev;
+            return {
+              ...prev,
+              ...profile,
+            };
+          });
+          // Keep the verified offline snapshot current without restarting auth.
+          // A new revocation marker must first pass token-time revalidation.
+          const verified = currentUserRef.current;
+          if (verified?.id === profile.id && (profile.sessionRevokedAtSeconds || 0) <= (verified.sessionRevokedAtSeconds || 0)) {
+            void OfflineStorage.saveVerifiedProfile({ ...verified, ...profile }).catch(() => {});
+          }
         }
-      }
-    });
-    return () => unsub();
-  }, [currentUser?.id, logout, revalidateSessionOnline]);
+      });
+    }).catch((error) => console.warn('[AUTH_CONTEXT] Profile subscription could not load:', error));
+    return () => { cancelled = true; unsub?.(); };
+  }, [currentUser?.id, isOffline, logout, revalidateSessionOnline]);
 
   // Inactivity Auto Logout
   useEffect(() => {
@@ -342,6 +348,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
     manualLoginEpochRef.current = currentEpoch;
+    preloadAuthenticatedShell();
     try {
       const res = await authService.authenticateWithPin(nipOrUserId, pin, { isCurrent: () => currentEpoch === sessionEpochRef.current });
       if (currentEpoch !== sessionEpochRef.current) {
@@ -375,6 +382,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
     manualLoginEpochRef.current = currentEpoch;
+    preloadAuthenticatedShell();
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -493,6 +501,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshProfile = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
+      const { FirestoreService } = await import('../services/firebase/firestoreService');
       const fresh = await FirestoreService.getByIdStrict<UserProfile>('users', currentUser.id);
       if (fresh) {
         if (fresh.isActive === false) {

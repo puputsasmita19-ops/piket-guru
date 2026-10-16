@@ -1,9 +1,7 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth, User } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import app, { auth } from './firebaseAuth';
 import firebaseConfig from '../../../firebase-applet-config.json';
-
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firestore with specific databaseId if provided
 export const db: Firestore =
@@ -11,7 +9,7 @@ export const db: Firestore =
     ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
     : getFirestore(app);
 
-export const auth = getAuth(app);
+export { auth };
 
 /**
  * Returns active Firebase Auth user if present

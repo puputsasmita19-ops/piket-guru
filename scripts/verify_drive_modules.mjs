@@ -5,10 +5,10 @@ import { build } from 'esbuild';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 
-const f = { records: new Map(), writes: [], files: new Map(), uploads: [], statusCode: 200,
+const f = { currentUid: 'test-officer', records: new Map(), writes: [], files: new Map(), uploads: [], statusCode: 200,
   uploadCode: 200, failWrite: false, enabled: true, settings: { attendanceMode: 'BEBAS', schoolLat: 0, schoolLng: 0, allowedRadiusMeters: 100 }, conversions: 0 };
 const io = {
-  firebase: `export const auth={currentUser:{uid:'test-officer',getIdToken:async()=> 'TEST_TOKEN'}};export const db={};`,
+  firebase: `export const auth={currentUser:{get uid(){return globalThis.f.currentUid},getIdToken:async()=> 'TEST_TOKEN'}};export const db={};`,
   firestoreService: `const f=globalThis.f;export class FirestoreService {
     static async getById(c,id){return f.records.get(c+'/'+id)||null;}
     static async getByIdStrict(c,id){return this.getById(c,id);}
@@ -34,7 +34,7 @@ const output = await build({
     export { SyncQueueService } from './src/services/offline/syncQueueService';
     export { DriveClientService } from './src/services/drive/driveClientService';`, resolveDir: process.cwd(), loader: 'ts' },
   bundle: true, write: false, platform: 'node', format: 'cjs', plugins: [{ name: 'isolated-io', setup(b) {
-    const patterns = [[/\/firebase$/, 'firebase'], [/\/firestoreService$/, 'firestoreService'], [/^firebase\/firestore$/, 'firestore'],
+    const patterns = [[/\/(?:firebase|firebaseAuth)$/, 'firebase'], [/\/firestoreService$/, 'firestoreService'], [/^firebase\/firestore$/, 'firestore'],
       [/\/offlineStorage$/, 'offline'], [/\/draftService$/, 'drafts'], [/\/dutyBookService$/, 'duty'],
       [/\/studentPermitService$/, 'permits'], [/\/substitutionService$/, 'substitutions']];
     for (const [filter, path] of patterns) b.onResolve({ filter }, () => ({ path, namespace: 'mock' }));
@@ -67,7 +67,7 @@ const visitor = (photo = a) => ({ id: 'vis-test', tanggal: '2026-10-16', jamMasu
 const checkIn = () => ({ userId: user.id, userName: user.fullName, tanggal: '2026-10-16', coords: { latitude: 0, longitude: 0, accuracy: 5, timestamp: Date.now() }, geofence: {}, photoUrl: a });
 let passed = 0;
 async function test(name, fn) { reset(); await fn(); passed++; console.log('PASS', name); }
-function reset() { f.records.clear(); f.files.clear(); f.writes = []; f.uploads = []; f.statusCode = 200; f.uploadCode = 200; f.failWrite = false; f.failUploadNumber = undefined; f.enabled = true; f.conversions = 0; }
+function reset() { f.currentUid = 'test-officer'; f.records.clear(); f.files.clear(); f.writes = []; f.uploads = []; f.statusCode = 200; f.uploadCode = 200; f.failWrite = false; f.failUploadNumber = undefined; f.enabled = true; f.conversions = 0; }
 
 await test('GPS check-in uploads with attendance record identity and stores reference', async () => {
   const saved = await attendance.checkIn(checkIn());
@@ -151,5 +151,10 @@ await test('visitor queue dispatch uploads the attachment via the same service',
 await test('photo reads use Authorization header and a releasable blob URL', async () => {
   const blobUrl = await drive.getAuthenticatedPhotoUrl('/api/drive/photo/test-file');
   assert.ok(blobUrl.startsWith('blob:')); URL.revokeObjectURL(blobUrl);
+});
+await test('account switch during lazy dispatch prevents a queued write', async () => {
+  f.currentUid = 'other-account';
+  await assert.rejects(() => sync.executeOperation({operationType:'VISITOR_REPORT',payload:{record:visitor(),isUpdate:false}},user), /Sesi sinkronisasi berubah/);
+  assert.equal(f.uploads.length,0);assert.equal(f.writes.length,0);
 });
 console.log(`${passed} module/queue/media regressions passed. Real Google Drive/Firebase IO was not used.`);

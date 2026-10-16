@@ -1,5 +1,4 @@
 import { UserProfile } from '../../types';
-import { FirestoreService } from '../firebase/firestoreService';
 import { authService } from './authService';
 import { OfflineStorage } from '../offline/offlineStorage';
 
@@ -40,9 +39,16 @@ export async function validateFirebaseUserProfile(
   let profile: UserProfile | null = null;
   let isOfflineFallback = false;
 
+  // Token verification and server profile lookup are independent. Start both
+  // now; handle the token outcome immediately even if profile validation exits
+  // early, so a rejected token can never become an unhandled rejection.
+  const tokenRequest = withVerificationTimeout(Promise.resolve().then(() => fbUser.getIdTokenResult()))
+    .then((value) => ({ ok: true as const, value }), (error) => ({ ok: false as const, error }));
+
   try {
     // 1. Strict UID-bound lookup from server
-    profile = await withVerificationTimeout(FirestoreService.getByIdStrict<UserProfile>('users', fbUser.uid));
+    profile = await withVerificationTimeout(import('../firebase/firestoreService')
+      .then(({ FirestoreService }) => FirestoreService.getByIdStrict<UserProfile>('users', fbUser.uid)));
   } catch (readErr: any) {
     const errorMsg = readErr?.message || String(readErr);
     const errorCode = readErr?.code || '';
@@ -119,7 +125,9 @@ export async function validateFirebaseUserProfile(
 
   // 3. Enforce session revocation: authTime <= sessionRevokedAtSeconds means session is revoked
   try {
-    const idTokenResult = await withVerificationTimeout(fbUser.getIdTokenResult());
+    const tokenResult = await tokenRequest;
+    if (!tokenResult.ok) throw tokenResult.error;
+    const idTokenResult = tokenResult.value;
     const authTimeSeconds = Math.floor(new Date(idTokenResult.authTime).getTime() / 1000);
     if (!Number.isFinite(authTimeSeconds)) throw Object.assign(new Error('Stempel waktu autentikasi tidak valid.'), { code: 'INVALID_AUTH_TIME' });
     const revokedAt = profile.sessionRevokedAtSeconds || 0;

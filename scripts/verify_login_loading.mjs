@@ -6,12 +6,12 @@ const f = { requests: [], signIns: 0, signOuts: 0, clears: 0, reads: 0, saves: [
 const mocks = {
  firebase: `export const auth={currentUser:null};`,
  sdk: `import {auth} from 'firebase'; export function onAuthStateChanged(){return ()=>{}}; export async function signOut(){globalThis.f.signOuts++;auth.currentUser=null}; export async function signInWithCustomToken(){const f=globalThis.f;f.signIns++;const user={uid:f.tokenUid};auth.currentUser=user;return{user}};`,
- store: `export class FirestoreService { static async getByIdStrict(){const f=globalThis.f;f.reads++;if(f.failRead==='stall')return new Promise(()=>{});if(f.failRead)throw Object.assign(Error(f.failRead),{code:f.failRead});return f.profile;} }`,
+ store: `export class FirestoreService { static async getByIdStrict(){const f=globalThis.f;f.reads++;if(f.deferProfile)return f.deferProfile;if(f.failRead==='stall')return new Promise(()=>{});if(f.failRead)throw Object.assign(Error(f.failRead),{code:f.failRead});return f.profile;} }`,
  offline: `export const OfflineStorage={teardownActiveListeners(){globalThis.f.clears++},clearDisplayCacheOnly:async()=>{},getPendingCount:async()=>({total:1}),isTrustedDevice:()=>true,purgeUserData:async()=>{throw Error('Unexpected purge')},getVerifiedProfile:async()=>globalThis.f.cached,saveVerifiedProfile:async p=>{globalThis.f.saves.push(p)}};`,
  queue: `export const SyncQueueService={};`,
 };
 const result=await build({stdin:{contents:`export {authService} from './src/services/auth/authService';export {validateFirebaseUserProfile as validate} from './src/services/auth/authProfileValidator';export {AppUpdateManager} from './src/services/offline/appUpdateManager';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,platform:'node',format:'cjs',plugins:[{name:'mock-io',setup(b){
- b.onResolve({filter:/\/firebase$/},()=>({path:'firebase',namespace:'mock'}));
+ b.onResolve({filter:/\/(?:firebase|firebaseAuth)$/},()=>({path:'firebase',namespace:'mock'}));
  b.onResolve({filter:/^firebase$/},()=>({path:'firebase',namespace:'mock'}));
  b.onResolve({filter:/^firebase\/auth$/},()=>({path:'sdk',namespace:'mock'}));
  for(const[path,filter]of[['store',/firestoreService$/],['offline',/offlineStorage$/],['queue',/syncQueueService$/]])b.onResolve({filter},()=>({path,namespace:'mock'}));
@@ -27,8 +27,8 @@ const context=vm.createContext({f,module:{exports:{}},console:{log(){},warn(){},
 vm.runInContext(result.outputFiles[0].text,context);
 const {authService:service,validate,AppUpdateManager}=context.module.exports;
 const profile=()=>({id:'teacher',role:'GURU',isActive:true,requiresActivation:false,permissions:[],sessionRevokedAtSeconds:0,fullName:'Test Teacher'});
-const user=()=>({uid:'teacher',getIdTokenResult:async()=>{if(f.failToken)throw Object.assign(Error(f.failToken),{code:f.failToken});return{authTime:'2026-10-16T00:00:00.000Z',claims:{role:'ADMIN'}}}});
-function reset(){Object.assign(f,{requests:[],signIns:0,signOuts:0,clears:0,reads:0,saves:[],online:true,failRead:null,profile:profile(),cached:null,deferUsers:null,loginBody:{success:true,customToken:'TEST_TOKEN',user:profile()},tokenUid:'teacher',stillCurrent:true,fastTimers:false,failToken:null});}
+const user=()=>({uid:'teacher',getIdTokenResult:async()=>{f.tokenReads++;if(f.deferToken)await f.deferToken;if(f.failToken)throw Object.assign(Error(f.failToken),{code:f.failToken});return{authTime:'2026-10-16T00:00:00.000Z',claims:{role:'ADMIN'}}}});
+function reset(){Object.assign(f,{requests:[],signIns:0,signOuts:0,clears:0,reads:0,saves:[],online:true,failRead:null,profile:profile(),cached:null,deferUsers:null,loginBody:{success:true,customToken:'TEST_TOKEN',user:profile()},tokenUid:'teacher',stillCurrent:true,fastTimers:false,failToken:null,deferProfile:null,deferToken:null,tokenReads:0});}
 let passed=0;async function check(name,run){reset();await run();passed++;console.log('PASS',name)}
 await check('manual PIN login does not fetch the users list',async()=>{assert.equal((await service.authenticateWithPin('teacher','123456')).success,true);assert.deepEqual(f.requests,['/api/auth/login']);assert.equal(f.saves.length,1)});
 await check('explicit empty permissions stay empty',async()=>{const res=await service.authenticateWithPin('teacher','123456');assert.equal(res.user.permissions.length,0)});
@@ -46,5 +46,8 @@ await check('revoked sessions and invalid auth timestamps are rejected',async()=
 await check('missing role cannot fall back to an elevated token claim',async()=>{f.profile={...profile(),role:undefined};assert.equal((await validate(user(),{clearInvalidSession:false})).success,false)});
 await check('offline mode does not hide an explicitly invalid Firebase token',async()=>{f.failRead='unavailable';f.cached=profile();f.online=false;f.failToken='auth/user-token-expired';assert.equal((await validate(user(),{clearInvalidSession:false})).success,false)});
 await check('stalled profile verification resolves to failure instead of endless loading',async()=>{f.fastTimers=true;f.failRead='stall';const res=await validate(user(),{clearInvalidSession:false});assert.equal(res.success,false);assert.equal(res.code,'OFFLINE_NO_CACHE')});
+await check('profile and token start together and both are required before access',async()=>{let releaseProfile,releaseToken;f.deferProfile=new Promise(r=>releaseProfile=r);f.deferToken=new Promise(r=>releaseToken=r);let done=false;const pending=validate(user(),{clearInvalidSession:false}).then(r=>{done=true;return r});await new Promise(r=>setTimeout(r,0));assert.equal(f.reads,1);assert.equal(f.tokenReads,1);assert.equal(done,false);releaseProfile(profile());await new Promise(r=>setTimeout(r,0));assert.equal(done,false);releaseToken();assert.equal((await pending).success,true)});
+await check('parallel token refusal cannot be ignored after a successful profile read',async()=>{f.failToken='auth/user-token-expired';assert.equal((await validate(user(),{clearInvalidSession:false})).code,'TOKEN_VERIFY_ERROR');assert.equal(f.saves.length,0)});
+await check('early missing-profile rejection safely handles a simultaneous failed token',async()=>{f.profile=null;f.failToken='auth/user-token-expired';assert.equal((await validate(user(),{clearInvalidSession:false})).code,'PROFILE_NOT_FOUND');await new Promise(r=>setTimeout(r,0));assert.equal(f.saves.length,0)});
 await check('initial PWA activation never reloads a running login; approved update reloads once',async()=>{AppUpdateManager.init();await Promise.resolve();callbacks.controllerchange();assert.equal(reloads,0);AppUpdateManager.applyUpdate();assert.equal(messages[0].type,'SKIP_WAITING');callbacks.controllerchange();callbacks.controllerchange();assert.equal(reloads,1)});
 console.log(`${passed} isolated login/profile/PWA regressions passed. No production access.`);

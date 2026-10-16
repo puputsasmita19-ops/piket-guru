@@ -15,15 +15,7 @@
 import { OfflineStorage, QueueItem, QueueItemStatus } from './offlineStorage';
 import { DraftService } from './draftService';
 import { UserProfile } from '../../types';
-import { auth } from '../firebase/firebase';
-import { FirestoreService } from '../firebase/firestoreService';
-import { AttendanceService } from '../firebase/attendanceService';
-import { DutyBookService } from '../firebase/dutyBookService';
-import { IncidentService } from '../firebase/incidentService';
-import { StudentTardyService } from '../firebase/studentTardyService';
-import { StudentPermitService } from '../firebase/studentPermitService';
-import { VisitorService } from '../firebase/visitorService';
-import { SubstitutionService } from '../firebase/substitutionService';
+import { auth } from '../firebase/firebaseAuth';
 
 export interface SyncQueueStatus {
   pendingCount: number;
@@ -491,11 +483,15 @@ export class SyncQueueService {
   private static async executeOperation(item: QueueItem, user: UserProfile): Promise<void> {
     switch (item.operationType) {
       case 'ATTENDANCE_CHECKIN': {
+        const { AttendanceService } = await import('../firebase/attendanceService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         await AttendanceService.checkIn(item.payload);
         break;
       }
 
       case 'DUTYBOOK_SUBMIT': {
+        const { DutyBookService } = await import('../firebase/dutyBookService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isSubmitOnly } = item.payload;
         if (isSubmitOnly) {
           await DutyBookService.submitJournal(record, user);
@@ -506,16 +502,22 @@ export class SyncQueueService {
       }
 
       case 'INCIDENT_REPORT': {
+        const { IncidentService } = await import('../firebase/incidentService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         await IncidentService.saveIncident(item.payload, user);
         break;
       }
 
       case 'TARDY_REPORT': {
+        const { StudentTardyService } = await import('../firebase/studentTardyService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         await StudentTardyService.saveTardyStudent(item.payload, user);
         break;
       }
 
       case 'PERMIT_REPORT': {
+        const { StudentPermitService } = await import('../firebase/studentPermitService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
           await StudentPermitService.updatePermit(record, user);
@@ -526,6 +528,8 @@ export class SyncQueueService {
       }
 
       case 'VISITOR_REPORT': {
+        const { VisitorService } = await import('../firebase/visitorService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
           await VisitorService.updateVisitor(record, user);
@@ -536,6 +540,8 @@ export class SyncQueueService {
       }
 
       case 'SUBSTITUTION_REPORT': {
+        const { SubstitutionService } = await import('../firebase/substitutionService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
           await SubstitutionService.updateSubstitution(record, user);
@@ -546,6 +552,8 @@ export class SyncQueueService {
       }
 
       case 'GENERIC_SET': {
+        const { FirestoreService } = await import('../firebase/firestoreService');
+        if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         await FirestoreService.setDocument(item.collectionName, item.recordId, item.payload);
         break;
       }

@@ -34,8 +34,8 @@ const result = await build({
   },
   bundle: true, write: false, platform: 'node', format: 'cjs',
   plugins: [{ name: 'isolated-io', setup(b) {
-    b.onResolve({ filter: /\/(firebase|firestoreService)$/ }, (args) => {
-      const name = args.path.split('/').pop();
+    b.onResolve({ filter: /\/(firebase|firebaseAuth|firestoreService)$/ }, (args) => {
+      const name = args.path.split('/').pop().replace('firebaseAuth', 'firebase');
       return { path: name, namespace: 'mock' };
     });
     b.onLoad({ filter: /.*/, namespace: 'mock' }, (args) => ({ contents: mocks[args.path], loader: 'js' }));

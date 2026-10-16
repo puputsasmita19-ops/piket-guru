@@ -32,6 +32,8 @@ import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, DEFAULT_LOGIN_SUPPORT_CONTACT, ROLE_LABELS } from '../../config/constants';
 import { SchoolSettings, LoginContactType } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
+import { preloadAuthenticatedShell } from '../../appBootstrap';
+import { useSlowOperation } from '../../hooks/useSlowOperation';
 
 export const LoginPage: React.FC = () => {
   const { loginWithPin, loginWithGoogle, isLoading, isTrustedDevice, setTrustedDevice } = useAuth();
@@ -55,6 +57,7 @@ export const LoginPage: React.FC = () => {
   const [hasError, setHasError] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState<boolean>(false);
+  const isLoginSlow = useSlowOperation(isSubmitting);
   const [isContactAdminModalOpen, setIsContactAdminModalOpen] = useState<boolean>(false);
 
   // Real-time Indonesian date and time clock
@@ -90,7 +93,7 @@ export const LoginPage: React.FC = () => {
   });
 
   useEffect(() => {
-    fetch('/api/auth/public-config')
+    fetch('/api/auth/public-config', { priority: 'low' })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.config) {
@@ -500,6 +503,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
+      onFocusCapture={() => preloadAuthenticatedShell()}
       className="min-h-screen min-h-[100dvh] flex flex-col justify-start sm:justify-center items-center px-3 py-4 sm:p-6 selection:text-white transition-colors duration-200 relative overflow-x-hidden overflow-y-auto"
       style={{
         backgroundColor: 'var(--theme-bg-app)',
@@ -1013,6 +1017,7 @@ export const LoginPage: React.FC = () => {
         {/* Submit Button (Ergonomic alternative to virtual pad) */}
         <button
           type="button"
+          aria-busy={isSubmitting}
           disabled={isSubmitting || isLoading}
           onClick={() => handleSubmit()}
           className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl sm:rounded-2xl bg-[var(--theme-primary)] hover:opacity-95 text-[var(--theme-primary-contrast,#ffffff)] font-bold text-xs sm:text-sm shadow-md shadow-[var(--theme-ring)] transition-all cursor-pointer active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed min-h-[46px]"
@@ -1024,6 +1029,9 @@ export const LoginPage: React.FC = () => {
           )}
           <span>{isSubmitting ? 'Memeriksa…' : 'Masuk Sekarang'}</span>
         </button>
+        {isSubmitting && <p role="status" aria-live="polite" className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          {isGoogleSubmitting ? 'Selesaikan login di jendela Google. Verifikasi akun berjalan otomatis.' : isLoginSlow ? 'Server masih memverifikasi akun. Periksa koneksi dan tunggu tanpa menekan masuk lagi.' : 'Menghubungkan dan memverifikasi akun…'}
+        </p>}
 
         {/* Admin Support Contact Action (Proportional & Ergonomic, Reset PIN removed) */}
         {supportContact.enabled !== false && (
