@@ -252,16 +252,16 @@ export const Header: React.FC<HeaderProps> = ({
         className="shrink-0 sticky top-0 z-40 border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
         style={{ backgroundColor: 'var(--theme-header-bg)' }}
       >
-        <div className="max-w-7xl mx-auto w-full px-2 sm:px-4 lg:px-6">
+        <div className="app-header-inner max-w-7xl mx-auto w-full px-2 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16 gap-2 sm:gap-4 w-full">
             {/* Left Section: Mobile Menu + Date/Time (Mobile) OR Sidebar Toggle + App Identity (Desktop) */}
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink-0 lg:max-w-[35%]">
               {/* Mobile Sidebar Trigger */}
               <Tooltip content="Buka menu navigasi utama" position="bottom">
                 <button
                   type="button"
                   onClick={onToggleSidebar}
-                  className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95"
+                  className="hidden min-[400px]:flex lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] items-center justify-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95"
                   aria-label="Buka Menu Navigasi"
                   title="Buka Menu Navigasi"
                 >
@@ -293,7 +293,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
 
               {/* Realtime Date & Time Block on Mobile (< sm) */}
-              <div className="sm:hidden flex flex-col justify-center leading-tight select-none font-mono tabular-nums text-left shrink-0">
+              <div className="lg:hidden flex flex-col justify-center leading-tight select-none font-mono tabular-nums text-left shrink-0">
                 <span className="text-[10px] min-[360px]:text-[11px] font-bold text-slate-700 dark:text-slate-200 tracking-tight whitespace-nowrap">
                   <span className="inline min-[360px]:hidden">{`${String(currentTime.getDate()).padStart(2, '0')}/${String(currentTime.getMonth() + 1).padStart(2, '0')}/${currentTime.getFullYear()}`}</span>
                   <span className="hidden min-[360px]:inline">{formatShortIndonesianDate(currentTime)}</span>
@@ -304,7 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               {/* App Identity on Desktop (>= sm) */}
-              <div className="hidden sm:flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="hidden lg:flex items-center gap-2 sm:gap-3 min-w-0">
                 {logoUrl ? (
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white dark:bg-[var(--theme-card-bg)] p-0.5 flex items-center justify-center shadow-md shadow-[var(--theme-ring)] border border-slate-200 dark:border-[var(--theme-card-border)] shrink-0">
                     <img src={logoUrl} alt="Logo Sekolah" className="w-full h-full object-contain rounded-lg" />
@@ -316,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                    <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-sm sm:text-lg whitespace-nowrap shrink-0">
+                    <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-sm sm:text-lg truncate min-w-0">
                       {appName}
                     </span>
                     <span className="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)]/50 shrink-0">
@@ -331,7 +331,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Center Section: Realtime Date & Time on Desktop (>= sm) */}
-            <div className="hidden sm:flex flex-col items-center justify-center px-1 sm:px-4 shrink-0 text-center select-none font-mono tabular-nums">
+            <div className="hidden lg:flex flex-col items-center justify-center px-1 sm:px-4 shrink-0 text-center select-none font-mono tabular-nums">
               <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                 {formatIndonesianDate(currentTime)}
               </div>
@@ -341,7 +341,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Right Section: Icons, Profile & Logout */}
-            <div className="flex items-center justify-end gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+            <div className="app-header-actions flex items-center justify-end gap-0 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 shrink-0">
               {/* Shared Transparent Backdrop (Below Header z-40, Non-blurring, Header items stay 100% interactive) */}
               {activePanel !== 'none' && (
                 <div
@@ -377,7 +377,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('notifications')}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'notifications'
                         ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
                         : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
@@ -563,7 +563,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('theme')}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 shrink-0 ${
+                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 shrink-0 ${
                       activePanel === 'theme'
                         ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
                         : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
@@ -708,7 +708,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
-                    className={`flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                    className={`flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'user'
                         ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
                         : 'hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'

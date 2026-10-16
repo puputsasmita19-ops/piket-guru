@@ -374,18 +374,16 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             Izin Keluar Siswa & Dispensasi Digital
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Penerbitan surat izin gerbang (tunggal & multi siswa), monitoring gerbang, dan rekap perizinan
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Buat izin keluar dan catat siswa yang sudah kembali.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="page-actions flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -468,19 +466,19 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-              <select
+            <div className="app-filter-group flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
                 value={periodFilter}
                 onChange={(e) => setPeriodFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
               >
-                <option value="this_month">Periode: Bulan Ini</option>
-                <option value="today">Periode: Hari Ini</option>
-                <option value="last_month">Periode: Bulan Lalu</option>
-                <option value="recent">Periode: 60 Terbaru</option>
-              </select>
+                <option value="this_month">Bulan Ini</option>
+                <option value="today">Hari Ini</option>
+                <option value="last_month">Bulan Lalu</option>
+                <option value="recent">60 Terbaru</option>
+              </select></label>
 
-              <select
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -489,7 +487,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                 <option value="SEDANG_KELUAR">Sedang di Luar</option>
                 <option value="SUDAH_KEMBALI">Sudah Kembali</option>
                 <option value="SELESAI_PULANG">Pulang Selesai</option>
-              </select>
+              </select></label>
 
               <select
                 value={typeFilter}

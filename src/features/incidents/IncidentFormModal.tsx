@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -473,7 +474,28 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         title={editingIncident ? 'Ubah Laporan Kejadian' : 'Lapor Kejadian / Insiden Baru'}
         maxWidth="2xl"
       >
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <DialogForm onSubmit={handleSubmit} noValidate className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-[44px] px-4"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="min-h-[44px] px-5 font-bold shadow-md"
+              isLoading={isSubmitting}
+              leftIcon={editingIncident ? <Save className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+            >
+              {editingIncident ? 'Simpan Perubahan' : 'Kirim Laporan Kejadian'}
+            </Button>
+          </div>}>
           {/* Uncommitted Local Draft Banner */}
           {availableDraft && (
             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -828,29 +850,8 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-[44px] px-4"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="min-h-[44px] px-5 font-bold shadow-md"
-              isLoading={isSubmitting}
-              leftIcon={editingIncident ? <Save className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-            >
-              {editingIncident ? 'Simpan Perubahan' : 'Kirim Laporan Kejadian'}
-            </Button>
-          </div>
-        </form>
+          
+        </DialogForm>
       </Modal>
 
       {/* Camera Capture Modal */}

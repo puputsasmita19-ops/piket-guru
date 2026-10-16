@@ -13,9 +13,10 @@ import { PERMISSIONS, PermissionKey } from '../../config/permissions';
 
 interface MobileNavProps {
   onOpenMore: () => void;
+  isMoreOpen?: boolean;
 }
 
-export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
+export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = false }) => {
   const { activeTab, setActiveTab } = useNavigation();
   const { hasPermission } = useAuth();
 
@@ -90,7 +91,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
         <button
           onClick={onOpenMore}
           aria-label="Menu Lainnya"
-          aria-expanded="false"
+          aria-expanded={isMoreOpen}
           className={`group relative flex flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 px-1 rounded-2xl cursor-pointer transition-all duration-150 active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] ${
             isMoreActive
               ? 'text-slate-900 dark:text-white'
@@ -115,7 +116,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore }) => {
                 : 'font-medium text-slate-600 dark:text-slate-400'
             }`}
           >
-            Lainnya
+            Menu
           </span>
         </button>
       </div>

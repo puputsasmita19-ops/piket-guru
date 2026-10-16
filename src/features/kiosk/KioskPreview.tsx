@@ -97,7 +97,7 @@ export const KioskPreview: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <Tv className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -107,15 +107,13 @@ export const KioskPreview: React.FC = () => {
               content="Tampilan layar TV Lobi sekolah yang menyajikan jadwal piket, bel sekolah, pengumuman, dan status kehadiran secara otomatis."
             />
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tampilan layar penuh dinamis untuk Smart TV lobi sekolah, ruang guru, dan pos gerbang utama
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Lihat informasi sekolah dalam tampilan TV lobi.</p>
         </div>
 
         <Button
           variant="primary"
           size="md"
-          className="shadow-lg shadow-blue-600/30"
+          className="page-actions shadow-lg shadow-blue-600/30"
           leftIcon={<Maximize className="w-4 h-4" />}
           onClick={() => setIsKioskOpen(true)}
         >

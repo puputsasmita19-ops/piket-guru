@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -55,7 +56,20 @@ export const AdminPinPromptModal: React.FC<AdminPinPromptModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={title} maxWidth="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <Button type="button" variant="outline" size="sm" onClick={handleClose}>
+            Batal
+          </Button>
+          <Button
+            type="submit"
+            variant="danger"
+            size="sm"
+            isLoading={isVerifying}
+            leftIcon={<KeyRound className="w-4 h-4" />}
+          >
+            Verifikasi & Lanjutkan
+          </Button>
+        </div>}>
         <div className="flex items-center gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs">
           <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
           <div className="leading-relaxed">
@@ -64,7 +78,7 @@ export const AdminPinPromptModal: React.FC<AdminPinPromptModalProps> = ({
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+          <div role="alert" tabIndex={-1} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -90,21 +104,8 @@ export const AdminPinPromptModal: React.FC<AdminPinPromptModalProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={handleClose}>
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            variant="danger"
-            size="sm"
-            isLoading={isVerifying}
-            leftIcon={<KeyRound className="w-4 h-4" />}
-          >
-            Verifikasi & Lanjutkan
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

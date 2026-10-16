@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -47,7 +48,20 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
       title="Buat Pengumuman Papan Informasi Piket"
       maxWidth="md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            isLoading={isSubmitting}
+            leftIcon={<Megaphone className="w-3.5 h-3.5" />}
+          >
+            Publikasikan Informasi
+          </Button>
+        </div>}>
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
             Judul Informasi / Instruksi
@@ -108,21 +122,8 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            isLoading={isSubmitting}
-            leftIcon={<Megaphone className="w-3.5 h-3.5" />}
-          >
-            Publikasikan Informasi
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

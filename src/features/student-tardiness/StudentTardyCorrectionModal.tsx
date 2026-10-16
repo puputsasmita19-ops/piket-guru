@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -141,7 +142,26 @@ export const StudentTardyCorrectionModal: React.FC<StudentTardyCorrectionModalPr
       title="Koreksi Keterlambatan Siswa (Khusus Admin)"
       maxWidth="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Batal
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            isLoading={isSubmitting}
+            leftIcon={<CheckCircle2 className="w-4 h-4" />}
+          >
+            Simpan Koreksi Admin
+          </Button>
+        </div>}>
         {/* Banner Hak Akses Admin */}
         <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
           <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -307,34 +327,15 @@ export const StudentTardyCorrectionModal: React.FC<StudentTardyCorrectionModalPr
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+          <div role="alert" tabIndex={-1} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         {/* Footer Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onClose}
-            disabled={isSubmitting}
-          >
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            isLoading={isSubmitting}
-            leftIcon={<CheckCircle2 className="w-4 h-4" />}
-          >
-            Simpan Koreksi Admin
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

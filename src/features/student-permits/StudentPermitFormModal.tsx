@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import { Navigation } from '../../components/icons';
 import { Plus } from '../../components/icons';
 import { Check } from '../../components/icons';
@@ -680,7 +681,31 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
       {/* STEP 1: FORM INPUT UTAMA (MULTI-SISWA ATAU EDIT)                          */}
       {/* ========================================================================= */}
       {currentStep === 'FORM' && (
-        <form onSubmit={handleProceedToSummary} noValidate className="flex flex-col gap-5 sm:gap-6">
+        <DialogForm onSubmit={handleProceedToSummary} noValidate className="flex flex-col gap-5 sm:gap-6" actions={<div className="app-form-actions flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 px-4 text-xs font-semibold"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Batal
+            </Button>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="h-11 px-6 font-bold text-xs"
+              isLoading={isSubmitting}
+              leftIcon={<Send className="w-4 h-4" />}
+            >
+              {isEditMode
+                ? 'Lanjut ke Ringkasan Perubahan'
+                : `Lanjut ke Ringkasan (${selectedStudents.length} Siswa)`}
+            </Button>
+          </div>}>
           {/* Uncommitted Local Draft Banner */}
           {availableDraft && (
             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -1360,32 +1385,8 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
           )}
 
           {/* Form Actions */}
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 px-4 text-xs font-semibold"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Batal
-            </Button>
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="h-11 px-6 font-bold text-xs"
-              isLoading={isSubmitting}
-              leftIcon={<Send className="w-4 h-4" />}
-            >
-              {isEditMode
-                ? 'Lanjut ke Ringkasan Perubahan'
-                : `Lanjut ke Ringkasan (${selectedStudents.length} Siswa)`}
-            </Button>
-          </div>
-        </form>
+          
+        </DialogForm>
       )}
 
       {/* ========================================================================= */}

@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -651,7 +652,70 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
       title={`Buku Piket Digital — ${formatIndonesianDate(tanggal)}`}
       maxWidth="2xl"
     >
-      <form onSubmit={handleSaveDraft} className="space-y-6">
+      <DialogForm onSubmit={handleSaveDraft} className="space-y-6" actions={<div className="app-form-actions flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
+            Tutup
+          </Button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Guru / Petugas Action: Simpan Draft */}
+            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                isLoading={isSubmitting}
+                leftIcon={<Save className="w-3.5 h-3.5" />}
+                onClick={() => handleSaveDraft()}
+              >
+                Simpan Draft
+              </Button>
+            )}
+
+            {/* Guru / Petugas Action: Kirim Jurnal (Satu Klik Langsung) */}
+            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                isLoading={isSubmitting}
+                leftIcon={<Send className="w-3.5 h-3.5" />}
+                onClick={handleSubmitJournal}
+              >
+                Kirim Jurnal
+              </Button>
+            )}
+
+            {/* Admin/Kepsek on Terkirim: Kembalikan ke Draft */}
+            {isTerkirim && canApproveOrComplete && !showRevisionPrompt && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                isLoading={isSubmitting}
+                leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                onClick={() => setShowRevisionPrompt(true)}
+              >
+                Kembalikan ke Draft
+              </Button>
+            )}
+
+            {/* Admin/Kepsek on Terkirim: Sahkan & Selesaikan (Satu Klik) */}
+            {isTerkirim && canApproveOrComplete && (
+              <Button
+                type="button"
+                variant="success"
+                size="sm"
+                isLoading={isSubmitting}
+                leftIcon={<CheckCheck className="w-3.5 h-3.5" />}
+                onClick={handleApproveAndComplete}
+              >
+                Sahkan & Selesaikan
+              </Button>
+            )}
+          </div>
+        </div>}>
         {/* Uncommitted Local Draft Banner */}
         {availableDraft && (
           <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -1020,71 +1084,8 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
         )}
 
         {/* WORKFLOW ACTIONS */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
-            Tutup
-          </Button>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Guru / Petugas Action: Simpan Draft */}
-            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                isLoading={isSubmitting}
-                leftIcon={<Save className="w-3.5 h-3.5" />}
-                onClick={() => handleSaveDraft()}
-              >
-                Simpan Draft
-              </Button>
-            )}
-
-            {/* Guru / Petugas Action: Kirim Jurnal (Satu Klik Langsung) */}
-            {!isSelesai && !isTerkirim && isOwner && hasWritePermission && (
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                isLoading={isSubmitting}
-                leftIcon={<Send className="w-3.5 h-3.5" />}
-                onClick={handleSubmitJournal}
-              >
-                Kirim Jurnal
-              </Button>
-            )}
-
-            {/* Admin/Kepsek on Terkirim: Kembalikan ke Draft */}
-            {isTerkirim && canApproveOrComplete && !showRevisionPrompt && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-amber-600 border-amber-300 hover:bg-amber-50"
-                isLoading={isSubmitting}
-                leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-                onClick={() => setShowRevisionPrompt(true)}
-              >
-                Kembalikan ke Draft
-              </Button>
-            )}
-
-            {/* Admin/Kepsek on Terkirim: Sahkan & Selesaikan (Satu Klik) */}
-            {isTerkirim && canApproveOrComplete && (
-              <Button
-                type="button"
-                variant="success"
-                size="sm"
-                isLoading={isSubmitting}
-                leftIcon={<CheckCheck className="w-3.5 h-3.5" />}
-                onClick={handleApproveAndComplete}
-              >
-                Sahkan & Selesaikan
-              </Button>
-            )}
-          </div>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

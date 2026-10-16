@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -129,9 +130,16 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       title={editingStudent ? 'Edit Data Siswa' : 'Tambah Siswa Baru'}
       maxWidth="md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <Button variant="outline" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
+            Batal
+          </Button>
+          <Button variant="primary" size="sm" type="submit" isLoading={isSubmitting}>
+            Simpan Data Siswa
+          </Button>
+        </div>}>
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs">
+          <div role="alert" tabIndex={-1} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs">
             {error}
           </div>
         )}
@@ -293,15 +301,8 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button variant="outline" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
-            Batal
-          </Button>
-          <Button variant="primary" size="sm" type="submit" isLoading={isSubmitting}>
-            Simpan Data Siswa
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

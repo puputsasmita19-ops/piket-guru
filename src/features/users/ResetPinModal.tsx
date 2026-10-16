@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -44,7 +45,20 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Reset PIN Keamanan Pengguna" maxWidth="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            isLoading={isSubmitting}
+            leftIcon={<Check className="w-4 h-4" />}
+          >
+            Simpan PIN Baru
+          </Button>
+        </div>}>
         <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs space-y-1">
           <div className="flex items-center gap-2 font-bold text-blue-900 dark:text-blue-200">
             <KeyRound className="w-4 h-4 text-blue-600" />
@@ -79,21 +93,8 @@ export const ResetPinModal: React.FC<ResetPinModalProps> = ({
           <p className="text-[11px] text-slate-400">Wajib 6 digit angka numerik unik tanpa pola berulang.</p>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            isLoading={isSubmitting}
-            leftIcon={<Check className="w-4 h-4" />}
-          >
-            Simpan PIN Baru
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

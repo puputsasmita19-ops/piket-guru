@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Search } from '../icons';
 import {
   LayoutDashboard,
   Radio,
@@ -53,17 +54,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { activeTab, setActiveTab } = useNavigation();
   const { hasPermission } = useAuth();
+  const [menuSearch, setMenuSearch] = useState('');
+  useEffect(() => { if (!isOpen) setMenuSearch(''); }, [isOpen]);
 
   const mainMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
-    { id: 'command-center', label: 'Pusat Komando & Peta', icon: Radio, permission: PERMISSIONS.COMMAND_CENTER_VIEW, badge: 'Live HUD' },
-    { id: 'kiosk', label: 'Mode TV Lobi (Kiosk)', icon: Tv, permission: PERMISSIONS.KIOSK_VIEW, badge: 'Smart TV' },
-    { id: 'schedules', label: 'Jadwal Piket', icon: CalendarDays, permission: PERMISSIONS.SCHEDULE_VIEW, badge: 'Hari ini' },
+    { id: 'command-center', label: 'Pusat Komando', icon: Radio, permission: PERMISSIONS.COMMAND_CENTER_VIEW },
+    { id: 'kiosk', label: 'TV Lobi', icon: Tv, permission: PERMISSIONS.KIOSK_VIEW },
+    { id: 'schedules', label: 'Jadwal Piket', icon: CalendarDays, permission: PERMISSIONS.SCHEDULE_VIEW },
     { id: 'attendance', label: 'Presensi GPS', icon: MapPin, permission: PERMISSIONS.ATTENDANCE_VIEW },
     { id: 'duty-book', label: 'Buku Piket Digital', icon: BookOpenCheck, permission: PERMISSIONS.DUTYBOOK_VIEW },
     { id: 'incidents', label: 'Laporan Kejadian', icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
     { id: 'student-tardiness', label: 'Siswa Terlambat', icon: ClockCountdown, permission: PERMISSIONS.STUDENT_TARDY_VIEW },
-    { id: 'substitutions', label: 'Guru Inval / Pengganti', icon: UserSwitch, permission: PERMISSIONS.SUBSTITUTIONS_VIEW },
+    { id: 'substitutions', label: 'Guru Pengganti', icon: UserSwitch, permission: PERMISSIONS.SUBSTITUTIONS_VIEW },
     { id: 'student-permits', label: 'Izin Siswa & Gerbang', icon: FileText, permission: PERMISSIONS.STUDENT_PERMITS_VIEW },
     { id: 'visitors', label: 'Buku Tamu Digital', icon: UserCheck, permission: PERMISSIONS.VISITORS_VIEW },
   ];
@@ -74,8 +77,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
   ];
 
-  const visibleMainItems = mainMenuItems.filter((item) => hasPermission(item.permission));
-  const visibleAdminItems = adminMenuItems.filter((item) => hasPermission(item.permission));
+  const searchAliases: Partial<Record<NavigationTab, string>> = {
+    attendance: 'absen hadir masuk pulang lokasi gps', 'duty-book': 'jurnal catatan kegiatan',
+    'student-tardiness': 'siswa telat keterlambatan', 'student-permits': 'izin keluar masuk pulang gerbang',
+    substitutions: 'inval berhalangan pengganti', visitors: 'tamu pengunjung', kiosk: 'mode layar lobi kiosk',
+  };
+  const matchesMenu = (item: MenuItem) => hasPermission(item.permission) &&
+    `${item.label} ${item.id} ${searchAliases[item.id] || ''}`.toLowerCase().includes(menuSearch.trim().toLowerCase());
+  const visibleMainItems = mainMenuItems.filter(matchesMenu);
+  const visibleAdminItems = adminMenuItems.filter(matchesMenu);
 
   const handleMenuClick = (tab: NavigationTab) => {
     setActiveTab(tab);
@@ -87,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Backdrop Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-150"
+          className="app-sidebar-scrim fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-150"
           onClick={onClose}
         />
       )}
@@ -95,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Container */}
       <aside
         data-tour="sidebar-nav"
-        aria-label="Panel Navigasi Aplikasi"
+        aria-label="Menu utama aplikasi"
         className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${
@@ -112,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/70 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-xs tracking-tight">
-              Panel Navigasi
+              Menu Aplikasi
             </span>
             {isPinned && !isDesktopHidden && (
               <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-md">
@@ -173,13 +183,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
+        <div className="px-3 pt-3 shrink-0">
+          <label className="relative block">
+            <span className="sr-only">Cari menu aplikasi</span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="search" value={menuSearch} onChange={(event) => setMenuSearch(event.target.value)} placeholder="Cari menu…"
+              className="w-full min-h-11 rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-input-bg)] pl-9 pr-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-[var(--theme-ring)]" />
+          </label>
+        </div>
+
         {/* Scrollable Nav Items */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 space-y-6">
+          {visibleMainItems.length + visibleAdminItems.length === 0 && (
+            <div role="status" className="text-sm text-center text-slate-500 dark:text-slate-400 py-6 space-y-3"><p>Menu tidak ditemukan.</p>
+              <button type="button" onClick={() => setMenuSearch('')} className="min-h-11 px-3 rounded-xl text-[var(--theme-primary-text)] font-semibold bg-[var(--theme-primary-light)]">Tampilkan semua menu</button>
+            </div>
+          )}
           {/* Main Duty Section */}
           {visibleMainItems.length > 0 && (
             <div>
               <div className="px-3 mb-2 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Tugas & Piket
+                Kegiatan Sekolah
               </div>
               <nav className="space-y-1">
                 {visibleMainItems.map((item) => {
@@ -225,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {visibleAdminItems.length > 0 && (
             <div>
               <div className="px-3 mb-2 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Administrasi & Data
+                Administrasi
               </div>
               <nav className="space-y-1">
                 {visibleAdminItems.map((item) => {

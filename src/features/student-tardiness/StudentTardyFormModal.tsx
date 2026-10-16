@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -578,7 +579,28 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         }
         maxWidth="2xl"
       >
-        <form onSubmit={handleInitiateSubmit} noValidate className="space-y-5">
+        <DialogForm onSubmit={handleInitiateSubmit} noValidate className="space-y-5" actions={<div className="app-form-actions flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={isSubmitting}
+              leftIcon={<Clock className="w-4 h-4" />}
+            >
+              {editingTardy
+                ? 'Simpan Perubahan'
+                : `Simpan Catatan (${selectedStudents.length} Siswa)`}
+            </Button>
+          </div>}>
           {/* ========================================================================= */}
           {/* BAGIAN 1: PEMILIHAN SISWA (MULTI-SELECT DENGAN PENCARIAN MASTER DATA)      */}
           {/* ========================================================================= */}
@@ -1166,36 +1188,15 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
           {/* Error Alert */}
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+            <div role="alert" tabIndex={-1} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isSubmitting}
-              leftIcon={<Clock className="w-4 h-4" />}
-            >
-              {editingTardy
-                ? 'Simpan Perubahan'
-                : `Simpan Catatan (${selectedStudents.length} Siswa)`}
-            </Button>
-          </div>
-        </form>
+          
+        </DialogForm>
       </Modal>
 
       {/* ========================================================================= */}

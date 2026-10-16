@@ -22,7 +22,12 @@ export const Card: React.FC<CardProps> = ({
       id={id}
       data-tour={dataTour}
       onClick={onClick}
-      className={`bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl border border-slate-200/80 dark:border-[var(--theme-card-border)] shadow-sm ${
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onClick(); }
+      } : undefined}
+      className={`app-card min-w-0 bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl border border-slate-200/80 dark:border-[var(--theme-card-border)] shadow-sm ${
         hoverable ? 'hover:shadow-md hover:border-slate-300 dark:hover:border-[var(--theme-primary-border)] transition-all duration-200 cursor-pointer' : ''
       } ${className}`}
     >
@@ -37,12 +42,12 @@ export const CardHeader: React.FC<{
   action?: React.ReactNode;
   className?: string;
 }> = ({ title, subtitle, action, className = '' }) => (
-  <div className={`p-4 sm:p-5 border-b border-slate-100 dark:border-[var(--theme-card-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${className}`}>
+  <div className={`app-card-header p-4 sm:p-5 border-b border-slate-100 dark:border-[var(--theme-card-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${className}`}>
     <div className="min-w-0 flex-1">
       <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight break-words">{title}</h3>
       {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{subtitle}</p>}
     </div>
-    {action && <div className="shrink-0 self-start sm:self-auto">{action}</div>}
+    {action && <div className="app-card-actions shrink-0 self-start sm:self-auto">{action}</div>}
   </div>
 );
 

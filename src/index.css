@@ -632,10 +632,75 @@ button.bg-\[var\(--theme-primary\)\],
 
 /* Local vector icons inherit the current theme and never take pointer focus. */
 .app-icon {
-  display: inline-block;
   flex-shrink: 0;
   vertical-align: middle;
 }
 @media print {
   .app-icon { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* Ergonomic app surfaces: scoped so login, TV output and printed reports keep
+   their own layout. Native form semantics and existing event handlers remain. */
+.app-content { min-width: 0; }
+.app-content > * { min-width: 0; }
+.page-header { align-items: flex-start; }
+.page-header h1 { line-height: 1.3; align-items: flex-start; }
+.page-header h1 > .app-icon { margin-top: 2px; }
+.page-header p { max-width: 48rem; line-height: 1.6; }
+.page-actions { flex-wrap: wrap; }
+.app-button { min-height: 36px; }
+.app-button[data-size="md"] { min-height: 40px; }
+.app-button[data-size="lg"] { min-height: 44px; }
+.app-button > span { min-width: 0; }
+.app-card[role="button"]:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 3px; }
+.app-filter-group { flex-wrap: wrap; align-items: flex-end; }
+.app-filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.app-filter-field > span { font-size: 12px; font-weight: 600; color: #64748b; }
+.dark .app-filter-field > span { color: #94a3b8; }
+.app-sidebar-scrim { touch-action: none; }
+.app-dialog { max-height: calc(100dvh - 12px); max-height: min(94dvh, 960px); overflow: hidden; }
+.app-dialog-body { -webkit-overflow-scrolling: touch; }
+.app-dialog-body:has(> .app-dialog-form) { display: flex; overflow: hidden; padding: 0; }
+.app-dialog-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; width: 100%; max-height: 100%; }
+.app-form-fields { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; scroll-padding-block: 16px; }
+.app-form-fields > * { flex-shrink: 0; }
+.app-form-footer { flex-shrink: 0; padding: 12px 20px; border-top: 1px solid var(--theme-card-border); background: var(--theme-card-bg); }
+.app-dialog .app-form-actions { padding-top: 0; border-top-width: 0; gap: 8px; flex-wrap: wrap; }
+.app-form-fields [role="alert"] { scroll-margin-block: 16px; outline: none; }
+.app-dialog-footer, .app-form-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+@media screen and (max-width: 639px) {
+  .app-content { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  .app-content > .space-y-6 { --tw-space-y-reverse: 0; }
+  .page-header { gap: 14px; }
+  .page-header h1 { font-size: 20px; }
+  .page-header p { font-size: 13px; }
+  .page-actions { width: 100%; display: flex; gap: 8px; }
+  .page-actions > .app-button { flex: 1 1 auto; }
+  .page-actions > .app-button[data-variant="primary"] { order: -1; flex-basis: 100%; }
+  .page-header > .app-button { width: 100%; }
+  .app-card-actions { width: 100%; }
+  .app-card-actions > .app-button { width: 100%; }
+  .app-content .app-button, .app-dialog .app-button { min-height: 44px; font-size: 13px; }
+  .app-content .overflow-x-auto { max-width: 100%; }
+  .app-filter-field { flex: 1 1 130px; max-width: 100%; }
+  .app-filter-field select { width: 100%; max-width: 100%; }
+  :where(.app-content, .app-dialog) input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]),
+  :where(.app-content, .app-dialog) select,
+  :where(.app-content, .app-dialog) textarea { font-size: 16px; min-height: 44px; line-height: 1.5; }
+  .app-dialog textarea { min-height: 100px; }
+  .app-dialog-body label:not(.sr-only) { font-size: 13px; line-height: 1.5; }
+  .app-dialog { max-height: calc(100dvh - 8px); }
+  .app-form-fields { padding: 16px; }
+  .app-form-footer { padding-left: 16px; padding-right: 16px; }
+  .app-form-actions > .app-button { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.4; }
+  .app-form-actions > .app-button[data-variant="primary"] { flex-grow: 2; }
+  .app-dialog-footer > .app-button { flex: 1 1 auto; }
+  .quick-action { min-height: 92px; }
+}
+@media print {
+  .app-dialog-overlay { position: absolute !important; inset: 0 !important; padding: 0 !important; display: block !important; }
+  .app-dialog-backdrop, .app-dialog-header, .app-dialog-footer, .app-form-footer { display: none !important; }
+  .app-dialog { max-height: none !important; height: auto !important; max-width: none !important; overflow: visible !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
+  .app-dialog-body, .app-form-fields { overflow: visible !important; max-height: none !important; padding: 0 !important; }
 }

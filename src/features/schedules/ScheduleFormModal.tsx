@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -301,7 +302,20 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
       title={editingSchedule ? 'Ubah Jadwal Piket' : 'Tambah Jadwal Piket Baru'}
       maxWidth="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogForm onSubmit={handleSubmit} className="space-y-4" actions={<div className="app-form-actions flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            isLoading={isSubmitting}
+            disabled={candidates.length === 0 || rooms.length === 0}
+          >
+            {editingSchedule ? 'Perbarui Jadwal' : 'Simpan Jadwal Piket'}
+          </Button>
+        </div>}>
         {/* Conflict Warning Box */}
         {conflictWarning && (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in duration-150">
@@ -585,21 +599,8 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            isLoading={isSubmitting}
-            disabled={candidates.length === 0 || rooms.length === 0}
-          >
-            {editingSchedule ? 'Perbarui Jadwal' : 'Simpan Jadwal Piket'}
-          </Button>
-        </div>
-      </form>
+        
+      </DialogForm>
     </Modal>
   );
 };

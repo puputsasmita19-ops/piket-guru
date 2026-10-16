@@ -259,18 +259,16 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <UserX className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             Guru Berhalangan & Tugas Inval Pengganti
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pencatatan ketidakhadiran guru, alokasi guru inval pengganti, lembar tugas kelas, dan notifikasi WA
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Atur guru pengganti dan kelas yang perlu ditangani.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="page-actions flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -351,19 +349,19 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-              <select
+            <div className="app-filter-group flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
                 value={periodFilter}
                 onChange={(e) => setPeriodFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
               >
-                <option value="this_month">Periode: Bulan Ini</option>
-                <option value="today">Periode: Hari Ini</option>
-                <option value="last_month">Periode: Bulan Lalu</option>
-                <option value="recent">Periode: 60 Terbaru</option>
-              </select>
+                <option value="this_month">Bulan Ini</option>
+                <option value="today">Hari Ini</option>
+                <option value="last_month">Bulan Lalu</option>
+                <option value="recent">60 Terbaru</option>
+              </select></label>
 
-              <select
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -373,7 +371,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                 <option value="TERTUGASKAN">Tertugaskan</option>
                 <option value="SEDANG_BERLANGSUNG">Sedang Berlangsung</option>
                 <option value="SELESAI_INVAL">Selesai Inval</option>
-              </select>
+              </select></label>
             </div>
           </div>
         </CardContent>

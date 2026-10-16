@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -784,10 +785,29 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
         }
         maxWidth="4xl"
       >
-        <form onSubmit={handleOpenSummary} className="space-y-6">
+        <DialogForm onSubmit={handleOpenSummary} className="space-y-6" actions={<div className="app-form-actions flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <span className="text-[11px] text-slate-500">
+              Setiap rincian penugasan akan disimpan sebagai dokumen tersendiri yang terhubung dengan ID grup massal.
+            </span>
+
+            <div className="flex items-center gap-2 justify-end">
+              <Button variant="outline" size="md" onClick={onClose}>
+                Batal
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={selectedTeachers.length === 0}
+                leftIcon={<ArrowRight className="w-4 h-4" />}
+              >
+                Tinjau Ringkasan ({totalAssignmentsCount} Penugasan)
+              </Button>
+            </div>
+          </div>}>
           {/* TOP ERROR MESSAGE */}
           {errorMessage && (
-            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-2.5">
+            <div role="alert" tabIndex={-1} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
@@ -1404,27 +1424,8 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] text-slate-500">
-              Setiap rincian penugasan akan disimpan sebagai dokumen tersendiri yang terhubung dengan ID grup massal.
-            </span>
-
-            <div className="flex items-center gap-2 justify-end">
-              <Button variant="outline" size="md" onClick={onClose}>
-                Batal
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                type="submit"
-                disabled={selectedTeachers.length === 0}
-                leftIcon={<ArrowRight className="w-4 h-4" />}
-              >
-                Tinjau Ringkasan ({totalAssignmentsCount} Penugasan)
-              </Button>
-            </div>
-          </div>
-        </form>
+          
+        </DialogForm>
       </Modal>
 
       {/* ========================================================================= */}

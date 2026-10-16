@@ -1,3 +1,4 @@
+import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -812,7 +813,28 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         title={editingVisitor ? 'Ubah Catatan Buku Tamu' : 'Registrasi Tamu Masuk (Check-In)'}
         maxWidth="lg"
       >
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 sm:gap-5">
+        <DialogForm onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 sm:gap-5" actions={<div className="app-form-actions flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-[44px] px-5 text-xs font-semibold"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="min-h-[44px] px-6 font-bold shadow-md text-xs"
+              isLoading={isSubmitting}
+              leftIcon={editingVisitor ? <Save className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+            >
+              {editingVisitor ? 'Simpan Perubahan Buku Tamu' : 'Check-In & Berikan Badge'}
+            </Button>
+          </div>}>
           {/* Uncommitted Local Draft Banner */}
           {availableDraft && (
             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -1448,29 +1470,8 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-[44px] px-5 text-xs font-semibold"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="min-h-[44px] px-6 font-bold shadow-md text-xs"
-              isLoading={isSubmitting}
-              leftIcon={editingVisitor ? <Save className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-            >
-              {editingVisitor ? 'Simpan Perubahan Buku Tamu' : 'Check-In & Berikan Badge'}
-            </Button>
-          </div>
-        </form>
+          
+        </DialogForm>
       </Modal>
 
       {/* Camera Capture Modal */}

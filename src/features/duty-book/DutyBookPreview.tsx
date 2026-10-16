@@ -185,18 +185,16 @@ export const DutyBookPreview: React.FC = () => {
   return (
     <div data-tour="duty-book-container" className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <BookOpenCheck className="w-6 h-6 text-[var(--theme-primary)]" />
             Buku Piket Digital
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Alokasi 3 tahap: Draft &rarr; Terkirim &rarr; Selesai (Arsip resmi terkunci otomatis)
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Isi kegiatan piket dan pantau catatan harian.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="page-actions flex items-center gap-2">
           <Button
             variant="primary"
             size="sm"
@@ -258,19 +256,19 @@ export const DutyBookPreview: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <select
+            <div className="app-filter-group flex items-center gap-2 w-full sm:w-auto justify-end">
+              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
                 value={periodFilter}
                 onChange={(e) => setPeriodFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold text-[var(--theme-primary)]"
               >
-                <option value="this_month">Periode: Bulan Ini</option>
-                <option value="today">Periode: Hari Ini</option>
-                <option value="last_month">Periode: Bulan Lalu</option>
-                <option value="recent">Periode: 60 Terbaru</option>
-              </select>
+                <option value="this_month">Bulan Ini</option>
+                <option value="today">Hari Ini</option>
+                <option value="last_month">Bulan Lalu</option>
+                <option value="recent">60 Terbaru</option>
+              </select></label>
 
-              <select
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
@@ -279,7 +277,7 @@ export const DutyBookPreview: React.FC = () => {
                 <option value="DRAFT">1. Draft</option>
                 <option value="TERKIRIM">2. Terkirim</option>
                 <option value="SELESAI">3. Selesai</option>
-              </select>
+              </select></label>
             </div>
           </div>
         </CardContent>

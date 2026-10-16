@@ -663,19 +663,17 @@ export const AttendancePreview: React.FC = () => {
   return (
     <div data-tour="attendance-container" className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <MapPin className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             Presensi GPS Piket Guru
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Validasi kehadiran berbasis koordinat Geolocation, jarak radius sekolah, dan swafoto selfie
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Catat presensi masuk atau pulang menggunakan lokasi dan foto.</p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] p-1 rounded-xl">
+        <div className="page-actions flex items-center gap-2 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('presensi')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${

@@ -224,15 +224,13 @@ export const SchedulePreview: React.FC = () => {
   return (
     <div data-tour="schedules-container" className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <CalendarDays className="w-6 h-6 text-[var(--theme-primary)]" />
             Jadwal Piket Guru & Staff
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Alokasi shift pengawasan, deteksi bentrok real-time, dan generator jadwal mingguan
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Lihat jadwal dan penugasan guru piket.</p>
         </div>
 
         {isAdmin && (
@@ -319,8 +317,8 @@ export const SchedulePreview: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-              <select
+            <div className="app-filter-group flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
@@ -331,7 +329,7 @@ export const SchedulePreview: React.FC = () => {
                 <option value="SELESAI">SELESAI</option>
                 <option value="DIGANTIKAN">DIGANTIKAN</option>
                 <option value="DIBATALKAN">DIBATALKAN</option>
-              </select>
+              </select></label>
 
               {/* View Mode Toggle */}
               <div className="flex items-center border border-slate-200 dark:border-[var(--theme-card-border)] rounded-xl p-1 bg-slate-50 dark:bg-[var(--theme-input-bg)]">

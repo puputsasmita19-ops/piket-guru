@@ -1,3 +1,4 @@
+import { QuickActions } from './QuickActions';
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
@@ -220,51 +221,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
   return (
     <div className="space-y-6">
-      {/* HERO WELCOME BANNER */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-[var(--theme-primary)] via-[var(--theme-primary-hover)] to-[var(--theme-primary-active)] text-white p-6 sm:p-8 shadow-xl shadow-[var(--theme-ring)]">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white backdrop-blur-md text-xs font-semibold">
-              <Building2 className="w-3.5 h-3.5" />
-              <span>{settings.schoolName}</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Selamat Bertugas, {currentUser?.fullName}
-            </h1>
-            <p className="text-white/90 text-xs sm:text-sm max-w-xl leading-relaxed">
-              Sistem Terintegrasi Presensi GPS Geolocation, Jurnal Buku Piket Digital & Penanganan Cepat Insiden Sekolah.
-            </p>
-          </div>
+      <section className="dashboard-welcome rounded-2xl border border-[var(--theme-card-border)] bg-[var(--theme-card-bg)] p-4 sm:p-6">
+        <p className="flex items-center gap-2 text-xs sm:text-sm font-medium text-[var(--theme-primary-text)]"><Building2 className="h-4 w-4" />{settings.schoolName}</p>
+        <h1 className="mt-2 text-xl sm:text-2xl font-bold leading-snug tracking-tight text-slate-900 dark:text-white">Selamat bertugas, {currentUser?.fullName}</h1>
+        <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Mulai dari kegiatan yang ingin Anda kerjakan.</p>
+      </section>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {hasPermission(PERMISSIONS.ATTENDANCE_VIEW) && (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('attendance')}
-                className="group relative inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-white bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/20 hover:border-white/50 focus-visible:border-white shadow-sm hover:shadow-lg backdrop-blur-md transition-all duration-250 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:transform-none cursor-pointer select-none"
-                aria-label="Buka Presensi Mandiri"
-              >
-                <ShieldCheck className="w-4 h-4 text-white group-hover:scale-105 transition-transform duration-250 ease-out motion-reduce:transform-none shrink-0" />
-                <span>Presensi Mandiri</span>
-              </button>
-            )}
-            {hasPermission(PERMISSIONS.DUTYBOOK_VIEW) && (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('duty-book')}
-                className="group relative inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[var(--theme-primary-text)] bg-white hover:bg-[var(--theme-primary-light)] active:bg-white/90 border border-transparent hover:border-[var(--theme-primary-border)] shadow-md hover:shadow-xl transition-all duration-250 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:transform-none cursor-pointer select-none"
-                aria-label="Buka Isi Buku Piket"
-              >
-                <BookOpenCheck className="w-4 h-4 text-[var(--theme-primary)] group-hover:scale-105 transition-transform duration-250 ease-out motion-reduce:transform-none shrink-0" />
-                <span>Isi Buku Piket</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Decorative background glow */}
-        <div className="absolute -right-12 -top-12 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-      </div>
+      <QuickActions onNavigate={onNavigateTab} />
 
       {/* PERSONAL DUTY STATUS CARD (TEACHER DUTY HUD) */}
       <Card className="border-[var(--theme-primary-border)]/60 bg-linear-to-b from-[var(--theme-primary-light)]/40 to-white dark:from-[var(--theme-primary-light)]/20 dark:to-[var(--theme-card-bg)] shadow-md">
@@ -277,7 +240,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Status Tugas Piket Anda Hari Ini
+                    Tugas Anda hari ini
                   </h2>
                   <Badge variant={myTodaySchedule ? 'primary' : 'neutral'} size="sm">
                     {formatIndonesianDate(new Date())}
@@ -463,7 +426,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             {isLoadingMetrics ? (
               <div className="h-8 w-28 bg-slate-200 dark:bg-[var(--theme-surface-subtle)] rounded-md animate-pulse my-0.5" />
             ) : (
-              <div className="text-xl font-bold text-slate-900 dark:text-white truncate">
+              <div className="text-lg sm:text-xl font-bold leading-snug text-slate-900 dark:text-white break-words">
                 {todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status).label : 'Belum Dibuat'}
               </div>
             )}

@@ -989,18 +989,16 @@ export const ReportsPreview: React.FC = () => {
   return (
     <div data-tour="reports-container" className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <FileBarChart2 className="w-6 h-6 text-[var(--theme-primary)]" />
             Laporan, Rekapitulasi & Analitik Piket
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pusat rekapitulasi kepatuhan piket, kedisiplinan siswa, layanan inval, buku tamu, dan pencetakan dokumen resmi
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Pilih periode untuk melihat, mengunduh, atau mencetak laporan.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="page-actions flex flex-wrap items-center gap-2">
           {/* Tombol Berikon Gambar dengan Label "Rekap Foto" pada Area Tindakan Atas Halaman (Dekat Tombol Cetak) */}
           <Button
             variant={activeTab === 'photoRecap' ? 'primary' : 'outline'}
@@ -1090,7 +1088,7 @@ export const ReportsPreview: React.FC = () => {
             </div>
 
             <div className="w-full sm:w-auto min-w-[220px]">
-              <select
+              <label className="app-filter-field"><span>Periode</span><select
                 id="period-mode-select"
                 aria-label="Periode Laporan"
                 value={periodMode}
@@ -1102,7 +1100,7 @@ export const ReportsPreview: React.FC = () => {
                 <option value="semester">Semester</option>
                 <option value="yearly">Tahunan</option>
                 <option value="custom">Rentang Khusus</option>
-              </select>
+              </select></label>
             </div>
           </div>
 

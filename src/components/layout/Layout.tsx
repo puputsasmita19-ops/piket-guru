@@ -81,8 +81,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div
-      className={`text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150 min-h-screen ${
-        isPinned ? 'lg:h-screen lg:max-h-screen lg:overflow-hidden' : ''
+      className={`app-shell text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150 min-h-dvh ${
+        isPinned ? 'lg:h-dvh lg:max-h-dvh lg:overflow-hidden' : ''
       }`}
       style={{ backgroundColor: 'var(--theme-bg-app)' }}
     >
@@ -125,7 +125,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         <main
           id="main-content-scroll"
-          className={`flex-1 max-w-7xl mx-auto w-full transition-all duration-200 pb-20 lg:pb-8 p-3 sm:p-6 md:p-8 ${
+          className={`app-content min-w-0 flex-1 max-w-7xl mx-auto w-full transition-all duration-200 pb-20 lg:pb-8 p-3 sm:p-6 md:p-8 ${
             isPinned
               ? 'lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain'
               : 'overflow-visible'
@@ -136,7 +136,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       <ScrollToTop targetSelector="#main-content-scroll" />
-      <MobileNav onOpenMore={() => setSidebarOpen(true)} />
+      <MobileNav onOpenMore={() => setSidebarOpen(true)} isMoreOpen={sidebarOpen} />
     </div>
   );
 };

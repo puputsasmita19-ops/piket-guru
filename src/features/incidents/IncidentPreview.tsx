@@ -159,15 +159,13 @@ export const IncidentPreview: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <AlertTriangle className="w-6 h-6 text-amber-500" />
             Laporan Kejadian & Insiden Sekolah
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pencatatan insiden ketertiban siswa, fasilitas sarpras, keamanan gerbang, dan rekam medis UKS
-          </p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Catat kejadian atau pelanggaran beserta tindak lanjutnya.</p>
         </div>
 
         <Button
@@ -179,7 +177,7 @@ export const IncidentPreview: React.FC = () => {
             setIsFormModalOpen(true);
           }}
         >
-          + Lapor Kejadian Baru
+          Lapor Kejadian Baru
         </Button>
       </div>
 
@@ -233,9 +231,9 @@ export const IncidentPreview: React.FC = () => {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
+            <div className="app-filter-group flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
               {/* Category Filter */}
-              <select
+              <label className="app-filter-field"><span>Kategori</span><select aria-label="Kategori"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -245,10 +243,10 @@ export const IncidentPreview: React.FC = () => {
                   <option key={c.id} value={c.code}>{c.name}
                   </option>
                 ))}
-              </select>
+              </select></label>
 
               {/* Severity Filter */}
-              <select
+              <label className="app-filter-field"><span>Tingkat</span><select aria-label="Tingkat"
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -258,10 +256,10 @@ export const IncidentPreview: React.FC = () => {
                 <option value="SEDANG">Sedang</option>
                 <option value="TINGGI">Tinggi</option>
                 <option value="KRITIS">Kritis</option>
-              </select>
+              </select></label>
 
               {/* Status Filter */}
-              <select
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -271,17 +269,21 @@ export const IncidentPreview: React.FC = () => {
                 <option value="INVESTIGASI">INVESTIGASI</option>
                 <option value="PENANGANAN">PENANGANAN</option>
                 <option value="SELESAI">SELESAI</option>
-              </select>
+              </select></label>
 
               {/* View Switch */}
               <div className="flex items-center border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-900">
                 <button
+                  aria-label="Tampilan kartu"
+                  aria-pressed={viewMode === 'grid'}
                   onClick={() => setViewMode('grid')}
                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  aria-label="Tampilan tabel"
+                  aria-pressed={viewMode === 'table'}
                   onClick={() => setViewMode('table')}
                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
                 >
