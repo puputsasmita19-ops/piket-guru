@@ -8,6 +8,9 @@ import { PanelLeftOpen } from '../icons';
 
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { InteractiveGuideTour } from '../guide/InteractiveGuideTour';
+import { useNavigation } from '../../contexts/NavigationContext';
+import { ModuleAppearanceProvider } from '../../contexts/ModuleAppearanceContext';
+import { getModuleStyle } from '../../config/moduleAppearance';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,6 +24,7 @@ interface SidebarPreferences {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const { activeTab } = useNavigation();
   // Mobile drawer state (always starts closed on mobile)
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -80,11 +84,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [isDesktopHidden]);
 
   return (
+    <ModuleAppearanceProvider value={activeTab}>
     <div
+      data-module={activeTab}
       className={`app-shell text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150 min-h-dvh ${
         isPinned ? 'lg:h-dvh lg:max-h-dvh lg:overflow-hidden' : ''
       }`}
-      style={{ backgroundColor: 'var(--theme-bg-app)' }}
+      style={{ ...getModuleStyle(activeTab), backgroundColor: 'var(--theme-bg-app)' }}
     >
       <AppUpdateBanner />
       <EmergencyBanner />
@@ -124,6 +130,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         )}
 
         <main
+          data-module={activeTab}
           id="main-content-scroll"
           className={`app-content min-w-0 flex-1 max-w-7xl mx-auto w-full transition-all duration-200 pb-20 lg:pb-8 p-3 sm:p-6 md:p-8 ${
             isPinned
@@ -138,6 +145,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <ScrollToTop targetSelector="#main-content-scroll" />
       <MobileNav onOpenMore={() => setSidebarOpen(true)} isMoreOpen={sidebarOpen} />
     </div>
+    </ModuleAppearanceProvider>
   );
 };
 

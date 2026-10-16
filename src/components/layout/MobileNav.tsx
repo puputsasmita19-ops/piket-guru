@@ -1,3 +1,4 @@
+import { getModuleStyle } from '../../config/moduleAppearance';
 import React from 'react';
 import {
   LayoutDashboard,
@@ -53,10 +54,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
           return (
             <button
               key={item.id}
+              data-module={item.id}
+              style={getModuleStyle(item.id)}
               onClick={() => setActiveTab(item.id)}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
-              className={`group relative flex flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 px-1 rounded-2xl cursor-pointer transition-all duration-150 active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] ${
+              className={`module-mobile-item group relative flex flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 px-1 rounded-2xl cursor-pointer transition-all duration-150 active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] ${
                 isActive
                   ? 'text-slate-900 dark:text-white'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -64,7 +67,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
             >
               {/* Squircle Pastel Container for Icon */}
               <div
-                className={`relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                className={`module-mobile-icon relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
                   isActive
                     ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-105'
                     : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
@@ -75,7 +78,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
 
               {/* Label */}
               <span
-                className={`text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
+                className={`module-mobile-label text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
                   isActive
                     ? 'font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
                     : 'font-medium text-slate-600 dark:text-slate-400'
@@ -91,8 +94,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
         <button
           onClick={onOpenMore}
           aria-label="Menu Lainnya"
+          data-module={activeTab}
+          style={getModuleStyle(activeTab)}
+          data-active={isMoreActive || undefined}
           aria-expanded={isMoreOpen}
-          className={`group relative flex flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 px-1 rounded-2xl cursor-pointer transition-all duration-150 active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] ${
+          className={`module-mobile-item group relative flex flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 px-1 rounded-2xl cursor-pointer transition-all duration-150 active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] ${
             isMoreActive
               ? 'text-slate-900 dark:text-white'
               : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -100,7 +106,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
         >
           {/* Squircle Container */}
           <div
-            className={`relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+            className={`module-mobile-icon relative w-10 h-8 sm:w-11 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-200 ${
               isMoreActive
                 ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-105'
                 : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
@@ -110,7 +116,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
           </div>
 
           <span
-            className={`text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
+            className={`module-mobile-label text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
               isMoreActive
                 ? 'font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
                 : 'font-medium text-slate-600 dark:text-slate-400'

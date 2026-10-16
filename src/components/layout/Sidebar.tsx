@@ -1,3 +1,4 @@
+import { getModuleStyle } from '../../config/moduleAppearance';
 import React, { useEffect, useState } from 'react';
 import { Search } from '../icons';
 import {
@@ -212,9 +213,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   return (
                     <button
                       key={item.id}
+                      data-module={item.id}
+                      style={getModuleStyle(item.id)}
                       onClick={() => handleMenuClick(item.id)}
                       aria-current={isActive ? 'page' : undefined}
-                      className={`group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
+                      className={`module-nav-item group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
                           ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
@@ -222,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                          className={`module-nav-icon w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
                             isActive
                               ? 'bg-white/20 text-inherit'
                               : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'
@@ -258,9 +261,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   return (
                     <button
                       key={item.id}
+                      data-module={item.id}
+                      style={getModuleStyle(item.id)}
                       onClick={() => handleMenuClick(item.id)}
                       aria-current={isActive ? 'page' : undefined}
-                      className={`group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
+                      className={`module-nav-item group w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] active:scale-[0.98] ${
                         isActive
                           ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-primary-text)] dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-[var(--theme-primary-text)]'
@@ -268,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                          className={`module-nav-icon w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
                             isActive
                               ? 'bg-white/20 text-inherit'
                               : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] group-hover:bg-[var(--theme-surface-hover)] group-hover:text-[var(--theme-primary)]'

@@ -704,3 +704,116 @@ button.bg-\[var\(--theme-primary\)\],
   .app-dialog { max-height: none !important; height: auto !important; max-width: none !important; overflow: visible !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
   .app-dialog-body, .app-form-fields { overflow: visible !important; max-height: none !important; padding: 0 !important; }
 }
+
+/* Feature identity complements the school's global theme without recoloring
+   warning/success badges, photo content, charts, or public TV output. */
+[data-module] {
+  --module-ink: var(--module-accent);
+  --module-tint: color-mix(in srgb, var(--module-accent) 9%, var(--theme-card-bg));
+  --module-icon-bg: color-mix(in srgb, var(--module-accent) 15%, var(--theme-card-bg));
+  --module-border: color-mix(in srgb, var(--module-accent) 27%, var(--theme-card-border));
+}
+.dark [data-module] {
+  --module-ink: var(--module-dark-ink);
+  --module-tint: color-mix(in srgb, var(--module-dark-ink) 10%, var(--theme-card-bg));
+  --module-icon-bg: color-mix(in srgb, var(--module-dark-ink) 17%, var(--theme-card-bg));
+  --module-border: color-mix(in srgb, var(--module-dark-ink) 30%, var(--theme-card-border));
+}
+.app-shell[data-module] header { border-bottom-color: var(--module-border); }
+.app-content[data-module] .page-header,
+.app-content[data-module] .dashboard-welcome {
+  padding: 20px;
+  border: 1px solid var(--module-border);
+  border-left: 4px solid var(--module-accent);
+  border-radius: 20px;
+  background: linear-gradient(110deg, var(--module-tint), var(--theme-card-bg)) !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+.app-content[data-module] .page-header h1 { gap: 12px; align-items: center; }
+.app-content[data-module] .page-header h1 > .app-icon {
+  color: var(--module-ink) !important;
+  background-color: var(--module-icon-bg);
+  box-sizing: content-box;
+  width: 22px; height: 22px; padding: 10px; margin: 0;
+  border-radius: 13px;
+}
+.app-content[data-module]:not([data-module="command-center"]) .app-card {
+  border-color: var(--module-border) !important;
+}
+.app-content[data-module]:not([data-module="command-center"]) .app-card-header {
+  background: linear-gradient(110deg, var(--module-tint), var(--theme-card-bg));
+  border-bottom-color: var(--module-border);
+  border-radius: 15px 15px 0 0;
+}
+.app-content .quick-action[data-module],
+.app-content[data-module] .module-summary-card[data-module] {
+  background: linear-gradient(125deg, var(--module-tint), var(--theme-card-bg)) !important;
+  border-color: var(--module-border) !important;
+  border-top: 3px solid var(--module-accent) !important;
+}
+@media screen and (hover: hover) {
+  .app-content .quick-action[data-module]:hover,
+  .app-content[data-module] .module-summary-card[data-module]:hover { background: var(--module-icon-bg) !important; }
+}
+.module-icon { background-color: var(--module-icon-bg); color: var(--module-ink); }
+.app-content .module-summary-card .module-summary-icon { background-color: var(--module-icon-bg) !important; color: var(--module-ink) !important; }
+.app-content[data-module] :is(.page-header p, .app-card-header p, .module-description, .dashboard-welcome > p:last-child),
+.app-content .module-summary-card :is(.text-slate-500, .text-slate-400) { color: #475569; }
+.dark .app-content[data-module] :is(.page-header p, .app-card-header p, .module-description, .dashboard-welcome > p:last-child),
+.dark .app-content .module-summary-card :is(.text-slate-500, .text-slate-400) { color: #94a3b8; }
+.app-content .module-summary-card .text-emerald-600 { color: #047857; }
+.app-content .module-summary-card .text-amber-600 { color: #92400e; }
+.dark .app-content .module-summary-card .text-emerald-600 { color: #6ee7b7; }
+.dark .app-content .module-summary-card .text-amber-600 { color: #fcd34d; }
+.dark .app-content .module-summary-card .text-purple-600 { color: #d8b4fe; }
+:where(.app-content, .app-dialog-overlay)[data-module] .app-button[data-variant="primary"] .app-icon { color: inherit !important; }
+.app-shell .module-nav-item { border: 1px solid transparent; }
+.app-shell .module-nav-item .module-nav-icon {
+  background-color: var(--module-icon-bg) !important;
+  color: var(--module-ink) !important;
+}
+.app-shell .module-nav-item:hover,
+.app-shell .module-nav-item[aria-current="page"] {
+  color: var(--module-ink) !important;
+  background-color: var(--module-tint) !important;
+  border-color: var(--module-border);
+}
+.app-shell .module-nav-item[aria-current="page"] { box-shadow: inset 3px 0 0 var(--module-accent); }
+.app-shell .module-mobile-item .module-mobile-icon {
+  background-color: var(--module-tint) !important;
+  color: var(--module-ink) !important;
+}
+.app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-icon {
+  background-color: var(--module-accent) !important;
+  color: #fff !important;
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--module-accent) 23%, transparent);
+}
+.app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-label {
+  color: var(--module-ink) !important;
+}
+:where(.app-content, .app-dialog-overlay)[data-module]:not([data-module="command-center"]) .app-button[data-variant="primary"]:not(:is([class*="bg-rose-"], [class*="bg-red-"], [class*="bg-emerald-"], [class*="bg-green-"], [class*="bg-amber-"], [class*="bg-yellow-"])) {
+  background-color: var(--module-accent) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--module-accent) 15%, transparent);
+}
+.app-dialog-overlay[data-module] .app-dialog-header {
+  background: linear-gradient(110deg, var(--module-tint), var(--theme-card-bg));
+  border-bottom: 3px solid var(--module-accent);
+}
+.app-content[data-module] .quick-action:focus-visible,
+.app-content[data-module] .module-summary-card:focus-visible,
+.app-shell .module-nav-item:focus-visible { outline: 2px solid var(--module-ink); outline-offset: 3px; }
+@media screen and (max-width: 639px) {
+  .app-content[data-module] .page-header,
+  .app-content[data-module] .dashboard-welcome { padding: 16px; border-radius: 17px; }
+  .app-content[data-module] .page-header h1 { font-size: 19px; gap: 10px; }
+  .app-content[data-module] .page-header h1 > .app-icon { width: 20px; height: 20px; padding: 9px; border-radius: 11px; }
+}
+@media print {
+  .app-content[data-module] .page-header,
+  .app-content[data-module] .dashboard-welcome,
+  .app-content[data-module] .app-card-header,
+  .app-content .quick-action[data-module],
+  .app-content[data-module] .module-summary-card[data-module] { background: #fff !important; border-color: #cbd5e1 !important; box-shadow: none !important; }
+  .app-content[data-module] .page-header h1 > .app-icon { background: transparent; color: #0f172a !important; }
+}

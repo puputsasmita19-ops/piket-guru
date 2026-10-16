@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from '../icons';
+import { useModuleAppearance } from '../../contexts/ModuleAppearanceContext';
+import { getModuleStyle } from '../../config/moduleAppearance';
 
 interface ModalProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ let savedOverflow = '';
 let savedPaddingRight = '';
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, maxWidth = 'lg' }) => {
+  const module = useModuleAppearance();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -78,7 +81,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   if (!isOpen) return null;
   const widths = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '4xl': 'max-w-4xl' };
   return createPortal(
-    <div className="app-dialog-overlay fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-6">
+    <div data-module={module} style={getModuleStyle(module)} className="app-dialog-overlay fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-6">
       <div className="app-dialog-backdrop absolute inset-0 bg-slate-950/55" aria-hidden="true"
         onClick={() => { if (openDialogs.at(-1) === tokenRef.current) closeRef.current(); }} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}

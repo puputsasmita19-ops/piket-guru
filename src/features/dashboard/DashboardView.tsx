@@ -1,3 +1,4 @@
+import { getModuleStyle } from '../../config/moduleAppearance';
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect } from 'react';
 import {
@@ -373,11 +374,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       {/* METRIC STAT CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Metric 1 */}
-        <Card hoverable onClick={() => onNavigateTab('schedules')} className="cursor-pointer">
+        <Card module="schedules" hoverable onClick={() => onNavigateTab('schedules')} className="cursor-pointer">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">Petugas Hari Ini</span>
-              <div className="w-7 h-7 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)] flex items-center justify-center">
+              <div className="module-summary-icon w-7 h-7 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)] flex items-center justify-center">
                 <Users className="w-4 h-4" />
               </div>
             </div>
@@ -393,11 +394,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </Card>
 
         {/* Metric 2 */}
-        <Card hoverable onClick={() => onNavigateTab('attendance')} className="cursor-pointer">
+        <Card module="attendance" hoverable onClick={() => onNavigateTab('attendance')} className="cursor-pointer">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">Kehadiran (GPS)</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
+              <div className="module-summary-icon w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
             </div>
@@ -415,11 +416,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </Card>
 
         {/* Metric 3 */}
-        <Card hoverable onClick={() => onNavigateTab('duty-book')} className="cursor-pointer">
+        <Card module="duty-book" hoverable onClick={() => onNavigateTab('duty-book')} className="cursor-pointer">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">Buku Piket Hari Ini</span>
-              <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
+              <div className="module-summary-icon w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
                 <BookOpenCheck className="w-4 h-4" />
               </div>
             </div>
@@ -437,11 +438,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </Card>
 
         {/* Metric 4 */}
-        <Card hoverable onClick={() => onNavigateTab('incidents')} className="cursor-pointer">
+        <Card module="incidents" hoverable onClick={() => onNavigateTab('incidents')} className="cursor-pointer">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">Insiden Terlapor</span>
-              <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
+              <div className="module-summary-icon w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4" />
               </div>
             </div>
@@ -462,12 +463,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       {/* OPERATIONAL SUMMARY ROW (STUDENT TARDINESS, PERMITS, SUBSTITUTIONS, VISITORS) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div
+          data-module="student-tardiness" style={getModuleStyle('student-tardiness')}
+          role="button" tabIndex={0}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onNavigateTab('student-tardiness'); } }}
           onClick={() => onNavigateTab('student-tardiness')}
-          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-amber-400 dark:hover:border-amber-600 transition-all cursor-pointer shadow-xs group"
+          className="module-summary-card p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-amber-400 dark:hover:border-amber-600 transition-all cursor-pointer shadow-xs group"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-slate-500 font-semibold group-hover:text-amber-600">Siswa Terlambat</span>
-            <div className="p-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600">
+            <div className="module-summary-icon p-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600">
               <UserX className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -478,12 +482,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
 
         <div
+          data-module="student-permits" style={getModuleStyle('student-permits')}
+          role="button" tabIndex={0}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onNavigateTab('student-permits'); } }}
           onClick={() => onNavigateTab('student-permits')}
-          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-[var(--theme-primary-border)] transition-all cursor-pointer shadow-xs group"
+          className="module-summary-card p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-[var(--theme-primary-border)] transition-all cursor-pointer shadow-xs group"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-slate-500 font-semibold group-hover:text-[var(--theme-primary)]">Izin Keluar Kelas</span>
-            <div className="p-1 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)]">
+            <div className="module-summary-icon p-1 rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary)]">
               <FileText className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -494,12 +501,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
 
         <div
+          data-module="substitutions" style={getModuleStyle('substitutions')}
+          role="button" tabIndex={0}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onNavigateTab('substitutions'); } }}
           onClick={() => onNavigateTab('substitutions')}
-          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer shadow-xs group"
+          className="module-summary-card p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer shadow-xs group"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-slate-500 font-semibold group-hover:text-indigo-600">Guru Pengganti (Inval)</span>
-            <div className="p-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+            <div className="module-summary-icon p-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
               <GraduationCap className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -510,12 +520,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
 
         <div
+          data-module="visitors" style={getModuleStyle('visitors')}
+          role="button" tabIndex={0}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onNavigateTab('visitors'); } }}
           onClick={() => onNavigateTab('visitors')}
-          className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-teal-400 dark:hover:border-teal-600 transition-all cursor-pointer shadow-xs group"
+          className="module-summary-card p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm hover:border-teal-400 dark:hover:border-teal-600 transition-all cursor-pointer shadow-xs group"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-slate-500 font-semibold group-hover:text-teal-600">Buku Tamu Sekolah</span>
-            <div className="p-1 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600">
+            <div className="module-summary-icon p-1 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600">
               <Building className="w-3.5 h-3.5" />
             </div>
           </div>

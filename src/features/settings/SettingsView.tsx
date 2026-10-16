@@ -787,7 +787,7 @@ export const SettingsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="page-header flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <Settings className="w-6 h-6 text-[var(--theme-primary)]" />

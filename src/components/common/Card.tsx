@@ -1,4 +1,6 @@
 import React from 'react';
+import type { NavigationTab } from '../../types';
+import { getModuleStyle } from '../../config/moduleAppearance';
 
 interface CardProps {
   children: React.ReactNode;
@@ -7,6 +9,7 @@ interface CardProps {
   hoverable?: boolean;
   id?: string;
   'data-tour'?: string;
+  module?: NavigationTab;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -16,18 +19,21 @@ export const Card: React.FC<CardProps> = ({
   hoverable = false,
   id,
   'data-tour': dataTour,
+  module,
 }) => {
   return (
     <div
       id={id}
       data-tour={dataTour}
+      data-module={module}
+      style={getModuleStyle(module)}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (event) => {
         if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onClick(); }
       } : undefined}
-      className={`app-card min-w-0 bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl border border-slate-200/80 dark:border-[var(--theme-card-border)] shadow-sm ${
+      className={`app-card ${module ? 'module-summary-card' : ''} min-w-0 bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl border border-slate-200/80 dark:border-[var(--theme-card-border)] shadow-sm ${
         hoverable ? 'hover:shadow-md hover:border-slate-300 dark:hover:border-[var(--theme-primary-border)] transition-all duration-200 cursor-pointer' : ''
       } ${className}`}
     >
