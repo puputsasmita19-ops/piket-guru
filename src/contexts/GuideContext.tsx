@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 
 interface GuideContextType {
@@ -33,10 +33,22 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [isGuideMenuOpen, setIsGuideMenuOpen] = useState<boolean>(false);
   const [isGuideTourActive, setIsGuideTourActive] = useState<boolean>(false);
+  const previousUserId = useRef<string | null>(null);
 
   // Sync preference state when currentUser changes
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || (previousUserId.current && previousUserId.current !== currentUser.id)) {
+      setIsGuideMenuOpen(false);
+      setIsGuideTourActive(false);
+    }
+    if (!currentUser?.id && previousUserId.current) {
+      try { sessionStorage.removeItem(`piket_guide_shown_session_${previousUserId.current}`); } catch {}
+    }
+    previousUserId.current = currentUser?.id || null;
+    if (!currentUser?.id) {
+      setShowOnLoginState(false);
+      return;
+    }
     try {
       const saved = localStorage.getItem(`piket_guide_show_on_login_${currentUser.id}`);
       setShowOnLoginState(saved === null ? false : saved === 'true');
@@ -61,7 +73,8 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!isAuthenticated || !currentUser?.id) return;
 
     const sessionKey = `piket_guide_shown_session_${currentUser.id}`;
-    const alreadyShownInSession = sessionStorage.getItem(sessionKey);
+    let alreadyShownInSession: string | null = null;
+    try { alreadyShownInSession = sessionStorage.getItem(sessionKey); } catch {}
 
     if (showOnLogin && !alreadyShownInSession) {
       // Delay briefly to allow main dashboard and DOM to render cleanly

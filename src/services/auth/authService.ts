@@ -1,5 +1,4 @@
 import { UserProfile } from '../../types';
-import { ROLE_PERMISSIONS } from '../../config/permissions';
 import { auth } from '../firebase/firebase';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { OfflineStorage } from '../offline/offlineStorage';
@@ -42,6 +41,7 @@ export interface AuthResult {
 class AuthService {
   private usersList: UserSummaryItem[] = [];
   private initialized = false;
+  private usersRequest: Promise<UserSummaryItem[]> | null = null;
   private currentFirebaseUser: User | null = null;
 
   constructor() {
@@ -81,7 +81,6 @@ class AuthService {
       }
     }
 
-    await this.refreshUsersList();
     this.initialized = true;
   }
 
@@ -90,6 +89,14 @@ class AuthService {
    * Does NOT query Firestore client-side, enforcing zero unauthenticated client access (SEC-06).
    */
   public async refreshUsersList(): Promise<UserSummaryItem[]> {
+    if (this.usersRequest) return this.usersRequest;
+    const request = this.fetchUsersList();
+    this.usersRequest = request;
+    try { return await request; }
+    finally { if (this.usersRequest === request) this.usersRequest = null; }
+  }
+
+  private async fetchUsersList(): Promise<UserSummaryItem[]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
@@ -138,8 +145,11 @@ class AuthService {
    * PIN -> Backend scrypt verification -> Firebase Custom Token -> Frontend signInWithCustomToken -> Firebase ID token.
    * Closes SEC-01, SEC-06, SEC-07, and SEC-08.
    */
-  public async authenticateWithPin(identifier: string, pin: string): Promise<AuthResult> {
+  public async authenticateWithPin(identifier: string, pin: string, options: { isCurrent?: () => boolean } = {}): Promise<AuthResult> {
     await this.init();
+    const isCurrent = options.isCurrent || (() => true);
+    const cancelled = () => ({ success: false, error: 'Sesi autentikasi dibatalkan.' });
+    if (!isCurrent()) return cancelled();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -159,6 +169,7 @@ class AuthService {
       });
 
       const data = await response.json();
+      if (!isCurrent()) return cancelled();
 
       if (!response.ok || !data.success) {
         return {
@@ -179,8 +190,20 @@ class AuthService {
         };
       }
 
+      if (!data.user || data.user.isActive !== true || data.user.requiresActivation === true || !data.user.id) {
+        return { success: false, error: 'Profil akun tidak aktif atau belum dapat diverifikasi.' };
+      }
+
       try {
         const userCredential = await signInWithCustomToken(auth, data.customToken);
+        if (!isCurrent()) {
+          if (auth.currentUser === userCredential.user) await signOut(auth);
+          return cancelled();
+        }
+        if (userCredential.user.uid !== data.user.id) {
+          if (auth.currentUser === userCredential.user) await signOut(auth);
+          return { success: false, error: 'Identitas sesi Firebase tidak sesuai dengan profil akun.' };
+        }
         this.currentFirebaseUser = userCredential.user;
       } catch (fbAuthErr: any) {
         console.error('[AUTH] signInWithCustomToken failed on client:', fbAuthErr);
@@ -192,12 +215,11 @@ class AuthService {
 
       const userProfile: UserProfile = {
         ...data.user,
-        permissions:
-          data.user.permissions && data.user.permissions.length > 0
-            ? data.user.permissions
-            : ROLE_PERMISSIONS[data.user.role as keyof typeof ROLE_PERMISSIONS] || [],
+        // An explicit empty list is an intentional access restriction, not a default.
+        permissions: Array.isArray(data.user.permissions) ? data.user.permissions : [],
         loginAt: Date.now(),
       };
+      void OfflineStorage.saveVerifiedProfile(userProfile).catch(() => {});
 
       if (typeof localStorage !== 'undefined') {
         try {
@@ -555,14 +577,14 @@ class AuthService {
    * Clears session, signs out from Firebase Auth, and purges local storage.
    * Gracefully tears down all active Firestore listeners.
    */
-  public async clearSession(options?: { purgeUserData?: boolean; userId?: string }): Promise<void> {
+  public async clearSession(options?: { purgeUserData?: boolean; userId?: string; signOutFirebase?: boolean }): Promise<void> {
     // 1. Immediately disconnect all active Firestore real-time listeners
     OfflineStorage.teardownActiveListeners();
 
     const targetUid = options?.userId || this.currentFirebaseUser?.uid || auth?.currentUser?.uid;
 
     try {
-      if (auth) {
+      if (auth && options?.signOutFirebase !== false) {
         await signOut(auth);
       }
     } catch (err) {

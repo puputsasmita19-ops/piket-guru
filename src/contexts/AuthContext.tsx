@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { UserProfile, UserRole } from '../types';
 import { authService } from '../services/auth/authService';
 import { auth } from '../services/firebase/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
 import { checkUserPermission, PermissionKey } from '../config/permissions';
 import { FirestoreService } from '../services/firebase/firestoreService';
@@ -31,7 +31,7 @@ interface AuthContextType {
     remainingSeconds?: number;
   }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  logout: (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => Promise<void>;
+  logout: (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => Promise<void>;
   refreshProfile: () => Promise<void>;
   changePin: (
     oldPin: string,
@@ -52,6 +52,8 @@ const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes auto logout
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // R21-02: Initial state starts as null; never restore authenticated state from localStorage when fbUser is null
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const currentUserRef = React.useRef(currentUser);
+  currentUserRef.current = currentUser;
   const [isLoading, setIsLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
   const [isOfflineSession, setIsOfflineSession] = useState(false);
@@ -59,11 +61,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Unified authentication tracking to eliminate duplicate validations and race conditions
   const sessionEpochRef = React.useRef<number>(1);
-  const inFlightVerificationRef = React.useRef<{
-    uid: string;
-    profile?: UserProfile;
-    epoch: number;
-  } | null>(null);
+  const manualLoginEpochRef = React.useRef<number | null>(null);
+  const logoutInProgressRef = React.useRef(false);
 
   const setTrustedDevice = useCallback((trusted: boolean) => {
     OfflineStorage.setTrustedDevice(trusted);
@@ -73,12 +72,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // State for pending unsynced offline data modal confirmation on logout
   const [pendingLogoutPrompt, setPendingLogoutPrompt] = useState<{
     counts: { syncQueueCount: number; draftsCount: number; total: number };
-    options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' };
+    options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' };
   } | null>(null);
 
-  const execLogout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
-    sessionEpochRef.current += 1;
-    inFlightVerificationRef.current = null;
+  const execLogout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+    const logoutEpoch = ++sessionEpochRef.current;
+    const currentUser = currentUserRef.current;
 
     if (currentUser) {
       if (options?.reason === 'INACTIVITY_TIMEOUT') {
@@ -92,6 +93,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: currentUser.role,
           loginId: currentUser.loginId,
           metadata: { reason: 'INACTIVITY_TIMEOUT' },
+        });
+      } else if (options?.reason === 'SESSION_INVALID') {
+        void AuditService.log({
+          action: 'SECURITY', module: 'USERS', status: 'BLOCKED',
+          details: 'Sesi berakhir karena verifikasi akun ditolak atau tidak dapat diselesaikan',
+          userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role,
+          metadata: { reason: 'SESSION_INVALID' },
         });
       } else if (options?.reason === 'ACCOUNT_DEACTIVATED') {
         void AuditService.log({
@@ -119,15 +127,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
-    setCurrentUser(null);
-    setIsOfflineSession(false);
-    setIsLoading(false);
-    setPendingLogoutPrompt(null);
-  }, [currentUser]);
+    try {
+      await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
+    } finally {
+      logoutInProgressRef.current = false;
+      if (logoutEpoch === sessionEpochRef.current) {
+        setCurrentUser(null);
+        setIsOfflineSession(false);
+        setIsLoading(false);
+        setPendingLogoutPrompt(null);
+      }
+    }
+  }, []);
 
-  const logout = useCallback(async (options?: { force?: boolean; purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' }) => {
-    if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED') {
+  const logout = useCallback(async (options?: { force?: boolean; purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
+    const currentUser = currentUserRef.current;
+    if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED' && options?.reason !== 'SESSION_INVALID') {
       try {
         const counts = await OfflineStorage.getPendingCount(currentUser.id);
         if (counts.total > 0) {
@@ -139,29 +154,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     await execLogout(options);
-  }, [currentUser, execLogout]);
+  }, [execLogout]);
 
   // Revalidate session with server when network reconnects
   const revalidateSessionOnline = useCallback(async (): Promise<boolean> => {
-    if (!auth?.currentUser) return false;
+    if (!auth?.currentUser || manualLoginEpochRef.current !== null || logoutInProgressRef.current) return false;
+    const epoch = sessionEpochRef.current;
+    const user = auth.currentUser;
     try {
-      const valRes = await validateFirebaseUserProfile(auth.currentUser);
+      const valRes = await validateFirebaseUserProfile(user, { clearInvalidSession: false });
+      if (epoch !== sessionEpochRef.current || auth.currentUser?.uid !== user.uid) return false;
       if (valRes.success && valRes.profile) {
         setCurrentUser(valRes.profile);
-        setIsOfflineSession(false);
+        setIsOfflineSession(!!valRes.isOfflineSession);
+        if (valRes.isOfflineSession) return false;
         // Automatically attempt queue sync on revalidation
         SyncQueueService.triggerSync(valRes.profile).catch(() => {});
         return true;
       } else {
         console.warn('[AUTH_CONTEXT] Revalidation online rejected by server:', valRes.error);
-        await logout();
+        await execLogout({ reason: 'SESSION_INVALID' });
         return false;
       }
     } catch (e) {
       console.error('[AUTH_CONTEXT] Online revalidation error:', e);
       return false;
     }
-  }, [logout]);
+  }, [execLogout]);
 
   // Network online/offline event listener
   useEffect(() => {
@@ -193,10 +212,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser: User | null) => {
-      const activeEpoch = sessionEpochRef.current;
+      // Explicit PIN/Google login owns its verification, including SDK events
+      // emitted before signIn resolves. Do not start a second profile request.
+      if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return;
+      const activeEpoch = ++sessionEpochRef.current;
       if (!fbUser) {
         if (isMounted && activeEpoch === sessionEpochRef.current) {
-          await authService.clearSession();
+          // Firebase is already signed out. Calling signOut here can race login.
+          void authService.clearSession({ signOutFirebase: false, userId: currentUserRef.current?.id });
           setCurrentUser(null);
           setIsOfflineSession(false);
           setIsLoading(false);
@@ -204,31 +227,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Check if this exact fbUser was ALREADY verified by in-flight login action (PIN or Google)
-      if (
-        inFlightVerificationRef.current &&
-        inFlightVerificationRef.current.uid === fbUser.uid &&
-        inFlightVerificationRef.current.epoch === activeEpoch
-      ) {
-        if (inFlightVerificationRef.current.profile && isMounted) {
-          setCurrentUser(inFlightVerificationRef.current.profile);
-          setIsOfflineSession(false);
-          setIsLoading(false);
-          SyncQueueService.refreshStatus(inFlightVerificationRef.current.profile.id).catch(() => {});
-        }
-        // Unified: Do not run duplicate parallel validation
-        return;
+      if (currentUserRef.current?.id !== fbUser.uid) {
+        const previousUid = currentUserRef.current?.id;
+        OfflineStorage.teardownActiveListeners();
+        if (previousUid) void OfflineStorage.clearDisplayCacheOnly(previousUid).catch(() => {});
+        setCurrentUser(null);
+        setIsOfflineSession(false);
+        setIsLoading(true);
       }
 
       // Otherwise (session restore / page refresh), perform strict profile validation
       try {
-        const valRes = await validateFirebaseUserProfile(fbUser);
-        if (activeEpoch !== sessionEpochRef.current) return;
+        const valRes = await validateFirebaseUserProfile(fbUser, { clearInvalidSession: false });
+        if (!isMounted || activeEpoch !== sessionEpochRef.current) return;
 
         if (!valRes.success || !valRes.profile) {
           console.warn('[AUTH_CONTEXT] User profile validation failed:', valRes.error);
           if (isMounted && activeEpoch === sessionEpochRef.current) {
-            await logout();
+            await execLogout({ reason: 'SESSION_INVALID' });
             setIsLoading(false);
           }
           return;
@@ -243,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error('[AUTH_CONTEXT] Failed to verify active Firebase session:', err);
         if (isMounted && activeEpoch === sessionEpochRef.current) {
-          await logout();
+          await execLogout({ reason: 'SESSION_INVALID' });
           setIsLoading(false);
         }
       }
@@ -253,32 +269,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       unsubscribe();
     };
-  }, [logout]);
+  }, [execLogout]);
 
   // Realtime subscription to database-authoritative profile (REV-07, R21-04)
   // Ensures permissions or role changes by Admin apply immediately to the active session.
   useEffect(() => {
     if (!currentUser?.id) return;
     const unsub = FirestoreService.subscribeToDocument<UserProfile>('users', currentUser.id, (profile) => {
+      if (auth.currentUser?.uid !== currentUser.id) return;
+      if (!profile || profile.isActive !== true || profile.requiresActivation === true) {
+        void logout({ reason: 'ACCOUNT_DEACTIVATED' });
+        return;
+      }
       if (profile) {
-        // If account has been deactivated, immediately log out
-        if (profile.isActive === false) {
-          console.warn('[AUTH_CONTEXT] Account has been deactivated by administrator.');
-          logout({ reason: 'ACCOUNT_DEACTIVATED' });
-          return;
+        if ((profile.sessionRevokedAtSeconds || 0) > (currentUserRef.current?.sessionRevokedAtSeconds || 0)) {
+          void revalidateSessionOnline();
         }
 
         setCurrentUser((prev) => {
-          if (!prev) return null;
+          if (!prev || prev.id !== profile.id) return prev;
           return {
             ...prev,
             ...profile,
           };
         });
+        // Keep the verified offline snapshot current without restarting auth.
+        // A new revocation marker must first pass token-time revalidation.
+        const verified = currentUserRef.current;
+        if (verified?.id === profile.id && (profile.sessionRevokedAtSeconds || 0) <= (verified.sessionRevokedAtSeconds || 0)) {
+          void OfflineStorage.saveVerifiedProfile({ ...verified, ...profile }).catch(() => {});
+        }
       }
     });
     return () => unsub();
-  }, [currentUser?.id, logout]);
+  }, [currentUser?.id, logout, revalidateSessionOnline]);
 
   // Inactivity Auto Logout
   useEffect(() => {
@@ -302,7 +326,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearTimeout(timeoutId);
       events.forEach((event) => window.removeEventListener(event, resetTimer));
     };
-  }, [currentUser, logout]);
+  }, [currentUser?.id, logout]);
 
   const loginWithPin = async (
     nipOrUserId: string,
@@ -314,19 +338,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLocked?: boolean;
     remainingSeconds?: number;
   }> => {
+    if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
+    manualLoginEpochRef.current = currentEpoch;
     try {
-      const res = await authService.authenticateWithPin(nipOrUserId, pin);
+      const res = await authService.authenticateWithPin(nipOrUserId, pin, { isCurrent: () => currentEpoch === sessionEpochRef.current });
       if (currentEpoch !== sessionEpochRef.current) {
         return { success: false, error: 'Sesi autentikasi dibatalkan.' };
       }
 
       if (res.success && res.user) {
-        inFlightVerificationRef.current = {
-          uid: res.user.id,
-          profile: res.user,
-          epoch: currentEpoch,
-        };
         setCurrentUser(res.user);
         setIsOfflineSession(false);
         setIsLoading(false);
@@ -344,34 +365,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Autentikasi gagal.' };
+    } finally {
+      if (manualLoginEpochRef.current === currentEpoch) manualLoginEpochRef.current = null;
     }
   };
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
+    manualLoginEpochRef.current = currentEpoch;
     try {
-      const { GoogleAuthProvider, signInWithPopup, signOut } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       const fbUser = result.user;
 
       if (currentEpoch !== sessionEpochRef.current) {
+        if (auth.currentUser === fbUser) await signOut(auth);
         return { success: false, error: 'Sesi autentikasi dibatalkan.' };
       }
 
-      inFlightVerificationRef.current = {
-        uid: fbUser.uid,
-        epoch: currentEpoch,
-      };
-
-      const valRes = await validateFirebaseUserProfile(fbUser, { isLoginWithGoogle: true });
+      const valRes = await validateFirebaseUserProfile(fbUser, { isLoginWithGoogle: true, clearInvalidSession: false });
       if (currentEpoch !== sessionEpochRef.current) return { success: false };
 
       if (!valRes.success || !valRes.profile) {
-        inFlightVerificationRef.current = null;
-        await signOut(auth);
-        authService.clearSession();
+        await authService.clearSession();
         setCurrentUser(null);
         setIsLoading(false);
         void AuditService.recordLoginFailure({
@@ -386,20 +404,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: valRes.error || 'Akun Google ini tidak terdaftar atau belum diaktifkan dalam database sekolah.',
         };
       }
-
-      inFlightVerificationRef.current = {
-        uid: fbUser.uid,
-        profile: valRes.profile,
-        epoch: currentEpoch,
-      };
       setCurrentUser(valRes.profile);
-      setIsOfflineSession(false);
+      setIsOfflineSession(!!valRes.isOfflineSession);
       setIsLoading(false);
       SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
       void AuditService.recordLogin('GOOGLE');
       return { success: true };
     } catch (err: any) {
-      inFlightVerificationRef.current = null;
       const errorCode = err?.code || '';
       const errorMessage = err?.message || '';
 
@@ -473,6 +484,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         details: `Login Google gagal: ${err?.message || 'Kesalahan autentikasi'}`,
       });
       return { success: false, error: err.message || 'Gagal masuk dengan Google.' };
+    } finally {
+      if (manualLoginEpochRef.current === currentEpoch) manualLoginEpochRef.current = null;
     }
   };
 

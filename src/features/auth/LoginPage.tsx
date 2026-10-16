@@ -108,19 +108,23 @@ export const LoginPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchUsers = async () => {
       setIsLoadingUsers(true);
       try {
         const users = await authService.getUsersList();
+        if (cancelled) return;
         setUsersList(users);
-        if (users.length > 0 && !selectedIdentifier) {
-          setSelectedIdentifier(users[0].loginId || users[0].nip || users[0].id);
+        if (users.length > 0) {
+          // Preserve an ID typed while the user list was still loading.
+          setSelectedIdentifier((previous) => previous || users[0].loginId || users[0].nip || users[0].id);
         }
       } finally {
-        setIsLoadingUsers(false);
+        if (!cancelled) setIsLoadingUsers(false);
       }
     };
     fetchUsers();
+    return () => { cancelled = true; };
   }, []);
 
   // Filter users by search query (case-insensitive & trimmed)

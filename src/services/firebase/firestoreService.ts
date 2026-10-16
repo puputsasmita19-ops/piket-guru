@@ -3,6 +3,7 @@ import {
   doc,
   getDocs,
   getDoc,
+  getDocFromServer,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -364,7 +365,7 @@ export class FirestoreService {
    */
   public static async getByIdStrict<T>(collectionName: string, id: string): Promise<T | null> {
     const docRef = doc(db, collectionName, id);
-    const snap = await getDoc(docRef);
+    const snap = await getDocFromServer(docRef);
     if (!snap.exists()) {
       return null;
     }

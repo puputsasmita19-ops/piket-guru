@@ -8,8 +8,7 @@ window.addEventListener('unhandledrejection', (event) => {
     event.reason &&
     (
       (typeof event.reason?.message === 'string' && event.reason.message.includes('Pending promise was never set')) ||
-      (typeof event.reason === 'string' && event.reason.includes('Pending promise was never set')) ||
-      (event.reason?.stack && typeof event.reason.stack === 'string' && event.reason.stack.includes('PopupOperation'))
+      (typeof event.reason === 'string' && event.reason.includes('Pending promise was never set'))
     )
   ) {
     console.warn('[Firebase Auth Suppressed Exception]', event.reason);
@@ -19,8 +18,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 window.addEventListener('error', (event) => {
   if (
-    (event.message && event.message.includes('Pending promise was never set')) ||
-    (event.error?.stack && typeof event.error.stack === 'string' && event.error.stack.includes('PopupOperation'))
+    (event.message && event.message.includes('Pending promise was never set'))
   ) {
     console.warn('[Firebase Auth Suppressed Error]', event.message);
     event.preventDefault();

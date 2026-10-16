@@ -15,6 +15,7 @@ export interface UpdateManagerListener {
 const listeners = new Set<UpdateManagerListener>();
 let isUpdateAvailable = false;
 let waitingWorker: ServiceWorker | null = null;
+let updateApproved = false;
 
 export class AppUpdateManager {
   private static registered = false;
@@ -47,7 +48,8 @@ export class AppUpdateManager {
     // Handle controller change (reloads after skipWaiting)
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
+      // First installation also claims the page; do not reload a live login/form.
+      if (updateApproved && !refreshing) {
         refreshing = true;
         window.location.reload();
       }
@@ -84,6 +86,7 @@ export class AppUpdateManager {
    */
   public static applyUpdate(): void {
     if (waitingWorker) {
+      updateApproved = true;
       waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     } else {
       window.location.reload();

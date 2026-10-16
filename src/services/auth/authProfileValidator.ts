@@ -1,4 +1,4 @@
-import { UserProfile, UserRole } from '../../types';
+import { UserProfile } from '../../types';
 import { FirestoreService } from '../firebase/firestoreService';
 import { authService } from './authService';
 import { OfflineStorage } from '../offline/offlineStorage';
@@ -25,10 +25,10 @@ export interface FirebaseUserLike {
  */
 export async function validateFirebaseUserProfile(
   fbUser: FirebaseUserLike | null,
-  options: { isLoginWithGoogle?: boolean } = {}
+  options: { isLoginWithGoogle?: boolean; clearInvalidSession?: boolean } = {}
 ): Promise<AuthProfileValidationResult> {
   if (!fbUser) {
-    await authService.clearSession();
+    if (options.clearInvalidSession !== false) await authService.clearSession();
     return {
       success: false,
       profile: null,
@@ -42,18 +42,17 @@ export async function validateFirebaseUserProfile(
 
   try {
     // 1. Strict UID-bound lookup from server
-    profile = await FirestoreService.getByIdStrict<UserProfile>('users', fbUser.uid);
+    profile = await withVerificationTimeout(FirestoreService.getByIdStrict<UserProfile>('users', fbUser.uid));
   } catch (readErr: any) {
     const errorMsg = readErr?.message || String(readErr);
     const errorCode = readErr?.code || '';
     const isNetworkError =
-      (typeof navigator !== 'undefined' && !navigator.onLine) ||
       errorCode === 'unavailable' ||
-      errorCode === 'failed-precondition' ||
-      errorMsg.includes('offline') ||
-      errorMsg.includes('network') ||
-      errorMsg.includes('Failed to fetch') ||
-      errorMsg.includes('client is offline');
+      errorCode === 'deadline-exceeded' ||
+      (!errorCode && (
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        errorMsg.includes('offline') || errorMsg.includes('network') || errorMsg.includes('Failed to fetch')
+      ));
 
     // If genuine network loss, check if an existing verified profile snapshot exists for this exact UID
     if (isNetworkError) {
@@ -73,7 +72,7 @@ export async function validateFirebaseUserProfile(
     } else {
       // Definite security or permission rejection by Firestore (gracefully handled)
       console.warn('[AUTH_VALIDATOR] Strict profile lookup rejected (permission/security):', errorMsg);
-      await authService.clearSession();
+      if (options.clearInvalidSession !== false) await authService.clearSession();
       return {
         success: false,
         profile: null,
@@ -87,7 +86,7 @@ export async function validateFirebaseUserProfile(
 
   // 2. Strict ID binding check & lifecycle status validation
   if (!profile || profile.id !== fbUser.uid) {
-    await authService.clearSession();
+    if (options.clearInvalidSession !== false) await authService.clearSession();
     return {
       success: false,
       profile: null,
@@ -99,7 +98,7 @@ export async function validateFirebaseUserProfile(
   }
 
   if (profile.isActive !== true) {
-    await authService.clearSession();
+    if (options.clearInvalidSession !== false) await authService.clearSession();
     return {
       success: false,
       profile: null,
@@ -109,7 +108,7 @@ export async function validateFirebaseUserProfile(
   }
 
   if (profile.requiresActivation === true) {
-    await authService.clearSession();
+    if (options.clearInvalidSession !== false) await authService.clearSession();
     return {
       success: false,
       profile: null,
@@ -120,12 +119,13 @@ export async function validateFirebaseUserProfile(
 
   // 3. Enforce session revocation: authTime <= sessionRevokedAtSeconds means session is revoked
   try {
-    const idTokenResult = await fbUser.getIdTokenResult();
+    const idTokenResult = await withVerificationTimeout(fbUser.getIdTokenResult());
     const authTimeSeconds = Math.floor(new Date(idTokenResult.authTime).getTime() / 1000);
+    if (!Number.isFinite(authTimeSeconds)) throw Object.assign(new Error('Stempel waktu autentikasi tidak valid.'), { code: 'INVALID_AUTH_TIME' });
     const revokedAt = profile.sessionRevokedAtSeconds || 0;
 
     if (revokedAt > 0 && authTimeSeconds <= revokedAt) {
-      await authService.clearSession();
+      if (options.clearInvalidSession !== false) await authService.clearSession();
       return {
         success: false,
         profile: null,
@@ -135,14 +135,17 @@ export async function validateFirebaseUserProfile(
     }
 
     // 4. Document role takes absolute authority; claims or client emails cannot elevate role
-    const authoritativeRole = profile.role || (idTokenResult.claims?.role as UserRole) || 'GURU';
+    const authoritativeRole = profile.role;
+    if (!['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(authoritativeRole)) {
+      throw Object.assign(new Error('Peran akun belum dikonfigurasi dengan benar.'), { code: 'INVALID_ROLE' });
+    }
     const activeProfile: UserProfile = {
       ...profile,
       role: authoritativeRole,
     };
 
     if (!isOfflineFallback) {
-      await OfflineStorage.saveVerifiedProfile(activeProfile);
+      void OfflineStorage.saveVerifiedProfile(activeProfile).catch(() => {});
     }
 
     return {
@@ -151,14 +154,15 @@ export async function validateFirebaseUserProfile(
       isOfflineSession: isOfflineFallback,
     };
   } catch (tokenErr: any) {
-    if (isOfflineFallback && profile) {
+    const networkFailure = tokenErr?.code === 'unavailable' || tokenErr?.code === 'deadline-exceeded' || tokenErr?.code === 'auth/network-request-failed' || (!tokenErr?.code && typeof navigator !== 'undefined' && !navigator.onLine);
+    if (isOfflineFallback && profile && networkFailure) {
       return {
         success: true,
         profile,
         isOfflineSession: true,
       };
     }
-    authService.clearSession();
+    if (options.clearInvalidSession !== false) await authService.clearSession();
     return {
       success: false,
       profile: null,
@@ -166,4 +170,12 @@ export async function validateFirebaseUserProfile(
       code: 'TOKEN_VERIFY_ERROR',
     };
   }
+}
+
+// Bound stalled verification without treating an unverified profile as a session.
+function withVerificationTimeout<T>(operation: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error('Verifikasi sesi melewati batas waktu. Periksa koneksi internet.'), { code: 'deadline-exceeded' })), 10_000);
+    operation.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
