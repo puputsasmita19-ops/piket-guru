@@ -709,22 +709,24 @@ button.bg-\[var\(--theme-primary\)\],
    warning/success badges, photo content, charts, or public TV output. */
 [data-module] {
   --module-ink: var(--module-accent);
-  --module-tint: color-mix(in srgb, var(--module-accent) 9%, var(--theme-card-bg));
-  --module-icon-bg: color-mix(in srgb, var(--module-accent) 15%, var(--theme-card-bg));
-  --module-border: color-mix(in srgb, var(--module-accent) 27%, var(--theme-card-border));
+  --module-line: color-mix(in srgb, var(--module-accent) 42%, var(--theme-card-border));
+  --module-tint: color-mix(in srgb, var(--module-accent) 5%, var(--theme-card-bg));
+  --module-icon-bg: color-mix(in srgb, var(--module-accent) 9%, var(--theme-card-bg));
+  --module-border: color-mix(in srgb, var(--module-accent) 12%, var(--theme-card-border));
 }
 .dark [data-module] {
   --module-ink: var(--module-dark-ink);
-  --module-tint: color-mix(in srgb, var(--module-dark-ink) 10%, var(--theme-card-bg));
-  --module-icon-bg: color-mix(in srgb, var(--module-dark-ink) 17%, var(--theme-card-bg));
-  --module-border: color-mix(in srgb, var(--module-dark-ink) 30%, var(--theme-card-border));
+  --module-line: color-mix(in srgb, var(--module-dark-ink) 35%, var(--theme-card-border));
+  --module-tint: color-mix(in srgb, var(--module-dark-ink) 6%, var(--theme-card-bg));
+  --module-icon-bg: color-mix(in srgb, var(--module-dark-ink) 11%, var(--theme-card-bg));
+  --module-border: color-mix(in srgb, var(--module-dark-ink) 18%, var(--theme-card-border));
 }
 .app-shell[data-module] header { border-bottom-color: var(--module-border); }
 .app-content[data-module] .page-header,
 .app-content[data-module] .dashboard-welcome {
   padding: 20px;
   border: 1px solid var(--module-border);
-  border-left: 4px solid var(--module-accent);
+  border-left: 3px solid var(--module-line);
   border-radius: 20px;
   background: linear-gradient(110deg, var(--module-tint), var(--theme-card-bg)) !important;
   box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
@@ -749,7 +751,7 @@ button.bg-\[var\(--theme-primary\)\],
 .app-content[data-module] .module-summary-card[data-module] {
   background: linear-gradient(125deg, var(--module-tint), var(--theme-card-bg)) !important;
   border-color: var(--module-border) !important;
-  border-top: 3px solid var(--module-accent) !important;
+  border-top: 2px solid var(--module-line) !important;
 }
 @media screen and (hover: hover) {
   .app-content .quick-action[data-module]:hover,
@@ -778,7 +780,7 @@ button.bg-\[var\(--theme-primary\)\],
   background-color: var(--module-tint) !important;
   border-color: var(--module-border);
 }
-.app-shell .module-nav-item[aria-current="page"] { box-shadow: inset 3px 0 0 var(--module-accent); }
+.app-shell .module-nav-item[aria-current="page"] { box-shadow: inset 2px 0 0 var(--module-line); }
 .app-shell .module-mobile-item .module-mobile-icon {
   background-color: var(--module-tint) !important;
   color: var(--module-ink) !important;
@@ -786,7 +788,7 @@ button.bg-\[var\(--theme-primary\)\],
 .app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-icon {
   background-color: var(--module-accent) !important;
   color: #fff !important;
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--module-accent) 23%, transparent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--module-accent) 12%, transparent);
 }
 .app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-label {
   color: var(--module-ink) !important;
@@ -794,11 +796,11 @@ button.bg-\[var\(--theme-primary\)\],
 :where(.app-content, .app-dialog-overlay)[data-module]:not([data-module="command-center"]) .app-button[data-variant="primary"]:not(:is([class*="bg-rose-"], [class*="bg-red-"], [class*="bg-emerald-"], [class*="bg-green-"], [class*="bg-amber-"], [class*="bg-yellow-"])) {
   background-color: var(--module-accent) !important;
   color: #fff !important;
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--module-accent) 15%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--module-accent) 8%, transparent);
 }
 .app-dialog-overlay[data-module] .app-dialog-header {
   background: linear-gradient(110deg, var(--module-tint), var(--theme-card-bg));
-  border-bottom: 3px solid var(--module-accent);
+  border-bottom: 2px solid var(--module-line);
 }
 .app-content[data-module] .quick-action:focus-visible,
 .app-content[data-module] .module-summary-card:focus-visible,
