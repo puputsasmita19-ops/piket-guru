@@ -22,6 +22,7 @@ import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { VisitorFormModal } from './VisitorFormModal';
 import { VisitorPassPrintModal } from './VisitorPassPrintModal';
@@ -66,6 +67,7 @@ export const VisitorPreview: React.FC = () => {
   const [editingVisitor, setEditingVisitor] = useState<VisitorRecord | null>(null);
   const [printVisitor, setPrintVisitor] = useState<VisitorRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<VisitorRecord | null>(null);
+  const [photoVisitor, setPhotoVisitor] = useState<VisitorRecord | null>(null);
 
   // WhatsApp Alert Modal
   const [waModalData, setWaModalData] = useState<{
@@ -442,6 +444,12 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                 {/* Mobile Actions */}
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap">
                   <div className="flex items-center gap-1.5">
+                    {item.fotoUrl && (
+                      <Button type="button" variant="outline" size="sm" aria-label={`Lihat foto ${item.namaTamu}`}
+                        onClick={() => setPhotoVisitor(item)} leftIcon={<Image className="w-4 h-4" />}>
+                        Foto
+                      </Button>
+                    )}
                     {canEdit && (
                       <Button
                         type="button"
@@ -593,6 +601,12 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {/* Edit Button */}
+                        {item.fotoUrl && (
+                          <button type="button" onClick={() => setPhotoVisitor(item)} title="Lihat Foto Tamu"
+                            aria-label={`Lihat foto ${item.namaTamu}`} className="p-2 rounded-lg text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
+                            <Image className="w-4 h-4" />
+                          </button>
+                        )}
                         {canEdit && (
                           <button
                             type="button"
@@ -681,6 +695,10 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
       />
 
       {/* PRINT PASS MODAL */}
+      <Modal isOpen={!!photoVisitor} onClose={() => setPhotoVisitor(null)} title="Dokumentasi Foto Tamu" maxWidth="md">
+        {photoVisitor?.fotoUrl && <AuthenticatedImage src={photoVisitor.fotoUrl} alt={`Foto ${photoVisitor.namaTamu}`} className="w-full max-h-[70vh] object-contain rounded-xl" />}
+      </Modal>
+
       <VisitorPassPrintModal
         isOpen={!!printVisitor}
         onClose={() => setPrintVisitor(null)}

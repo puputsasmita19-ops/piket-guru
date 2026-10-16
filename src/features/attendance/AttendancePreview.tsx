@@ -22,6 +22,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { ContextualHelp, Tooltip } from '../../components/common/Tooltip';
 import { LocationService, LocationCoordinates, GeofenceResult } from '../../services/location/locationService';
 import { where, limit } from 'firebase/firestore';
@@ -1335,7 +1336,7 @@ export const AttendancePreview: React.FC = () => {
       >
         <div className="space-y-3 text-center">
           {viewPhoto && (
-            <img
+            <AuthenticatedImage
               src={viewPhoto}
               alt="Swafoto Presensi"
               className="w-full h-auto rounded-2xl object-contain border border-slate-200 dark:border-slate-800 shadow-md"

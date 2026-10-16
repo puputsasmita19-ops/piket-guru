@@ -1,6 +1,7 @@
 import { FirestoreService } from './firestoreService';
 import { IncidentRecord, IncidentStatus } from '../../types/incident.types';
 import { UserProfile } from '../../types';
+import { processMultiplePhotosForStorage } from '../drive/photoUploadHelper';
 
 export class IncidentService {
   /**
@@ -101,22 +102,29 @@ export class IncidentService {
     record: IncidentRecord,
     user: UserProfile
   ): Promise<IncidentRecord> {
-    const isNew = !record.id || record.id.startsWith('temp-');
-    const id = isNew ? `inc-${record.tanggal}-${Date.now()}` : record.id;
+    const needsGeneratedId = !record.id || record.id.startsWith('temp-');
+    const id = needsGeneratedId ? `inc-${record.tanggal}-${crypto.randomUUID()}` : record.id;
+    // Keep generated identity on the pending payload for retry after a lost response.
+    record.id = id;
 
     // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
     const existingDoc = await FirestoreService.getById<IncidentRecord>('incidents', id);
-    if (isNew && existingDoc) {
+    if (needsGeneratedId && existingDoc) {
       return existingDoc;
     }
+    // Forms reserve IDs before saving so retries keep the same photo identity.
+    // A reserved ID is still a creation until its document exists on the server.
+    const isNew = !existingDoc;
     if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > record.updatedAt && existingDoc.updatedBy !== user.fullName) {
       throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
     const now = new Date().toISOString();
+    const photos = await processMultiplePhotosForStorage(record.photos || [], 'incidents', id);
 
     const rawPayload: IncidentRecord = {
       ...record,
+      photos,
       id,
       pelaporId: record.pelaporId || user.id,
       pelaporName: record.pelaporName || user.fullName,

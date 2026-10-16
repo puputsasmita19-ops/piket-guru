@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
@@ -30,7 +30,7 @@ import {
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
-import { processMultiplePhotosForStorage } from '../../services/drive/photoUploadHelper';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { SchoolSettings } from '../../types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
@@ -81,6 +81,10 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const draftKey = editingIncident?.id || 'new-incident';
+  const pendingRecordId = useRef('');
+  useEffect(() => {
+    if (isOpen) pendingRecordId.current = editingIncident?.id || `inc-${crypto.randomUUID()}`;
+  }, [isOpen, editingIncident?.id]);
 
   // Ensure 'LAINNYA' is always present as a stable option without duplicate entries
   const effectiveCategories = useMemo(() => {
@@ -199,6 +203,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         tindakLanjut,
         status,
         photos: lightPhotos,
+        pendingRecordId: pendingRecordId.current,
       }, attachments);
     };
 
@@ -226,6 +231,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   const handleRestoreDraft = async () => {
     if (!availableDraft?.data) return;
     const d = availableDraft.data;
+    if (typeof d.pendingRecordId === 'string' && d.pendingRecordId.startsWith('inc-')) pendingRecordId.current = d.pendingRecordId;
     if (d.tanggal) setTanggal(d.tanggal);
     if (d.waktu) setWaktu(d.waktu);
     if (d.kategori) setKategori(d.kategori);
@@ -348,18 +354,8 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
 
     const selectedCat = effectiveCategories.find((c) => c.code === kategori);
     const isLainnya = kategori === 'LAINNYA';
-    const incidentId = editingIncident ? editingIncident.id : `inc-${tanggal}-${Date.now()}`;
-
-    let processedPhotos = photos;
-    if (photos.length > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
-      try {
-        processedPhotos = await processMultiplePhotosForStorage(photos, 'incidents', incidentId);
-      } catch (pErr: any) {
-        setErrorMessage(pErr.message || 'Gagal menyimpan foto kejadian ke Google Drive. Draf Anda tetap aman.');
-        setIsSubmitting(false);
-        return;
-      }
-    }
+    const incidentId = editingIncident?.id || pendingRecordId.current || `inc-${crypto.randomUUID()}`;
+    pendingRecordId.current = incidentId;
 
     const payload: IncidentRecord = {
       id: incidentId,
@@ -378,7 +374,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       pelaporId: editingIncident?.pelaporId || currentUser?.id,
       pelaporName: editingIncident?.pelaporName || currentUser?.fullName || 'Petugas Piket',
       status,
-      ...(processedPhotos.length > 0 ? { photos: processedPhotos } : {}),
+      photos,
       createdAt: editingIncident ? editingIncident.createdAt : new Date().toISOString(),
       createdBy: editingIncident ? editingIncident.createdBy : currentUser?.fullName || 'Petugas',
       updatedAt: new Date().toISOString(),
@@ -792,7 +788,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
                 {photos.map((photo) => (
                   <div key={photo.id} className="relative group rounded-xl overflow-hidden aspect-square border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <img src={photo.url} alt="Bukti Kejadian" className="w-full h-full object-cover" />
+                    <AuthenticatedImage src={photo.url} alt="Bukti Kejadian" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(photo.id)}

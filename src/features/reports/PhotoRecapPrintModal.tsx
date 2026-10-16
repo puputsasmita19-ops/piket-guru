@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { SchoolSettings } from '../../types';
@@ -39,6 +39,13 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
   const [reportDate, setReportDate] = useState<string>(() => getTodayISODate());
   const [reportCity, setReportCity] = useState<string>(() => settings.reportCity || 'Jakarta');
   const [showSignatures, setShowSignatures] = useState<boolean>(true);
+  const [imageStates, setImageStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({});
+  // Do not reset on every parent render: report selections may be new arrays.
+  // Each image reports loading again whenever its source changes.
+  useEffect(() => { setImageStates({}); }, [isOpen]);
+  const loadedCount = selectedPhotos.filter((p) => imageStates[p.id] === 'loaded').length;
+  const hasPhotoError = selectedPhotos.some((p) => imageStates[p.id] === 'error');
+  const photosReady = selectedPhotos.length > 0 && loadedCount === selectedPhotos.length;
 
   if (!isOpen) return null;
 
@@ -49,6 +56,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
   }
 
   const handlePrint = () => {
+    if (!photosReady) return;
     // Record export audit log
     if (currentUser) {
       void AuditService.log({
@@ -289,6 +297,8 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                         src={photo.photoUrl}
                         alt={photo.title}
                         className="w-full h-full object-contain"
+                        onStatusChange={(state) => setImageStates((previous) =>
+                          previous[photo.id] === state ? previous : { ...previous, [photo.id]: state })}
                       />
                       <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-slate-900/80 text-white text-[9px] font-bold">
                         {getModuleBadgeLabel(photo.sourceModule)}
@@ -400,11 +410,15 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
             Tutup
           </Button>
           <div className="flex items-center gap-2">
+            {!photosReady && <span role="status" className="text-xs text-slate-500">
+              {hasPhotoError ? 'Ada foto gagal dimuat. Buka ulang pratinjau atau periksa koneksi.' : `Memuat foto ${loadedCount}/${selectedPhotos.length}…`}
+            </span>}
             <Button
               type="button"
               variant="primary"
               size="sm"
               onClick={handlePrint}
+              disabled={!photosReady}
               leftIcon={<Printer className="w-4 h-4" />}
               className="font-bold shadow-md text-xs"
             >

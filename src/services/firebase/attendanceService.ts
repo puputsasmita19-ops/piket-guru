@@ -145,7 +145,7 @@ export class AttendanceService {
           throw new Error(checkResult.error || 'Ukuran foto presensi melebihi batas aman dokumen. Silakan ambil ulang swafoto.');
         }
       }
-      const processed = await processPhotoForStorage(photoUrl, 'attendance', `att-${tanggal}-${userId}`);
+      const processed = await processPhotoForStorage(photoUrl, 'attendance', attendanceId, attendanceId);
       finalPhotoUrl = processed.photoUrl;
     }
 

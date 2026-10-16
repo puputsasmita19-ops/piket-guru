@@ -153,7 +153,9 @@ const backendMocks = {
   auth: `export const requireAuth = (req, res, next) => {
     const role = req.headers['x-test-role'];
     if (!role) return res.status(401).json({ success: false });
-    req.user = { uid: 'test-officer', role }; next();
+    req.user = { uid: 'test-officer', role };
+    req.callerData = { permissions: JSON.parse(req.headers['x-test-permissions'] || '[]') };
+    next();
   };
   export const requireAdmin = (req, res, next) => req.user.role === 'ADMIN' ? next() : res.status(403).json({ success: false });`,
   admin: `export const adminAuth = {};
@@ -210,6 +212,23 @@ try {
     assert.equal(res.status, 200); assert.equal(backendUploadedModule, 'studentTardiness');
     assert.equal((await res.json()).photoUrl, '/api/drive/photo/TEST_FILE');
     assert.equal((await fetch(`${origin}/api/drive/upload`, { ...options, headers: { ...options.headers, 'x-test-role': 'NONE' } })).status, 403);
+  });
+  await check('incident and visitor uploads accept staff and reject unknown roles', async () => {
+    for (const module of ['incidents', 'visitors']) {
+      const options = { method: 'POST', headers: { 'x-test-role': 'GURU', 'Content-Type': 'application/json' }, body: JSON.stringify({ module, base64: 'data:image/jpeg;base64,dGVzdA==' }) };
+      assert.equal((await fetch(`${origin}/api/drive/upload`, options)).status, 200);
+      assert.equal(backendUploadedModule, module);
+      assert.equal((await fetch(`${origin}/api/drive/upload`, { ...options, headers: { ...options.headers, 'x-test-role': 'NONE' } })).status, 403);
+    }
+  });
+  await check('attendance upload enforces server-side attendance permission', async () => {
+    const options = { method: 'POST', headers: { 'x-test-role': 'GURU', 'Content-Type': 'application/json' }, body: JSON.stringify({ module: 'attendance', base64: 'data:image/jpeg;base64,dGVzdA==' }) };
+    assert.equal((await fetch(`${origin}/api/drive/upload`, options)).status, 403);
+    for (const permission of ['attendance.create', 'input_duty_book', '*']) {
+      assert.equal((await fetch(`${origin}/api/drive/upload`, { ...options, headers: { ...options.headers, 'x-test-permissions': JSON.stringify([permission]) } })).status, 200);
+    }
+    assert.equal((await fetch(`${origin}/api/drive/upload`, { ...options, headers: { ...options.headers, 'x-test-role': 'ADMIN' } })).status, 200);
+    assert.equal(backendUploadedModule, 'attendance');
   });
 } finally { await new Promise((resolve) => server.close(resolve)); }
 console.log(`${passed} total service/router regressions passed; all external services were mocked.`);

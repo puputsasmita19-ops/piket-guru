@@ -39,7 +39,7 @@ import {
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
-import { processPhotoForStorage } from '../../services/drive/photoUploadHelper';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { SchoolSettings } from '../../types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
@@ -120,6 +120,10 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
   const [keperluan, setKeperluan] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
+  const pendingRecordId = useRef('');
+  useEffect(() => {
+    if (isOpen) pendingRecordId.current = editingVisitor?.id || `vis-${crypto.randomUUID()}`;
+  }, [isOpen, editingVisitor?.id]);
   const [catatanPetugas, setCatatanPetugas] = useState('');
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -468,6 +472,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         tujuanDetail: selectedRecipient?.subtitle,
         keperluan,
         fotoUrl: cleanFotoUrl,
+        pendingRecordId: pendingRecordId.current,
         catatanPetugas,
       }, attachments);
     };
@@ -498,6 +503,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
   const handleRestoreDraft = async () => {
     if (!availableDraft?.data) return;
     const d = availableDraft.data;
+    if (typeof d.pendingRecordId === 'string' && d.pendingRecordId.startsWith('vis-')) pendingRecordId.current = d.pendingRecordId;
     if (d.tanggal) setTanggal(d.tanggal);
     if (d.jamMasuk) setJamMasuk(d.jamMasuk);
     if (d.jamKeluar !== undefined) setJamKeluar(d.jamKeluar);
@@ -699,22 +705,11 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      let finalFotoUrl = fotoUrl;
-      const visitorId = editingVisitor?.id || `vst-${tanggal}-${Date.now()}`;
-
-      if (fotoUrl && fotoUrl.startsWith('data:') && typeof navigator !== 'undefined' && navigator.onLine) {
-        try {
-          const processed = await processPhotoForStorage(fotoUrl, 'visitors', visitorId);
-          finalFotoUrl = processed.photoUrl;
-        } catch (pErr: any) {
-          setErrorMessage(pErr.message || 'Gagal menyimpan foto tamu ke Google Drive. Draf Anda tetap aman.');
-          setIsSubmitting(false);
-          return;
-        }
-      }
+      const visitorId = editingVisitor?.id || pendingRecordId.current || `vis-${crypto.randomUUID()}`;
+      pendingRecordId.current = visitorId;
 
       const payload: Partial<VisitorRecord> = {
-        ...(editingVisitor ? { id: editingVisitor.id } : {}),
+        id: visitorId,
         tanggal,
         jamMasuk,
         jamKeluar: editingVisitor?.jamKeluar || jamKeluar,
@@ -731,7 +726,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         tujuanTargetType: selectedRecipient?.targetType || (editingVisitor ? editingVisitor.tujuanTargetType : 'CUSTOM'),
         tujuanDetail: selectedRecipient?.subtitle || (editingVisitor ? editingVisitor.tujuanDetail : undefined),
         keperluan: keperluan.trim(),
-        fotoUrl: finalFotoUrl || undefined,
+        fotoUrl: fotoUrl || undefined,
         status: editingVisitor ? editingVisitor.status : 'SEDANG_BERKUNJUNG',
         catatanPetugas: catatanPetugas.trim() || undefined,
         petugasPiketName: editingVisitor?.petugasPiketName || currentUser?.fullName || 'Petugas Piket',
@@ -1432,7 +1427,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
             {fotoUrl && (
               <div className="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
-                <img src={fotoUrl} alt="Foto Tamu" className="w-full h-full object-cover" />
+                <AuthenticatedImage src={fotoUrl} alt="Foto Tamu" className="w-full h-full object-cover" />
                 <button
                   type="button"
                   onClick={() => setFotoUrl(undefined)}

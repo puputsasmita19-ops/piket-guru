@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DriveClientService } from '../../services/drive/driveClientService';
 
 interface AuthenticatedImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src?: string | null;
   fallbackText?: string;
   fallbackIcon?: React.ReactNode;
+  onStatusChange?: (status: 'loading' | 'loaded' | 'error') => void;
 }
 
 export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
@@ -14,35 +15,47 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   fallbackText,
   fallbackIcon,
   onError,
+  onLoad,
+  onStatusChange,
   ...props
 }) => {
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
   const [hasError, setHasError] = useState(false);
+  const statusCallback = useRef(onStatusChange);
+  statusCallback.current = onStatusChange;
 
   useEffect(() => {
     let isCancelled = false;
+    const controller = new AbortController();
+    let objectUrl = '';
     setHasError(false);
+    setResolvedSrc('');
+    statusCallback.current?.(src ? 'loading' : 'error');
 
     if (!src) {
       setResolvedSrc('');
       return;
     }
 
-    if (src.startsWith('data:image/') || src.startsWith('http') || src.includes('?token=')) {
+    if (src.startsWith('data:image/') || src.startsWith('http') || src.startsWith('blob:')) {
       setResolvedSrc(src);
       return;
     }
 
     if (src.startsWith('/api/drive/photo/')) {
-      DriveClientService.getAuthenticatedPhotoUrl(src)
+      DriveClientService.getAuthenticatedPhotoUrl(src.split('?')[0], controller.signal)
         .then((authUrl) => {
+          objectUrl = authUrl;
           if (!isCancelled) {
             setResolvedSrc(authUrl);
+          } else if (authUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(authUrl);
           }
         })
         .catch(() => {
           if (!isCancelled) {
             setHasError(true);
+            statusCallback.current?.('error');
           }
         });
     } else {
@@ -51,6 +64,8 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
     return () => {
       isCancelled = true;
+      controller.abort();
+      if (objectUrl.startsWith('blob:')) URL.revokeObjectURL(objectUrl);
     };
   }, [src]);
 
@@ -70,7 +85,12 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
       className={className}
       onError={(e) => {
         setHasError(true);
+        statusCallback.current?.('error');
         if (onError) onError(e);
+      }}
+      onLoad={(e) => {
+        statusCallback.current?.('loaded');
+        onLoad?.(e);
       }}
       {...props}
     />

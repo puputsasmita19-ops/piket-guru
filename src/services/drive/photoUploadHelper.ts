@@ -58,10 +58,16 @@ export async function processPhotoForStorage(
 
   // Drive storage IS active -> MUST upload to Google Drive
   try {
+    // A stable identity survives retries and partial multi-photo uploads. Including
+    // the content makes replacement photos distinct from the previous attachment.
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
+      JSON.stringify([module, recordId || '', clientPhotoId || '', photoInput])
+    ));
+    const uploadId = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
     const uploadRes = await DriveClientService.uploadPhoto({
       base64: photoInput,
       module,
-      clientPhotoId,
+      clientPhotoId: `pg-${uploadId}`,
       recordId,
     });
 
@@ -91,9 +97,6 @@ export async function processMultiplePhotosForStorage<T extends { url: string; i
 ): Promise<T[]> {
   if (!photos || photos.length === 0) return [];
 
-  const driveActive = await isDriveStorageActive();
-  if (!driveActive) return photos;
-
   const processed: T[] = [];
   for (let i = 0; i < photos.length; i++) {
     const p = photos[i];
@@ -102,7 +105,7 @@ export async function processMultiplePhotosForStorage<T extends { url: string; i
       continue;
     }
 
-    const res = await processPhotoForStorage(p.url, module, p.id || `photo-${i}-${Date.now()}`, recordId);
+    const res = await processPhotoForStorage(p.url, module, p.id || `photo-${i}`, recordId);
     processed.push({
       ...p,
       url: res.photoUrl,

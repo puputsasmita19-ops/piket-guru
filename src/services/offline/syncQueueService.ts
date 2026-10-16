@@ -404,7 +404,7 @@ export class SyncQueueService {
 
     switch (item.operationType) {
       case 'INCIDENT_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET', 'GURU'].includes(user.role);
+        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role);
         return allowed ? null : 'Hak akses dicabut: Akun Anda tidak memiliki wewenang melaporkan kejadian.';
       }
       case 'TARDY_REPORT': {
@@ -416,7 +416,7 @@ export class SyncQueueService {
         return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat menerbitkan surat izin siswa.';
       }
       case 'VISITOR_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET'].includes(user.role);
+        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role);
         return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat mencatat buku tamu.';
       }
       case 'SUBSTITUTION_REPORT': {
@@ -465,11 +465,20 @@ export class SyncQueueService {
         item.payload.fotoUrl = item.uploadedAttachmentUrls['visitor_photo'];
       }
     } else if (item.operationType === 'INCIDENT_REPORT') {
-      const incidentPhotos = Object.entries(item.uploadedAttachmentUrls).map(([k, url], idx) => ({
-        id: `photo-${idx}`,
-        url,
-        uploadedAt: new Date().toISOString(),
-      }));
+      // Keep existing Drive references, photo IDs, captions and capture times.
+      // Attachment conversion must not replace the entire photo list.
+      const originals = Array.isArray(item.payload.photos) ? item.payload.photos : [];
+      const incidentPhotos = originals.length > 0
+        ? originals.map((photo: any, index: number) => {
+            const key = photo.url?.startsWith('attachment:')
+              ? photo.url.slice('attachment:'.length) : `photo_${index}`;
+            const converted = item.uploadedAttachmentUrls?.[key];
+            return converted && !photo.url?.startsWith('/api/drive/photo/') && !photo.url?.startsWith('http')
+              ? { ...photo, url: converted } : photo;
+          })
+        : Object.entries(item.uploadedAttachmentUrls).map(([key, url]) => ({
+            id: key, url, uploadedAt: item.createdAt,
+          }));
       if (incidentPhotos.length > 0) {
         item.payload.photos = incidentPhotos;
       }

@@ -205,7 +205,7 @@ export class DriveClientService {
   /**
    * Helper to construct an authenticated URL for displaying or printing a Google Drive photo.
    */
-  public static async getAuthenticatedPhotoUrl(fileIdOrPath: string): Promise<string> {
+  public static async getAuthenticatedPhotoUrl(fileIdOrPath: string, signal?: AbortSignal): Promise<string> {
     if (!fileIdOrPath) return '';
     if (fileIdOrPath.startsWith('data:image/')) return fileIdOrPath; // Legacy Base64
 
@@ -214,7 +214,14 @@ export class DriveClientService {
       fileId = fileIdOrPath.replace('/api/drive/photo/', '');
     }
 
-    const token = auth?.currentUser ? await auth.currentUser.getIdToken() : '';
-    return `/api/drive/photo/${fileId}?token=${encodeURIComponent(token)}`;
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/drive/photo/${encodeURIComponent(fileId)}`, {
+      headers, cache: 'no-store', signal,
+    });
+    if (!res.ok) throw new Error('Foto Drive belum dapat dimuat. Periksa koneksi atau hak akses.');
+    const blob = await res.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('Respons dokumentasi bukan gambar.');
+    // Tokens stay in the Authorization header, never in an image URL/history.
+    return URL.createObjectURL(blob);
   }
 }

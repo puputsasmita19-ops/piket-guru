@@ -2,6 +2,7 @@ import { FirestoreService } from './firestoreService';
 import { VisitorRecord, VisitorStatus } from '../../types/visitor.types';
 import { UserProfile } from '../../types';
 import { formatTime } from '../../utils/dateUtils';
+import { processPhotoForStorage } from '../drive/photoUploadHelper';
 
 export class VisitorService {
   /**
@@ -83,7 +84,8 @@ export class VisitorService {
     data: Omit<VisitorRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<VisitorRecord> {
-    const id = data.id || `vis-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `vis-${data.tanggal}-${crypto.randomUUID()}`;
+    data.id = id;
     // Idempotency check: jika tamu telah tercatat di server (misal respons jaringan terputus), kembalikan tanpa membuat log audit ganda
     const existingDoc = await FirestoreService.getById<VisitorRecord>('visitors', id);
     if (existingDoc) {
@@ -95,6 +97,10 @@ export class VisitorService {
     const cleanData = { ...data };
     if (cleanData.kategori !== 'LAINNYA') {
       delete cleanData.keteranganLainnya;
+    }
+    if (cleanData.fotoUrl) {
+      const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', id, id);
+      cleanData.fotoUrl = photo.photoUrl;
     }
 
     const payload: VisitorRecord = {
@@ -141,6 +147,11 @@ export class VisitorService {
 
     const now = new Date().toISOString();
     const cleanData = { ...data };
+    // Only process an explicitly provided photo; partial edits preserve the old one.
+    if (cleanData.fotoUrl) {
+      const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', data.id, data.id);
+      cleanData.fotoUrl = photo.photoUrl;
+    }
 
     // If kategori is not LAINNYA, delete keteranganLainnya
     if (cleanData.kategori && cleanData.kategori !== 'LAINNYA') {

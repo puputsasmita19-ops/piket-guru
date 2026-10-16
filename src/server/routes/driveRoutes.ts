@@ -235,10 +235,17 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
     return;
   }
 
-  // Match the staff roles permitted to create studentTardiness in firestore.rules.
-  if (module === 'studentTardiness' && !['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role)) {
-    res.status(403).json({ success: false, error: 'Akses unggah dokumentasi siswa terlambat ditolak.' });
+  // Match staff roles and attendance permissions enforced by firestore.rules.
+  if (['attendance', 'studentTardiness', 'incidents', 'visitors'].includes(module) && !['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role)) {
+    res.status(403).json({ success: false, error: 'Akses unggah dokumentasi ditolak.' });
     return;
+  }
+  if (module === 'attendance' && user.role !== 'ADMIN') {
+    const permissions = (req as any).callerData?.permissions;
+    if (!Array.isArray(permissions) || !permissions.some((p: string) => ['*', 'attendance.create', 'input_duty_book'].includes(p))) {
+      res.status(403).json({ success: false, error: 'Hak presensi tidak tersedia untuk akun ini.' });
+      return;
+    }
   }
 
   console.info('[DRIVE_UPLOAD] started', { module });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { IncidentRecord, IncidentStatus, getIncidentCategoryDisplay } from '../../types/incident.types';
@@ -164,7 +165,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
                     onClick={() => setSelectedPhoto(photo.url)}
                     className="relative rounded-xl overflow-hidden aspect-square border border-slate-200 dark:border-slate-800 cursor-pointer group shadow-xs hover:border-blue-500 transition-all"
                   >
-                    <img
+                    <AuthenticatedImage
                       src={photo.url}
                       alt="Bukti Insiden"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -261,7 +262,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
       >
         <div className="space-y-3">
           {selectedPhoto && (
-            <img
+            <AuthenticatedImage
               src={selectedPhoto}
               alt="Foto Bukti Kejadian Zoom"
               className="w-full rounded-2xl object-cover max-h-[70vh] border border-slate-200 dark:border-slate-800 shadow-lg"
