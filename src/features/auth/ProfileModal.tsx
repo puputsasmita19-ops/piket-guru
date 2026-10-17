@@ -1,3 +1,4 @@
+import { UserAvatar } from '../../components/common/UserAvatar';
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Modal } from '../../components/common/Modal';
@@ -63,9 +64,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         {/* User Card */}
         <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/60 border border-slate-200 dark:border-[var(--theme-card-border)] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-lg shadow-sm">
-              {currentUser.fullName.charAt(0)}
-            </div>
+            <UserAvatar user={currentUser} className="w-12 h-12 rounded-2xl text-lg shadow-sm" />
             <div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                 {currentUser.fullName}

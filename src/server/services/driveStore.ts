@@ -20,10 +20,11 @@ export interface DriveConfigDoc {
 export interface DriveUploadOptions {
   buffer: Buffer;
   mimeType: string;
-  module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general';
+  module: 'attendance' | 'studentTardiness' | 'incidents' | 'studentPermits' | 'visitors' | 'general' | 'profilePhotos';
   clientPhotoId?: string;
   uploadedBy?: string;
   recordId?: string;
+  contentHash?: string;
 }
 
 export interface DriveUploadResult {
@@ -449,18 +450,21 @@ export class DriveStore {
       throw new Error('Folder aplikasi Google Drive belum terinisialisasi.');
     }
 
-    const { folderId, folderPath } = await this.getOrCreateFolderHierarchy(drive, config.rootFolderId, options.module);
+    const { folderId, folderPath } = options.module === 'profilePhotos'
+      ? { folderId: await this.ensureFolder(drive.context._options.auth, 'Foto_Profil', config.rootFolderId), folderPath: `${DEFAULT_ROOT_FOLDER}/Foto_Profil` }
+      : await this.getOrCreateFolderHierarchy(drive, config.rootFolderId, options.module);
 
     // Idempotency check: search if file with same clientPhotoId property already exists
     if (options.clientPhotoId) {
       try {
         const searchRes = await drive.files.list({
           q: `'${folderId}' in parents and properties has { key='clientPhotoId' and value='${options.clientPhotoId}' } and trashed = false`,
-          fields: 'files(id, mimeType, size, name)',
+          fields: 'files(id, mimeType, size, name, properties)',
         });
 
         if (searchRes.data.files && searchRes.data.files.length > 0) {
           const existing = searchRes.data.files[0];
+          if (options.module === 'profilePhotos' && (existing.properties?.contentHash !== options.contentHash || existing.properties?.recordId !== options.recordId)) throw new Error('PROFILE_PHOTO_RETRY_MISMATCH');
           console.log(`[DRIVE_STORE] Idempotent retry hit for clientPhotoId ${options.clientPhotoId}`);
           return {
             fileId: existing.id!,
@@ -472,6 +476,7 @@ export class DriveStore {
           };
         }
       } catch (err: any) {
+        if (options.module === 'profilePhotos') throw err;
         console.warn('[DRIVE_STORE] Idempotency lookup warning:', err?.message || err);
       }
     }
@@ -492,6 +497,7 @@ export class DriveStore {
     if (options.clientPhotoId) properties.clientPhotoId = options.clientPhotoId;
     if (options.uploadedBy) properties.uploadedBy = options.uploadedBy;
     if (options.recordId) properties.recordId = options.recordId;
+    if (options.contentHash) properties.contentHash = options.contentHash;
 
     const fileMetadata = {
       name: fileName,

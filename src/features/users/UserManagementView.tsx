@@ -1,3 +1,6 @@
+import ProfilePhotoModal from './ProfilePhotoModal';
+import { Camera } from '../../components/icons';
+import { UserAvatar } from '../../components/common/UserAvatar';
 import { X } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
@@ -76,6 +79,7 @@ export const UserManagementView: React.FC = () => {
   // Modals for User (Guru/Tendik)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [photoUser, setPhotoUser] = useState<UserProfile | null>(null);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [bulkImportDefaultType, setBulkImportDefaultType] = useState<'USERS_TEACHERS' | 'STUDENTS'>('USERS_TEACHERS');
   const [isResetPinOpen, setIsResetPinOpen] = useState(false);
@@ -653,9 +657,7 @@ export const UserManagementView: React.FC = () => {
                       <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs shrink-0">
-                              {user.fullName.charAt(0)}
-                            </div>
+                            {isAdmin ? <button type="button" className="relative min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0 cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-[var(--theme-primary-text)]" aria-label={`Ubah foto ${user.fullName}`} title="Ketuk untuk mengatur foto profil" onClick={() => setPhotoUser(user)}><UserAvatar user={user} className="w-9 h-9 rounded-xl text-xs" /><span className="absolute bottom-0 right-0 w-4 h-4 rounded-md bg-[var(--theme-card-bg)] border border-[var(--theme-card-border)] flex items-center justify-center"><Camera className="w-2.5 h-2.5" /></span></button> : <UserAvatar user={user} className="w-9 h-9 rounded-xl text-xs" />}
                             <div>
                               <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                                 <span>{user.fullName}</span>
@@ -734,6 +736,7 @@ export const UserManagementView: React.FC = () => {
                         {isAdmin && (
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              <Button variant="outline" size="sm" title="Atur foto profil" aria-label={`Atur foto profil ${user.fullName}`} onClick={() => setPhotoUser(user)} leftIcon={<Camera className="w-3.5 h-3.5" />}>Foto</Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1072,6 +1075,13 @@ export const UserManagementView: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && photoUser && <ProfilePhotoModal key={photoUser.id} user={photoUser} onClose={() => setPhotoUser(null)} onSaved={avatarUrl => {
+        setUsers(previous => previous.map(user => user.id === photoUser.id ? { ...user, avatarUrl } : user));
+        if (photoUser.id === currentUser?.id) void refreshProfile();
+        setFeedbackSuccess(`Foto profil ${photoUser.fullName} berhasil diperbarui.`);
+        setTimeout(() => setFeedbackSuccess(null), 5000);
+      }} />}
 
       {/* USER FORM MODAL */}
       <UserFormModal

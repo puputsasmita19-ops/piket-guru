@@ -172,7 +172,6 @@ export class UserService {
       role: updates.role || existing.role,
       email: updates.email !== undefined ? updates.email.trim() : existing.email,
       phone: updates.phone !== undefined ? updates.phone.trim() : existing.phone,
-      avatarUrl: updates.avatarUrl !== undefined ? updates.avatarUrl : existing.avatarUrl,
       isActive: updates.isActive !== undefined ? updates.isActive : existing.isActive,
       permissions: updates.permissions || existing.permissions,
       requiresActivation: updates.requiresActivation !== undefined ? updates.requiresActivation : existing.requiresActivation,
@@ -183,6 +182,8 @@ export class UserService {
       updatedAt: new Date().toISOString(),
     };
 
+    // Avatar is managed by the dedicated admin API. Omit it from merge writes
+    // so a concurrent profile edit never restores an older photo reference.
     // Guaranteed removal of any legacy residual credential fields
     delete (payload as any).pin;
     delete (payload as any).pinHash;

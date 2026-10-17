@@ -1,3 +1,4 @@
+import { UserAvatar } from '../../components/common/UserAvatar';
 import { FeatureIllustration } from '../../components/common/FeatureIllustration';
 import { getModuleStyle } from '../../config/moduleAppearance';
 import { QuickActions } from './QuickActions';
@@ -234,7 +235,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     <div className="space-y-6">
       <section className="dashboard-welcome">
         <div><p className="dashboard-eyebrow">{settings.schoolName}</p><h1>Halo, {currentUser?.fullName || 'selamat datang'}</h1><p className="dashboard-intro">Semoga kegiatan sekolah hari ini berjalan lancar.</p></div>
-        <span className="dashboard-avatar" aria-hidden="true">{currentUser?.fullName?.charAt(0) || 'P'}</span>
+        <UserAvatar user={currentUser} className="dashboard-avatar" />
       </section>
 
       <section className="dashboard-feature-banner" aria-label="Kegiatan piket hari ini">
@@ -254,9 +255,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         <CardContent className="p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--theme-primary-border)]/40 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-sm shadow-md shadow-[var(--theme-ring)] shrink-0">
-                {currentUser?.fullName?.charAt(0) || 'G'}
-              </div>
+              <UserAvatar user={currentUser} className="w-10 h-10 rounded-2xl text-sm shadow-md" />
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">

@@ -1,3 +1,4 @@
+import { UserAvatar } from '../common/UserAvatar';
 import { NotificationBell } from './NotificationBell';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -465,9 +466,7 @@ export const Header: React.FC<HeaderProps> = ({
                     aria-label="Menu Pengguna & Profil"
                     title="Menu Pengguna & Profil"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center font-bold text-xs shadow-inner overflow-hidden shrink-0">
-                      {currentUser.fullName.charAt(0)}
-                    </div>
+                    <UserAvatar user={currentUser} className="w-8 h-8 rounded-lg text-xs shadow-inner" />
                     <div className="hidden lg:block text-left">
                       <div className="text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[120px]">
                         {currentUser.fullName.split(' ')[0]}

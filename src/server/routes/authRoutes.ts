@@ -1047,6 +1047,11 @@ authRouter.post('/update-user', requireAuth, requireAdmin, async (req: Request, 
     return;
   }
 
+  if (updates.avatarUrl !== undefined) {
+    res.status(400).json({ success: false, error: 'Gunakan pengaturan Foto profil agar foto dikompres dan disimpan melalui Google Drive.' });
+    return;
+  }
+
   if (!adminDb) {
     res.status(503).json({ success: false, error: 'Database backend belum tersedia.', code: 'DB_UNAVAILABLE' });
     return;
@@ -1104,7 +1109,6 @@ authRouter.post('/update-user', requireAuth, requireAdmin, async (req: Request, 
       if (updates.role !== undefined) payloadToUpdate.role = updates.role;
       if (updates.email !== undefined) payloadToUpdate.email = (updates.email || '').trim();
       if (updates.phone !== undefined) payloadToUpdate.phone = (updates.phone || '').trim();
-      if (updates.avatarUrl !== undefined) payloadToUpdate.avatarUrl = updates.avatarUrl;
       if (updates.isActive !== undefined) payloadToUpdate.isActive = updates.isActive;
       if (updates.permissions !== undefined) payloadToUpdate.permissions = updates.permissions;
       if (updates.sessionRevokedAtSeconds !== undefined) payloadToUpdate.sessionRevokedAtSeconds = updates.sessionRevokedAtSeconds;

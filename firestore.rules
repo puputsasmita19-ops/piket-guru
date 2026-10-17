@@ -196,7 +196,7 @@ service cloud.firestore {
         isOwner(userId) &&
         hasNoCredentials(request.resource.data) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'fullName', 'phone', 'email', 'avatarUrl', 'updatedAt'
+          'fullName', 'phone', 'email', 'updatedAt'
         ])
       );
 
