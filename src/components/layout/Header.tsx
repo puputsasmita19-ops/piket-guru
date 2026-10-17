@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { theme, setTheme, pastelTheme, setPastelTheme, isDark, pastelThemesList } = useTheme();
   const { currentUser, logout } = useAuth();
   const firstName = currentUser?.fullName.trim().split(/\s+/)[0] || 'Pengguna';
-  const displayFirstName = firstName.charAt(0).toLocaleUpperCase('id-ID') + firstName.slice(1).toLocaleLowerCase('id-ID');
+  const profileInitial = Array.from(firstName.toLocaleUpperCase('id-ID'))[0] || 'P';
   const { activeTab, subView } = useNavigation();
   const { isGuideMenuOpen, openGuideMenu, closeGuideMenu } = useGuide();
 
@@ -459,23 +459,15 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
-                    className={`header-user-chip max-w-full flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                    className={`header-user-chip w-11 h-11 flex items-center justify-center p-1 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'user'
                         ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
                         : 'hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
                     }`}
                     aria-label="Menu Pengguna & Profil"
-                    title="Menu Pengguna & Profil"
+                    title={`Menu Pengguna & Profil: ${currentUser.fullName}`}
                   >
-                    <div className="min-w-0 text-left">
-                      <div className="text-[11px] sm:text-xs font-bold text-slate-900 dark:text-white truncate max-w-[72px] sm:max-w-[120px]">
-                        {displayFirstName}
-                      </div>
-                      <div className="hidden lg:block text-[10px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-medium">
-                        {ROLE_LABELS[currentUser.role]}
-                      </div>
-                    </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block shrink-0" />
+                    <span aria-hidden="true" className="text-sm font-bold leading-none text-slate-900 dark:text-white">{profileInitial}</span>
                   </button>
 
                   {activePanel === 'user' && (

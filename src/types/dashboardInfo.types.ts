@@ -11,7 +11,7 @@ export interface DashboardInfoConfig {
   intervalMs: number;
   panels: Record<DashboardInfoPanel, boolean>;
 }
-export const DASHBOARD_INFO_INTERVALS = [2000, 2500, 3000, 5000, 8000];
+export const DASHBOARD_INFO_INTERVALS = [2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 15000, 20000, 30000, 45000, 60000];
 export function sanitizeDashboardInfoConfig(value?: Partial<DashboardInfoConfig> | null): DashboardInfoConfig {
   const v = value && typeof value === 'object' ? value : {};
   return {

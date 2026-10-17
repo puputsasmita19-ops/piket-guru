@@ -34,11 +34,11 @@ try {
     await flash.waitFor();
     await seed();
     await page.evaluate(mode => document.documentElement.classList.toggle('dark', mode === 'dark'), mode);
-    await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).getByText('Dian', { exact: true }).waitFor();
-    check(`${mode}/${width}: header shows framed first name with only its first letter capitalized`, await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).locator('img').count() === 0 && await page.locator('.header-user-chip').evaluate(e => parseFloat(getComputedStyle(e).borderWidth) >= 1));
+    await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).getByText('D', { exact: true }).waitFor();
+    check(`${mode}/${width}: header shows only a framed uppercase initial`, await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).locator('img').count() === 0 && await page.locator('.header-user-chip').evaluate(e => parseFloat(getComputedStyle(e).borderWidth) >= 1));
     check(`${mode}/${width}: header and carousel do not overflow`, await page.evaluate(() => document.documentElement.scrollWidth === innerWidth) && await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).evaluate(e => e.getBoundingClientRect().right <= innerWidth) && await flash.evaluate(e => e.scrollWidth <= e.clientWidth));
     check(`${mode}/${width}: exactly one info slide and no duplicated long boards`, await flash.getByRole('group', { name: /dari/ }).count() === 1 && await page.getByRole('heading', { name: 'Papan Pengumuman & Instruksi Khusus Piket', exact: true }).count() === 0);
-    check(`${mode}/${width}: activity and info share one horizontal viewport`, await page.locator('.dashboard-feature-banner').count() === 0 && await flash.locator('.flash-track').evaluate(e => { const children = [...e.children]; return children.length === 5 && children.every((child, i) => i === 0 || child.getBoundingClientRect().left >= children[i - 1].getBoundingClientRect().right - 1); }));
+    check(`${mode}/${width}: activity and info share one horizontal viewport`, await page.locator('.dashboard-feature-banner').count() === 0 && await flash.locator('.flash-track').evaluate(e => { const children = [...e.children].filter(child => !child.hasAttribute('data-loop-clone')); return children.length === 5 && children.every((child, i) => i === 0 || child.getBoundingClientRect().left >= children[i - 1].getBoundingClientRect().right - 1); }));
     if (width < 640) check(`${mode}/${width}: first two shortcuts are fully visible on entry`, await page.locator('.quick-action').evaluateAll(es => es.slice(0, 2).every(e => { const r = e.getBoundingClientRect(); const bottom = document.querySelector('nav[aria-label="Navigasi Utama Mobile"]').getBoundingClientRect().top; return r.top >= 0 && r.bottom <= bottom; })));
 
     if (process.env.PIKET_QA_SCREENSHOTS) { fs.mkdirSync(process.env.PIKET_QA_SCREENSHOTS, { recursive: true }); await page.screenshot({ path: `${process.env.PIKET_QA_SCREENSHOTS}/flash-${mode}-${width}.png` }); }
@@ -54,22 +54,22 @@ try {
   await flash.getByRole('button', { name: 'Jeda flash info' }).click();
   const pausedTitle = await flash.getByRole('heading').innerText();
   await page.mouse.move(0, 0); await page.evaluate(() => document.activeElement.blur());
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(2800);
   check('explicit pause remains paused after focus and pointer leave', await flash.getByRole('heading').innerText() === pausedTitle);
   await flash.getByRole('button', { name: 'Info berikutnya' }).click();
   check('manual controls still work while paused', await flash.getByRole('heading').innerText() !== pausedTitle);
   await flash.getByRole('button', { name: 'Putar flash info' }).click();
   await page.mouse.move(0, 0); await page.evaluate(() => document.activeElement.blur());
   const resumedTitle = await flash.getByRole('heading').innerText();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(2800);
   check('resume restarts automatic rotation', await flash.getByRole('heading').innerText() !== resumedTitle);
-  await flash.hover(); const hoveredTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  await flash.hover(); const hoveredTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2800);
   check('reading with the pointer pauses rotation', await flash.getByRole('heading').innerText() === hoveredTitle);
   await page.mouse.move(0, 0); await flash.getByRole('button', { name: 'Info berikutnya' }).focus();
-  const focusedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  const focusedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2800);
   check('keyboard focus pauses rotation', await flash.getByRole('heading').innerText() === focusedTitle);
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.evaluate(() => document.activeElement.blur());
-  const reducedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  const reducedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2800);
   check('reduced motion stops autoplay and the slide animation', await flash.getByRole('heading').innerText() === reducedTitle && await flash.locator('.flash-track').evaluate(e => getComputedStyle(e).transitionDuration === '0s'));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.evaluate(() => window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000 } }));
@@ -80,7 +80,7 @@ try {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
   for (let i = 1; i <= 4; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - rect.width * .12 * i, y }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(700);
   check('touch swipe moves to the adjacent horizontal slide', await flash.getByRole('heading').innerText() !== oldTitle);
   const transform = await flash.locator('.flash-track').evaluate(e => getComputedStyle(e).transform);
   check('slides are translated horizontally without stacking', transform !== 'none' && await flash.getByRole('group', { name: /dari/ }).count() === 1);
@@ -88,6 +88,18 @@ try {
   await flash.getByRole('button', { name: 'Info berikutnya' }).focus(); await page.keyboard.press('ArrowRight');
   check('keyboard arrows change the slide', await flash.getByRole('heading').innerText() !== keyboardTitle);
   await cdp.detach();
+  const settle = () => page.waitForFunction(() => document.querySelector('[aria-label="Flash info sekolah"]').dataset.transitioning === 'false');
+  const target = () => flash.locator('.flash-track').evaluate(e => parseFloat(e.style.transform.slice('translate3d('.length)));
+  await settle();
+  check('slide transition uses a gentle 600ms curve', await flash.locator('.flash-track').evaluate(e => getComputedStyle(e).transitionDuration === '0.6s' && getComputedStyle(e).transitionTimingFunction === 'cubic-bezier(0.45, 0, 0.2, 1)'));
+  while (await flash.locator('.flash-page').innerText() !== '5 / 5') { await flash.getByRole('button', { name: 'Info berikutnya' }).click(); await settle(); }
+  const lastTarget = await target(); await flash.getByRole('button', { name: 'Info berikutnya' }).click();
+  check('last-to-first moves one adjacent card instead of crossing the whole deck', await target() === lastTarget - 100 && await flash.getByRole('group', { name: /dari/ }).count() === 1);
+  await settle(); check('loop reset preserves the first card without a second visible transition', await target() === -100 && await flash.locator('.flash-page').innerText() === '1 / 5');
+  await flash.getByRole('button', { name: 'Info sebelumnya' }).click(); check('first-to-last also uses one adjacent edge card', await target() === 0);
+  await settle(); check('reverse loop settles on the original last card', await target() === -500 && await flash.locator('.flash-page').innerText() === '5 / 5');
+  await flash.getByRole('button', { name: 'Info berikutnya' }).click(); await flash.getByRole('button', { name: 'Info berikutnya' }).click();
+  check('rapid repeated taps do not interrupt or skip the in-progress movement', await flash.locator('.flash-page').innerText() === '1 / 5'); await settle();
   // A notification must reveal its exact announcement, including items beyond the old first four.
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -118,23 +130,24 @@ try {
   // Admin toggles reuse the shared school settings document; failures keep the draft.
   await page.goto(origin + '/#settings'); await page.getByRole('heading', { name: 'Flash Info Dashboard', exact: true }).waitFor();
   await page.getByRole('switch', { name: 'Ganti slide otomatis', exact: true }).check();
-  await page.getByLabel('Jeda pergantian slide').selectOption('2500');
+  check('admin has 15 interval choices including half-seconds and up to one minute', await page.getByLabel('Jeda pergantian slide').locator('option').count() === 15 && await page.getByRole('option', { name: '2,5 detik', exact: true }).count() === 1 && await page.getByRole('option', { name: '60 detik', exact: true }).count() === 1);
+  await page.getByLabel('Jeda pergantian slide').selectOption('15000');
   await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).uncheck();
   await page.evaluate(() => window.fixture.failSettingsSave = true);
   await page.getByRole('button', { name: 'Simpan flash info' }).click();
-  await page.getByRole('alert').waitFor(); check('failed settings save preserves interval and panel draft', await page.getByLabel('Jeda pergantian slide').inputValue() === '2500' && !await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).isChecked());
+  await page.getByRole('alert').waitFor(); check('failed settings save preserves interval and panel draft', await page.getByLabel('Jeda pergantian slide').inputValue() === '15000' && !await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).isChecked());
   await page.evaluate(() => window.fixture.failSettingsSave = false);
   await page.getByRole('button', { name: 'Simpan flash info' }).click(); await page.getByRole('status').filter({ hasText: 'Pengaturan flash info tersimpan' }).waitFor();
-  check('admin can save interval and selected panels', await page.evaluate(() => window.fixture.settingsSaves.at(-1).config.intervalMs === 2500 && window.fixture.settingsSaves.at(-1).config.panels.incidents === false));
+  check('admin can save interval and selected panels', await page.evaluate(() => window.fixture.settingsSaves.at(-1).config.intervalMs === 15000 && window.fixture.settingsSaves.at(-1).config.panels.incidents === false));
   await page.getByRole('switch', { name: /Tampilkan flash info/ }).uncheck(); await page.getByRole('button', { name: 'Simpan flash info' }).click();
   await page.evaluate(() => { location.hash = '#dashboard'; }); await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).waitFor();
   check('admin OFF retains only the activity slide in the same compact panel', await flash.locator('.flash-page').innerText() === '1 / 1' && await flash.getByRole('button', { name: 'Info berikutnya' }).isDisabled());
   await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).click(); await dialog.waitFor();
   check('announcement board remains accessible when flash info is OFF', await dialog.isVisible()); await page.keyboard.press('Escape');
-  await page.evaluate(() => window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000, panels: { announcements: true, dutyRoster: false, incidents: false, operations: false } } })); await flash.locator('.flash-slide').nth(1).waitFor({ state: 'attached' });
-  check('live admin settings apply without reload, hiding disabled slides and autoplay controls', await flash.locator('.flash-page').innerText() === '1 / 2' && await flash.getByRole('button', { name: 'Jeda flash info' }).count() === 0 && await flash.locator('.flash-slide').count() === 2);
+  await page.evaluate(() => window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000, panels: { announcements: true, dutyRoster: false, incidents: false, operations: false } } })); await flash.locator('.flash-slide:not([data-loop-clone])').nth(1).waitFor({ state: 'attached' });
+  check('live admin settings apply without reload, hiding disabled slides and autoplay controls', await flash.locator('.flash-page').innerText() === '1 / 2' && await flash.getByRole('button', { name: 'Jeda flash info' }).count() === 0 && await flash.locator('.flash-slide:not([data-loop-clone])').count() === 2);
   await page.evaluate(() => { window.fixture.user = { ...window.fixture.user, role: 'GURU', permissions: ['dashboard.view'] }; window.fixture.permissions = ['dashboard.view']; window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000 } }); window.fixture.force(); });
-  check('restricted teacher sees only activity and allowed announcements', await flash.locator('.flash-slide').count() === 2);
+  check('restricted teacher sees only activity and allowed announcements', await flash.locator('.flash-slide:not([data-loop-clone])').count() === 2);
   await page.evaluate(() => { location.hash = '#settings'; }); await page.waitForTimeout(100);
   check('non-admin cannot use the dashboard info settings form', await page.getByRole('button', { name: 'Simpan flash info' }).count() === 0);
   check('UI actions do not create operational school records', await page.evaluate(() => window.fixture.writes.length === 0));
