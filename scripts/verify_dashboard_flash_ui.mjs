@@ -65,7 +65,7 @@ try {
   check('resume restarts automatic rotation', await flash.getByRole('heading').innerText() !== resumedTitle);
   await flash.hover(); const hoveredTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2800);
   check('reading with the pointer pauses rotation', await flash.getByRole('heading').innerText() === hoveredTitle);
-  await page.mouse.move(0, 0); await flash.getByRole('button', { name: 'Info berikutnya' }).focus();
+  await page.mouse.move(0, 0); await flash.getByRole('button', { name: 'Info sebelumnya' }).focus(); await page.keyboard.press('Tab');
   const focusedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2800);
   check('keyboard focus pauses rotation', await flash.getByRole('heading').innerText() === focusedTitle);
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.evaluate(() => document.activeElement.blur());

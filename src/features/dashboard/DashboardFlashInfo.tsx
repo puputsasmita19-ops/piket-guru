@@ -42,6 +42,15 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
     setEdge(next < 0 ? -1 : next >= slides.length ? 1 : 0);
     setSelectedId(slides[(next + slides.length) % slides.length].id);
   };
+  const togglePlayback = () => {
+    if (paused) {
+      // Play is an explicit request to resume, even if its button retains focus/hover.
+      // Keep DOM focus in place so keyboard and screen-reader users do not lose their position.
+      setFocused(false);
+      setInteracting(false);
+      setPaused(false);
+    } else setPaused(true);
+  };
   const finishMove = () => {
     if (!movingRef.current) return;
     if (edge !== 0) {
@@ -93,7 +102,9 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
   ] : originals;
   return <section className="dashboard-flash" data-transitioning={moving} aria-label="Flash info sekolah" aria-roledescription="carousel"
     onPointerEnter={e => { if (e.pointerType === 'mouse') setInteracting(true); }} onPointerLeave={e => { if (e.pointerType === 'mouse') setInteracting(false); }}
-    onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocused(false); }}
+    onPointerDownCapture={e => { setFocused(false); if (e.pointerType !== 'mouse') setInteracting(false); }}
+    onKeyDownCapture={() => setFocused(true)}
+    onFocusCapture={e => setFocused((e.target as HTMLElement).matches(':focus-visible'))} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocused(false); }}
     onKeyDown={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); change(e.key === 'ArrowRight' ? 1 : -1); } }}>
     <div className="flash-heading"><span className="flash-eyebrow">{slide.id === 'activity' ? 'HARI INI' : 'FLASH INFO'}</span><button type="button" className="flash-announcements" onClick={onAnnouncements}>Papan pengumuman</button><span className="flash-page">{index + 1} / {slides.length}</span></div>
     <div className="flash-viewport"
@@ -128,7 +139,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
       <button type="button" className="flash-open" onClick={slide.onAction} aria-expanded={slide.id === 'activity' ? slide.expanded : undefined} aria-controls={slide.id === 'activity' ? 'personal-duty-details' : undefined}>{slide.actionLabel}<ChevronRight className="w-3.5 h-3.5 shrink-0" /></button>
       <div className="flex shrink-0 gap-1">
         <button type="button" className="flash-control" aria-label="Info sebelumnya" disabled={slides.length < 2} onClick={() => change(-1)}><ChevronLeft className="w-4 h-4" /></button>
-        {config.autoPlay && !reducedMotion && slides.length > 1 && <button type="button" className="flash-control" aria-label={paused ? 'Putar flash info' : 'Jeda flash info'} aria-pressed={paused} onClick={() => setPaused(v => !v)}>{paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}</button>}
+        {config.autoPlay && !reducedMotion && slides.length > 1 && <button type="button" className="flash-control" aria-label={paused ? 'Putar flash info' : 'Jeda flash info'} aria-pressed={paused} onClick={togglePlayback}>{paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}</button>}
         <button type="button" className="flash-control" aria-label="Info berikutnya" disabled={slides.length < 2} onClick={() => change(1)}><ChevronRight className="w-4 h-4" /></button>
       </div>
     </div>
