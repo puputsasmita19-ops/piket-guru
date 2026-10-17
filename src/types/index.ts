@@ -225,6 +225,7 @@ export interface SchoolSettings {
   studentTardyConfig?: StudentTardyConfig;
   lessonPeriodConfig?: import('./period.types').LessonPeriodConfig;
   notificationConfig?: import('./notification.types').NotificationConfig;
+  dashboardInfoConfig?: import('./dashboardInfo.types').DashboardInfoConfig;
   documentationWatermark?: import('./watermark.types').DocumentationWatermarkConfig;
   workHours: {
     start: string;

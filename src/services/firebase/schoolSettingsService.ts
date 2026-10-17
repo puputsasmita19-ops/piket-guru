@@ -1,3 +1,4 @@
+import { sanitizeDashboardInfoConfig, type DashboardInfoConfig } from '../../types/dashboardInfo.types';
 import { sanitizeNotificationConfig, type NotificationConfig } from '../../types/notification.types';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -137,7 +138,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -182,6 +183,25 @@ export class SchoolSettingsService {
       transaction.update(ref, { notificationConfig, updatedAt: serverTimestamp() });
     });
     void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui pengaturan notifikasi realtime sekolah' });
+    return this.receipt(expected);
+  }
+
+  public static async saveDashboardInfoSettings(config: DashboardInfoConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists() || userSnap.data().role !== 'ADMIN' || userSnap.data().isActive !== true) {
+      throw new Error('Hanya administrator aktif yang dapat mengubah flash info.');
+    }
+    const dashboardInfoConfig = sanitizeDashboardInfoConfig(config);
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      expected = { ...snap.data(), dashboardInfoConfig } as SchoolSettings;
+      transaction.update(ref, { dashboardInfoConfig, updatedAt: serverTimestamp() });
+    });
+    void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui panel dan pergantian slide flash info dashboard' });
     return this.receipt(expected);
   }
 

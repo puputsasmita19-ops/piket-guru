@@ -1,8 +1,12 @@
+import { DashboardFlashInfo, type DashboardFlashSlide } from './DashboardFlashInfo';
+import { sanitizeDashboardInfoConfig } from '../../types/dashboardInfo.types';
+import { useNavigation } from '../../contexts/NavigationContext';
+import { Modal } from '../../components/common/Modal';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { FeatureIllustration } from '../../components/common/FeatureIllustration';
 import { getModuleStyle } from '../../config/moduleAppearance';
 import { QuickActions } from './QuickActions';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -62,6 +66,18 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
   const { currentUser, hasRole, hasPermission } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const { subView, setSubView } = useNavigation();
+  const [detailPanel, setDetailPanel] = useState<'announcements' | 'dutyRoster' | 'incidents' | null>(null);
+  const [focusedAnnouncementId, setFocusedAnnouncementId] = useState<string | null>(null);
+  const focusedOnce = useRef<string | null>(null);
+  const openAnnouncements = () => { setFocusedAnnouncementId(null); focusedOnce.current = null; setDetailPanel('announcements'); };
+  useEffect(() => {
+    if (!subView?.startsWith('announcement:')) return;
+    setFocusedAnnouncementId(subView.slice('announcement:'.length));
+    focusedOnce.current = null;
+    setDetailPanel('announcements');
+    setSubView(null);
+  }, [subView, setSubView]);
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
@@ -107,8 +123,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   useEffect(() => {
     AnnouncementService.bootstrapIfEmpty();
 
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
+    const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => {
+      setSettings(data || DEFAULT_SCHOOL_SETTINGS);
     });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
@@ -138,7 +154,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>(
       'announcements',
       (data) => {
-        setAnnouncements(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setAnnouncements([...data].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()));
         setIsLoadingAnnouncements(false);
       },
       undefined,
@@ -170,6 +186,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     );
 
     return () => {
+      unsubSettings();
       unsubSched();
       unsubTeachers();
       unsubStaff();
@@ -231,6 +248,247 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     await AnnouncementService.deleteAnnouncement(id, currentUser);
   };
 
+  const visibleAnnouncements = announcements.filter(a => {
+    const target = a.targetRole || 'SEMUA';
+    return a.isActive && !a.isDemo && a.dataSource !== 'SEED' && (isAdmin || target === 'SEMUA' || target === currentUser?.role || (target === 'TENDIK' && currentUser?.role === 'TENAGA_KEPENDIDIKAN'));
+  });
+  useEffect(() => {
+    if (detailPanel !== 'announcements' || !focusedAnnouncementId || isLoadingAnnouncements || focusedOnce.current === focusedAnnouncementId) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`dashboard-announcement-${encodeURIComponent(focusedAnnouncementId)}`);
+      if (!target) return;
+      focusedOnce.current = focusedAnnouncementId;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailPanel, focusedAnnouncementId, isLoadingAnnouncements, announcements]);
+  const flashConfig = sanitizeDashboardInfoConfig(settings.dashboardInfoConfig);
+  const operationItems = [
+    hasPermission(PERMISSIONS.STUDENT_TARDY_VIEW) && { id: 'tardy', title: `${todayTardiness.length} siswa terlambat`, detail: 'Pencatatan hari ini' },
+    hasPermission(PERMISSIONS.STUDENT_PERMITS_VIEW) && { id: 'permits', title: `${todayPermits.filter(p => p.status === 'SEDANG_KELUAR').length} izin siswa masih di luar`, detail: `${todayPermits.length} izin tercatat hari ini` },
+    hasPermission(PERMISSIONS.VISITORS_VIEW) && { id: 'visitors', title: `${todayVisitors.length} tamu sekolah`, detail: `${todayVisitors.filter(v => v.status === 'SEDANG_BERKUNJUNG').length} kunjungan berlangsung hari ini` },
+  ].filter(Boolean) as DashboardFlashSlide['items'];
+  const flashSlides: DashboardFlashSlide[] = [
+    { id: 'announcements' as const, title: 'Pengumuman & Instruksi Piket', icon: Megaphone, items: visibleAnnouncements.map(a => ({ id: a.id, title: a.title, detail: a.content })), emptyText: isLoadingAnnouncements ? 'Memuat pengumuman…' : 'Belum ada pengumuman aktif untuk Anda.', actionLabel: 'Buka pengumuman', onAction: openAnnouncements },
+    ...(hasPermission(PERMISSIONS.SCHEDULE_VIEW) ? [{ id: 'dutyRoster' as const, title: 'Guru Bertugas Hari Ini', icon: Users, items: todaySchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Tidak ada jadwal piket hari ini.', actionLabel: 'Buka daftar guru', onAction: () => setDetailPanel('dutyRoster') }] : []),
+    ...(hasPermission(PERMISSIONS.INCIDENT_VIEW) ? [{ id: 'incidents' as const, title: 'Insiden & Kejadian Terbaru', icon: AlertTriangle, items: [...todayIncidents].sort((a, b) => (b.waktu || '').localeCompare(a.waktu || '')).map(item => ({ id: item.id, title: `[${getIncidentCategoryDisplay(item)}] ${item.lokasi}`, detail: `${item.waktu} WIB · ${item.uraian}` })), emptyText: 'Belum ada kejadian yang dilaporkan hari ini.', actionLabel: 'Buka laporan kejadian', onAction: () => setDetailPanel('incidents') }] : []),
+    ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: () => toggleDutyDetails(true) }] : []),
+  ].filter(slide => flashConfig.panels[slide.id]);
+  const hasFlash = flashConfig.enabled && flashSlides.length > 0;
+  const announcementBoard = (
+<Card>
+        <CardHeader
+          title="Papan Pengumuman & Instruksi Khusus Piket"
+          subtitle="Pemberitahuan resmi dari Kepala Sekolah dan Koordinator Piket"
+          action={
+            isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                leftIcon={<Plus className="w-3.5 h-3.5 text-[var(--theme-primary)]" />}
+                onClick={() => { setDetailPanel(null); setIsAnnModalOpen(true); }}
+              >
+                + Buat Pengumuman
+              </Button>
+            )
+          }
+        />
+        <CardContent className="p-4 sm:p-5">
+          {focusedAnnouncementId && !isLoadingAnnouncements && !visibleAnnouncements.some(a => a.id === focusedAnnouncementId) && <p role="status" className="mb-3 p-3 rounded-xl bg-[var(--theme-surface-subtle)] text-xs">Pengumuman yang dipilih sudah tidak tersedia atau tidak ditujukan untuk akun ini. Pengumuman aktif lainnya ditampilkan di bawah.</p>}
+          {isLoadingAnnouncements ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
+                <div className="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
+                <div className="h-3 w-1/2 bg-slate-200 dark:bg-slate-700/60 rounded" />
+              </div>
+              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
+                <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
+                <div className="h-3 w-1/3 bg-slate-200 dark:bg-slate-700/60 rounded" />
+              </div>
+            </div>
+          ) : visibleAnnouncements.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {visibleAnnouncements.map((ann) => (
+                <div
+                  key={ann.id}
+                  id={`dashboard-announcement-${encodeURIComponent(ann.id)}`}
+                  tabIndex={-1}
+                  className={`p-4 rounded-2xl border transition-all focus:outline-none ${focusedAnnouncementId === ann.id ? 'ring-2 ring-[var(--theme-primary-text)] ring-offset-2 dark:ring-offset-[var(--theme-card-bg)]' : ''} ${
+                    ann.priority === 'DARURAT'
+                      ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200'
+                      : ann.priority === 'PENTING'
+                      ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-900 text-amber-900 dark:text-amber-200'
+                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={ann.priority === 'DARURAT' ? 'danger' : ann.priority === 'PENTING' ? 'warning' : 'info'}
+                        size="sm"
+                      >
+                        {ann.priority}
+                      </Badge>
+                      <h4 className="font-bold text-xs">{ann.title}</h4>
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDeleteAnnouncement(ann.id)}
+                        className="text-slate-400 hover:text-rose-600 cursor-pointer p-1"
+                        title="Hapus Pengumuman"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-xs mt-2 leading-relaxed text-justify opacity-90">
+                    {ann.content}
+                  </p>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5 font-mono">
+                    <span>Oleh: <strong>{ann.authorName.split(' ')[0]}</strong> ({ann.authorRole})</span>
+                    <span>{formatIndonesianDate(ann.date)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-slate-400 text-xs">
+              Belum ada pengumuman instruksi khusus hari ini.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+  );
+  const dutyRosterBoard = (
+<Card>
+          <CardHeader
+            title="Daftar Guru Bertugas Hari Ini"
+            subtitle={`${formatIndonesianDate(new Date())} • ${todaySchedules.length} Pos Terjadwal`}
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
+                onClick={() => { setDetailPanel(null); onNavigateTab('schedules'); }}
+              >
+                Lihat Semua Jadwal
+              </Button>
+            }
+          />
+          <CardContent className="p-0">
+            {todaySchedules.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {todaySchedules.map((item) => {
+                  const att = todayAttendance.find((a) => a.userId === item.petugasId);
+                  const isPresent = att?.status === 'DALAM_LOKASI';
+
+                  return (
+                    <div key={item.id} className="p-4 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                          isPresent
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600'
+                        }`}>
+                          {item.petugasName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-white">
+                            {item.petugasName}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                            <span><MapPin className="w-3.5 h-3.5 mr-1" />{item.ruangName}</span>
+                            <span>•</span>
+                            <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge variant={isPresent ? 'success' : 'neutral'} size="sm">
+                          {isPresent ? 'Hadir (GPS)' : 'Belum Presensi'}
+                        </Badge>
+
+                        {/* WhatsApp reminder button */}
+                        <button
+                          type="button"
+                          onClick={() => handleSendWaReminder(item)}
+                          className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 hover:bg-emerald-100 cursor-pointer transition-colors"
+                          title="Kirim Pesan WhatsApp"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-400 text-xs">
+                Tidak ada jadwal tugas piket untuk hari ini.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+  );
+  const incidentBoard = (
+<Card>
+          <CardHeader
+            title="Laporan Insiden & Kejadian Terbaru"
+            subtitle="Rekapitulasi peristiwa terkini yang memerlukan tindak lanjut"
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
+                onClick={() => { setDetailPanel(null); onNavigateTab('incidents'); }}
+              >
+                Buka Manajemen Insiden
+              </Button>
+            }
+          />
+          <CardContent className="p-0">
+            {incidents.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {incidents.slice(0, 4).map((inc) => (
+                  <div key={inc.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        [{getIncidentCategoryDisplay(inc)}] {inc.lokasi}
+                      </span>
+                      <Badge
+                        variant={inc.status === 'SELESAI' ? 'success' : inc.tingkatKeparahan === 'KRITIS' ? 'danger' : 'warning'}
+                        size="sm"
+                      >
+                        {inc.status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">
+                      {inc.uraian}
+                    </p>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+                      <span>Pihak: {inc.pihakTerlibat}</span>
+                      <span>{formatIndonesianDate(inc.tanggal)} ({inc.waktu} WIB)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-400 text-xs">
+                Belum ada insiden yang dilaporkan. Situasi sekolah aman dan kondusif.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+  );
+
   return (
     <div className="space-y-6">
       <section className="dashboard-welcome">
@@ -238,13 +496,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         <UserAvatar user={currentUser} className="dashboard-avatar" />
       </section>
 
+      <div className={`dashboard-info-row ${hasFlash ? 'has-flash' : ''}`}>
       <section className="dashboard-feature-banner" aria-label="Kegiatan piket hari ini">
         <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />
         <div className="min-w-0 flex-1"><p className="banner-eyebrow">PIKET GURU • HARI INI</p><h2>{isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis'}</h2>
           <p className="banner-description">{myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.'}</p>
           <button type="button" className="banner-action" aria-expanded={showDutyDetails} aria-controls="personal-duty-details" onClick={() => toggleDutyDetails(true)}>{showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas'}<ChevronRight className="w-4 h-4" /></button>
+          <button type="button" className="banner-announcements" onClick={openAnnouncements}><Megaphone className="w-4 h-4" />Papan pengumuman</button>
         </div>
       </section>
+      <DashboardFlashInfo config={flashConfig} slides={flashSlides} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
+      </div>
 
       <QuickActions onNavigate={onNavigateTab} />
 
@@ -560,217 +822,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
       </div>
 
-      {/* PAPAN INFORMASI & PENGUMUMAN PIKET */}
-      <Card>
-        <CardHeader
-          title="Papan Pengumuman & Instruksi Khusus Piket"
-          subtitle="Pemberitahuan resmi dari Kepala Sekolah dan Koordinator Piket"
-          action={
-            isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                leftIcon={<Plus className="w-3.5 h-3.5 text-[var(--theme-primary)]" />}
-                onClick={() => setIsAnnModalOpen(true)}
-              >
-                + Buat Pengumuman
-              </Button>
-            )
-          }
-        />
-        <CardContent className="p-4 sm:p-5">
-          {isLoadingAnnouncements ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
-                <div className="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded" />
-                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
-                <div className="h-3 w-1/2 bg-slate-200 dark:bg-slate-700/60 rounded" />
-              </div>
-              <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 animate-pulse space-y-2">
-                <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-700 rounded" />
-                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700/60 rounded" />
-                <div className="h-3 w-1/3 bg-slate-200 dark:bg-slate-700/60 rounded" />
-              </div>
-            </div>
-          ) : announcements.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {announcements.slice(0, 4).map((ann) => (
-                <div
-                  key={ann.id}
-                  className={`p-4 rounded-2xl border transition-all ${
-                    ann.priority === 'DARURAT'
-                      ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200'
-                      : ann.priority === 'PENTING'
-                      ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-900 text-amber-900 dark:text-amber-200'
-                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={ann.priority === 'DARURAT' ? 'danger' : ann.priority === 'PENTING' ? 'warning' : 'info'}
-                        size="sm"
-                      >
-                        {ann.priority}
-                      </Badge>
-                      <h4 className="font-bold text-xs">{ann.title}</h4>
-                    </div>
-
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleDeleteAnnouncement(ann.id)}
-                        className="text-slate-400 hover:text-rose-600 cursor-pointer p-1"
-                        title="Hapus Pengumuman"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <p className="text-xs mt-2 leading-relaxed text-justify opacity-90">
-                    {ann.content}
-                  </p>
-
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5 font-mono">
-                    <span>Oleh: <strong>{ann.authorName.split(' ')[0]}</strong> ({ann.authorRole})</span>
-                    <span>{formatIndonesianDate(ann.date)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-6 text-center text-slate-400 text-xs">
-              Belum ada pengumuman instruksi khusus hari ini.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* 2 COLS: TODAY'S DUTY ROSTER & RECENT INCIDENTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* LEFT: TODAY'S DUTY ROSTER */}
-        <Card>
-          <CardHeader
-            title="Daftar Guru Bertugas Hari Ini"
-            subtitle={`${formatIndonesianDate(new Date())} • ${todaySchedules.length} Pos Terjadwal`}
-            action={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
-                onClick={() => onNavigateTab('schedules')}
-              >
-                Lihat Semua Jadwal
-              </Button>
-            }
-          />
-          <CardContent className="p-0">
-            {todaySchedules.length > 0 ? (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {todaySchedules.map((item) => {
-                  const att = todayAttendance.find((a) => a.userId === item.petugasId);
-                  const isPresent = att?.status === 'DALAM_LOKASI';
-
-                  return (
-                    <div key={item.id} className="p-4 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isPresent
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600'
-                        }`}>
-                          {item.petugasName.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-white">
-                            {item.petugasName}
-                          </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                            <span><MapPin className="w-3.5 h-3.5 mr-1" />{item.ruangName}</span>
-                            <span>•</span>
-                            <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge variant={isPresent ? 'success' : 'neutral'} size="sm">
-                          {isPresent ? 'Hadir (GPS)' : 'Belum Presensi'}
-                        </Badge>
-
-                        {/* WhatsApp reminder button */}
-                        <button
-                          type="button"
-                          onClick={() => handleSendWaReminder(item)}
-                          className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 hover:bg-emerald-100 cursor-pointer transition-colors"
-                          title="Kirim Pesan WhatsApp"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                Tidak ada jadwal tugas piket untuk hari ini.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* RIGHT: RECENT INCIDENTS */}
-        <Card>
-          <CardHeader
-            title="Laporan Insiden & Kejadian Terbaru"
-            subtitle="Rekapitulasi peristiwa terkini yang memerlukan tindak lanjut"
-            action={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]"
-                onClick={() => onNavigateTab('incidents')}
-              >
-                Buka Manajemen Insiden
-              </Button>
-            }
-          />
-          <CardContent className="p-0">
-            {incidents.length > 0 ? (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {incidents.slice(0, 4).map((inc) => (
-                  <div key={inc.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        [{getIncidentCategoryDisplay(inc)}] {inc.lokasi}
-                      </span>
-                      <Badge
-                        variant={inc.status === 'SELESAI' ? 'success' : inc.tingkatKeparahan === 'KRITIS' ? 'danger' : 'warning'}
-                        size="sm"
-                      >
-                        {inc.status}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">
-                      {inc.uraian}
-                    </p>
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
-                      <span>Pihak: {inc.pihakTerlibat}</span>
-                      <span>{formatIndonesianDate(inc.tanggal)} ({inc.waktu} WIB)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                Belum ada insiden yang dilaporkan. Situasi sekolah aman dan kondusif.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Modal isOpen={detailPanel !== null} onClose={() => { setDetailPanel(null); setFocusedAnnouncementId(null); }} maxWidth="3xl"
+        title={detailPanel === 'announcements' ? 'Papan Pengumuman & Instruksi Piket' : detailPanel === 'dutyRoster' ? 'Daftar Guru Bertugas Hari Ini' : 'Laporan Insiden & Kejadian Terbaru'}>
+        {detailPanel === 'announcements' && announcementBoard}
+        {detailPanel === 'dutyRoster' && dutyRosterBoard}
+        {detailPanel === 'incidents' && incidentBoard}
+      </Modal>
 
       {/* ANNOUNCEMENT FORM MODAL */}
       <AnnouncementFormModal

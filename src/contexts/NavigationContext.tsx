@@ -4,6 +4,7 @@ import { NavigationTab } from '../types';
 interface NavigationContextType {
   activeTab: NavigationTab;
   setActiveTab: (tab: NavigationTab) => void;
+  navigateTo: (tab: NavigationTab, view?: string) => void;
   subView: string | null;
   setSubView: (view: string | null) => void;
 }
@@ -52,9 +53,9 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleSetActiveTab = (tab: NavigationTab) => {
+  const handleNavigateTo = (tab: NavigationTab, view?: string) => {
     setActiveTabState(tab);
-    setSubView(null);
+    setSubView(view || null);
     if (typeof window !== 'undefined') {
       try {
         window.history.replaceState(
@@ -72,7 +73,8 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <NavigationContext.Provider
       value={{
         activeTab,
-        setActiveTab: handleSetActiveTab,
+        setActiveTab: (tab) => handleNavigateTo(tab),
+        navigateTo: handleNavigateTo,
         subView,
         setSubView,
       }}

@@ -1,4 +1,3 @@
-import { UserAvatar } from '../common/UserAvatar';
 import { NotificationBell } from './NotificationBell';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -275,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Right Section: Icons, Profile & Logout */}
-            <div className="app-header-actions flex items-center justify-end gap-0 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+            <div className="app-header-actions flex items-center justify-end gap-0 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 min-w-0 flex-1 lg:flex-none">
               {/* Shared Transparent Backdrop (Below Header z-40, Non-blurring, Header items stay 100% interactive) */}
               {activePanel !== 'none' && (
                 <div
@@ -452,13 +451,13 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
 
-              {/* 5. User Profile Mini Card & Dropdown */}
+              {/* 5. User name & profile dropdown */}
               {currentUser && (
-                <div className="relative shrink-0">
+                <div className="relative min-w-0 shrink">
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
-                    className={`flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                    className={`max-w-full flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'user'
                         ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
                         : 'hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
@@ -466,12 +465,11 @@ export const Header: React.FC<HeaderProps> = ({
                     aria-label="Menu Pengguna & Profil"
                     title="Menu Pengguna & Profil"
                   >
-                    <UserAvatar user={currentUser} className="w-8 h-8 rounded-lg text-xs shadow-inner" />
-                    <div className="hidden lg:block text-left">
-                      <div className="text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[120px]">
-                        {currentUser.fullName.split(' ')[0]}
+                    <div className="min-w-0 text-left">
+                      <div className="text-[11px] sm:text-xs font-bold text-slate-900 dark:text-white truncate max-w-[72px] sm:max-w-[120px]">
+                        {(currentUser.fullName.trim().split(/\s+/)[0] || 'Pengguna').toLocaleUpperCase('id-ID')}
                       </div>
-                      <div className="text-[10px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-medium">
+                      <div className="hidden lg:block text-[10px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-medium">
                         {ROLE_LABELS[currentUser.role]}
                       </div>
                     </div>

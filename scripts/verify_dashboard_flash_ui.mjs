@@ -1,0 +1,124 @@
+// Real Header, Dashboard, notification navigation and admin card. Synthetic IO only.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { server } from './fixtures/modern_workspace_fixture.mjs';
+const dep = createRequire((process.env.PIKET_BROWSER_TEST_TOOLS || process.cwd()) + '/package.json');
+const chromium = dep('@sparticuz/chromium').default;
+const { chromium: pw } = dep('playwright-core');
+if (!server.listening) await new Promise(r => server.once('listening', r));
+let browser, count = 0;
+const check = (label, ok) => { assert.ok(ok, label); count++; console.log('PASS', label); };
+try {
+  browser = await pw.launch({ executablePath: await chromium.executablePath(), args: chromium.args, headless: true });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+  page.setDefaultTimeout(10000);
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const flash = page.getByRole('region', { name: 'Flash info sekolah' });
+  const dialog = page.getByRole('dialog', { name: 'Papan Pengumuman & Instruksi Piket', exact: true });
+  const seed = async () => page.evaluate(() => {
+    const now = new Date().toISOString();
+    const rows = Array.from({ length: 6 }, (_, i) => ({ id: `ann-${i}`, title: `Arahan sekolah ${i}`, content: `Informasi terbaru ${i} untuk seluruh petugas.`, priority: 'INFO', targetRole: 'SEMUA', isActive: true, authorName: 'Admin Contoh', authorRole: 'ADMIN', date: now.slice(0, 10), createdAt: new Date(Date.now() - i * 1000).toISOString() }));
+    window.fixture.emitCollection('announcements', rows);
+    window.fixture.emitNotifications({ announcements: rows });
+    window.fixture.user = { ...window.fixture.user, fullName: '  dian    alamsyah  ' };
+    window.fixture.force();
+    return rows;
+  });
+  for (const mode of ['light', 'dark']) for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 960 });
+    await page.goto(origin + '/#dashboard');
+    await flash.waitFor();
+    await seed();
+    await page.evaluate(mode => document.documentElement.classList.toggle('dark', mode === 'dark'), mode);
+    await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).getByText('DIAN', { exact: true }).waitFor();
+    check(`${mode}/${width}: header shows uppercase first name without the personal avatar`, await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).locator('img').count() === 0);
+    check(`${mode}/${width}: header and carousel do not overflow`, await page.evaluate(() => document.documentElement.scrollWidth === innerWidth) && await page.getByRole('button', { name: 'Menu Pengguna & Profil' }).evaluate(e => e.getBoundingClientRect().right <= innerWidth) && await flash.evaluate(e => e.scrollWidth <= e.clientWidth));
+    check(`${mode}/${width}: exactly one info slide and no duplicated long boards`, await flash.getByRole('group', { name: /dari/ }).count() === 1 && await page.getByRole('heading', { name: 'Papan Pengumuman & Instruksi Khusus Piket', exact: true }).count() === 0);
+    check(`${mode}/${width}: info is beside desktop banner or below mobile banner`, await page.locator('.dashboard-info-row').evaluate((e, width) => { const [banner, flash] = e.children; const a = banner.getBoundingClientRect(), b = flash.getBoundingClientRect(); return width >= 1024 ? Math.abs(a.top - b.top) < 2 && b.left > a.right : b.top >= a.bottom; }, width));
+    if (process.env.PIKET_QA_SCREENSHOTS) { fs.mkdirSync(process.env.PIKET_QA_SCREENSHOTS, { recursive: true }); await page.screenshot({ path: `${process.env.PIKET_QA_SCREENSHOTS}/flash-${mode}-${width}.png` }); }
+  }
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto(origin + '/#dashboard'); await flash.waitFor(); await seed();
+  await page.evaluate(() => window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: true, intervalMs: 2000 } }));
+  const starts = await page.evaluate(() => window.fixture.subscriptionStarts);
+  await page.mouse.move(0, 0);
+  await flash.getByRole('heading', { name: 'Guru Bertugas Hari Ini', exact: true }).waitFor();
+  check('automatic rotation advances after the configured two seconds', true);
+  check('rotating does not start additional database collection subscriptions', starts === await page.evaluate(() => window.fixture.subscriptionStarts));
+  await flash.getByRole('button', { name: 'Jeda flash info' }).click();
+  const pausedTitle = await flash.getByRole('heading').innerText();
+  await page.mouse.move(0, 0); await page.evaluate(() => document.activeElement.blur());
+  await page.waitForTimeout(2200);
+  check('explicit pause remains paused after focus and pointer leave', await flash.getByRole('heading').innerText() === pausedTitle);
+  await flash.getByRole('button', { name: 'Info berikutnya' }).click();
+  check('manual controls still work while paused', await flash.getByRole('heading').innerText() !== pausedTitle);
+  await flash.getByRole('button', { name: 'Putar flash info' }).click();
+  await page.mouse.move(0, 0); await page.evaluate(() => document.activeElement.blur());
+  const resumedTitle = await flash.getByRole('heading').innerText();
+  await page.waitForTimeout(2200);
+  check('resume restarts automatic rotation', await flash.getByRole('heading').innerText() !== resumedTitle);
+  await flash.hover(); const hoveredTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  check('reading with the pointer pauses rotation', await flash.getByRole('heading').innerText() === hoveredTitle);
+  await page.mouse.move(0, 0); await flash.getByRole('button', { name: 'Info berikutnya' }).focus();
+  const focusedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  check('keyboard focus pauses rotation', await flash.getByRole('heading').innerText() === focusedTitle);
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.evaluate(() => document.activeElement.blur());
+  const reducedTitle = await flash.getByRole('heading').innerText(); await page.waitForTimeout(2200);
+  check('reduced motion stops autoplay and the slide animation', await flash.getByRole('heading').innerText() === reducedTitle && await flash.locator('.flash-slide').evaluate(e => getComputedStyle(e).animationName === 'none'));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  // A notification must reveal its exact announcement, including items beyond the old first four.
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(origin + '/#visitors'); await page.getByRole('heading', { name: /Buku Tamu/ }).first().waitFor();
+    await seed(); await page.getByRole('button', { name: /Pusat Notifikasi/ }).click();
+    const notification = page.getByRole('dialog', { name: 'Pusat Notifikasi' });
+    await notification.getByRole('heading', { name: 'Arahan sekolah 5', exact: true }).waitFor();
+    await notification.locator('article').filter({ has: page.getByRole('heading', { name: 'Arahan sekolah 5', exact: true }) }).getByRole('button', { name: 'Buka pengumuman', exact: true }).click();
+    await dialog.waitFor(); await page.waitForURL('**/#dashboard');
+    await page.waitForFunction(() => document.activeElement?.id === 'dashboard-announcement-ann-5');
+    check(`${width}: notification opens dashboard and focuses its exact announcement beyond the first four`, await dialog.locator('#dashboard-announcement-ann-5').isVisible() && await notification.count() === 0);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: /Pusat Notifikasi/ }).click();
+    await notification.locator('article').filter({ has: page.getByRole('heading', { name: 'Arahan sekolah 5', exact: true }) }).getByRole('button', { name: 'Buka pengumuman', exact: true }).click();
+    await dialog.waitFor();
+    check(`${width}: the same announcement can be reopened while already on dashboard`, await dialog.locator('#dashboard-announcement-ann-5').isVisible());
+    await page.keyboard.press('Escape');
+  }
+  await page.evaluate(() => window.fixture.emitNotifications({ events: [{ id: 'schedule-update', scope: 'SCHOOL', actorId: 'another-admin', actorName: 'Admin Lain', module: 'SCHEDULES', action: 'UPDATE', createdAt: new Date().toISOString() }] }));
+  await page.getByRole('button', { name: /Pusat Notifikasi/ }).click();
+  await page.getByRole('dialog', { name: 'Pusat Notifikasi' }).getByRole('button', { name: 'Buka menu', exact: true }).click();
+  await page.waitForURL('**/#schedules'); check('schedule activity notification routes to the schedule menu', true);
+  await page.goto(origin + '/#dashboard'); await flash.waitFor();
+  await page.evaluate(() => window.fixture.emitNotifications({ announcements: [{ id: 'removed-ann', title: 'Pengumuman lama', content: 'Sudah tidak tersedia.', isActive: true, targetRole: 'SEMUA', priority: 'INFO', createdAt: new Date().toISOString() }] }));
+  await page.getByRole('button', { name: /Pusat Notifikasi/ }).click();
+  await page.getByRole('dialog', { name: 'Pusat Notifikasi' }).getByRole('button', { name: 'Buka pengumuman', exact: true }).click(); await dialog.waitFor();
+  check('removed announcement shows an explicit unavailable message', await dialog.getByRole('status').getByText(/sudah tidak tersedia/).isVisible()); await page.keyboard.press('Escape');
+  // Admin toggles reuse the shared school settings document; failures keep the draft.
+  await page.goto(origin + '/#settings'); await page.getByRole('heading', { name: 'Flash Info Dashboard', exact: true }).waitFor();
+  await page.getByLabel('Jeda pergantian slide').selectOption('2500');
+  await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).uncheck();
+  await page.evaluate(() => window.fixture.failSettingsSave = true);
+  await page.getByRole('button', { name: 'Simpan flash info' }).click();
+  await page.getByRole('alert').waitFor(); check('failed settings save preserves interval and panel draft', await page.getByLabel('Jeda pergantian slide').inputValue() === '2500' && !await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).isChecked());
+  await page.evaluate(() => window.fixture.failSettingsSave = false);
+  await page.getByRole('button', { name: 'Simpan flash info' }).click(); await page.getByRole('status').filter({ hasText: 'Pengaturan flash info tersimpan' }).waitFor();
+  check('admin can save interval and selected panels', await page.evaluate(() => window.fixture.settingsSaves.at(-1).config.intervalMs === 2500 && window.fixture.settingsSaves.at(-1).config.panels.incidents === false));
+  await page.getByRole('switch', { name: /Tampilkan flash info/ }).uncheck(); await page.getByRole('button', { name: 'Simpan flash info' }).click();
+  await page.evaluate(() => { location.hash = '#dashboard'; }); await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).waitFor();
+  check('admin OFF hides flash info on dashboard', await flash.count() === 0);
+  await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).click(); await dialog.waitFor();
+  check('announcement board remains accessible when flash info is OFF', await dialog.isVisible()); await page.keyboard.press('Escape');
+  await page.evaluate(() => window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000, panels: { announcements: true, dutyRoster: false, incidents: false, operations: false } } })); await flash.waitFor();
+  check('live admin settings apply without reload, hiding disabled slides and autoplay controls', await flash.locator('.flash-page').innerText() === '1 / 1' && await flash.getByRole('button', { name: 'Jeda flash info' }).count() === 0 && await flash.getByRole('button', { name: 'Info berikutnya' }).isDisabled());
+  await page.evaluate(() => { window.fixture.user = { ...window.fixture.user, role: 'GURU', permissions: ['dashboard.view'] }; window.fixture.permissions = ['dashboard.view']; window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000 } }); window.fixture.force(); });
+  check('restricted teacher sees only the allowed announcement slide', await flash.locator('.flash-page').innerText() === '1 / 1');
+  await page.evaluate(() => { location.hash = '#settings'; }); await page.waitForTimeout(100);
+  check('non-admin cannot use the dashboard info settings form', await page.getByRole('button', { name: 'Simpan flash info' }).count() === 0);
+  check('UI actions do not create operational school records', await page.evaluate(() => window.fixture.writes.length === 0));
+  check('all exercised interactions have no runtime errors', errors.length === 0);
+  console.log(`${count} dashboard/header/notification browser scenarios passed.`);
+} finally { if (browser) await browser.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); }

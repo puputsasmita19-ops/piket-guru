@@ -53,6 +53,7 @@ export interface FeedItem {
   category: 'SESSION' | 'ACTIVITY' | 'ANNOUNCEMENT';
   tab?: NavigationTab;
   urgent?: boolean;
+  targetId?: string;
 }
 export function operationalEventFromAudit(record: { id: string; userId: string; userName: string; module: string; action: string; status?: string; timestamp: string }): NotificationEvent | null {
   if (!Object.hasOwn(NOTIFICATION_MODULES, record.module) || !NOTIFICATION_ACTIONS.includes(record.action as any) || !['SUCCESS', 'BERHASIL'].includes(record.status || 'SUCCESS')) return null;
@@ -87,7 +88,7 @@ export function buildNotificationFeed(events: NotificationEvent[], announcements
     const createdAt = typeof a.updatedAt === 'string' ? a.updatedAt : a.createdAt;
     if (!Number.isFinite(Date.parse(createdAt))) continue;
     const id = `announcement:${a.id}:${createdAt}`;
-    result.set(id, { id, title: a.title, description: a.content.slice(0, 320), createdAt, category: 'ANNOUNCEMENT', urgent: a.priority === 'DARURAT', tab: checkUserPermission(user.permissions, 'dashboard.view') ? 'dashboard' : undefined });
+    result.set(id, { id, title: a.title, description: a.content.slice(0, 320), createdAt, category: 'ANNOUNCEMENT', targetId: a.id, urgent: a.priority === 'DARURAT', tab: checkUserPermission(user.permissions, 'dashboard.view') ? 'dashboard' : undefined });
   }
   return [...result.values()].sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)).slice(0, config.maxItems);
 }

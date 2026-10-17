@@ -14,7 +14,7 @@ const timestamp = (iso: string) => new Intl.DateTimeFormat('id-ID', { timeZone: 
 
 export const NotificationBell: React.FC<{ isOpen: boolean; onToggle: () => void; onClose: () => void; config?: NotificationConfig }> = ({ isOpen, onToggle, onClose, config: rawConfig }) => {
   const { currentUser, isTrustedDevice } = useAuth();
-  const { setActiveTab } = useNavigation();
+  const { navigateTo } = useNavigation();
   const uid = currentUser?.id || '';
   const project = auth.app.options.projectId || 'piket-guru';
   const configJson = JSON.stringify(sanitizeNotificationConfig(rawConfig));
@@ -81,7 +81,7 @@ export const NotificationBell: React.FC<{ isOpen: boolean; onToggle: () => void;
               {item.urgent && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">PENGUMUMAN DARURAT</p>}
               <p className="text-xs mt-1 leading-relaxed break-words whitespace-pre-line text-slate-600 dark:text-slate-300">{item.description}</p>
               <time dateTime={item.createdAt} className="block text-[10px] text-slate-500 dark:text-slate-400 mt-1.5">{timestamp(item.createdAt)}</time>
-              <div className="flex items-center justify-between gap-1 mt-1">{item.tab ? <button type="button" className={actionClass} onClick={() => { mark([item.id]); setActiveTab(item.tab!); close(); }}>Buka {item.category === 'ANNOUNCEMENT' ? 'pengumuman' : 'menu'}</button> : <span className="text-[10px] text-slate-500">Pribadi</span>}{!read && <button type="button" onClick={() => mark([item.id])} className={actionClass} aria-label={`Tandai dibaca: ${item.title}`}><CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />Dibaca</button>}</div>
+              <div className="flex items-center justify-between gap-1 mt-1">{item.tab ? <button type="button" className={actionClass} onClick={() => { mark([item.id]); close(); navigateTo(item.tab!, item.category === 'ANNOUNCEMENT' && item.targetId ? `announcement:${item.targetId}` : undefined); }}>Buka {item.category === 'ANNOUNCEMENT' ? 'pengumuman' : 'menu'}</button> : <span className="text-[10px] text-slate-500">Pribadi</span>}{!read && <button type="button" onClick={() => mark([item.id])} className={actionClass} aria-label={`Tandai dibaca: ${item.title}`}><CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />Dibaca</button>}</div>
             </div></div>
           </article>;
         })}
