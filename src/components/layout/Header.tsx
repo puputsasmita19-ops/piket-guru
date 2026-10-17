@@ -41,6 +41,9 @@ interface HeaderProps {
   onToggleDesktopSidebar?: () => void;
 }
 
+const mobileWeekdayFormatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' });
+const mobileCompactDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Jakarta' });
+
 type HeaderPanel = 'none' | 'sync' | 'guide' | 'notifications' | 'theme' | 'user';
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,8 +53,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { theme, setTheme, pastelTheme, setPastelTheme, isDark, pastelThemesList } = useTheme();
   const { currentUser, logout } = useAuth();
-  const firstName = currentUser?.fullName.trim().split(/\s+/)[0] || 'Pengguna';
-  const profileInitial = Array.from(firstName.toLocaleUpperCase('id-ID'))[0] || 'P';
   const { activeTab, subView } = useNavigation();
   const { isGuideMenuOpen, openGuideMenu, closeGuideMenu } = useGuide();
 
@@ -227,15 +228,16 @@ export const Header: React.FC<HeaderProps> = ({
                 </Tooltip>
               )}
 
-              {/* Realtime Date & Time Block on Mobile (< sm) */}
-              <div className="lg:hidden flex flex-col justify-center leading-tight select-none font-mono tabular-nums text-left shrink-0">
+              {/* Three compact lines keep weekday, date and seconds readable on mobile. */}
+              <div className="header-mobile-clock lg:hidden flex flex-col justify-center leading-[1.15] select-none font-mono tabular-nums text-left shrink-0" aria-label="Hari, tanggal, dan waktu WIB">
+                <span className="header-mobile-weekday text-[10px] min-[360px]:text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">{mobileWeekdayFormatter.format(currentTime)}</span>
                 <span className="text-[10px] min-[360px]:text-[11px] font-bold text-slate-700 dark:text-slate-200 tracking-tight whitespace-nowrap">
-                  <span className="inline min-[360px]:hidden">{`${String(currentTime.getDate()).padStart(2, '0')}/${String(currentTime.getMonth() + 1).padStart(2, '0')}/${currentTime.getFullYear()}`}</span>
+                  <span className="inline min-[360px]:hidden">{mobileCompactDateFormatter.format(currentTime)}</span>
                   <span className="hidden min-[360px]:inline">{formatShortIndonesianDate(currentTime)}</span>
                 </span>
-                <span className="text-[11px] min-[360px]:text-[12px] font-extrabold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] tracking-wider whitespace-nowrap">
+                <time className="header-mobile-time text-[11px] min-[360px]:text-[12px] font-extrabold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] tracking-wider whitespace-nowrap" dateTime={currentTime.toISOString()}>
                   {formatTimeRaw(currentTime)}
-                </span>
+                </time>
               </div>
 
               {/* App Identity on Desktop (>= sm) */}
@@ -453,9 +455,9 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
 
-              {/* 5. User name & profile dropdown */}
+              {/* 5. Universal profile icon & dropdown */}
               {currentUser && (
-                <div className="relative min-w-0 shrink">
+                <div className="relative z-40 min-w-0 shrink">
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
@@ -467,7 +469,7 @@ export const Header: React.FC<HeaderProps> = ({
                     aria-label="Menu Pengguna & Profil"
                     title={`Menu Pengguna & Profil: ${currentUser.fullName}`}
                   >
-                    <span aria-hidden="true" className="text-sm font-bold leading-none text-slate-900 dark:text-white">{profileInitial}</span>
+                    <User aria-hidden="true" className="header-profile-icon w-5 h-5 text-slate-900 dark:text-white" />
                   </button>
 
                   {activePanel === 'user' && (
