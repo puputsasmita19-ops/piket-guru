@@ -20,7 +20,6 @@ import {
   ChevronRight,
   Pin,
   PinOff,
-  PanelLeftClose,
 } from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,7 +31,6 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   isDesktopHidden?: boolean;
-  onToggleDesktopHide?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
 }
@@ -49,7 +47,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
   isDesktopHidden = false,
-  onToggleDesktopHide,
   isPinned = true,
   onTogglePin,
 }) => {
@@ -105,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
+        id="app-sidebar"
         data-tour="sidebar-nav"
         aria-label="Menu utama aplikasi"
         className={`app-sidebar fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
@@ -152,21 +150,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ) : (
                     <PinOff className="w-4 h-4" />
                   )}
-                </button>
-              </Tooltip>
-            )}
-
-            {/* Desktop Hide Button */}
-            {onToggleDesktopHide && (
-              <Tooltip content="Sembunyikan panel menu navigasi" position="bottom">
-                <button
-                  type="button"
-                  onClick={onToggleDesktopHide}
-                  className="hidden lg:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[36px] min-h-[36px] items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
-                  aria-label="Sembunyikan panel menu (Ctrl+B)"
-                  title="Sembunyikan panel menu"
-                >
-                  <PanelLeftClose className="w-4 h-4" />
                 </button>
               </Tooltip>
             )}

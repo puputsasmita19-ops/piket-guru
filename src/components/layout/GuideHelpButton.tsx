@@ -79,7 +79,7 @@ export const GuideHelpButton: React.FC<GuideHelpButtonProps> = ({
   }, [isGuideMenuOpen]);
 
   return (
-    <div ref={containerRef} data-tour="guide-help-button" className="relative inline-block">
+    <div ref={containerRef} data-tour="guide-help-button" className="relative z-40 shrink-0 inline-block">
       {/* Help Icon Header Button */}
       <Tooltip content="Panduan Penggunaan" position="bottom">
         <button
@@ -89,11 +89,7 @@ export const GuideHelpButton: React.FC<GuideHelpButtonProps> = ({
           aria-haspopup="true"
           aria-label="Panduan penggunaan"
           title="Panduan penggunaan"
-          className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[40px] xs:min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 shrink-0 ${
-            isGuideMenuOpen
-              ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
-              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
-          }`}
+          className="header-icon-button flex"
         >
           <HelpCircle className="w-5 h-5 shrink-0" />
         </button>

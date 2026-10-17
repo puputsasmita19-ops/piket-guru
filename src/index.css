@@ -427,6 +427,13 @@ input, textarea {
   outline-offset: 2px;
 }
 
+/* Keep the keyboard indicator inside compact header controls. This override
+   shares the global focus rule's layer so its offset takes precedence. */
+.header-icon-button:focus-visible {
+  outline: 2px solid var(--theme-primary-text);
+  outline-offset: -3px;
+}
+
 /* Global Form Input & Interactive Normalization */
 input:focus,
 select:focus,
@@ -981,7 +988,24 @@ button.bg-\[var\(--theme-primary\)\],
 }
 
 @layer components {
-  .header-user-chip { border: 1px solid var(--theme-primary-border); background: var(--theme-primary-light); box-shadow: 0 1px 2px rgb(15 23 42 / .04); }
+  /* One quiet surface per header action. Keyboard focus stays inside its hit
+     area, so it cannot touch the neighbouring icon on narrow phones. */
+  .header-icon-button {
+    position: relative; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 10px;
+    border: 0; border-radius: 14px; background: transparent; box-shadow: none;
+    color: var(--icon-ink); cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .header-icon-button[aria-expanded="true"],
+  .header-icon-button:active { background: var(--theme-primary-light); }
+  @media (hover: hover) {
+    .header-icon-button:hover { background: var(--theme-surface-subtle); }
+    .header-icon-button[aria-expanded="true"]:hover { background: var(--theme-primary-light); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .header-icon-button { transition: none; }
+  }
   .dashboard-flash { min-width: 0; border-radius: 24px; border: 1px solid var(--theme-card-border); background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary-light) 48%, var(--theme-card-bg)), var(--theme-card-bg)); padding: 12px 18px; color: inherit; box-shadow: 0 5px 18px rgb(15 23 42 / .025); }
   .flash-heading { display: flex; align-items: center; gap: 8px; height: 36px; margin-bottom: 4px; }
   .flash-eyebrow { flex: 1; min-width: 0; font-size: 10px; font-weight: 750; letter-spacing: .1em; color: var(--theme-primary-text); }

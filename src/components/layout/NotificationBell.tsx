@@ -55,10 +55,10 @@ export const NotificationBell: React.FC<{ isOpen: boolean; onToggle: () => void;
   const close = () => { onClose(); buttonRef.current?.focus(); };
   const status = !config.enabled ? 'Dinonaktifkan oleh admin' : !online ? 'Offline • menunggu koneksi' : data.error ? 'Perlu diperiksa' : data.loading ? 'Menghubungkan…' : data.fromCache ? 'Data cache • menunggu server' : 'Terhubung realtime';
   const actionClass = 'min-h-[44px] px-2.5 rounded-xl text-xs font-semibold cursor-pointer hover:bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]';
-  return <div className="relative">
+  return <div className="relative z-40 shrink-0">
     <Tooltip content="Notifikasi terbaru" position="bottom">
       <button ref={buttonRef} type="button" onClick={onToggle} aria-label={`Pusat Notifikasi${unread ? `, ${unread} belum dibaca` : ''}`} aria-haspopup="dialog" aria-expanded={isOpen} aria-controls="notification-panel"
-        className={`p-2 sm:p-2.5 rounded-xl min-w-[44px] min-h-[44px] flex items-center justify-center relative cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] ${isOpen ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'}`}>
+        className="header-icon-button flex">
         <Bell className="w-4 h-4" />
         {unread > 0 && <span className="absolute top-0.5 right-0 text-[9px] font-bold min-w-4 h-4 px-0.5 rounded-full bg-[var(--theme-primary)] text-white flex items-center justify-center" aria-hidden="true">{unread > 9 ? '9+' : unread}</span>}
       </button>

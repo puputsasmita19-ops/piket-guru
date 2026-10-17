@@ -4,7 +4,6 @@ import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { EmergencyBanner } from './EmergencyBanner';
 import { ScrollToTop } from '../common/ScrollToTop';
-import { PanelLeftOpen } from '../icons';
 
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { InteractiveGuideTour } from '../guide/InteractiveGuideTour';
@@ -110,24 +109,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           isDesktopHidden={isDesktopHidden}
-          onToggleDesktopHide={handleToggleDesktopHide}
           isPinned={isPinned}
           onTogglePin={handleTogglePin}
         />
-
-        {/* Floating reopen button on desktop when sidebar is hidden */}
-        {isDesktopHidden && (
-          <button
-            type="button"
-            onClick={handleToggleDesktopHide}
-            className="hidden lg:flex fixed left-4 top-20 z-30 items-center gap-2 px-3 py-2 rounded-2xl bg-white/95 dark:bg-[var(--theme-card-bg)]/95 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[var(--theme-card-border)] shadow-md hover:shadow-lg hover:text-[var(--theme-primary)] dark:hover:text-[var(--theme-primary-text)] backdrop-blur-md transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 text-xs font-semibold print:hidden"
-            aria-label="Tampilkan panel navigasi (Ctrl+B)"
-            title="Tampilkan panel navigasi (Ctrl+B)"
-          >
-            <PanelLeftOpen className="w-4 h-4 text-[var(--theme-primary)] shrink-0" />
-            <span>Buka Menu</span>
-          </button>
-        )}
 
         <main
           data-module={activeTab}

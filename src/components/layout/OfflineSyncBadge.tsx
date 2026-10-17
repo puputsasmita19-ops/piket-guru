@@ -131,18 +131,14 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative inline-block">
+    <div ref={containerRef} className="relative z-40 shrink-0 inline-block">
       <button
         ref={triggerButtonRef}
         type="button"
         onClick={handleTogglePanel}
         aria-expanded={isPanelOpen}
         aria-haspopup="true"
-        className={`p-2.5 sm:p-2 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
-          isPanelOpen
-            ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
-            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
-        }`}
+        className="header-icon-button flex"
         title={`Status koneksi: ${shortLabel}`}
         aria-label={accessibleLabel}
       >

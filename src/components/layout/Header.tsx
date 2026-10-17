@@ -16,8 +16,6 @@ import {
   Check,
   X,
   RotateCcw,
-  PanelLeftOpen,
-  PanelLeftClose,
 } from '../icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -211,19 +209,13 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={onToggleDesktopSidebar}
-                    className={`hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer min-w-[44px] min-h-[44px] items-center justify-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
-                      isDesktopSidebarHidden
-                        ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] font-semibold'
-                        : ''
-                    }`}
+                    className="header-icon-button header-sidebar-toggle hidden lg:flex"
+                    aria-expanded={!isDesktopSidebarHidden}
+                    aria-controls="app-sidebar"
                     aria-label={isDesktopSidebarHidden ? 'Tampilkan panel menu (Ctrl+B)' : 'Sembunyikan panel menu (Ctrl+B)'}
                     title={isDesktopSidebarHidden ? 'Tampilkan panel menu' : 'Sembunyikan panel menu'}
                   >
-                    {isDesktopSidebarHidden ? (
-                      <PanelLeftOpen className="w-5 h-5 text-[var(--theme-primary)]" />
-                    ) : (
-                      <PanelLeftClose className="w-5 h-5" />
-                    )}
+                    <Menu className="w-5 h-5" />
                   </button>
                 </Tooltip>
               )}
@@ -278,7 +270,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Right Section: Icons, Profile & Logout */}
-            <div className="app-header-actions flex items-center justify-end gap-0 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 min-w-0 flex-1 lg:flex-none">
+            <div className="app-header-actions flex items-center justify-end gap-0.5 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 min-w-0 flex-1 lg:flex-none">
               {/* Shared Transparent Backdrop (Below Header z-40, Non-blurring, Header items stay 100% interactive) */}
               {activePanel !== 'none' && (
                 <div
@@ -311,16 +303,14 @@ export const Header: React.FC<HeaderProps> = ({
               <NotificationBell isOpen={activePanel === 'notifications'} onToggle={() => handleTogglePanel('notifications')} onClose={() => setActivePanel('none')} config={notificationConfig} />
 
               {/* 4. Pengaturan Tampilan & Warna Tema Button */}
-              <div className="relative">
+              <div className="relative z-40 shrink-0">
                 <Tooltip content="Pengaturan mode tampilan & warna tema" position="bottom">
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('theme')}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 shrink-0 ${
-                      activePanel === 'theme'
-                        ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
-                    }`}
+                    className="header-icon-button flex"
+                    aria-expanded={activePanel === 'theme'}
+                    aria-haspopup="dialog"
                     title="Pengaturan Tampilan & Warna Tema"
                     aria-label="Pengaturan Tampilan dan Warna Tema"
                   >
@@ -457,15 +447,13 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* 5. Universal profile icon & dropdown */}
               {currentUser && (
-                <div className="relative z-40 min-w-0 shrink">
+                <div className="relative z-40 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
-                    className={`header-user-chip w-11 h-11 flex items-center justify-center p-1 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
-                      activePanel === 'user'
-                        ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
-                        : 'hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
-                    }`}
+                    className="header-icon-button header-user-chip flex"
+                    aria-expanded={activePanel === 'user'}
+                    aria-haspopup="true"
                     aria-label="Menu Pengguna & Profil"
                     title={`Menu Pengguna & Profil: ${currentUser.fullName}`}
                   >
