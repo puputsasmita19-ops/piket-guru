@@ -12,11 +12,12 @@
 .gps-map-heading h5 { font-size: 12px; font-weight: 750; }
 .gps-map-heading p, .gps-map-caption { font-size: 10px; line-height: 1.6; color: #475569; }
 .dark .gps-map-heading p, .dark .gps-map-caption { color: #cbd5e1; }
-.gps-map-frame { position: relative; isolation: isolate; height: 260px; }
+.gps-map-frame { position: relative; isolation: isolate; height: 240px; }
 .gps-map-canvas { height: 100%; width: 100%; background: #e8e5d8; font-family: inherit; z-index: 0; }
-.gps-map-controls { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; flex-direction: column; gap: 5px; }
+.gps-map-controls { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; flex-direction: column; gap: 0; border: 1px solid var(--theme-card-border); border-radius: 13px; overflow: hidden; box-shadow: 0 2px 8px #00000013; }
 .gps-map-controls button, .gps-map-explore { color: var(--icon-ink, #252525); background: var(--theme-card-bg); border: 1px solid var(--theme-card-border); border-radius: 12px; box-shadow: 0 2px 8px #00000013; cursor: pointer; }
-.gps-map-controls button { width: 44px; height: 44px; font-size: 23px; font-weight: 600; }
+.gps-map-controls button { width: 44px; height: 44px; font-size: 23px; font-weight: 600; border: 0; border-radius: 0; box-shadow: none; }
+.gps-map-controls button + button { border-top: 1px solid var(--theme-card-border); }
 .gps-map-controls button:disabled { opacity: .5; }
 .gps-map-explore { position: absolute; left: 10px; top: 10px; z-index: 2; min-height: 44px; padding: 8px 12px; font-size: 11px; font-weight: 650; }
 .gps-map-controls button:focus-visible, .gps-map-explore:focus-visible, .gps-map-text-button:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
@@ -37,6 +38,21 @@
 .gps-map-canvas .leaflet-control-attribution a { color: #252525; text-decoration: underline; }
 .gps-map-canvas .leaflet-tooltip { background: var(--theme-card-bg); border-color: var(--theme-card-border); color: var(--icon-ink, #252525); font-family: inherit; font-size: 11px; }
 .dark .gps-map-canvas { background: #272824; }
+.gps-map-minimal .leaflet-tile-pane { filter: saturate(.18) contrast(.95) brightness(1.03); }
 .dark .gps-map-canvas .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.3) brightness(.8); }
-@media (min-width: 640px) { .gps-map-frame { height: 300px; } }
+@media (min-width: 640px) { .gps-map-frame { height: 280px; } }
 @media (max-width: 359px) { .gps-map-frame { height: 230px; } }
+/* Higher specificity than Leaflet's .leaflet-marker-icon {display:block}.
+   Border-box and an inner grid keep each letter centered inside its badge. */
+.gps-map-canvas .gps-school-marker, .gps-map-canvas .gps-user-marker { display: grid; place-items: center; box-sizing: border-box; padding: 0; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 1; letter-spacing: 0; text-align: center; }
+.gps-map-canvas .gps-school-marker > span, .gps-map-canvas .gps-user-marker > span { display: grid; place-items: center; width: 100%; height: 100%; line-height: 1; margin: 0; padding: 0; }
+.gps-map-canvas .gps-google-marker { position: absolute; width: 30px; height: 30px; transform: translate(-50%, -50%); z-index: 2; }
+.gps-map-canvas .gps-google-marker.gps-user-marker { z-index: 3; }
+.gps-map-provider-note { margin: 0 0 8px; font-size: 10px; line-height: 1.6; color: #475569; }
+.dark .gps-map-provider-note { color: #cbd5e1; }
+.gps-map-connection { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 4px 14px; font-size: 11px; }
+.gps-map-connection strong { margin-left: 6px; }
+.gps-map-connection small { display: block; font-size: 10px; color: #475569; }
+.dark .gps-map-connection small { color: #cbd5e1; }
+.gps-map-directions { min-height: 44px; display: inline-flex; align-items: center; color: var(--theme-primary-text); text-decoration: underline; text-underline-offset: 3px; font-size: 11px; font-weight: 650; }
+.gps-map-directions:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }

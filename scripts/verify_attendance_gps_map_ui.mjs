@@ -41,6 +41,7 @@ try {
     await page.goto(url + '/' + query + '#attendance');
     await page.evaluate(mode => { localStorage.setItem('piket_guru_theme', mode); localStorage.setItem('piket_guru_pastel_theme', 'default'); }, mode);
     await page.reload();
+    if (!query.includes('settingsdelay')) await page.locator('[data-gps-search="active"]').waitFor();
   };
   for (const mode of ['light', 'dark']) for (const width of [320, 390, 1440]) {
     await open(mode, width);
@@ -50,6 +51,7 @@ try {
     await page.locator('.gps-user-marker').waitFor();
     await page.locator('[data-gps-search="idle"]').waitFor();
     check(`${mode}/${width}: real school/user markers and visible attribution`, await page.locator('.gps-school-marker').count() === 1 && await page.getByRole('link', { name: 'OpenStreetMap', exact: true }).isVisible());
+    check(`${mode}/${width}: connection line and explicit straight distance are visible`, await page.locator('.leaflet-overlay-pane path[stroke="#a56e00"]').count()===1 && await page.getByText('Garis jarak lurus',{exact:true}).count()===1);
     check(`${mode}/${width}: map fits screen and GPS search stops`, await page.evaluate(() => document.documentElement.scrollWidth === innerWidth) && await page.locator('.gps-map-canvas').evaluate(e => e.clientWidth > 100 && e.clientHeight >= 230) && await page.locator('.gps-search-indicator').count() === 0);
     if (process.env.PIKET_QA_SCREENSHOTS) { fs.mkdirSync(process.env.PIKET_QA_SCREENSHOTS, { recursive: true }); await page.locator('[data-tour="gps-status"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.PIKET_QA_SCREENSHOTS + `/gps-${mode}-${width}.png` }); }
   }
@@ -99,6 +101,7 @@ try {
   await open(); await page.evaluate(() => window.gpsMock.emit());
   await page.getByText(/Latar peta belum tersedia/).waitFor();
   check('tile failure keeps real GPS marker and usable refresh', await page.locator('.gps-user-marker').count() === 1 && await page.getByRole('button', { name: 'Perbarui GPS' }).isEnabled());
+  check('OpenStreetMap is the sole provider even if a Google key was previously configured', await page.locator('[data-map-provider="openstreetmap"]').count()===1 && await page.locator('script[data-piket-maps="google"]').count()===0);
   failTiles = false; await page.getByRole('button', { name: 'Coba peta lagi' }).click();
   await page.getByText(/Latar peta belum tersedia/).waitFor({ state: 'detached' });
   check('map tile retry recovers without a new GPS request', await page.evaluate(() => window.gpsMock.calls === 1));
@@ -107,11 +110,13 @@ try {
   check('reduced motion uses a static indicator', await page.locator('.gps-search-indicator').evaluate(e => getComputedStyle(e, '::after').animationName === 'none'));
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   await mobile.addInitScript(initGPS); await mobile.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort());
-  await mobile.goto(url + '/#attendance'); await mobile.getByRole('button', { name: 'Geser peta', exact: true }).waitFor();
+  await mobile.goto(url + '/#attendance'); await mobile.getByRole('button', { name: 'Geser peta', exact: true }).waitFor();await mobile.evaluate(()=>window.gpsMock.emit());await mobile.locator('.gps-user-marker').waitFor();
   check('touch map starts locked so the page remains easy to scroll', await mobile.getByRole('button', { name: 'Geser peta', exact: true }).getAttribute('aria-pressed') === 'false');
   await mobile.getByRole('button', { name: 'Geser peta', exact: true }).click();
   check('touch user can explicitly explore and finish dragging', await mobile.getByRole('button', { name: 'Selesai geser peta' }).getAttribute('aria-pressed') === 'true');
   await mobile.getByRole('button', { name: 'Selesai geser peta' }).click();
+  check('school and user letters remain centered inside their badges', await mobile.locator('.gps-school-marker,.gps-user-marker').evaluateAll(es=>es.every(e=>{const a=e.getBoundingClientRect(),b=e.firstElementChild.getBoundingClientRect();return Math.abs(a.left+a.width/2-b.left-b.width/2)<.6&&Math.abs(a.top+a.height/2-b.top-b.height/2)<.6&&getComputedStyle(e).display==='grid'})));
+  check('paid-map setup messages do not appear', await page.getByText('Google Maps belum tersedia. Peta alternatif ditampilkan.').count()===0);
   check('map requests only tile images from external hosts', external.every(h => h === 'tile.openstreetmap.org'));
   check('viewing/changing map does not write operational records', await page.evaluate(() => window.fixture.writes.length === 0));
   check('attendance map and GPS flow have no runtime errors', errors.length === 0);
