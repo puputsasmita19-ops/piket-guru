@@ -1,0 +1,31 @@
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { SchoolSettingsService } from '../../services/firebase/schoolSettingsService';
+import type { SchoolSettings } from '../../types';
+import { normalizeVisitorConfig } from '../../types/visitorConfig.types';
+import { normalizeReportPrint } from '../../utils/operationalReport';
+import { Card, CardContent, CardHeader } from '../../components/common/Card';
+import { Button } from '../../components/common/Button';
+
+export function OperationalReportSettingsCard({ settings, onSaved }: { settings: SchoolSettings; onSaved: (settings: SchoolSettings) => void }) {
+  const { currentUser } = useAuth();
+  const [print, setPrint] = useState(() => normalizeReportPrint(settings.printConfig));
+  const [visitor, setVisitor] = useState(() => normalizeVisitorConfig(settings.visitorConfig));
+  const [destinations, setDestinations] = useState(visitor.customDestinations.join('\n'));
+  const [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
+  useEffect(() => { if (dirty) return; setPrint(normalizeReportPrint(settings.printConfig)); const v = normalizeVisitorConfig(settings.visitorConfig); setVisitor(v); setDestinations(v.customDestinations.join('\n')); }, [settings.printConfig, settings.visitorConfig, dirty]);
+  if (currentUser?.role !== 'ADMIN') return null;
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); if (busy) return; setBusy(true); setMessage(''); setError('');
+    try { const result = await SchoolSettingsService.saveOperationalReportSettings(print, { ...visitor, customDestinations: destinations.split('\n') }, currentUser.id); onSaved(result.settings); setDirty(false); setMessage(result.confirmed ? 'Pengaturan cetak dan buku tamu tersimpan.' : 'Perubahan terkirim. Muat ulang untuk memastikan hasil penyimpanan.'); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Pengaturan belum tersimpan.'); } finally { setBusy(false); }
+  };
+  return <Card><CardHeader title="Cetak laporan & tujuan buku tamu" subtitle="Berlaku untuk ekspor Word/PDF pada menu operasional. Identitas sekolah dan penanda tangan mengikuti Profil Sekolah."/><CardContent><form onSubmit={save} className="space-y-5" onChange={() => { setDirty(true); setMessage(''); }}>
+    <div className="history-controls-row"><label className="history-field"><span>Kertas</span><select aria-label="Kertas laporan" value={print.paperSize} onChange={e => setPrint(p => ({ ...p, paperSize: e.target.value as typeof p.paperSize }))}><option>A4</option><option>F4</option></select></label><label className="history-field"><span>Orientasi</span><select aria-label="Orientasi laporan" value={print.orientation} onChange={e => setPrint(p => ({ ...p, orientation: e.target.value as typeof p.orientation }))}><option value="portrait">Tegak</option><option value="landscape">Mendatar</option></select></label>
+    {print.paperSize === 'F4' && <>{(['f4WidthMm', 'f4HeightMm'] as const).map((key, i) => <label key={key} className="history-field"><span>{i ? 'Tinggi F4 (mm)' : 'Lebar F4 (mm)'}</span><input type="number" required min={i ? 280 : 180} max={i ? 360 : 240} value={print[key]} onChange={e => setPrint(p => ({ ...p, [key]: Number(e.target.value) }))}/></label>)}</>}
+    {(['marginTopMm', 'marginRightMm', 'marginBottomMm', 'marginLeftMm'] as const).map((key, i) => <label key={key} className="history-field"><span>Margin {['atas', 'kanan', 'bawah', 'kiri'][i]} (mm)</span><input type="number" required min="5" max="40" value={print[key]} onChange={e => setPrint(p => ({ ...p, [key]: Number(e.target.value) }))}/></label>)}</div>
+    <div className="flex flex-wrap gap-4 text-sm">{(['showLetterhead', 'showLogo', 'showSignatures'] as const).map((key, i) => <label key={key} className="inline-flex items-center gap-2 min-h-11"><input type="checkbox" checked={print[key]} onChange={e => setPrint(p => ({ ...p, [key]: e.target.checked }))}/>{['Tampilkan kop sekolah', 'Tampilkan logo pada kop', 'Tampilkan tanda tangan'][i]}</label>)}</div>
+    <div className="space-y-2 border-t border-[var(--theme-card-border)] pt-4"><h3 className="font-semibold text-sm">Buku Tamu Digital</h3><label className="flex items-center gap-2 min-h-11 text-sm"><input type="checkbox" checked={visitor.allowCustomDestination} onChange={e => setVisitor(v => ({ ...v, allowCustomDestination: e.target.checked }))}/>Izinkan tujuan “Lain-lain” dengan isian manual</label><label className="history-field"><span>Tambahan tujuan / unit sekolah</span><textarea aria-label="Tambahan tujuan buku tamu" rows={4} maxLength={3000} value={destinations} onChange={e => setDestinations(e.target.value)} placeholder={'Contoh:\nKoperasi Sekolah\nPanitia Kegiatan'}/></label><p className="text-xs text-slate-500 dark:text-slate-400">Satu tujuan per baris, maksimal 30 tujuan (100 karakter per tujuan). Daftar guru dan staf tetap berasal dari master pengguna. Data tujuan lama tetap tersimpan.</p></div>
+    {error && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{error}</p>}{message && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-300">{message}</p>}<Button type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan pengaturan cetak & buku tamu'}</Button>
+  </form></CardContent></Card>;
+}

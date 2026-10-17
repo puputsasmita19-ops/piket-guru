@@ -47,7 +47,7 @@ import {
   Settings,
   Check,
 } from '../../components/icons';
-import { formatIndonesianDate } from '../../utils/dateUtils';
+import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
 
 interface TeacherAssignmentEntry {
   assignmentId: string;
@@ -110,7 +110,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = getTodayISODate();
 
   // =========================================================================
   // STATE MASTER KELAS DARI DATA SISWA AKTIF

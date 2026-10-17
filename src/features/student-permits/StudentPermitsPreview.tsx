@@ -1,3 +1,8 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
+import { HistoryControls, HistoryPagination, HistoryTable, useHistoryView } from '../../components/common/HistoryControls';
+import { OperationalExport } from '../../components/common/OperationalExport';
+import type { OperationalReport } from '../../utils/operationalReport';
 import { Phone } from '../../components/icons';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -44,7 +49,6 @@ import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { StudentPermitService } from '../../services/firebase/studentPermitService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
-import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
@@ -59,12 +63,13 @@ export const StudentPermitsPreview: React.FC = () => {
 
   const [permits, setPermits] = useState<StudentPermitRecord[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
-  const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
+  const settings = useOperationalSchoolSettings();
+  const history = useHistoryPeriod(settings);
+  const [viewMode, setViewMode] = useHistoryView();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [typeFilter, setTypeFilter] = useState<string>('SEMUA');
-  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Multi-Selection State for bulk actions
   const [selectedPermitIds, setSelectedPermitIds] = useState<Set<string>>(new Set());
@@ -100,14 +105,11 @@ export const StudentPermitsPreview: React.FC = () => {
     title: '',
   });
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = history.today;
 
   useEffect(() => {
     StudentPermitService.bootstrapIfEmpty();
 
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
 
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
 
@@ -116,43 +118,15 @@ export const StudentPermitsPreview: React.FC = () => {
     };
   }, []);
 
-  // Bounded subscription based on periodFilter
+  // Server query always keeps the selected date bounds; invalid ranges never query.
+  const [historyError, setHistoryError] = useState('');
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (periodFilter === 'today') {
-      constraints = [where('tanggal', '==', todayISO)];
-    } else if (periodFilter === 'this_month') {
-      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-    } else if (periodFilter === 'last_month') {
-      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-    } else {
-      constraints = [limit(60)];
-    }
-
-    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
-      'studentPermits',
-      (data) => {
-        setPermits(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      },
-      undefined,
-      constraints
-    );
-
-    return () => unsubPermits();
-  }, [periodFilter, todayISO]);
+    setPermits([]); setHistoryError('');
+    if (history.range.error) return;
+    return FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', data => {
+      setPermits([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+  }, [history.constraints, history.range.error]);
 
   // Filtered Permits
   const filteredPermits = useMemo(() => {
@@ -171,9 +145,9 @@ export const StudentPermitsPreview: React.FC = () => {
         p.petugasPiketName.toLowerCase().includes(q) ||
         typeLabel.includes(q);
 
-      return matchStatus && matchType && matchSearch;
+      return !history.range.error && p.tanggal >= history.range.start && p.tanggal <= history.range.end && matchStatus && matchType && matchSearch;
     });
-  }, [permits, statusFilter, typeFilter, searchQuery]);
+  }, [permits, statusFilter, typeFilter, searchQuery, history.key]);
 
   // Selected Permits Object List
   const selectedPermits = useMemo(() => {
@@ -326,50 +300,14 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
     });
   };
 
-  // Export CSV
-  const handleExportCsv = () => {
-    const headers = [
-      'No Surat',
-      'Grup ID',
-      'Tanggal',
-      'Jam Keluar',
-      'Jam Kembali',
-      'Nama Siswa',
-      'NISN',
-      'Kelas',
-      'Jenis Izin',
-      'Alasan',
-      'Penjemput',
-      'No HP Ortu',
-      'Guru Mapel',
-      'Petugas Piket',
-      'Status',
-    ];
-    const rows = filteredPermits.map((p) => [
-      p.id,
-      p.groupId || '-',
-      p.tanggal,
-      p.jamKeluar,
-      p.jamKembali || '-',
-      p.namaSiswa,
-      p.nisn,
-      p.kelas,
-      getStudentPermitTypeDisplay(p),
-      p.alasan,
-      `${p.namaPenjemput || '-'} (${p.penjemput})`,
-      p.noHpOrangTua || '-',
-      p.guruPengajarName || '-',
-      p.petugasPiketName,
-      p.status,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Izin_Keluar_Siswa_${Date.now()}`, headers, rows);
-  };
+  const buildReport = (): OperationalReport => ({ title: 'Rekap Izin Keluar Siswa', period: history.range.label + (searchQuery ? ' · Pencarian: ' + searchQuery : ''), headers: ['Tanggal', 'Siswa / Kelas', 'Keluar / Kembali', 'Izin / Status', 'Alasan / Penjemput', 'Guru Pengajar', 'Petugas'], rows: filteredPermits.map(p => [p.tanggal, p.namaSiswa + '\n' + p.kelas + '\n' + (p.nisn || '-'), p.jamKeluar + ' / ' + (p.jamKembali || 'Belum kembali'), getStudentPermitTypeDisplay(p) + '\n' + p.status.replace(/_/g, ' '), p.alasan + '\nPenjemput: ' + (p.namaPenjemput || p.penjemput?.replace(/_/g, ' ') || '-'), p.guruPengajarName || '-', p.petugasPiketName]) });
 
   // Metrics
   const todayPermits = permits.filter((p) => p.tanggal === todayISO);
   const activeOutside = permits.filter((p) => p.status === 'SEDANG_KELUAR');
   const sickLeaves = todayPermits.filter((p) => p.jenisIzin === 'SAKIT_PULANG');
+
+  const historyPage = useHistoryPagination(filteredPermits, [history.key, searchQuery, statusFilter, typeFilter].join('|'));
 
   return (
     <div className="space-y-6">
@@ -384,14 +322,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
         </div>
 
         <div className="page-actions flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<Download className="w-4 h-4" />}
-            onClick={handleExportCsv}
-          >
-            Ekspor Excel
-          </Button>
+          <OperationalExport report={buildReport()} settings={settings} disabled={Boolean(history.range.error)} />
           {canEdit && (
             <Button
               variant="primary"
@@ -467,16 +398,6 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
             </div>
 
             <div className="app-filter-group flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
-                value={periodFilter}
-                onChange={(e) => setPeriodFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
-              >
-                <option value="this_month">Bulan Ini</option>
-                <option value="today">Hari Ini</option>
-                <option value="last_month">Bulan Lalu</option>
-                <option value="recent">60 Terbaru</option>
-              </select></label>
 
               <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
@@ -559,10 +480,13 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
         </div>
       )}
 
+      <HistoryControls history={history} view={viewMode} onViewChange={setViewMode} />
+      {historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}
+
       {/* PERMITS LIST: RESPONSIVE MOBILE CARDS & DESKTOP TABLE */}
       {/* Mobile Card List (Hidden on tablet/desktop) */}
-      <div className="block md:hidden space-y-3">
-        <div className="flex items-center justify-between px-1">
+      <div className={viewMode === 'grid' ? 'history-card-grid' : 'hidden'}>
+        <div className="flex items-center justify-between px-1 col-span-full">
           <button
             type="button"
             onClick={handleToggleSelectAll}
@@ -578,7 +502,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
         </div>
 
         {filteredPermits.length > 0 ? (
-          filteredPermits.map((item) => {
+          historyPage.records.map((item) => {
             const isSelected = selectedPermitIds.has(item.id);
             return (
               <Card
@@ -749,7 +673,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
       </div>
 
       {/* Desktop Table View (Hidden on mobile) */}
-      <Card className="hidden md:block">
+      <Card className={viewMode === 'list' ? '' : 'hidden'}>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
@@ -778,7 +702,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredPermits.length > 0 ? (
-                filteredPermits.map((item) => {
+                historyPage.records.map((item) => {
                   const isSelected = selectedPermitIds.has(item.id);
                   return (
                     <tr
@@ -951,6 +875,8 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
           </table>
         </CardContent>
       </Card>
+
+      <HistoryPagination {...historyPage} />
 
       {/* PERMIT FORM MODAL (MULTI-SISWA) */}
       <StudentPermitFormModal

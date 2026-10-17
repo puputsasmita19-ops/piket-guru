@@ -1,3 +1,8 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
+import { HistoryControls, HistoryPagination, HistoryTable, useHistoryView } from '../../components/common/HistoryControls';
+import { OperationalExport } from '../../components/common/OperationalExport';
+import type { OperationalReport } from '../../utils/operationalReport';
 import { Phone } from '../../components/icons';
 import { MapPin } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
@@ -40,7 +45,6 @@ import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { VisitorService } from '../../services/firebase/visitorService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
-import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
@@ -57,12 +61,13 @@ export const VisitorPreview: React.FC = () => {
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staffList, setStaffList] = useState<StaffRecord[]>([]);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
-  const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
+  const settings = useOperationalSchoolSettings();
+  const history = useHistoryPeriod(settings);
+  const [viewMode, setViewMode] = useHistoryView();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [categoryFilter, setCategoryFilter] = useState<string>('SEMUA');
-  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -84,14 +89,11 @@ export const VisitorPreview: React.FC = () => {
     title: '',
   });
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = history.today;
 
   useEffect(() => {
     VisitorService.bootstrapIfEmpty();
 
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
 
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaffList);
@@ -104,43 +106,15 @@ export const VisitorPreview: React.FC = () => {
     };
   }, []);
 
-  // Bounded subscription based on periodFilter
+  // Server query always keeps the selected date bounds; invalid ranges never query.
+  const [historyError, setHistoryError] = useState('');
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (periodFilter === 'today') {
-      constraints = [where('tanggal', '==', todayISO)];
-    } else if (periodFilter === 'this_month') {
-      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-    } else if (periodFilter === 'last_month') {
-      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-    } else {
-      constraints = [limit(60)];
-    }
-
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
-      'visitors',
-      (data) => {
-        setVisitors(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      },
-      undefined,
-      constraints
-    );
-
-    return () => unsubVis();
-  }, [periodFilter, todayISO]);
+    setVisitors([]); setHistoryError('');
+    if (history.range.error) return;
+    return FirestoreService.subscribeToCollection<VisitorRecord>('visitors', data => {
+      setVisitors([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+  }, [history.constraints, history.range.error]);
 
   // Create or Update Visitor
   const handleSaveVisitor = async (data: any, isEdit?: boolean) => {
@@ -189,45 +163,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
     });
   };
 
-  // Export to CSV
-  const handleExportCsv = () => {
-    const headers = [
-      'No',
-      'ID',
-      'Tanggal',
-      'Jam Masuk',
-      'Jam Keluar',
-      'Nama Tamu',
-      'Instansi',
-      'Kategori',
-      'No HP',
-      'No Identitas',
-      'Badge',
-      'Tujuan Bertemu',
-      'Keperluan',
-      'Status',
-      'Petugas Piket',
-    ];
-    const rows = filteredVisitors.map((v, idx) => [
-      idx + 1,
-      v.id,
-      v.tanggal,
-      v.jamMasuk,
-      v.jamKeluar || '-',
-      v.namaTamu,
-      v.instansiAsal,
-      getVisitorCategoryDisplay(v),
-      v.noHp || '-',
-      v.nomorIdentitas ? `'${v.nomorIdentitas}` : '-',
-      v.nomorBadge,
-      v.tujuanBertemu,
-      v.keperluan,
-      v.status,
-      v.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Buku_Tamu_Sekolah_${Date.now()}`, headers, rows);
-  };
+  // Export all records matching the active filters
+  const buildReport = (): OperationalReport => ({ title: 'Rekap Buku Tamu Digital', period: history.range.label + (searchQuery ? ' Â· Pencarian: ' + searchQuery : ''), headers: ['Tanggal / Waktu', 'Tamu / Instansi', 'Kategori / Badge', 'Tujuan', 'Keperluan', 'Status / Petugas'], rows: filteredVisitors.map(v => [v.tanggal + '\nMasuk: ' + v.jamMasuk + '\nKeluar: ' + (v.jamKeluar || '-'), v.namaTamu + '\n' + v.instansiAsal, getVisitorCategoryDisplay(v) + '\n' + v.nomorBadge, v.tujuanBertemu, v.keperluan, v.status.replace(/_/g, ' ') + '\n' + v.petugasPiketName]) });
 
   // Metrics
   const todayVisitors = visitors.filter((v) => v.tanggal === todayISO);
@@ -250,8 +187,10 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
       (v.noHp && v.noHp.includes(q)) ||
       (v.petugasPiketName && v.petugasPiketName.toLowerCase().includes(q));
 
-    return matchStatus && matchCat && matchSearch;
+    return !history.range.error && v.tanggal >= history.range.start && v.tanggal <= history.range.end && matchStatus && matchCat && matchSearch;
   });
+
+  const historyPage = useHistoryPagination(filteredVisitors, [history.key, searchQuery, statusFilter, categoryFilter].join('|'));
 
   return (
     <div className="space-y-6">
@@ -266,14 +205,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
         </div>
 
         <div className="page-actions flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<Download className="w-4 h-4" />}
-            onClick={handleExportCsv}
-          >
-            Ekspor Excel
-          </Button>
+          <OperationalExport report={buildReport()} settings={settings} disabled={Boolean(history.range.error)} />
           {canEdit && (
             <Button
               variant="primary"
@@ -324,7 +256,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
 
         <Card>
           <CardContent className="p-4">
-            <span className="text-xs text-slate-500 font-medium">Total Seluruh Arsip</span>
+            <span className="text-xs text-slate-500 font-medium">Total Periode Dipilih</span>
             <div className="text-xl font-bold text-purple-600 mt-1">
               {visitors.length} Tamu
             </div>
@@ -349,16 +281,6 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
             </div>
 
             <div className="app-filter-group flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
-                value={periodFilter}
-                onChange={(e) => setPeriodFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
-              >
-                <option value="this_month">Bulan Ini</option>
-                <option value="today">Hari Ini</option>
-                <option value="last_month">Bulan Lalu</option>
-                <option value="recent">60 Terbaru</option>
-              </select></label>
 
               <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
@@ -388,11 +310,14 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
         </CardContent>
       </Card>
 
+      <HistoryControls history={history} view={viewMode} onViewChange={setViewMode} />
+      {historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}
+
       {/* VISITORS LIST: RESPONSIVE MOBILE CARDS & DESKTOP TABLE */}
       {/* Mobile Card List (Hidden on tablet/desktop) */}
-      <div className="block md:hidden space-y-3">
+      <div className={viewMode === 'grid' ? 'history-card-grid' : 'hidden'}>
         {filteredVisitors.length > 0 ? (
-          filteredVisitors.map((item) => (
+          historyPage.records.map((item) => (
             <Card key={item.id} className="overflow-hidden border border-slate-200 dark:border-slate-800">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -522,7 +447,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
       </div>
 
       {/* Desktop Table View (Hidden on mobile) */}
-      <Card className="hidden md:block">
+      <Card className={viewMode === 'list' ? '' : 'hidden'}>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
@@ -538,7 +463,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredVisitors.length > 0 ? (
-                filteredVisitors.map((item) => (
+                historyPage.records.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -679,6 +604,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
           </table>
         </CardContent>
       </Card>
+
+      <HistoryPagination {...historyPage} />
 
       {/* VISITOR FORM MODAL */}
       <VisitorFormModal

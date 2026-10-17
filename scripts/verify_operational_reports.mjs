@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { transform } from 'esbuild';
+const built=await transform(fs.readFileSync('src/utils/operationalReport.ts','utf8'),{loader:'ts',format:'esm'});
+const {operationalReportDocx:docx,operationalReportHtml:html,normalizeReportPrint:normalize,reportPaper}=await import('data:text/javascript;base64,'+Buffer.from(built.code).toString('base64'));
+const settings={schoolName:'Sekolah Uji',npsn:'12345678',address:'Jalan Sekolah 1',reportCity:'Jember',principalName:'Kepala Sekolah Uji',principalIdType:'NIP',principalIdNumber:'000123',coordinatorName:'Koordinator Uji',printConfig:{paperSize:'F4',f4WidthMm:215,f4HeightMm:330,orientation:'landscape',marginTopMm:12,marginRightMm:13,marginBottomMm:14,marginLeftMm:15,showLetterhead:true,showLogo:true,showSignatures:true}};
+const report={title:'Rekap Laporan Kejadian',period:'2026-10-01 s.d. 2026-10-31',headers:['Tanggal','Pihak Terlibat','Kronologi','Tindak Lanjut','Petugas'],rows:Array.from({length:18},(_,i)=>['2026-10-17',`Siswa Uji ${i+1}\nX TKJ 1`,'Uraian kejadian uji yang dicatat secara jelas. '.repeat(i%3+1),'Pendampingan dan koordinasi dengan wali kelas.','Petugas Uji'])};
+let count=0;const check=(name,ok)=>{assert.ok(ok,name);count++;console.log('PASS',name)};
+const text=html(report,settings);check('PDF uses the admin F4 landscape dimensions and all margins',text.includes('size:330mm 215mm')&&text.includes('margin:12mm 13mm 14mm 15mm'));
+check('PDF includes all records, school identity and both signers',text.includes('Total: 18 catatan')&&text.includes('Sekolah Uji')&&text.includes('Kepala Sekolah Uji')&&text.includes('Koordinator Uji'));
+const noHeader=html(report,{...settings,printConfig:{...settings.printConfig,showLetterhead:false,showSignatures:false}});check('admin switches really hide the letterhead and signers',!noHeader.includes('<header>')&&!noHeader.includes('<footer>')&&!noHeader.includes('Kepala Sekolah Uji'));
+const escaped=html({...report,title:'<script>alert(1)</script>',rows:[['<img src=x onerror=alert(1)>','A&B',null,'"quoted"','test']]},settings);check('data is escaped as text rather than executable markup',!escaped.includes('<script>')&&!escaped.includes('<img src=x')&&escaped.includes('&lt;script&gt;')&&escaped.includes('A&amp;B'));
+check('invalid layout settings are clamped safely',normalize({marginLeftMm:NaN,marginTopMm:999}).marginLeftMm===15&&normalize({marginTopMm:999}).marginTopMm===40);
+check('missing optional school details never print undefined or fabricated identities',!new TextDecoder().decode(docx(report,{schoolName:'Sekolah Tanpa Detail'})).includes('undefined'));
+check('A4 portrait has the expected dimensions',reportPaper(normalize()).width===210&&reportPaper(normalize()).height===297);
+const bytes=docx(report,settings);check('Word export uses a real OOXML ZIP container',bytes[0]===0x50&&bytes[1]===0x4b&&new TextDecoder().decode(bytes).includes('word/document.xml')&&!new TextDecoder().decode(bytes).startsWith('<html'));
+if(process.env.PIKET_HISTORY_QA){fs.mkdirSync(process.env.PIKET_HISTORY_QA,{recursive:true});fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4.docx',bytes);fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4.html',text);fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/escaped.docx',docx({...report,rows:[['<script>literal</script>','A&B','X','Y','Z']]},settings));}
+console.log(`${count} Word/PDF report checks passed.`);

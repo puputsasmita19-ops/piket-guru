@@ -1,4 +1,5 @@
 import { DialogForm } from '../../components/common/DialogForm';
+import { StudentMultiSelect } from '../../components/common/StudentMultiSelect';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -13,7 +14,7 @@ import {
 import { IncidentCategoryRecord } from '../../types/master.types';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS } from '../../config/permissions';
-import { formatTime } from '../../utils/dateUtils';
+import { formatTime, getTodayISODate } from '../../utils/dateUtils';
 import {
   AlertTriangle,
   Camera,
@@ -60,13 +61,14 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
     return DEFAULT_SCHOOL_SETTINGS;
   });
 
-  const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState<string>(getTodayISODate());
   const [waktu, setWaktu] = useState<string>(formatTime(new Date()));
   const [kategori, setKategori] = useState<string>('SISWA');
   const [kategoriLainnya, setKategoriLainnya] = useState<string>('');
   const [tingkatKeparahan, setTingkatKeparahan] = useState<IncidentSeverity>('SEDANG');
   const [lokasi, setLokasi] = useState<string>('');
   const [pihakTerlibat, setPihakTerlibat] = useState<string>('');
+  const [involvedStudents, setInvolvedStudents] = useState<NonNullable<IncidentRecord['involvedStudents']>>([]);
   const [uraian, setUraian] = useState<string>('');
   const [tindakanAwal, setTindakanAwal] = useState<string>('');
   const [tindakLanjut, setTindakLanjut] = useState<string>('');
@@ -129,20 +131,22 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       setKategoriLainnya(editingIncident.kategoriLainnya || '');
       setTingkatKeparahan(editingIncident.tingkatKeparahan);
       setLokasi(editingIncident.lokasi);
-      setPihakTerlibat(editingIncident.pihakTerlibat);
+      setPihakTerlibat(editingIncident.pihakLainnya ?? (editingIncident.involvedStudents?.length ? '' : editingIncident.pihakTerlibat));
+      setInvolvedStudents(editingIncident.involvedStudents || []);
       setUraian(editingIncident.uraian);
       setTindakanAwal(editingIncident.tindakanAwal);
       setTindakLanjut(editingIncident.tindakLanjut || '');
       setStatus(editingIncident.status);
       setPhotos(editingIncident.photos || []);
     } else {
-      setTanggal(new Date().toISOString().split('T')[0]);
+      setTanggal(getTodayISODate());
       setWaktu(formatTime(new Date()));
       setKategori(effectiveCategories[0]?.code || 'SISWA');
       setKategoriLainnya('');
       setTingkatKeparahan('SEDANG');
       setLokasi('');
       setPihakTerlibat('');
+      setInvolvedStudents([]);
       setUraian('');
       setTindakanAwal('');
       setTindakLanjut('');
@@ -169,7 +173,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   // Debounced auto-save draft while typing
   useEffect(() => {
     if (!isOpen || !hasWritePermission || !currentUser?.id || editingIncident) return;
-    if (!lokasi.trim() && !pihakTerlibat.trim() && !uraian.trim() && !tindakanAwal.trim() && photos.length === 0) {
+    if (!lokasi.trim() && !pihakTerlibat.trim() && !involvedStudents.length && !uraian.trim() && !tindakanAwal.trim() && photos.length === 0) {
       return;
     }
 
@@ -199,6 +203,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         tingkatKeparahan,
         lokasi,
         pihakTerlibat,
+        involvedStudents,
         uraian,
         tindakanAwal,
         tindakLanjut,
@@ -221,6 +226,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
     tingkatKeparahan,
     lokasi,
     pihakTerlibat,
+    involvedStudents,
     uraian,
     tindakanAwal,
     tindakLanjut,
@@ -240,6 +246,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
     if (d.tingkatKeparahan) setTingkatKeparahan(d.tingkatKeparahan);
     if (d.lokasi !== undefined) setLokasi(d.lokasi);
     if (d.pihakTerlibat !== undefined) setPihakTerlibat(d.pihakTerlibat);
+    if (Array.isArray(d.involvedStudents)) setInvolvedStudents(d.involvedStudents);
     if (d.uraian !== undefined) setUraian(d.uraian);
     if (d.tindakanAwal !== undefined) setTindakanAwal(d.tindakanAwal);
     if (d.tindakLanjut !== undefined) setTindakLanjut(d.tindakLanjut);
@@ -314,7 +321,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       errors.lokasi = 'Lokasi kejadian di sekolah wajib diisi';
       missing.push('Lokasi Kejadian');
     }
-    if (!pihakTerlibat.trim()) {
+    if (!pihakTerlibat.trim() && !involvedStudents.length) {
       errors.pihakTerlibat = 'Pihak/siswa yang terlibat wajib diisi';
       missing.push('Pihak Terlibat');
     }
@@ -367,7 +374,9 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       ...(isLainnya && kategoriLainnya.trim() ? { kategoriLainnya: kategoriLainnya.trim() } : {}),
       tingkatKeparahan,
       lokasi: lokasi.trim(),
-      pihakTerlibat: pihakTerlibat.trim(),
+      pihakTerlibat: [...involvedStudents.map(s => `${s.nama} (${s.kelas})`), pihakTerlibat.trim()].filter(Boolean).join('; '),
+      involvedStudents,
+      pihakLainnya: pihakTerlibat.trim(),
       uraian: uraian.trim(),
       tindakanAwal: tindakanAwal.trim(),
       ...(tindakLanjut.trim() ? { tindakLanjut: tindakLanjut.trim() } : {}),
@@ -685,14 +694,17 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
                 <User className="w-3.5 h-3.5 text-blue-500" />
                 <span>Pihak / Siswa yang Terlibat *</span>
               </label>
+              <StudentMultiSelect value={involvedStudents} onChange={value => { setInvolvedStudents(value); setFieldErrors(prev => ({ ...prev, pihakTerlibat: '' })); }}/>
+              <label className="block text-[11px] text-slate-500 dark:text-slate-400">Pihak lain / keterangan tambahan (opsional jika siswa sudah dipilih)</label>
               <input
                 type="text"
+                aria-label="Pihak lain atau keterangan tambahan"
                 value={pihakTerlibat}
                 onChange={(e) => {
                   setPihakTerlibat(e.target.value);
                   if (fieldErrors.pihakTerlibat) setFieldErrors((prev) => ({ ...prev, pihakTerlibat: '' }));
                 }}
-                placeholder="Contoh: Riko & Dimas (Kelas XI MIPA 1) / Orang Tua Siswa"
+                placeholder="Contoh: Orang tua siswa / petugas keamanan"
                 className={`w-full p-2.5 rounded-xl border ${
                   fieldErrors.pihakTerlibat
                     ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'

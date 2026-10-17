@@ -1,3 +1,6 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
+import { HistoryControls, HistoryPagination, HistoryTable, useHistoryView } from '../../components/common/HistoryControls';
 import React, { useState, useEffect } from 'react';
 import {
   BookOpenCheck,
@@ -30,12 +33,14 @@ export const DutyBookPreview: React.FC = () => {
 
   const [dutyBooks, setDutyBooks] = useState<DutyBookRecord[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
+  const settings = useOperationalSchoolSettings();
+  const history = useHistoryPeriod(settings);
+  const [viewMode, setViewMode] = useHistoryView();
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [historyUser, setHistoryUser] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
-  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Modal States
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -43,7 +48,7 @@ export const DutyBookPreview: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printDutyBook, setPrintDutyBook] = useState<DutyBookRecord | null>(null);
 
-  const todayISO = getTodayISODate();
+  const todayISO = history.today;
 
   // Load subscriptions
   useEffect(() => {
@@ -51,9 +56,6 @@ export const DutyBookPreview: React.FC = () => {
       setIsLoading(false);
     });
 
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
       setSchedules(data);
@@ -64,45 +66,15 @@ export const DutyBookPreview: React.FC = () => {
     };
   }, []);
 
-  // Bounded subscription based on periodFilter
+  // Server query always keeps the selected date bounds; invalid ranges never query.
+  const [historyError, setHistoryError] = useState('');
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (periodFilter === 'today') {
-      constraints = [where('tanggal', '==', todayISO)];
-    } else if (periodFilter === 'this_month') {
-      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-    } else if (periodFilter === 'last_month') {
-      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-    } else {
-      constraints = [limit(60)];
-    }
-
-    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
-      'dutyBooks',
-      (data) => {
-        setDutyBooks(
-          data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-        );
-      },
-      undefined,
-      constraints
-    );
-
-    return () => unsubBooks();
-  }, [periodFilter, todayISO]);
+    setDutyBooks([]); setHistoryError('');
+    if (history.range.error) return;
+    return FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', data => {
+      setDutyBooks([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+  }, [history.constraints, history.range.error]);
 
   // Save Draft (Guru or Admin)
   const handleSaveDutyBook = async (record: DutyBookRecord, originalUpdatedAt?: string) => {
@@ -179,8 +151,10 @@ export const DutyBookPreview: React.FC = () => {
       b.tanggal.includes(searchQuery) ||
       (b.catatanPiket && b.catatanPiket.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return matchStatus && matchSearch;
+    return (historyUser === 'all' || b.petugasId === (historyUser === 'me' ? currentUser?.id : historyUser)) && !history.range.error && b.tanggal >= history.range.start && b.tanggal <= history.range.end && matchStatus && matchSearch;
   });
+
+  const historyPage = useHistoryPagination(filtered, [history.key, searchQuery, statusFilter, historyUser].join('|'));
 
   return (
     <div data-tour="duty-book-container" className="space-y-6">
@@ -257,16 +231,6 @@ export const DutyBookPreview: React.FC = () => {
             </div>
 
             <div className="app-filter-group flex items-center gap-2 w-full sm:w-auto justify-end">
-              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
-                value={periodFilter}
-                onChange={(e) => setPeriodFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold text-[var(--theme-primary)]"
-              >
-                <option value="this_month">Bulan Ini</option>
-                <option value="today">Hari Ini</option>
-                <option value="last_month">Bulan Lalu</option>
-                <option value="recent">60 Terbaru</option>
-              </select></label>
 
               <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
@@ -283,10 +247,15 @@ export const DutyBookPreview: React.FC = () => {
         </CardContent>
       </Card>
 
+      <HistoryControls history={history} view={viewMode} onViewChange={setViewMode} user={historyUser} onUserChange={setHistoryUser} users={[...new Map([...schedules.map(s => ({ id: s.petugasId, name: s.petugasName })), ...dutyBooks.map(b => ({ id: b.petugasId, name: b.petugasName }))].filter(u => u.id && u.id !== currentUser?.id).map(u => [u.id, u])).values()].sort((a,b) => a.name.localeCompare(b.name))} />
+      {historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}
+
+      {viewMode === 'list' && <HistoryTable view="list"><Card><CardContent className="p-0"><table className="w-full text-left text-xs"><thead className="bg-[var(--theme-surface-subtle)]"><tr>{['Tanggal', 'Petugas / Ruang', 'Shift', 'Kesimpulan', 'Status', 'Aksi'].map(h => <th className="p-3" key={h}>{h}</th>)}</tr></thead><tbody>{historyPage.records.map(item => <tr key={item.id} className="border-t border-[var(--theme-card-border)]"><td className="p-3">{formatIndonesianDate(item.tanggal)}</td><td className="p-3 font-semibold">{item.petugasName}<div className="text-[11px] font-normal">{item.ruangName}</div></td><td className="p-3 whitespace-nowrap">{item.jamMulai}–{item.jamSelesai}</td><td className="p-3 min-w-40">{item.catatanPiket || '-'}</td><td className="p-3"><Badge variant={getDutyBookDisplayStatus(item.status).variant}>{getDutyBookDisplayStatus(item.status).label}</Badge></td><td className="p-3"><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { setPrintDutyBook(item); setIsPrintModalOpen(true); }}>Cetak</Button><Button size="sm" onClick={() => { setActiveDutyBook(item); setIsFormModalOpen(true); }}>{getDutyBookDisplayStatus(item.status).stage === 'SELESAI' && !isAdmin ? 'Lihat' : 'Buka / Edit'}</Button></div></td></tr>)}{!historyPage.total && <tr><td colSpan={6} className="p-8 text-center text-slate-500">Belum ada buku piket untuk kriteria ini.</td></tr>}</tbody></table></CardContent></Card></HistoryTable>}
+
       {/* JURNAL LIST CARDS */}
-      <div data-tour="my-history-section" className="space-y-4">
+      <div data-tour="my-history-section" className={viewMode === 'grid' ? 'history-card-grid' : 'hidden'}>
         {filtered.length > 0 ? (
-          filtered.map((item) => {
+          historyPage.records.map((item) => {
             const displayInfo = getDutyBookDisplayStatus(item.status);
             return (
               <Card key={item.id} hoverable className="transition-all">
@@ -389,6 +358,8 @@ export const DutyBookPreview: React.FC = () => {
           </div>
         )}
       </div>
+
+      <HistoryPagination {...historyPage} />
 
       {/* DUTY BOOK FORM MODAL */}
       <DutyBookFormModal

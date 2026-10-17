@@ -221,6 +221,7 @@ export interface SchoolSettings {
   coordinatorSignatureUrl?: string;
   academicSemester?: AcademicSemesterConfig;
   printConfig?: PrintLayoutConfig;
+  visitorConfig?: import('./visitorConfig.types').VisitorConfig;
   lobbyTv?: import('./lobbyTv.types').LobbyTvConfig;
   studentTardyConfig?: StudentTardyConfig;
   lessonPeriodConfig?: import('./period.types').LessonPeriodConfig;

@@ -20,7 +20,7 @@ import { StudentService } from '../../services/firebase/studentService';
 import { StudentPermitService } from '../../services/firebase/studentPermitService';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatTime } from '../../utils/dateUtils';
+import { formatTime, getTodayISODate } from '../../utils/dateUtils';
 import {
   FileText,
   User,
@@ -86,7 +86,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
   const [currentStep, setCurrentStep] = useState<'FORM' | 'SUMMARY' | 'RESULT'>('FORM');
 
   // Shared Values (Nilai Bersama)
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(getTodayISODate());
   const [jamKeluarUmum, setJamKeluarUmum] = useState(formatTime(new Date()));
   const [targetReturnTimeUmum, setTargetReturnTimeUmum] = useState('');
   const [jenisIzin, setJenisIzin] = useState<StudentPermitType>('SAKIT_PULANG');
@@ -211,7 +211,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
 
       if (editingPermit) {
         // Edit mode (single permit)
-        setTanggal(editingPermit.tanggal || new Date().toISOString().split('T')[0]);
+        setTanggal(editingPermit.tanggal || getTodayISODate());
         setJamKeluarUmum(editingPermit.jamKeluar || formatTime(new Date()));
         setTargetReturnTimeUmum(editingPermit.targetReturnTime || '');
         setSingleStudentId(editingPermit.studentId);
@@ -232,7 +232,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
         // New multi-student mode
         const newGroupId = `grp-${Date.now().toString(36)}`;
         setSessionGroupId(newGroupId);
-        setTanggal(new Date().toISOString().split('T')[0]);
+        setTanggal(getTodayISODate());
         setJamKeluarUmum(formatTime(new Date()));
         setTargetReturnTimeUmum('');
         setJenisIzin('SAKIT_PULANG');

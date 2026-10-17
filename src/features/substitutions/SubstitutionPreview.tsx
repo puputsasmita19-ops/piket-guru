@@ -1,3 +1,8 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
+import { HistoryControls, HistoryPagination, HistoryTable, useHistoryView } from '../../components/common/HistoryControls';
+import { OperationalExport } from '../../components/common/OperationalExport';
+import type { OperationalReport } from '../../utils/operationalReport';
 import React, { useState, useEffect } from 'react';
 import {
   UserX,
@@ -34,7 +39,6 @@ import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { SubstitutionService } from '../../services/firebase/substitutionService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
-import { ExportUtils } from '../../utils/exportUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
@@ -53,11 +57,12 @@ export const SubstitutionPreview: React.FC = () => {
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(true);
   const [teachersError, setTeachersError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
+  const settings = useOperationalSchoolSettings();
+  const history = useHistoryPeriod(settings);
+  const [viewMode, setViewMode] = useHistoryView();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
-  const [periodFilter, setPeriodFilter] = useState<string>('this_month');
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -78,14 +83,11 @@ export const SubstitutionPreview: React.FC = () => {
     title: '',
   });
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = history.today;
 
   useEffect(() => {
     SubstitutionService.bootstrapIfEmpty();
 
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
 
     const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>(
       'teachers',
@@ -106,43 +108,15 @@ export const SubstitutionPreview: React.FC = () => {
     };
   }, []);
 
-  // Bounded subscription based on periodFilter
+  // Server query always keeps the selected date bounds; invalid ranges never query.
+  const [historyError, setHistoryError] = useState('');
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (periodFilter === 'today') {
-      constraints = [where('tanggal', '==', todayISO)];
-    } else if (periodFilter === 'this_month') {
-      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-    } else if (periodFilter === 'last_month') {
-      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-    } else {
-      constraints = [limit(60)];
-    }
-
-    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
-      'substitutions',
-      (data) => {
-        setSubstitutions(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      },
-      undefined,
-      constraints
-    );
-
-    return () => unsubSub();
-  }, [periodFilter, todayISO]);
+    setSubstitutions([]); setHistoryError('');
+    if (history.range.error) return;
+    return FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', data => {
+      setSubstitutions([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+  }, [history.constraints, history.range.error]);
 
   // Create or Update Substitution
   const handleSaveSubstitution = async (data: any, isEdit?: boolean) => {
@@ -219,24 +193,8 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
     });
   };
 
-  // Export CSV
-  const handleExportCsv = () => {
-    const headers = ['Tanggal', 'Guru Berhalangan', 'Mapel', 'Alasan', 'Kelas', 'Jam Pelajaran', 'Guru Pengganti', 'Status', 'Tugas Siswa', 'Petugas Piket'];
-    const rows = filteredSubs.map((s) => [
-      s.tanggal,
-      s.guruBerhalanganName,
-      s.mataPelajaran,
-      getSubstitutionReasonDisplay(s),
-      s.kelas,
-      s.jamPelajaran,
-      s.guruPenggantiName || 'Belum Ditugaskan',
-      s.status,
-      s.materiDanTugasSiswa,
-      s.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Guru_Inval_Pengganti_${Date.now()}`, headers, rows);
-  };
+  // Export all records matching the active filters
+  const buildReport = (): OperationalReport => ({ title: 'Rekap Guru Pengganti', period: history.range.label + (searchQuery ? ' · Pencarian: ' + searchQuery : ''), headers: ['Tanggal', 'Guru Berhalangan', 'Mapel / Kelas / JP', 'Guru Pengganti', 'Alasan / Tugas', 'Status / Petugas'], rows: filteredSubs.map(s => [s.tanggal, s.guruBerhalanganName, s.mataPelajaran + '\n' + s.kelas + '\n' + s.jamPelajaran, s.guruPenggantiName || 'Belum ditugaskan', getSubstitutionReasonDisplay(s) + '\nTugas: ' + s.materiDanTugasSiswa, s.status.replace(/_/g, ' ') + '\n' + s.petugasPiketName]) });
 
   // Metrics
   const todaySubs = substitutions.filter((s) => s.tanggal === todayISO);
@@ -253,8 +211,10 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
       s.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
       getSubstitutionReasonDisplay(s).toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchStatus && matchSearch;
+    return !history.range.error && s.tanggal >= history.range.start && s.tanggal <= history.range.end && matchStatus && matchSearch;
   });
+
+  const historyPage = useHistoryPagination(filteredSubs, [history.key, searchQuery, statusFilter].join('|'));
 
   return (
     <div className="space-y-6">
@@ -269,14 +229,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
         </div>
 
         <div className="page-actions flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<Download className="w-4 h-4" />}
-            onClick={handleExportCsv}
-          >
-            Ekspor Excel
-          </Button>
+          <OperationalExport report={buildReport()} settings={settings} disabled={Boolean(history.range.error)} />
           <Button
             variant="primary"
             size="sm"
@@ -350,16 +303,6 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
             </div>
 
             <div className="app-filter-group flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-              <label className="app-filter-field"><span>Periode</span><select aria-label="Periode"
-                value={periodFilter}
-                onChange={(e) => setPeriodFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-blue-600 dark:text-blue-400"
-              >
-                <option value="this_month">Bulan Ini</option>
-                <option value="today">Hari Ini</option>
-                <option value="last_month">Bulan Lalu</option>
-                <option value="recent">60 Terbaru</option>
-              </select></label>
 
               <label className="app-filter-field"><span>Status</span><select aria-label="Status"
                 value={statusFilter}
@@ -377,11 +320,14 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
         </CardContent>
       </Card>
 
+      <HistoryControls history={history} view={viewMode} onViewChange={setViewMode} />
+      {historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}
+
       {/* SUBSTITUTIONS LIST - MOBILE CARDS & DESKTOP TABLE */}
       {/* Mobile Card List (Hidden on tablet/desktop) */}
-      <div className="block md:hidden space-y-3">
+      <div className={viewMode === 'grid' ? 'history-card-grid' : 'hidden'}>
         {filteredSubs.length > 0 ? (
-          filteredSubs.map((item) => (
+          historyPage.records.map((item) => (
             <Card key={item.id} className="overflow-hidden border border-slate-200 dark:border-slate-800">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -536,7 +482,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
       </div>
 
       {/* Desktop Table View (Hidden on mobile) */}
-      <Card className="hidden md:block">
+      <Card className={viewMode === 'list' ? '' : 'hidden'}>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
@@ -551,7 +497,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredSubs.length > 0 ? (
-                filteredSubs.map((item) => (
+                historyPage.records.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <td className="p-4">
                       <div className="font-bold text-slate-900 dark:text-white">
@@ -708,6 +654,8 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
           </table>
         </CardContent>
       </Card>
+
+      <HistoryPagination {...historyPage} />
 
       {/* SUBSTITUTION FORM MODAL */}
       <SubstitutionFormModal

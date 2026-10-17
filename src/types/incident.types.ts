@@ -2,6 +2,7 @@ import { BaseEntityMetadata } from './index';
 
 export type IncidentSeverity = 'RENDAH' | 'SEDANG' | 'TINGGI' | 'KRITIS';
 export type IncidentStatus = 'BARU' | 'INVESTIGASI' | 'PENANGANAN' | 'SELESAI';
+export interface IncidentStudentSnapshot { studentId: string; nama: string; kelas: string }
 
 export interface IncidentPhoto {
   id: string;
@@ -20,6 +21,8 @@ export interface IncidentRecord extends BaseEntityMetadata {
   tingkatKeparahan: IncidentSeverity;
   lokasi: string;
   pihakTerlibat: string;
+  involvedStudents?: IncidentStudentSnapshot[];
+  pihakLainnya?: string;
   uraian: string;
   tindakanAwal: string;
   tindakLanjut?: string;

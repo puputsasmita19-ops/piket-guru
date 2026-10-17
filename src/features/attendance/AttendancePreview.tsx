@@ -1,3 +1,6 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { HistoryControls, HistoryTable, HistoryPagination, useHistoryView } from '../../components/common/HistoryControls';
+import { attendanceDuration } from '../../utils/historyPeriod';
 import { XCircle } from '../../components/icons';
 import { AlertCircle } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
@@ -49,6 +52,7 @@ interface AttendanceFeedback {
 
 const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = ({ status }) => {
   if (!status) return null;
+
   return (
     <div
       role={status.tone === 'error' ? 'alert' : 'status'}
@@ -115,11 +119,13 @@ export const AttendancePreview: React.FC = () => {
 
   // Active Tab: Presensi Mandiri vs Rekap Kehadiran
   const [activeTab, setActiveTab] = useState<'presensi' | 'riwayat'>('presensi');
-  const [riwayatPeriod, setRiwayatPeriod] = useState<'today' | 'this_month' | 'last_month' | 'all'>('this_month');
-  const [riwayatPage, setRiwayatPage] = useState<number>(1);
+  const history = useHistoryPeriod(settings);
+  const [historyView, setHistoryView] = useHistoryView();
+  const [historyUser, setHistoryUser] = useState('all');
+  const [historyError, setHistoryError] = useState('');
 
   const todayName = getCurrentDayName();
-  const todayISO = getTodayISODate();
+  const todayISO = history.today;
 
   // Evaluates check-out window for today according to authoritative school settings
   const windowCheck: WindowCheckResult = AttendancePolicy.validateCheckOutWindow(
@@ -160,53 +166,15 @@ export const AttendancePreview: React.FC = () => {
     };
   }, []);
 
-  // 2. Load Attendance Records bounded strictly by active view & selected period
+  // Check-in only reads today. History always reads the selected bounded period.
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (activeTab === 'presensi') {
-      // In presensi tab: only fetch today's check-ins
-      constraints = [where('tanggal', '==', todayISO)];
-    } else {
-      // In riwayat tab: scope to user's selected period
-      if (riwayatPeriod === 'today') {
-        constraints = [where('tanggal', '==', todayISO)];
-      } else if (riwayatPeriod === 'this_month') {
-        constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-      } else if (riwayatPeriod === 'last_month') {
-        constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-      } else {
-        constraints = [limit(50)];
-      }
-    }
-
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
-      'attendance',
-      (data) => {
-        setAttendanceList(
-          data.sort((a, b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk))
-        );
-      },
-      undefined,
-      constraints
-    );
-
-    return () => {
-      unsubAtt();
-    };
-  }, [activeTab, riwayatPeriod, todayISO]);
+    setAttendanceList([]); setHistoryError('');
+    if (activeTab !== 'presensi' && history.range.error) return;
+    const constraints = activeTab === 'presensi' ? [where('tanggal', '==', todayISO)] : history.constraints;
+    return FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', data => {
+      setAttendanceList([...data].sort((a,b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk)));
+    }, error => setHistoryError(error.message || 'Riwayat presensi belum dapat dimuat.'), constraints);
+  }, [activeTab, history.constraints, history.range.error, todayISO]);
 
   useEffect(() => {
     // A photo must never survive an account or school-location change.
@@ -675,6 +643,10 @@ export const AttendancePreview: React.FC = () => {
     }
   };
 
+  const filteredAttendance = attendanceList.filter(item => !history.range.error && item.tanggal >= history.range.start && item.tanggal <= history.range.end && (historyUser === 'all' || item.userId === (historyUser === 'me' ? currentUser?.id : historyUser)));
+  const historyUsers = [...new Map([...teachers.map(t => ({ id: t.userId || t.id, name: t.fullName })), ...staff.map(t => ({ id: t.userId || t.id, name: t.fullName })), ...attendanceList.map(a => ({ id: a.userId, name: a.userName }))].filter(u => u.id !== currentUser?.id).map(u => [u.id, u])).values()].sort((a,b) => a.name.localeCompare(b.name));
+  const historyPage = useHistoryPagination(filteredAttendance, history.key + ':' + historyUser);
+
   return (
     <div data-tour="attendance-container" className="space-y-6">
       {/* Header section */}
@@ -1124,55 +1096,10 @@ export const AttendancePreview: React.FC = () => {
           <CardHeader
             title="Rekap Riwayat Presensi Guru Piket"
             subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
-            action={
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
-                <button
-                  type="button"
-                  onClick={() => { setRiwayatPeriod('today'); setRiwayatPage(1); }}
-                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
-                    riwayatPeriod === 'today'
-                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  Hari Ini
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setRiwayatPeriod('this_month'); setRiwayatPage(1); }}
-                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
-                    riwayatPeriod === 'this_month'
-                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  Bulan Ini
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setRiwayatPeriod('last_month'); setRiwayatPage(1); }}
-                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
-                    riwayatPeriod === 'last_month'
-                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  Bulan Lalu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setRiwayatPeriod('all'); setRiwayatPage(1); }}
-                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer transition-all ${
-                    riwayatPeriod === 'all'
-                      ? 'bg-white dark:bg-slate-700 text-[var(--theme-primary)] shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  50 Terbaru
-                </button>
-              </div>
-            }
+
           />
+          <div className="p-3"><HistoryControls history={history} view={historyView} onViewChange={setHistoryView} user={historyUser} onUserChange={setHistoryUser} users={historyUsers}/>{historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}</div>
+          <HistoryTable view={historyView}>
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
@@ -1181,20 +1108,21 @@ export const AttendancePreview: React.FC = () => {
                   <th className="p-4">Guru / Petugas</th>
                   <th className="p-4">Jam Masuk</th>
                   <th className="p-4">Jam Pulang</th>
+                  <th className="p-4">Durasi Kehadiran</th>
                   <th className="p-4">Jarak GPS</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-center">Foto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {attendanceList.length === 0 ? (
+                {filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
                       Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
                 ) : (
-                  attendanceList.slice((riwayatPage - 1) * 15, riwayatPage * 15).map((item) => (
+                  historyPage.records.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                       <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
                         {formatIndonesianDate(item.tanggal)}
@@ -1208,6 +1136,7 @@ export const AttendancePreview: React.FC = () => {
                       <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
                         {item.jamPulang ? formatTime(item.jamPulang) : '-'}
                       </td>
+                      <td className="p-4 font-semibold">{attendanceDuration(item.jamMasuk, item.jamPulang)}</td>
                       <td className="p-4 font-mono">
                         {item.distance} meter
                       </td>
@@ -1238,34 +1167,8 @@ export const AttendancePreview: React.FC = () => {
               </tbody>
             </table>
 
-            {/* Pagination Controls */}
-            {attendanceList.length > 15 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-200 dark:border-slate-800 text-xs">
-                <span className="text-slate-500">
-                  Menampilkan {(riwayatPage - 1) * 15 + 1} - {Math.min(riwayatPage * 15, attendanceList.length)} dari {attendanceList.length} data
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={riwayatPage <= 1}
-                    onClick={() => setRiwayatPage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
-                  >
-                    Sebelumnya
-                  </button>
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">
-                    Halaman {riwayatPage} / {Math.ceil(attendanceList.length / 15)}
-                  </span>
-                  <button
-                    disabled={riwayatPage >= Math.ceil(attendanceList.length / 15)}
-                    onClick={() => setRiwayatPage((p) => Math.min(Math.ceil(attendanceList.length / 15), p + 1))}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
-                  >
-                    Berikutnya
-                  </button>
-                </div>
-              </div>
-            )}
-          </CardContent>
+          </CardContent></HistoryTable>
+          <HistoryPagination {...historyPage} />
         </Card>
       )}
 

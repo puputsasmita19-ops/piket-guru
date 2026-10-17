@@ -1,4 +1,5 @@
 import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
+import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
@@ -66,7 +67,7 @@ import { AnnouncementRecord } from '../../types/announcement.types';
 import { StudentTardySettingsCard } from './StudentTardySettingsCard';
 import { LessonPeriodSettingsCard } from './LessonPeriodSettingsCard';
 
-type SettingsTab = 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
+type SettingsTab = 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
 const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
@@ -801,6 +802,8 @@ export const SettingsView: React.FC = () => {
             <MapPin className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
             Profil & GPS
           </button>
+          {isAdmin && <button onClick={() => setActiveTab('operational_reports')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'operational_reports' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><FileText className="w-3.5 h-3.5"/>Cetak & Buku Tamu</button>}
           {isAdmin && <button onClick={() => setActiveTab('dashboard_info')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'dashboard_info' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
             <Layers className="w-3.5 h-3.5" />Info Dashboard
@@ -2242,6 +2245,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB: PENGATURAN KETERLAMBATAN SISWA (ADMIN) */}
+      {activeTab === 'operational_reports' && isAdmin && <OperationalReportSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'dashboard_info' && isAdmin && <DashboardInfoSettingsCard settings={settings} onSaved={setSettings} />}
 
       {activeTab === 'notifications' && isAdmin && <NotificationSettingsCard settings={settings} onSaved={setSettings} />}

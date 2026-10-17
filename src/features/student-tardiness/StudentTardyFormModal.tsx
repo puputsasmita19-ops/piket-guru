@@ -19,7 +19,7 @@ import { SchoolSettings } from '../../types';
 import { StudentTardyService } from '../../services/firebase/studentTardyService';
 import { StudentService } from '../../services/firebase/studentService';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatTime, formatIndonesianDate } from '../../utils/dateUtils';
+import { formatTime, formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
 import { DEFAULT_DOCUMENTATION_WATERMARK_CONFIG } from '../../types/watermark.types';
 import {
@@ -103,7 +103,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
   // Shared defaults
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(getTodayISODate());
   const [sharedJamDatang, setSharedJamDatang] = useState(formatTime(new Date()));
   const [sharedAlasan, setSharedAlasan] = useState<TardyReason>('BANGUN_KESIANGAN');
   const [sharedKeteranganAlasan, setSharedKeteranganAlasan] = useState('');
@@ -186,7 +186,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       } else {
         // Multi Student Mode
         const nowTime = formatTime(new Date());
-        setTanggal(new Date().toISOString().split('T')[0]);
+        setTanggal(getTodayISODate());
         setSharedJamDatang(nowTime);
         setSharedAlasan('BANGUN_KESIANGAN');
         setSharedKeteranganAlasan('');

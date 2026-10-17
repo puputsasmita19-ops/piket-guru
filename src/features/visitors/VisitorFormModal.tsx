@@ -1,3 +1,5 @@
+import { normalizeVisitorConfig } from '../../types/visitorConfig.types';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -12,7 +14,7 @@ import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { UserProfile } from '../../types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatTime } from '../../utils/dateUtils';
+import { formatTime, getTodayISODate } from '../../utils/dateUtils';
 import {
   UserCheck,
   Building,
@@ -92,15 +94,10 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 }) => {
   const { currentUser } = useAuth();
 
-  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
-    try {
-      const cached = localStorage.getItem('piket_guru_school_config');
-      if (cached) return { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(cached) };
-    } catch {}
-    return DEFAULT_SCHOOL_SETTINGS;
-  });
+  const schoolSettings = useOperationalSchoolSettings();
+  const visitorConfig = useMemo(() => normalizeVisitorConfig(schoolSettings.visitorConfig), [schoolSettings.visitorConfig]);
 
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(getTodayISODate());
   const [jamMasuk, setJamMasuk] = useState(formatTime(new Date()));
   const [jamKeluar, setJamKeluar] = useState<string | undefined>(undefined);
   const [namaTamu, setNamaTamu] = useState('');
@@ -274,8 +271,11 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
       });
     });
 
+    visitorConfig.customDestinations.forEach(name => {
+      if (!list.some(r => r.displayName.toLowerCase() === name.toLowerCase())) list.push({ id: 'extra:' + name, targetType: 'UNIT', recipientId: 'extra:' + name, displayName: name, subtitle: 'Tujuan tambahan sekolah', badgeLabel: 'UNIT SEKOLAH', badgeColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', searchableText: name.toLowerCase() });
+    });
     return list;
-  }, [teachers, staffList, usersList]);
+  }, [teachers, staffList, usersList, visitorConfig.customDestinations]);
 
   // Filtered recipient list based on search and active tab
   const filteredRecipients = useMemo(() => {
@@ -305,7 +305,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (editingVisitor) {
-        setTanggal(editingVisitor.tanggal || new Date().toISOString().split('T')[0]);
+        setTanggal(editingVisitor.tanggal || getTodayISODate());
         setJamMasuk(editingVisitor.jamMasuk || formatTime(new Date()));
         setJamKeluar(editingVisitor.jamKeluar);
         setNamaTamu(editingVisitor.namaTamu || '');
@@ -362,7 +362,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         setOriginalUpdatedAt(editingVisitor.updatedAt || null);
       } else {
         // Mode Baru: DO NOT select first teacher automatically (biarkan kosong agar pengguna memilih secara sadar)
-        setTanggal(new Date().toISOString().split('T')[0]);
+        setTanggal(getTodayISODate());
         setJamMasuk(formatTime(new Date()));
         setJamKeluar(undefined);
         setNamaTamu('');
@@ -399,7 +399,8 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         });
       }
     }
-  }, [isOpen, editingVisitor, recipientOptions, currentUser?.id, draftKey]);
+  // A live master/settings update must not erase a form already being typed.
+  }, [isOpen, editingVisitor?.id, currentUser?.id, draftKey]);
 
   // Click outside to close combobox popover
   useEffect(() => {
@@ -671,7 +672,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
     // Recipient selection validation: must have selected a valid recipient OR has non-empty tujuanBertemu
     const finalTujuanSnapshot = tujuanBertemu.trim();
-    if (!finalTujuanSnapshot) {
+    if (!finalTujuanSnapshot || (selectedRecipient?.targetType === 'CUSTOM' && !visitorConfig.allowCustomDestination && !(editingVisitor && (!editingVisitor.tujuanTargetType || editingVisitor.tujuanTargetType === 'CUSTOM')))) {
       errors.tujuanBertemu = 'Pihak/guru yang dituju wajib dipilih dari daftar';
       missing.push('Pihak Dituju');
     }
@@ -722,8 +723,9 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         nomorIdentitas: nomorIdentitas.trim() || '',
         nomorBadge: nomorBadge.trim(),
         tujuanBertemu: finalTujuanSnapshot,
-        tujuanRecipientId: selectedRecipient?.recipientId || (editingVisitor ? editingVisitor.tujuanRecipientId : undefined),
-        tujuanUserId: selectedRecipient?.userId || (editingVisitor ? editingVisitor.tujuanUserId : undefined),
+        // Clear the old teacher association explicitly when changing the destination.
+        tujuanRecipientId: selectedRecipient ? (selectedRecipient.targetType === 'CUSTOM' ? '' : selectedRecipient.recipientId || '') : editingVisitor?.tujuanRecipientId || '',
+        tujuanUserId: selectedRecipient ? (selectedRecipient.targetType === 'CUSTOM' ? '' : selectedRecipient.userId || '') : editingVisitor?.tujuanUserId || '',
         tujuanTargetType: selectedRecipient?.targetType || (editingVisitor ? editingVisitor.tujuanTargetType : 'CUSTOM'),
         tujuanDetail: selectedRecipient?.subtitle || (editingVisitor ? editingVisitor.tujuanDetail : undefined),
         keperluan: keperluan.trim(),
@@ -1091,6 +1093,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
               <div className="relative">
                 <div
                   role="combobox"
+                  aria-label="Pihak / guru yang dituju"
                   tabIndex={0}
                   aria-haspopup="listbox"
                   aria-expanded={isComboboxOpen}
@@ -1367,6 +1370,10 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
                 )}
               </div>
 
+              {(visitorConfig.allowCustomDestination || selectedRecipient?.targetType === 'CUSTOM') && <div className="space-y-2 mt-2">
+                {visitorConfig.allowCustomDestination && <button type="button" className="min-h-11 px-3 py-2 rounded-xl border border-[var(--theme-card-border)] text-xs font-semibold cursor-pointer" onClick={() => { setSelectedRecipient({ id: 'custom:manual', targetType: 'CUSTOM', displayName: 'Lain-lain', subtitle: 'Diisi manual', badgeLabel: 'LAIN-LAIN', badgeColor: 'bg-slate-100 text-slate-700', searchableText: '' }); setTujuanBertemu(''); setIsComboboxOpen(false); }}>Lain-lain / isi tujuan manual</button>}
+                {selectedRecipient?.targetType === 'CUSTOM' && <label className="history-field"><span>Nama pihak / tujuan lain</span><input aria-label="Tujuan lain buku tamu" maxLength={150} value={tujuanBertemu} onChange={e => { setTujuanBertemu(e.target.value); setSelectedRecipient(r => r ? { ...r, displayName: e.target.value || 'Lain-lain' } : r); setFieldErrors(v => ({ ...v, tujuanBertemu: '' })); }} placeholder="Contoh: Panitia kegiatan sekolah"/><span className="text-[11px] font-normal text-slate-500">Tetap pilih guru/staf dari daftar bila tujuan sudah tersedia.</span></label>}
+              </div>}
               {fieldErrors.tujuanBertemu && (
                 <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.tujuanBertemu}</p>
               )}

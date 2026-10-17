@@ -1,3 +1,7 @@
+import { useHistoryPeriod, useHistoryPagination } from '../../hooks/useHistoryPeriod';
+import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
+import { HistoryControls, HistoryPagination } from '../../components/common/HistoryControls';
+import { OperationalExport } from '../../components/common/OperationalExport';
 import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle,
@@ -39,8 +43,9 @@ export const IncidentPreview: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters & Views
-  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | 'all'>('this_month');
-  const [page, setPage] = useState<number>(1);
+  const settings = useOperationalSchoolSettings();
+  const history = useHistoryPeriod(settings);
+  const [historyError, setHistoryError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [categoryFilter, setCategoryFilter] = useState<string>('SEMUA');
@@ -70,48 +75,11 @@ export const IncidentPreview: React.FC = () => {
     return () => unsubCat();
   }, []);
 
-  // Load Incidents bounded strictly by selected period
   useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-    const startThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-01`;
-    const lastDayThisMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const endThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}`;
-
-    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
-    const prevMonth = curMonth === 0 ? 12 : curMonth;
-    const startPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const endPrevMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}`;
-
-    let constraints: any[] = [];
-    if (periodFilter === 'this_month') {
-      constraints = [where('tanggal', '>=', startThisMonth), where('tanggal', '<=', endThisMonth)];
-    } else if (periodFilter === 'last_month') {
-      constraints = [where('tanggal', '>=', startPrevMonth), where('tanggal', '<=', endPrevMonth)];
-    } else {
-      constraints = [limit(60)];
-    }
-
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
-      'incidents',
-      (data) => {
-        setIncidents(
-          data.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-        );
-      },
-      undefined,
-      constraints
-    );
-
-    return () => unsubInc();
-  }, [periodFilter]);
-
-  // Reset page when any filter changes
-  useEffect(() => {
-    setPage(1);
-  }, [periodFilter, statusFilter, categoryFilter, severityFilter, searchQuery]);
+    setIncidents([]); setHistoryError('');
+    if (history.range.error) return;
+    return FirestoreService.subscribeToCollection<IncidentRecord>('incidents', data => setIncidents([...data].sort((a,b) => b.tanggal.localeCompare(a.tanggal))), error => setHistoryError(error.message), history.constraints);
+  }, [history.constraints, history.range.error]);
 
   // Save / Update
   const handleSaveIncident = async (record: IncidentRecord) => {
@@ -153,8 +121,10 @@ export const IncidentPreview: React.FC = () => {
       getIncidentCategoryDisplay(i).toLowerCase().includes(searchQuery.toLowerCase()) ||
       i.kategoriName.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchStatus && matchCat && matchSev && matchSearch;
+    return !history.range.error && i.tanggal >= history.range.start && i.tanggal <= history.range.end && matchStatus && matchCat && matchSev && matchSearch;
   });
+
+  const historyPage = useHistoryPagination(filtered, [history.key, searchQuery, statusFilter, categoryFilter, severityFilter].join('|'));
 
   return (
     <div className="space-y-6">
@@ -168,6 +138,7 @@ export const IncidentPreview: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Catat kejadian atau pelanggaran beserta tindak lanjutnya.</p>
         </div>
 
+        <div className="page-actions flex flex-wrap items-center gap-2"><OperationalExport settings={settings} disabled={Boolean(history.range.error)} report={{ title: 'Rekap Laporan Kejadian', period: history.range.label, headers: ['Tanggal / Waktu', 'Kategori / Lokasi', 'Pihak Terlibat', 'Kronologi', 'Penanganan', 'Status / Pelapor'], rows: filtered.map(i => [i.tanggal + '\n' + i.waktu, getIncidentCategoryDisplay(i) + '\n' + i.lokasi, i.pihakTerlibat, i.uraian, i.tindakanAwal + '\n' + (i.tindakLanjut || ''), i.status.replace(/_/g, ' ') + '\n' + (i.pelaporName || i.createdBy)]) }}/>
         <Button
           variant="primary"
           size="sm"
@@ -178,7 +149,7 @@ export const IncidentPreview: React.FC = () => {
           }}
         >
           Lapor Kejadian Baru
-        </Button>
+        </Button></div>
       </div>
 
       {/* METRIC SUMMARY CARDS */}
@@ -271,35 +242,20 @@ export const IncidentPreview: React.FC = () => {
                 <option value="SELESAI">SELESAI</option>
               </select></label>
 
-              {/* View Switch */}
-              <div className="flex items-center border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-900">
-                <button
-                  aria-label="Tampilan kartu"
-                  aria-pressed={viewMode === 'grid'}
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  aria-label="Tampilan tabel"
-                  aria-pressed={viewMode === 'table'}
-                  onClick={() => setViewMode('table')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-slate-800 shadow-xs text-blue-600' : 'text-slate-400'}`}
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
+
             </div>
           </div>
         </CardContent>
       </Card>
 
+      <HistoryControls history={history} view={viewMode === 'table' ? 'list' : 'grid'} onViewChange={v => setViewMode(v === 'list' ? 'table' : 'grid')}/>
+      {historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}
+
       {/* INCIDENT VIEW: GRID */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.length > 0 ? (
-            filtered.map((item) => (
+            historyPage.records.map((item) => (
               <Card key={item.id} hoverable className="transition-all">
                 <CardContent className="p-5 space-y-3.5">
                   <div className="flex items-start justify-between gap-2">
@@ -409,7 +365,7 @@ export const IncidentPreview: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map((item) => (
+                {historyPage.records.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                       {item.tanggal} <span className="text-[11px] text-slate-400">{item.waktu}</span>
@@ -462,6 +418,8 @@ export const IncidentPreview: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <HistoryPagination {...historyPage}/>
 
       {/* FORM MODAL */}
       <IncidentFormModal
