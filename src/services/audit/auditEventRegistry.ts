@@ -126,6 +126,10 @@ export const AUDIT_MODULE_REGISTRY: Record<AuditLogModule, AuditModuleMeta> = {
     category: 'MASTER',
     description: 'Manajemen data guru, NIP/NUPTK, status mengajar aktif.',
   },
+  STUDENTS: {
+    id: 'STUDENTS', label: 'Master Siswa', category: 'MASTER',
+    description: 'Penambahan, pembaruan, impor, dan penghapusan data master siswa.',
+  },
   STAFF: {
     id: 'STAFF',
     label: 'Master Tenaga Kependidikan',
@@ -274,8 +278,14 @@ export function normalizeAuditStatus(status?: string | null): 'SUCCESS' | 'FAILE
 /**
  * Returns human-readable label for module
  */
+export function normalizeAuditModule(module: string): string {
+  const key = String(module || '').toUpperCase();
+  const aliases: Record<string, string> = { DUTYBOOKS: 'DUTY_BOOK', DUTYBOOK: 'DUTY_BOOK', STUDENTTARDINESS: 'TARDINESS', STUDENTPERMITS: 'PERMITS', INCIDENTCATEGORIES: 'CATEGORIES' };
+  return aliases[key] || key;
+}
+
 export function getAuditModuleLabel(mod: string): string {
-  const meta = AUDIT_MODULE_REGISTRY[mod as AuditLogModule];
+  const meta = AUDIT_MODULE_REGISTRY[normalizeAuditModule(mod) as AuditLogModule];
   return meta ? meta.label : mod;
 }
 

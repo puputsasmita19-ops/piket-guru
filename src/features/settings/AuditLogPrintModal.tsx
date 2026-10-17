@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { SchoolSettings } from '../../types';
 import { AuditLogRecord } from '../../types/master.types';
 import { Printer, ShieldCheck } from '../../components/icons';
-import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTime, getTodayISODate } from '../../utils/dateUtils';
 import {
   normalizeAuditStatus,
   getAuditModuleLabel,
@@ -42,13 +42,13 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
     else if (st === 'BLOCKED') blockedCount++;
 
     if (l.timestamp) {
-      const d = l.timestamp.split('T')[0];
+      const d = getTodayISODate(l.timestamp);
       if (!minDateStr || d < minDateStr) minDateStr = d;
       if (!maxDateStr || d > maxDateStr) maxDateStr = d;
     }
   }
 
-  let timeRangeDisplay = 'Seluruh Riwayat';
+  let timeRangeDisplay = 'Daftar log yang dimuat';
   if (minDateStr && maxDateStr) {
     timeRangeDisplay =
       minDateStr === maxDateStr
@@ -176,7 +176,7 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
                       </td>
                       <td className="p-1 border-r border-black font-mono text-[8.5px] whitespace-nowrap">
                         <div>{formatIndonesianDate(log.timestamp)}</div>
-                        <span className="text-slate-500">{formatTime(log.timestamp)} WIB</span>
+                        <span className="text-slate-500">{formatTime(log.timestamp, true)}</span>
                       </td>
                       <td className="p-1 border-r border-black text-center font-bold text-[8.5px]">
                         <span

@@ -1,3 +1,4 @@
+import type { AuditFeedStatus } from '../../hooks/useAuditLogFeed';
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -24,6 +25,7 @@ import {
   ArrowRight,
   Database,
   Info,
+  RefreshCw,
 } from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -33,13 +35,14 @@ import { AuditLogPrintModal } from './AuditLogPrintModal';
 import { AuditLogRecord, AuditLogAction, AuditLogModule } from '../../types/master.types';
 import { SchoolSettings } from '../../types';
 import { ExportUtils } from '../../utils/exportUtils';
-import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatTime, getTodayISODate } from '../../utils/dateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   AUDIT_MODULE_REGISTRY,
   AUDIT_ACTION_REGISTRY,
   AUDIT_STATUS_REGISTRY,
   normalizeAuditStatus,
+  normalizeAuditModule,
   getAuditModuleLabel,
   getAuditActionLabel,
   getAuditStatusMeta,
@@ -48,9 +51,10 @@ import {
 interface AuditForensicViewerProps {
   logs: AuditLogRecord[];
   settings: SchoolSettings;
+  feedStatus?: AuditFeedStatus;
 }
 
-export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, settings }) => {
+export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, settings, feedStatus }) => {
   const { currentUser, hasRole } = useAuth();
   const isAuthorized = hasRole('ADMIN', 'KEPALA_SEKOLAH');
 
@@ -90,7 +94,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       // 1. Module Filter
-      if (moduleFilter !== 'SEMUA' && log.module !== moduleFilter) {
+      if (moduleFilter !== 'SEMUA' && normalizeAuditModule(log.module) !== moduleFilter) {
         return false;
       }
 
@@ -107,7 +111,8 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
 
       // 4. Date Range Filter
       if (startDate || endDate) {
-        const logDateStr = log.timestamp.split('T')[0];
+        if (!log.timestamp) return false;
+        const logDateStr = getTodayISODate(log.timestamp);
         if (startDate && logDateStr < startDate) return false;
         if (endDate && logDateStr > endDate) return false;
       }
@@ -159,13 +164,13 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
       else if (st === 'BLOCKED') blockedCount++;
 
       if (log.timestamp) {
-        const d = log.timestamp.split('T')[0];
+        const d = getTodayISODate(log.timestamp);
         if (!minDateStr || d < minDateStr) minDateStr = d;
         if (!maxDateStr || d > maxDateStr) maxDateStr = d;
       }
     }
 
-    let timeRangeText = 'Seluruh Riwayat Log';
+    let timeRangeText = 'Log terbaru yang dimuat';
     if (startDate && endDate) {
       timeRangeText = `${formatIndonesianDate(startDate)} s.d. ${formatIndonesianDate(endDate)}`;
     } else if (startDate) {
@@ -340,6 +345,17 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
 
   return (
     <div className="space-y-5">
+      {feedStatus && <div className="p-3 sm:p-4 rounded-2xl border border-[var(--theme-card-border)] bg-[var(--theme-card-bg)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <p role="status" className="text-xs font-bold text-[var(--theme-primary-text)] flex items-center gap-2"><Activity className="w-4 h-4 shrink-0" />
+            {feedStatus.error ? 'Pembacaan log perlu diperiksa' : !feedStatus.online ? 'Offline • log belum diperbarui' : feedStatus.loading ? 'Memuat log terbaru…' : feedStatus.fromCache ? 'Data cache • menunggu server' : 'Terhubung realtime'}
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">50 log terbaru dari semua modul. Filter, statistik, cetak, dan CSV berlaku pada daftar ini.</p>
+          {feedStatus.receivedAt && <p className="text-[11px] text-slate-500 dark:text-slate-400">Diterima dari server: {formatTime(feedStatus.receivedAt, true)}</p>}
+          {feedStatus.error && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">{feedStatus.error}</p>}
+        </div>
+        <Button type="button" variant="outline" size="sm" disabled={feedStatus.loading} onClick={feedStatus.reload} leftIcon={<RefreshCw className="w-4 h-4" />} className="w-full sm:w-auto shrink-0">Muat ulang log</Button>
+      </div>}
       {/* 1. FORENSIC SUMMARY METRICS */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
@@ -354,7 +370,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
             <span className="text-[11px] text-slate-400">dari {logs.length} (50 Log Terbaru)</span>
           </div>
           <div className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-            {metrics.timeRangeText} (Halaman 1)
+            {metrics.timeRangeText}
           </div>
         </div>
 
@@ -580,8 +596,8 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
       {/* 3. MAIN FORENSIC AUDIT TABLE */}
       <Card>
         <CardHeader
-          title={`Jejak Audit Forensik & Rekam Jejak Sistem (${filteredLogs.length} Log)`}
-          subtitle="Pencatatan real-time terhadap seluruh login PIN/Google, transaksi operasional, hak akses, dan aksi sistem"
+          title={`Jejak Audit Forensik — 50 Log Terbaru (${filteredLogs.length} tampil)`}
+          subtitle="Aktivitas yang tercatat dari seluruh modul, diurutkan dari yang terbaru. Log lama tetap tersimpan."
         />
         <CardContent className="p-0">
           <div className="max-h-[640px] overflow-y-auto overflow-x-auto scrollbar-thin">
@@ -632,7 +648,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                           {formatIndonesianDate(log.timestamp)}
                         </div>
                         <span className="text-slate-400">
-                          {formatTime(log.timestamp)} WIB
+                          {formatTime(log.timestamp, true)}
                         </span>
                       </td>
 
@@ -729,7 +745,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               </div>
               <div className="font-mono text-slate-500 text-[11px] text-right">
                 <div>{formatIndonesianDate(inspectingLog.timestamp)}</div>
-                <div className="text-slate-400">{formatTime(inspectingLog.timestamp)} WIB</div>
+                <div className="text-slate-400">{formatTime(inspectingLog.timestamp, true)}</div>
               </div>
             </div>
 

@@ -130,6 +130,7 @@ export type AuditLogModule =
   | 'USERS'
   | 'AUTH'
   | 'TEACHERS'
+  | 'STUDENTS'
   | 'STAFF'
   | 'ROOMS'
   | 'CATEGORIES'

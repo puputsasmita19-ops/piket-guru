@@ -1,3 +1,5 @@
+import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
+import { normalizeAuditModule } from '../../services/audit/auditEventRegistry';
 import { Phone } from '../../components/icons';
 import { BookOpen } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
@@ -31,7 +33,7 @@ import {
   StudentRecord,
   RoomRecord,
   IncidentCategoryRecord,
-  AuditLogRecord,
+  AuditLogModule,
   getTeacherDisplayIdentifier,
   maskNik,
 } from '../../types/master.types';
@@ -56,7 +58,7 @@ export const MasterDataTabs: React.FC = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
+  const { logs: auditLogs, status: auditFeedStatus } = useAuditLogFeed();
 
   // Bulk Import state
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -114,9 +116,6 @@ export const MasterDataTabs: React.FC = () => {
     const unsubCats = FirestoreService.subscribeToCollection<IncidentCategoryRecord>('incidentCategories', (data) => {
       setCategories(data);
     });
-    const unsubAudit = FirestoreService.subscribeToCollection<AuditLogRecord>('auditLogs', (data) => {
-      setAuditLogs(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
 
     return () => {
       unsubTeachers();
@@ -124,7 +123,6 @@ export const MasterDataTabs: React.FC = () => {
       unsubStudents();
       unsubRooms();
       unsubCats();
-      unsubAudit();
     };
   }, []);
 
@@ -393,7 +391,7 @@ export const MasterDataTabs: React.FC = () => {
       userName: currentUser?.fullName || 'Admin',
       role: currentUser?.role || 'ADMIN',
       action: editingStudent ? 'UPDATE' : 'CREATE',
-      module: 'STUDENTS' as any,
+      module: 'STUDENTS',
       recordId: id,
       details: `${editingStudent ? 'Memperbarui' : 'Menambahkan'} data siswa: ${payload.nama} (${payload.kelas})`,
     });
@@ -428,7 +426,7 @@ export const MasterDataTabs: React.FC = () => {
       userName: currentUser?.fullName || 'Admin',
       role: currentUser?.role || 'ADMIN',
       action: editingCat ? 'UPDATE' : 'CREATE',
-      module: 'INCIDENTS',
+      module: 'CATEGORIES',
       recordId: id,
       details: `${editingCat ? 'Memperbarui' : 'Menambahkan'} kategori insiden: ${payload.name} (${payload.severity})`,
     });
@@ -448,7 +446,7 @@ export const MasterDataTabs: React.FC = () => {
       userName: currentUser?.fullName || 'Admin',
       role: currentUser?.role || 'ADMIN',
       action: 'DELETE',
-      module: collection.toUpperCase() as any,
+      module: normalizeAuditModule(collection) as AuditLogModule,
       recordId: id,
       details: `Menghapus record ${collection}: ${name}`,
     });
@@ -928,7 +926,7 @@ export const MasterDataTabs: React.FC = () => {
 
       {/* TAB 5: AUDIT LOGS (CR-005: Scroll model) */}
       {activeTab === 'audit' && (
-        <AuditForensicViewer logs={auditLogs} settings={DEFAULT_SCHOOL_SETTINGS} />
+        <AuditForensicViewer logs={auditLogs} settings={DEFAULT_SCHOOL_SETTINGS} feedStatus={auditFeedStatus} />
       )}
 
       {/* TEACHER MODAL (ADD / EDIT) */}

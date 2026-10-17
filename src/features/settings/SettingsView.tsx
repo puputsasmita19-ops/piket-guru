@@ -1,3 +1,4 @@
+import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -46,7 +47,7 @@ import { AuditForensicViewer } from './AuditForensicViewer';
 import { OperationalResetCard } from './OperationalResetCard';
 import { DocumentationWatermarkSettingsCard } from './DocumentationWatermarkSettingsCard';
 import { GoogleDriveSettingsCard } from './GoogleDriveSettingsCard';
-import { where, limit } from 'firebase/firestore';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { BackupService, BackupPayload } from '../../services/backup/backupService';
 import { LocationService } from '../../services/location/locationService';
@@ -55,7 +56,6 @@ import { formatTime } from '../../utils/dateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { SchoolSettings, UserProfile, DayOfWeek, DayShiftDetail, LoginContactType, ScheduleItem } from '../../types';
 import { DEFAULT_LOGIN_SUPPORT_CONTACT, DEFAULT_SCHOOL_SETTINGS, DEFAULT_DAILY_SCHEDULES } from '../../config/constants';
-import { AuditLogRecord } from '../../types/master.types';
 import { LobbyTvConfig } from '../../types/lobbyTv.types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
@@ -88,7 +88,7 @@ export const SettingsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('school');
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
-  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
+  const { logs: auditLogs, status: auditFeedStatus } = useAuditLogFeed();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [substitutions, setSubstitutions] = useState<TeacherSubstitutionRecord[]>([]);
@@ -329,17 +329,6 @@ export const SettingsView: React.FC = () => {
 
     const todayISO = new Date().toISOString().split('T')[0];
 
-    const unsubLogs = FirestoreService.subscribeToCollection<AuditLogRecord>(
-      'auditLogs',
-      (data) => {
-        setAuditLogs(
-          data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        );
-      },
-      undefined,
-      [limit(50)]
-    );
-
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
     const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
       'substitutions',
@@ -377,7 +366,6 @@ export const SettingsView: React.FC = () => {
       locationRequestRef.current++;
       LocationService.clearCurrentWatcher();
       unsubUsers();
-      unsubLogs();
       unsubSched();
       unsubSub();
       unsubTrd();
@@ -2409,7 +2397,7 @@ export const SettingsView: React.FC = () => {
 
       {/* TAB 7: FORENSIC AUDIT TRAIL */}
       {activeTab === 'audit' && (
-        <AuditForensicViewer logs={auditLogs} settings={settings} />
+        <AuditForensicViewer logs={auditLogs} settings={settings} feedStatus={auditFeedStatus} />
       )}
 
       {/* RESTORE CONFIRMATION MODAL */}
