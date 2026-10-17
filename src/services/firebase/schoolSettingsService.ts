@@ -1,3 +1,5 @@
+import { normalizeLetterhead, validateBrandLogo } from '../../utils/reportBranding';
+import type { LetterheadConfig } from '../../types';
 import { sanitizeDashboardInfoConfig, type DashboardInfoConfig } from '../../types/dashboardInfo.types';
 import { sanitizeNotificationConfig, type NotificationConfig } from '../../types/notification.types';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
@@ -141,7 +143,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -186,6 +188,22 @@ export class SchoolSettingsService {
       transaction.update(ref, { notificationConfig, updatedAt: serverTimestamp() });
     });
     void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui pengaturan notifikasi realtime sekolah' });
+    return this.receipt(expected);
+  }
+
+  public static async saveBrandingSettings(application: string, letterLogo: string, letter: LetterheadConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId), user = await getDocFromServer(doc(db, 'users', uid));
+    if (!user.exists() || user.data().role !== 'ADMIN' || user.data().isActive !== true) throw new Error('Hanya administrator aktif yang dapat mengubah logo dan kop surat.');
+    const appLogoUrl = validateBrandLogo(application, true), letterheadLogoUrl = validateBrandLogo(letterLogo);
+    const letterheadConfig = normalizeLetterhead(letter), ref = doc(db, 'settings', 'school_config');
+    if (!letterheadConfig.schoolName) throw new Error('Nama sekolah pada kop wajib diisi.');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref); if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      expected = { ...snap.data(), appLogoUrl, letterheadLogoUrl, letterheadConfig } as SchoolSettings;
+      transaction.update(ref, { appLogoUrl, letterheadLogoUrl, letterheadConfig, updatedAt: serverTimestamp() });
+    });
+    void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui logo aplikasi, logo kop dan format kop surat' });
     return this.receipt(expected);
   }
 

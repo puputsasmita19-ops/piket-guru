@@ -11,7 +11,7 @@ const built = await build({ stdin: { contents: "export{SchoolSettingsService}fro
   for (const [filter,path] of [[/\/firebase$/,'firebase'],[/^firebase\/firestore$/,'sdk'],[/locationService$/,'location'],[/auditService$/,'audit'],[/driveClientService$/,'drive']]) b.onResolve({filter},()=>({path,namespace:'mock'}));
   b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}));
 }}] });
-const context = vm.createContext({ f: fixture, module: { exports: {} }, console, localStorage: { setItem() {} }, TextEncoder, Uint8Array, DataView }); vm.runInContext(built.outputFiles[0].text,context);
+const context = vm.createContext({ f: fixture, module: { exports: {} }, console, localStorage: { setItem() {} }, TextEncoder, Uint8Array, DataView, URL }); vm.runInContext(built.outputFiles[0].text,context);
 const service = context.module.exports.SchoolSettingsService; let count=0;const check=(name,ok)=>{assert.ok(ok,name);count++;console.log('PASS',name)};
 await service.saveOperationalReportSettings({ paperSize:'F4',orientation:'landscape',marginLeftMm:20,showLogo:false,showLetterhead:false,showSignatures:false },{allowCustomDestination:false,customDestinations:[' Koperasi ','Koperasi','Panitia']},'admin');
 check('admin saves only print and visitor configuration',fixture.writes.length===1 && Object.keys(fixture.writes[0]).sort().join(',')==='printConfig,updatedAt,visitorConfig');
@@ -24,4 +24,20 @@ fixture.user.isActive=true;await assert.rejects(()=>service.saveOperationalRepor
 await service.saveProfile({...fixture.settings,schoolName:'Nama baru',printConfig:{paperSize:'A4'},visitorConfig:{allowCustomDestination:true,customDestinations:['stale']}},'admin');
 check('a stale profile save cannot overwrite newer report/visitor settings',fixture.settings.printConfig.paperSize==='F4'&&!fixture.settings.visitorConfig.allowCustomDestination&&fixture.settings.schoolName==='Nama baru');
 check('settings save creates an audit entry',fixture.logs.some(event=>event.module==='SETTINGS'&&event.details.includes('format cetak')));
+const oldSettings=JSON.parse(JSON.stringify(fixture.settings));
+await service.saveBrandingSettings('/icon.svg','https://example.invalid/school.png',{schoolName:'Kop Khusus',foundationName:'Yayasan Uji',logoWidthMm:500},'admin');
+check('branding writes only its three independent fields',Object.keys(fixture.writes.at(-1)).sort().join(',')==='appLogoUrl,letterheadConfig,letterheadLogoUrl,updatedAt');
+check('branding preserves GPS, school profile and report settings',fixture.settings.schoolName===oldSettings.schoolName&&fixture.settings.schoolLat===oldSettings.schoolLat&&fixture.settings.printConfig.paperSize===oldSettings.printConfig.paperSize);
+check('letterhead values are normalized without undefined',fixture.settings.letterheadConfig.logoWidthMm===32&&!Object.values(fixture.settings.letterheadConfig).includes(undefined));
+await service.saveProfile({...oldSettings,schoolName:'Profil lebih baru',appLogoUrl:'https://example.invalid/stale.png',letterheadLogoUrl:'stale',letterheadConfig:{schoolName:'stale'}},'admin');
+check('stale profile save preserves newer app/letterhead branding',fixture.settings.appLogoUrl==='/icon.svg'&&fixture.settings.letterheadLogoUrl==='https://example.invalid/school.png'&&fixture.settings.letterheadConfig.schoolName==='Kop Khusus');
+const current=fixture.writes.length;
+for(const role of ['GURU','inactive','wrong-uid']){fixture.user.role=role==='GURU'?'GURU':'ADMIN';fixture.user.isActive=role!=='inactive';await assert.rejects(()=>service.saveBrandingSettings('/icon.svg','',{schoolName:'Sekolah'},role==='wrong-uid'?'other':'admin'));}
+check('branding rejects non-admin, inactive and mismatched sessions',fixture.writes.length===current);
+fixture.user.role='ADMIN';fixture.user.isActive=true;
+for(const logo of ['javascript:alert(1)','/api/drive/photo/private','http://example.invalid/logo.png','https://user:password@example.invalid/logo.png'])await assert.rejects(()=>service.saveBrandingSettings(logo,'',{schoolName:'Sekolah'},'admin'));
+check('branding rejects unsafe or private URLs before saving',fixture.writes.length===current);
+await assert.rejects(()=>service.saveBrandingSettings('/icon.svg','',{schoolName:''},'admin'));
+check('blank letterhead school name cannot be saved',fixture.writes.length===current);
+check('default report signature order is principal left',fixture.settings.printConfig.signatureOrder==='principal_left');
 console.log(`${count} operational settings/access checks passed.`);

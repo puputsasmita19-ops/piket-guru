@@ -1,3 +1,4 @@
+import { appLogo, DEFAULT_APP_LOGO } from '../../utils/reportBranding';
 import { NotificationBell } from './NotificationBell';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -57,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || APP_NAME);
-  const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
+  const [logoUrl, setLogoUrl] = useState(DEFAULT_APP_LOGO);
 
   const [activePanel, setActivePanel] = useState<HeaderPanel>('none');
 
@@ -171,9 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
           if (config.appName) {
             setAppName(config.appName);
           }
-          if (config.logoUrl !== undefined) {
-            setLogoUrl(config.logoUrl);
-          }
+          setLogoUrl(appLogo(config));
         }
       }
     );
@@ -236,7 +235,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="hidden lg:flex items-center gap-2 sm:gap-3 min-w-0">
                 {logoUrl ? (
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white dark:bg-[var(--theme-card-bg)] p-0.5 flex items-center justify-center shadow-md shadow-[var(--theme-ring)] border border-slate-200 dark:border-[var(--theme-card-border)] shrink-0">
-                    <img src={logoUrl} alt="Logo Sekolah" className="w-full h-full object-contain rounded-lg" />
+                    <img src={logoUrl} alt="Logo aplikasi" className="w-full h-full object-contain rounded-lg" />
                   </div>
                 ) : (
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] flex items-center justify-center shadow-md shadow-[var(--theme-ring)] font-bold text-base sm:text-lg shrink-0">

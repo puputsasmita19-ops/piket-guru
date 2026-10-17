@@ -1,3 +1,5 @@
+import { BrandingSettingsCard } from './BrandingSettingsCard';
+import { appLogo } from '../../utils/reportBranding';
 import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
 import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
@@ -67,7 +69,7 @@ import { AnnouncementRecord } from '../../types/announcement.types';
 import { StudentTardySettingsCard } from './StudentTardySettingsCard';
 import { LessonPeriodSettingsCard } from './LessonPeriodSettingsCard';
 
-type SettingsTab = 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
+type SettingsTab = 'branding' | 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
 const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
@@ -113,7 +115,6 @@ export const SettingsView: React.FC = () => {
   const [appCreator, setAppCreator] = useState(
     DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'
   );
-  const [logoUrl, setLogoUrl] = useState(DEFAULT_SCHOOL_SETTINGS.logoUrl || '');
   const [schoolLat, setSchoolLat] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat);
   const [schoolLng, setSchoolLng] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLng);
   const [schoolLatRaw, setSchoolLatRaw] = useState(DEFAULT_SCHOOL_SETTINGS.schoolLat.toString());
@@ -165,7 +166,6 @@ export const SettingsView: React.FC = () => {
   );
   const [selectedDayConfig, setSelectedDayConfig] = useState<DayOfWeek>('SENIN');
 
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -259,7 +259,6 @@ export const SettingsView: React.FC = () => {
         if (data.appName) setAppName(data.appName);
         if (data.appSubtitle) setAppSubtitle(data.appSubtitle);
         if (data.appCreator) setAppCreator(data.appCreator);
-        if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
         if (data.phone) setPhone(data.phone);
         if (data.email) setEmail(data.email);
         if (data.website) setWebsite(data.website);
@@ -488,25 +487,6 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSaveSuccessBanner(null), 4000);
   };
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran file logo maksimal 2MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const res = event.target?.result as string;
-      if (res) {
-        setLogoUrl(res);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handlePrincipalSigUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -547,7 +527,6 @@ export const SettingsView: React.FC = () => {
     appName: appName.trim() || 'PIKET GURU',
     appSubtitle: appSubtitle.trim() || 'Jadwal & Buku Piket Digital Sekolah',
     appCreator: appCreator.trim(),
-    logoUrl: logoUrl.trim(),
     schoolLat,
     schoolLng,
     allowedRadiusMeters,
@@ -802,6 +781,7 @@ export const SettingsView: React.FC = () => {
             <MapPin className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
             Profil & GPS
           </button>
+          {isAdmin && <button type="button" onClick={() => setActiveTab('branding')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'branding' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><ImageIcon className="w-3.5 h-3.5"/>Logo & Kop Surat</button>}
           {isAdmin && <button onClick={() => setActiveTab('operational_reports')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'operational_reports' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><FileText className="w-3.5 h-3.5"/>Cetak & Buku Tamu</button>}
           {isAdmin && <button onClick={() => setActiveTab('dashboard_info')}
@@ -1368,93 +1348,16 @@ export const SettingsView: React.FC = () => {
                 />
               </div>
 
-              {/* Logo Management */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <ImageIcon className="w-4 h-4 text-blue-500" />
-                      <span>Logo Resmi Sekolah / Aplikasi</span>
-                    </label>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Tampil pada halaman login, bilah atas (header), kop buku piket, dan laporan
-                    </p>
-                  </div>
-
-                  {logoUrl && isAdmin && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-rose-600 hover:text-rose-700 text-xs self-start sm:self-auto cursor-pointer"
-                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                      onClick={() => setLogoUrl('')}
-                    >
-                      Hapus / Reset Logo
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {/* Current Logo / Placeholder */}
-                  <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 p-1 flex items-center justify-center shrink-0 shadow-xs">
-                    {logoUrl ? (
-                      <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-contain rounded-xl" />
-                    ) : (
-                      <div className="text-center text-slate-400">
-                        <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
-                        <span className="text-[9px] block">Default</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload & URL input */}
-                  <div className="flex-1 w-full space-y-2">
-                    <input
-                      type="file"
-                      ref={logoFileInputRef}
-                      onChange={handleLogoFileUpload}
-                      accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp"
-                      className="hidden"
-                    />
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!isAdmin}
-                        leftIcon={<Upload className="w-3.5 h-3.5 text-blue-500" />}
-                        onClick={() => logoFileInputRef.current?.click()}
-                        className="text-xs cursor-pointer"
-                      >
-                        Unggah Gambar Logo
-                      </Button>
-                      <span className="text-[10px] text-slate-400">Format: PNG, JPG, WebP, SVG (Maks. 2MB)</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <input
-                        type="url"
-                        disabled={!isAdmin}
-                        value={logoUrl}
-                        onChange={(e) => setLogoUrl(e.target.value)}
-                        placeholder="Atau tempel URL gambar logo eksternal (https://...)"
-                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <div className="p-4 rounded-xl border border-[var(--theme-card-border)] space-y-2"><p className="text-xs text-slate-500 dark:text-slate-400">Logo aplikasi dan logo kop dikelola secara terpisah.</p>{isAdmin && <Button type="button" variant="outline" onClick={() => setActiveTab('branding')}>Buka pengaturan Logo & Kop Surat</Button>}</div>
 
               {/* Live Preview Box */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-1.5 shadow-inner">
                 <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
                   Pratinjau Tampilan Header & Footer Login:
                 </div>
-                {logoUrl ? (
+                {appLogo(settings) ? (
                   <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center mx-auto shadow-md">
-                    <img src={logoUrl} alt="Logo" className="w-full h-full object-contain rounded-lg" />
+                    <img src={appLogo(settings)} alt="Logo" className="w-full h-full object-contain rounded-lg" />
                   </div>
                 ) : (
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white mx-auto shadow-md">
@@ -2245,6 +2148,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB: PENGATURAN KETERLAMBATAN SISWA (ADMIN) */}
+      {activeTab === 'branding' && isAdmin && <BrandingSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'operational_reports' && isAdmin && <OperationalReportSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'dashboard_info' && isAdmin && <DashboardInfoSettingsCard settings={settings} onSaved={setSettings} />}
 

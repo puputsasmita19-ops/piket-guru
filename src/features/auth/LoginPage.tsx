@@ -1,3 +1,4 @@
+import { appLogo } from '../../utils/reportBranding';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Lock,
@@ -648,11 +649,11 @@ export const LoginPage: React.FC = () => {
 
         {/* Header Branding & Real-time Date/Time */}
         <div className="text-center space-y-1.5 sm:space-y-2 pt-1 sm:pt-0 px-8 sm:px-10">
-          {schoolSettings.logoUrl ? (
+          {appLogo(schoolSettings) ? (
             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)] p-1 flex items-center justify-center mx-auto shadow-md border border-slate-200 dark:border-[var(--theme-card-border)]">
               <img
-                src={schoolSettings.logoUrl}
-                alt="Logo Sekolah"
+                src={appLogo(schoolSettings)}
+                alt="Logo aplikasi"
                 className="w-full h-full object-contain rounded-lg sm:rounded-xl"
               />
             </div>

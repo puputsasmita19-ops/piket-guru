@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { transform } from 'esbuild';
-const built=await transform(fs.readFileSync('src/utils/operationalReport.ts','utf8'),{loader:'ts',format:'esm'});
+import { build } from 'esbuild';
+const bundled=await build({entryPoints:['src/utils/operationalReport.ts'],bundle:true,write:false,format:'esm',external:['../services/drive/driveClientService']});const built={code:bundled.outputFiles[0].text};
 const {operationalReportDocx:docx,operationalReportHtml:html,normalizeReportPrint:normalize,reportPaper}=await import('data:text/javascript;base64,'+Buffer.from(built.code).toString('base64'));
 const settings={schoolName:'Sekolah Uji',npsn:'12345678',address:'Jalan Sekolah 1',reportCity:'Jember',principalName:'Kepala Sekolah Uji',principalIdType:'NIP',principalIdNumber:'000123',coordinatorName:'Koordinator Uji',printConfig:{paperSize:'F4',f4WidthMm:215,f4HeightMm:330,orientation:'landscape',marginTopMm:12,marginRightMm:13,marginBottomMm:14,marginLeftMm:15,showLetterhead:true,showLogo:true,showSignatures:true}};
 const report={title:'Rekap Laporan Kejadian',period:'2026-10-01 s.d. 2026-10-31',headers:['Tanggal','Pihak Terlibat','Kronologi','Tindak Lanjut','Petugas'],rows:Array.from({length:18},(_,i)=>['2026-10-17',`Siswa Uji ${i+1}\nX TKJ 1`,'Uraian kejadian uji yang dicatat secara jelas. '.repeat(i%3+1),'Pendampingan dan koordinasi dengan wali kelas.','Petugas Uji'])};
@@ -14,5 +14,13 @@ check('invalid layout settings are clamped safely',normalize({marginLeftMm:NaN,m
 check('missing optional school details never print undefined or fabricated identities',!new TextDecoder().decode(docx(report,{schoolName:'Sekolah Tanpa Detail'})).includes('undefined'));
 check('A4 portrait has the expected dimensions',reportPaper(normalize()).width===210&&reportPaper(normalize()).height===297);
 const bytes=docx(report,settings);check('Word export uses a real OOXML ZIP container',bytes[0]===0x50&&bytes[1]===0x4b&&new TextDecoder().decode(bytes).includes('word/document.xml')&&!new TextDecoder().decode(bytes).startsWith('<html'));
+const detail={...settings,appLogoUrl:'https://example.invalid/app.png',letterheadConfig:{foundationName:'YAYASAN UJI',schoolName:'Sekolah Kop Uji',accreditation:'TERAKREDITASI (A)',accreditationNumber:'SK UJI',nss:'123',npsn:'456',address:'Alamat Kop',phone:'000',email:'uji@example.invalid',website:'www.example.invalid',borderStyle:'double',fontFamily:'Arial',logoWidthMm:22}};
+const detailedHtml=html(report,detail),detailedWord=new TextDecoder().decode(docx(report,detail));
+check('HTML and Word include all configured letterhead lines and double rule',['YAYASAN UJI','Sekolah Kop Uji','SK UJI','NSS: 123','NPSN: 456','Alamat Kop','uji@example.invalid','www.example.invalid'].every(t=>detailedHtml.includes(t)&&detailedWord.includes(t))&&detailedHtml.includes('4px double #000')&&detailedWord.includes('w:val="double"'));
+const footer=detailedHtml.slice(detailedHtml.indexOf('<footer>')),signatures=detailedWord.slice(detailedWord.indexOf('catatan · Seluruh hasil filter aktif'));
+check('default HTML and Word report signers put principal before coordinator',footer.indexOf('Kepala Sekolah')<footer.indexOf('Koordinator Piket')&&signatures.indexOf('Kepala Sekolah')<signatures.indexOf('Koordinator Piket'));
+const swapped=html(report,{...detail,printConfig:{...detail.printConfig,signatureOrder:'coordinator_left'}}).split('<footer>')[1];
+check('admin can reverse report signature order',swapped.indexOf('Koordinator Piket')<swapped.indexOf('Kepala Sekolah'));
+check('application logo never leaks into printed reports',!detailedHtml.includes('https://example.invalid/app.png')&&!detailedWord.includes('https://example.invalid/app.png'));
 if(process.env.PIKET_HISTORY_QA){fs.mkdirSync(process.env.PIKET_HISTORY_QA,{recursive:true});fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4.docx',bytes);fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4.html',text);fs.writeFileSync(process.env.PIKET_HISTORY_QA+'/escaped.docx',docx({...report,rows:[['<script>literal</script>','A&B','X','Y','Z']]},settings));}
 console.log(`${count} Word/PDF report checks passed.`);

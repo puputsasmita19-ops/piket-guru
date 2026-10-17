@@ -167,6 +167,24 @@ export interface PrintLayoutConfig {
   showLogo: boolean;
   showLetterhead: boolean;
   showSignatures: boolean;
+  /** Reports only. Individual entry/admit slips retain their original signers. */
+  signatureOrder?: 'principal_left' | 'coordinator_left';
+}
+
+export interface LetterheadConfig {
+  foundationName: string;
+  schoolName: string;
+  accreditation: string;
+  accreditationNumber: string;
+  nss: string;
+  npsn: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  borderStyle: 'double' | 'single' | 'none';
+  fontFamily: 'Arial' | 'Times New Roman';
+  logoWidthMm: number;
 }
 
 export type LoginContactType = 'whatsapp' | 'phone' | 'email';
@@ -199,6 +217,10 @@ export interface SchoolSettings {
   appSubtitle?: string;
   appCreator?: string;
   logoUrl?: string;
+  /** Independent branding. logoUrl remains the legacy school/watermark logo. */
+  appLogoUrl?: string;
+  letterheadLogoUrl?: string;
+  letterheadConfig?: LetterheadConfig;
   schoolLat: number;
   schoolLng: number;
   allowedRadiusMeters: number;

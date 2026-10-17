@@ -356,6 +356,7 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
     email: 'info@smkdrsoebandi.sch.id',
     website: 'smkdrsoebandi.sch.id',
     logoUrl: '',
+    appLogoUrl: '/icon.svg',
     appName: 'PIKET GURU',
     appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
     loginSupportContact: {
@@ -403,7 +404,9 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
           phone: data.phone || DEFAULT_CONFIG.phone,
           email: data.email || DEFAULT_CONFIG.email,
           website: data.website || DEFAULT_CONFIG.website,
-          logoUrl: data.logoUrl || DEFAULT_CONFIG.logoUrl,
+          // Login receives only the independent application logo, never the larger legacy school logo.
+          logoUrl: DEFAULT_CONFIG.logoUrl,
+          appLogoUrl: data.appLogoUrl || DEFAULT_CONFIG.appLogoUrl,
           appName: data.appName || DEFAULT_CONFIG.appName,
           appSubtitle: data.appSubtitle || DEFAULT_CONFIG.appSubtitle,
           loginSupportContact: sanitizedContact,

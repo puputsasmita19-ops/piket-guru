@@ -1,3 +1,5 @@
+import { PrintLetterhead, ReportSignatures } from '../../components/reports/PrintLetterhead';
+import { normalizeReportPrint } from '../../utils/operationalReport';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -38,22 +40,6 @@ interface MonthlyReportPrintModalProps {
   dutyBookRecords?: DutyBookRecord[];
 }
 
-const LOCAL_STORAGE_PRINT_KEY = 'piket_print_settings_v1';
-
-const DEFAULT_PRINT_CONFIG: PrintLayoutConfig = {
-  paperSize: 'A4',
-  f4WidthMm: 215,
-  f4HeightMm: 330,
-  orientation: 'portrait',
-  marginTopMm: 15,
-  marginBottomMm: 15,
-  marginLeftMm: 15,
-  marginRightMm: 15,
-  showLogo: true,
-  showLetterhead: true,
-  showSignatures: true,
-};
-
 export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = ({
   isOpen,
   onClose,
@@ -69,31 +55,12 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
   visitorRecords = [],
   dutyBookRecords = [],
 }) => {
-  // Load initial print preferences from localStorage or settings
-  const [printConfig, setPrintConfig] = useState<PrintLayoutConfig>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_PRINT_KEY);
-      if (saved) {
-        return { ...DEFAULT_PRINT_CONFIG, ...JSON.parse(saved) };
-      }
-    } catch {
-      // ignore
-    }
-    return settings.printConfig || DEFAULT_PRINT_CONFIG;
-  });
+  const [printConfig, setPrintConfig] = useState<PrintLayoutConfig>(() => normalizeReportPrint(settings.printConfig));
+  useEffect(() => { if (isOpen) setPrintConfig(normalizeReportPrint(settings.printConfig)); }, [isOpen, settings.printConfig]);
 
   const [showConfigPanel, setShowConfigPanel] = useState<boolean>(false);
   const [reportDate, setReportDate] = useState<string>(() => getTodayISODate());
-  const [customReportCity, setCustomReportCity] = useState<string>(() => settings.reportCity || 'Jakarta');
-
-  // Save to localStorage whenever printConfig changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_PRINT_KEY, JSON.stringify(printConfig));
-    } catch {
-      // ignore
-    }
-  }, [printConfig]);
+  const [customReportCity, setCustomReportCity] = useState<string>(() => settings.reportCity || '');
 
   if (!isOpen) return null;
 
@@ -102,7 +69,7 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
   };
 
   const resetPrintConfig = () => {
-    setPrintConfig(DEFAULT_PRINT_CONFIG);
+    setPrintConfig(normalizeReportPrint(settings.printConfig));
   };
 
   const avgAttendance =
@@ -122,17 +89,6 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
   // City and date display
   const cityDisplay = customReportCity || settings.reportCity || 'Tempat';
   const formattedPublishDate = formatIndonesianDate(reportDate);
-
-  // Signer IDs
-  const principalIdDisplay =
-    settings.principalIdNumber && settings.principalIdNumber.trim() !== ''
-      ? `${settings.principalIdType || 'NIP'}. ${settings.principalIdNumber}`
-      : null;
-
-  const coordinatorIdDisplay =
-    settings.coordinatorIdNumber && settings.coordinatorIdNumber.trim() !== ''
-      ? `${settings.coordinatorIdType || 'NIP'}. ${settings.coordinatorIdNumber}`
-      : null;
 
   // Compute paper CSS dimensions
   const isA4 = printConfig.paperSize === 'A4';
@@ -496,56 +452,12 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
             }}
           >
             {/* KOP SURAT SEKOLAH */}
-            {printConfig.showLetterhead && (
-              <div className="border-b-2 border-black pb-3">
-                <div className="flex items-center justify-between gap-4">
-                  {printConfig.showLogo && settings.logoUrl && (
-                    <div className="shrink-0 w-20 h-20 flex items-center justify-center">
-                      <img
-                        src={settings.logoUrl}
-                        alt="Logo Sekolah"
-                        className="max-h-20 max-w-20 object-contain"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex-1 text-center space-y-0.5">
-                    <h2 className="text-base sm:text-lg font-bold uppercase tracking-wider text-black">
-                      {settings.schoolName || 'PEMERINTAH DAERAH / SEKOLAH'}
-                    </h2>
-                    <p className="text-[11px] text-slate-800 italic">
-                      {settings.npsn ? `NPSN: ${settings.npsn}` : ''}
-                      {settings.address ? ` • ${settings.address}` : ''}
-                    </p>
-                    {(settings.phone || settings.email || settings.website) && (
-                      <p className="text-[10px] text-slate-700">
-                        {settings.phone ? `Telp: ${settings.phone}` : ''}
-                        {settings.email ? ` • Email: ${settings.email}` : ''}
-                        {settings.website ? ` • Web: ${settings.website}` : ''}
-                      </p>
-                    )}
-                  </div>
-
-                  {printConfig.showLogo && settings.logoUrl && (
-                    <div className="shrink-0 w-20 hidden sm:block opacity-0">
-                      {/* Spacer for symmetrical centering */}
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-center pt-3 space-y-0.5 border-t border-slate-400 mt-2">
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wide underline">
-                    LAPORAN REKAPITULASI PELAKSANAAN TUGAS PIKET & KETERTIBAN SEKOLAH
-                  </h3>
-                  <p className="text-[11px] font-sans font-bold text-slate-900">
-                    Periode: {periodLabel}
-                  </p>
-                  <p className="text-[9px] font-sans text-slate-500">
-                    Dokumen dicetak pada: {formattedPublishDate} • Berkas Resmi Sekolah
-                  </p>
-                </div>
-              </div>
-            )}
+            {printConfig.showLetterhead && <PrintLetterhead settings={settings} showLogo={printConfig.showLogo}/>}
+            <div className="text-center pt-3 space-y-0.5 mt-2">
+              <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wide underline">LAPORAN REKAPITULASI PELAKSANAAN TUGAS PIKET & KETERTIBAN SEKOLAH</h3>
+              <p className="text-[11px] font-sans font-bold text-slate-900">Periode: {periodLabel}</p>
+              <p className="text-[9px] font-sans text-slate-500">Dokumen dicetak pada: {formattedPublishDate} • Berkas Resmi Sekolah</p>
+            </div>
 
             {/* RINGKASAN EKSEKUTIF SEMUA MODUL */}
             <div className="print-page-break-avoid border border-slate-300 p-3.5 rounded-lg text-[11px] space-y-2 bg-slate-50">
@@ -918,117 +830,7 @@ export const MonthlyReportPrintModal: React.FC<MonthlyReportPrintModalProps> = (
               </div>
             )}
 
-            {/* TANDA TANGAN REKAP RESMI */}
-            {printConfig.showSignatures && (
-              <div
-                className="print-page-break-avoid pt-6"
-                style={{
-                  breakInside: 'avoid',
-                  pageBreakInside: 'avoid',
-                }}
-              >
-                {/* Two equal-width columns: Kepala Sekolah on left, Koordinator on right */}
-                <div className="grid grid-cols-2 gap-8 text-center text-[10px] w-full items-start">
-                  {/* Kolom Kiri: Kepala Sekolah */}
-                  <div className="flex flex-col items-center w-full space-y-1">
-                    {/* Ruang penyeimbang setinggi Tempat & Tanggal di kolom kanan */}
-                    <div className="h-5 flex items-center justify-center invisible select-none" aria-hidden="true">
-                      &nbsp;
-                    </div>
-
-                    {/* Bagian Jabatan */}
-                    <div className="h-10 flex flex-col justify-end items-center text-center">
-                      <p className="font-medium text-slate-800 leading-tight">Mengetahui,</p>
-                      <p className="font-medium text-slate-800 leading-tight">Kepala Sekolah,</p>
-                    </div>
-
-                    {/* Ruang Tanda Tangan */}
-                    <div className="h-20 w-full flex items-center justify-center my-1">
-                      {settings.principalSignatureUrl ? (
-                        <img
-                          src={settings.principalSignatureUrl}
-                          alt="Tanda Tangan Kepala Sekolah"
-                          className="max-h-20 max-w-36 object-contain"
-                        />
-                      ) : (
-                        <div className="h-16 w-full flex items-center justify-center text-[9px] italic text-slate-400">
-                          [Ruang Tanda Tangan & Cap Lembaga]
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Nama Lengkap & Gelar */}
-                    <div className="min-h-[1.25rem] flex items-center justify-center text-center px-2">
-                      <p className="font-bold underline text-black leading-tight break-words">
-                        {settings.principalName || 'Dr. Hj. Siti Rohmah, M.Pd.'}
-                      </p>
-                    </div>
-
-                    {/* Identitas Pendamping (NIP/NUPTK/dll) */}
-                    <div className="min-h-[1.1rem] flex items-center justify-center text-center">
-                      {principalIdDisplay ? (
-                        <p className="text-[9px] font-mono text-slate-700 leading-tight">
-                          {principalIdDisplay}
-                        </p>
-                      ) : (
-                        <span className="invisible text-[9px] select-none">&nbsp;</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Kolom Kanan: Koordinator Tim Piket */}
-                  <div className="flex flex-col items-center w-full space-y-1">
-                    {/* Tempat dan Tanggal Penerbitan */}
-                    <div className="h-5 flex items-center justify-center text-slate-800">
-                      <p className="leading-tight font-medium">
-                        {cityDisplay}, {formattedPublishDate}
-                      </p>
-                    </div>
-
-                    {/* Bagian Jabatan */}
-                    <div className="h-10 flex flex-col justify-end items-center text-center">
-                      <p className="font-medium text-slate-800 leading-tight invisible select-none" aria-hidden="true">
-                        &nbsp;
-                      </p>
-                      <p className="font-medium text-slate-800 leading-tight">Koordinator Tim Piket Sekolah,</p>
-                    </div>
-
-                    {/* Ruang Tanda Tangan */}
-                    <div className="h-20 w-full flex items-center justify-center my-1">
-                      {settings.coordinatorSignatureUrl ? (
-                        <img
-                          src={settings.coordinatorSignatureUrl}
-                          alt="Tanda Tangan Koordinator"
-                          className="max-h-20 max-w-36 object-contain"
-                        />
-                      ) : (
-                        <div className="h-16 w-full flex items-center justify-center text-[9px] italic text-slate-400">
-                          [Ruang Tanda Tangan & Cap Tim Piket]
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Nama Lengkap & Gelar */}
-                    <div className="min-h-[1.25rem] flex items-center justify-center text-center px-2">
-                      <p className="font-bold underline text-black leading-tight break-words">
-                        {settings.coordinatorName || 'Drs. H. Ahmad Fauzi, M.Pd.'}
-                      </p>
-                    </div>
-
-                    {/* Identitas Pendamping (NIP/NUPTK/dll) */}
-                    <div className="min-h-[1.1rem] flex items-center justify-center text-center">
-                      {coordinatorIdDisplay ? (
-                        <p className="text-[9px] font-mono text-slate-700 leading-tight">
-                          {coordinatorIdDisplay}
-                        </p>
-                      ) : (
-                        <span className="invisible text-[9px] select-none">&nbsp;</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {printConfig.showSignatures && <ReportSignatures settings={settings} date={formattedPublishDate} city={cityDisplay}/>}
           </div>
         </div>
       </div>

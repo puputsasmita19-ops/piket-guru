@@ -1,3 +1,4 @@
+import { PrintLetterhead, ReportSignatures } from '../../components/reports/PrintLetterhead';
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -48,18 +49,8 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
 
         {/* Printable Paper Canvas */}
         <div className="bg-white text-black p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm print:border-none print:shadow-none print:p-0 font-serif text-xs leading-relaxed space-y-4">
-          {/* KOP SURAT SEKOLAH */}
-          <div className="text-center border-b-2 border-black pb-3 space-y-1">
-            <h2 className="text-base font-bold uppercase tracking-wider">
-              {settings.schoolName}
-            </h2>
-            <p className="text-[11px] italic">
-              NPSN: {settings.npsn} • {settings.address}
-            </p>
-            <h3 className="text-xs font-bold uppercase tracking-wide pt-1">
-              BUKU JURNAL CATATAN PIKET HARIAN
-            </h3>
-          </div>
+          {settings.printConfig?.showLetterhead !== false && <PrintLetterhead settings={settings} showLogo={settings.printConfig?.showLogo !== false}/>}
+          <h3 className="text-xs font-bold uppercase tracking-wide text-center">BUKU JURNAL CATATAN PIKET HARIAN</h3>
 
           {/* META INFO TABEL */}
           <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-b border-slate-200 pb-2">
@@ -126,32 +117,9 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
             </div>
           </div>
 
-          {/* TANDA TANGAN (SIGNATURE BLOCK) */}
-          <div className="grid grid-cols-2 gap-8 pt-8 text-center text-[10px]">
-            <div>
-              <p>Petugas Piket (Penulis),</p>
-              <div className="h-16 flex flex-col items-center justify-center text-slate-500 text-[10px]">
-                {dutyBook.submittedAt ? (
-                  <span>Terkirim: {formatIndonesianDate(dutyBook.submittedAt.split('T')[0])}</span>
-                ) : (
-                  <span>(Draf Belum Terkirim)</span>
-                )}
-              </div>
-              <p className="font-bold underline">{dutyBook.petugasName}</p>
-            </div>
+          <p className="text-[10px] text-slate-600">Penulis: {dutyBook.petugasName} · Pengesahan: {pengesahNama || 'Belum disahkan'}</p>
+          {settings.printConfig?.showSignatures !== false && <ReportSignatures settings={settings} date={formatIndonesianDate(dutyBook.tanggal)}/>}
 
-            <div>
-              <p>Mengetahui,<br />Kepala Sekolah / Pengesah,</p>
-              <div className="h-16 flex flex-col items-center justify-center text-slate-500 text-[10px]">
-                {pengesahNama ? (
-                  <span>Telah Disahkan & Selesai</span>
-                ) : (
-                  <span>(Belum Disahkan)</span>
-                )}
-              </div>
-              <p className="font-bold underline">{pengesahNama || '( .......................................... )'}</p>
-            </div>
-          </div>
         </div>
       </div>
     </Modal>

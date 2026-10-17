@@ -1,4 +1,4 @@
-import { School } from '../../components/icons';
+import { PrintLetterhead, ReportSignatures } from '../../components/reports/PrintLetterhead';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -38,9 +38,10 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
   const { currentUser } = useAuth();
   const [photosPerPage, setPhotosPerPage] = useState<2 | 4>(4);
   const [reportDate, setReportDate] = useState<string>(() => getTodayISODate());
-  const [reportCity, setReportCity] = useState<string>(() => settings.reportCity || 'Jakarta');
-  const [showSignatures, setShowSignatures] = useState<boolean>(true);
+  const [reportCity, setReportCity] = useState<string>(() => settings.reportCity || '');
+  const [showSignatures, setShowSignatures] = useState<boolean>(settings.printConfig?.showSignatures !== false);
   const [imageStates, setImageStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({});
+  useEffect(() => { if (isOpen) setShowSignatures(settings.printConfig?.showSignatures !== false); }, [isOpen, settings.printConfig?.showSignatures]);
   // Do not reset on every parent render: report selections may be new arrays.
   // Each image reports loading again whenever its source changes.
   useEffect(() => { setImageStates({}); }, [isOpen]);
@@ -137,10 +138,18 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                 margin: 0 !important;
                 width: 100% !important;
                 max-width: 100% !important;
-                min-height: 260mm !important;
+                height: 270mm !important;
+                min-height: 0 !important;
+                box-sizing: border-box !important;
+                gap: 3mm !important;
                 page-break-after: always !important;
                 break-after: page !important;
               }
+              .print-page > div { flex-shrink: 0; }
+              .photo-print-grid { flex: 1 1 0 !important; min-height: 0 !important; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+              .photo-print-grid > div { min-height: 0; height: 100%; break-inside: avoid; }
+              .photo-print-image { height: auto !important; min-height: 0 !important; flex: 1 1 0 !important; }
+              .photo-print-grid .photo-print-meta { flex-shrink: 0; }
               .print-page:last-child {
                 page-break-after: auto !important;
                 break-after: auto !important;
@@ -234,40 +243,12 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
               style={{ pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto' }}
             >
               {/* Kop Surat Sekolah */}
-              <div className="border-b-2 border-slate-900 pb-3 mb-4">
-                <div className="flex items-center gap-4">
-                  {settings.logoUrl ? (
-                    <img
-                      src={settings.logoUrl}
-                      alt="Logo Sekolah"
-                      className="w-14 h-14 object-contain shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xl shrink-0">
-                      <School className="w-9 h-9" />
-                    </div>
-                  )}
-                  <div className="text-center flex-1">
-                    <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900 leading-tight">
-                      {settings.schoolName}
-                    </h2>
-                    <p className="text-[11px] text-slate-700 leading-tight">
-                      NPSN: {settings.npsn} • {settings.address}
-                    </p>
-                    {settings.phone && (
-                      <p className="text-[10px] text-slate-600">
-                        Telp/Fax: {settings.phone} • Email: {settings.email || '-'}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <div className="pb-3 mb-4">
+                {settings.printConfig?.showLetterhead !== false && <PrintLetterhead settings={settings} showLogo={settings.printConfig?.showLogo !== false}/>}
 
-              {/* Document Title Header */}
+              </div>
               <div className="text-center mb-4 space-y-0.5">
-                <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 underline">
-                  LAMPIRAN DOKUMENTASI BULANAN
-                </h3>
+                <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 underline">LAMPIRAN DOKUMENTASI BULANAN</h3>
                 <p className="text-xs text-slate-600 font-medium">Periode: {periodLabel}</p>
                 <div className="text-[10px] text-slate-500 flex items-center justify-between pt-1">
                   <span>Bukti Dokumentasi Visual & Operasional Piket</span>
@@ -279,7 +260,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
 
               {/* Photos Grid: 2 or 4 photos per page */}
               <div
-                className={`grid gap-4 flex-1 ${
+                className={`photo-print-grid grid gap-4 flex-1 ${
                   photosPerPage === 2 ? 'grid-cols-1' : 'grid-cols-2'
                 }`}
               >
@@ -290,7 +271,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                   >
                     {/* Preserved Aspect Ratio Photo */}
                     <div
-                      className={`relative w-full rounded-lg overflow-hidden bg-black flex items-center justify-center ${
+                      className={`photo-print-image relative w-full rounded-lg overflow-hidden bg-black flex items-center justify-center ${
                         photosPerPage === 2 ? 'h-[340px]' : 'h-[175px]'
                       }`}
                     >
@@ -312,7 +293,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                     </div>
 
                     {/* Compact Caption */}
-                    <div className="pt-2 text-[10px] space-y-0.5 text-slate-800">
+                    <div className="photo-print-meta pt-2 text-[10px] space-y-0.5 text-slate-800">
                       <div className="font-bold text-[11px] truncate">{photo.title}</div>
                       <div className="text-slate-600 truncate">{photo.briefIdentity}</div>
                       <div className="flex items-center justify-between text-slate-500 text-[9.5px]">
@@ -336,65 +317,7 @@ export const PhotoRecapPrintModal: React.FC<PhotoRecapPrintModalProps> = ({
                 ))}
               </div>
 
-              {/* Signatures on the final page */}
-              {pageIdx === pages.length - 1 && showSignatures && (
-                <div className="pt-6 border-t border-slate-300 mt-4 text-xs">
-                  <div className="text-right text-[11px] text-slate-700 mb-2">
-                    {reportCity}, {formatIndonesianDate(reportDate)}
-                  </div>
-                  <div className="grid grid-cols-2 gap-8 text-center">
-                    <div>
-                      <p className="font-medium text-slate-600 text-[10.5px]">
-                        Koordinator Guru Piket,
-                      </p>
-                      <div className="h-14 flex items-center justify-center">
-                        {settings.coordinatorSignatureUrl ? (
-                          <img
-                            src={settings.coordinatorSignatureUrl}
-                            alt="TTD Koordinator"
-                            className="max-h-12 object-contain"
-                          />
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">
-                            (Tanda Tangan & Stempel)
-                          </div>
-                        )}
-                      </div>
-                      <p className="font-bold underline text-slate-900">
-                        {settings.coordinatorName || 'Koordinator Guru Piket'}
-                      </p>
-                      <p className="text-[10px] text-slate-600">
-                        {settings.coordinatorIdType || 'NIP'}. {settings.coordinatorIdNumber || '-'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="font-medium text-slate-600 text-[10.5px]">
-                        Kepala Sekolah,
-                      </p>
-                      <div className="h-14 flex items-center justify-center">
-                        {settings.principalSignatureUrl ? (
-                          <img
-                            src={settings.principalSignatureUrl}
-                            alt="TTD Kepala Sekolah"
-                            className="max-h-12 object-contain"
-                          />
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">
-                            (Tanda Tangan & Stempel)
-                          </div>
-                        )}
-                      </div>
-                      <p className="font-bold underline text-slate-900">
-                        {settings.principalName || 'Kepala Sekolah'}
-                      </p>
-                      <p className="text-[10px] text-slate-600">
-                        {settings.principalIdType || 'NIP'}. {settings.principalIdNumber || '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {pageIdx === pages.length - 1 && showSignatures && <ReportSignatures settings={settings} date={formatIndonesianDate(reportDate)} city={reportCity}/>}
 
               {/* Footer Page Number */}
               <div className="text-center text-[9px] text-slate-400 pt-2 border-t border-slate-100 mt-2">

@@ -1,3 +1,4 @@
+import { PrintLetterhead, ReportSignatures } from '../../components/reports/PrintLetterhead';
 import React from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -92,23 +93,8 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
           </div>
 
           {/* KOP SURAT RESMI */}
-          <div className="border-b-2 border-black pb-3 text-center space-y-1 relative">
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-lg font-mono">
-                PG
-              </div>
-              <div className="text-left">
-                <h2 className="font-extrabold text-base uppercase tracking-wider text-black">
-                  {settings.schoolName || 'INSTANSI SEKOLAH'}
-                </h2>
-                <p className="text-[11px] text-slate-700">
-                  NPSN: {settings.npsn || '-'} • {settings.address || '-'}
-                </p>
-                <p className="text-[10px] text-slate-500 font-mono">
-                  Sistem Informasi Manajemen Piket & Ketertiban Sekolah Terpadu
-                </p>
-              </div>
-            </div>
+          <div className="pb-3 text-center space-y-1 relative">
+            {settings.printConfig?.showLetterhead !== false && <PrintLetterhead settings={settings} showLogo={settings.printConfig?.showLogo !== false}/>}
             <div className="pt-2">
               <h3 className="text-sm font-black uppercase tracking-widest underline">
                 BERKAS AUDIT FORENSIK & REKAM JEJAK SISTEM (AUDIT TRAIL)
@@ -221,32 +207,7 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
             )}
           </div>
 
-          {/* LEGALITAS DAN TANDA TANGAN */}
-          <div className="grid grid-cols-2 gap-8 pt-6 border-t-2 border-black text-center text-[10px]">
-            <div>
-              <p className="text-slate-600">Disusun dan Diverifikasi oleh:</p>
-              <p className="font-bold">Administrator / Petugas Audit Sistem</p>
-              <div className="h-14 flex items-center justify-center italic text-slate-300">
-                [Tanda Tangan & Stempel Resmi]
-              </div>
-              <p className="font-bold underline uppercase">( Tim Administrator IT )</p>
-              <p className="text-slate-500 text-[9px]">Piket Guru Digital Security</p>
-            </div>
-
-            <div>
-              <p className="text-slate-600">
-                Mengetahui dan Mengesahkan,
-                <br />
-                {settings.address ? settings.address.split(',')[0] : 'Sekolah'}, {formatIndonesianDate(currentDate)}
-              </p>
-              <p className="font-bold">Kepala Sekolah / Penanggung Jawab</p>
-              <div className="h-14 flex items-center justify-center italic text-slate-300">
-                [Tanda Tangan & Cap Sekolah]
-              </div>
-              <p className="font-bold underline uppercase">( Kepala {settings.schoolName || 'Sekolah'} )</p>
-              <p className="text-slate-500 text-[9px]">NIP. 19780512 200501 1 008</p>
-            </div>
-          </div>
+          {settings.printConfig?.showSignatures !== false && <ReportSignatures settings={settings} date={formatIndonesianDate(currentDate)}/>}
 
           <div className="text-[8px] text-slate-400 text-center italic pt-2">
             Dokumen ini dihasilkan secara otomatis dan sah berdasarkan enkripsi jejak audit sistem Piket Guru Digital.

@@ -1,3 +1,4 @@
+import { appLogo } from '../../utils/reportBranding';
 import { Megaphone } from '../../components/icons';
 import { MapPin } from '../../components/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -417,10 +418,10 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
       >
         {/* Left: School Identity */}
         <div className="flex items-center gap-4 min-w-0">
-          {settings.logoUrl ? (
+          {appLogo(settings) ? (
             <div className={`${densityStyles.iconSize} rounded-2xl bg-white p-1 flex items-center justify-center shadow-md border border-slate-200 shrink-0`}>
               <img
-                src={settings.logoUrl}
+                src={appLogo(settings)}
                 alt="Logo Sekolah"
                 className="w-full h-full object-contain rounded-xl"
               />
