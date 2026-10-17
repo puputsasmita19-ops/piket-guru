@@ -224,6 +224,7 @@ export interface SchoolSettings {
   lobbyTv?: import('./lobbyTv.types').LobbyTvConfig;
   studentTardyConfig?: StudentTardyConfig;
   lessonPeriodConfig?: import('./period.types').LessonPeriodConfig;
+  notificationConfig?: import('./notification.types').NotificationConfig;
   documentationWatermark?: import('./watermark.types').DocumentationWatermarkConfig;
   workHours: {
     start: string;

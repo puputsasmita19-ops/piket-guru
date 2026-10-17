@@ -1,3 +1,4 @@
+import { NotificationBell } from './NotificationBell';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Sun,
@@ -12,9 +13,6 @@ import {
   LogOut,
   KeyRound,
   Bell,
-  CheckCircle2,
-  Clock,
-  Sparkles,
   Check,
   X,
   RotateCcw,
@@ -42,42 +40,6 @@ interface HeaderProps {
   isDesktopSidebarHidden?: boolean;
   onToggleDesktopSidebar?: () => void;
 }
-
-interface NotificationItem {
-  id: string;
-  title: string;
-  description: string;
-  category: 'BELL' | 'SECURITY' | 'BACKUP';
-  time: string;
-  isRead: boolean;
-}
-
-const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    title: 'Bel Sekolah Digital Siaga',
-    description: 'Jadwal bel masuk, jeda istirahat, dan kepulangan aktif tersinkronisasi.',
-    category: 'BELL',
-    time: 'Hari ini',
-    isRead: false,
-  },
-  {
-    id: 'notif-2',
-    title: 'Geofence & Keamanan Siber',
-    description: 'Radius kehadiran guru terkunci; seluruh aksi tercatat pada audit trail.',
-    category: 'SECURITY',
-    time: 'Hari ini',
-    isRead: false,
-  },
-  {
-    id: 'notif-3',
-    title: 'Snapshot & Pemulihan Bencana',
-    description: 'Titik cadangan siap digunakan untuk 1-click disaster recovery.',
-    category: 'BACKUP',
-    time: 'Hari ini',
-    isRead: false,
-  },
-];
 
 type HeaderPanel = 'none' | 'sync' | 'guide' | 'notifications' | 'theme' | 'user';
 
@@ -142,18 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
     await logout({ purgeUserData });
   };
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    try {
-      const stored = localStorage.getItem('piket_notifications_list');
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch {}
-    return DEFAULT_NOTIFICATIONS;
-  });
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-  const hasUnreadNotif = unreadCount > 0;
+  const [notificationConfig, setNotificationConfig] = useState<SchoolSettings['notificationConfig']>();
 
   const previousNavigationRef = useRef({ activeTab, subView });
 
@@ -199,25 +150,6 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, []);
 
-  const saveNotifications = (items: NotificationItem[]) => {
-    setNotifications(items);
-    try {
-      localStorage.setItem('piket_notifications_list', JSON.stringify(items));
-    } catch {}
-  };
-
-  const handleMarkNotificationsAsRead = () => {
-    const updated = notifications.map((n) => ({ ...n, isRead: true }));
-    saveNotifications(updated);
-  };
-
-  const handleToggleSingleNotifRead = (id: string) => {
-    const updated = notifications.map((n) =>
-      n.id === id ? { ...n, isRead: !n.isRead } : n
-    );
-    saveNotifications(updated);
-  };
-
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
@@ -230,6 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
       'settings',
       'school_config',
       (config) => {
+        setNotificationConfig(config?.notificationConfig);
         if (config) {
           if (config.schoolName) {
             setSchoolName(config.schoolName);
@@ -371,191 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
               />
 
-              {/* 3. Notification Bell Dropdown */}
-              <div className="relative">
-                <Tooltip content="Pusat Notifikasi" position="bottom">
-                  <button
-                    type="button"
-                    onClick={() => handleTogglePanel('notifications')}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-colors relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
-                      activePanel === 'notifications'
-                        ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold ring-2 ring-[var(--theme-primary-border)]'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
-                    }`}
-                    title="Pusat Notifikasi"
-                    aria-label="Pusat Notifikasi"
-                  >
-                    <Bell className="w-4 h-4" />
-                    {hasUnreadNotif && (
-                      <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--theme-primary)] ring-2 ring-white dark:ring-[var(--theme-card-bg)] animate-pulse" />
-                    )}
-                  </button>
-                </Tooltip>
-
-                {activePanel === 'notifications' && (
-                  <div
-                    role="dialog"
-                    aria-label="Pusat Notifikasi"
-                    onClick={(e) => e.stopPropagation()}
-                    className="fixed top-16 left-3.5 right-3.5 sm:left-auto sm:right-0 sm:absolute sm:top-full sm:mt-2 w-auto sm:w-[380px] max-w-[calc(100vw-28px)] bg-white dark:bg-[var(--theme-card-bg)] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-[var(--theme-card-border)] z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[min(520px,calc(100vh-5rem))] overflow-hidden"
-                  >
-                    {/* Header Panel */}
-                    <div className="p-3.5 sm:p-4 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] shrink-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary)] flex items-center justify-center shrink-0 border border-[var(--theme-primary-border)]/50">
-                            <Bell className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                                Notifikasi
-                              </h3>
-                              {unreadCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[var(--theme-primary)] text-white shrink-0">
-                                  {unreadCount} Baru
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                              Pemberitahuan & informasi aplikasi
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setActivePanel('none')}
-                          className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[var(--theme-surface-hover)] transition-colors cursor-pointer shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                          aria-label="Tutup Notifikasi"
-                          title="Tutup (Esc)"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Action & Status Subheader */}
-                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-200/60 dark:border-[var(--theme-card-border)] text-xs gap-2">
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                          {unreadCount > 0 ? `${unreadCount} belum dibaca` : 'Semua notifikasi dibaca'}
-                        </span>
-                        {hasUnreadNotif ? (
-                          <button
-                            type="button"
-                            onClick={handleMarkNotificationsAsRead}
-                            className="text-[11px] font-bold text-[var(--theme-primary-text)] hover:underline flex items-center gap-1 cursor-pointer bg-[var(--theme-primary-light)] px-2.5 py-1 rounded-lg border border-[var(--theme-primary-border)] active:scale-95 transition-all shrink-0"
-                            title="Tandai seluruh notifikasi sudah dibaca"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Tandai Semua Dibaca
-                          </button>
-                        ) : (
-                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            Semua Dibaca
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Content Body */}
-                    <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 min-h-0 space-y-2.5">
-                      {notifications.length === 0 ? (
-                        <div className="py-8 px-4 text-center flex flex-col items-center justify-center space-y-2">
-                          <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center">
-                            <Bell className="w-5 h-5" />
-                          </div>
-                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                            Belum ada notifikasi
-                          </p>
-                        </div>
-                      ) : (
-                        notifications.map((notif) => (
-                          <div
-                            key={notif.id}
-                            className={`p-3 rounded-2xl border transition-all ${
-                              notif.isRead
-                                ? 'bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/30 border-slate-200/60 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-400'
-                                : 'bg-[var(--theme-primary-light)]/40 dark:bg-[var(--theme-primary-light)]/15 border-[var(--theme-primary-border)] dark:border-[var(--theme-primary)]/40 shadow-xs'
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              {/* Category Icon */}
-                              <div
-                                className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center font-bold text-xs ${
-                                  notif.category === 'BELL'
-                                    ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)]'
-                                    : notif.category === 'SECURITY'
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300'
-                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
-                                }`}
-                              >
-                                {notif.category === 'BELL' && <Clock className="w-4 h-4" />}
-                                {notif.category === 'SECURITY' && <ShieldCheck className="w-4 h-4" />}
-                                {notif.category === 'BACKUP' && <Sparkles className="w-4 h-4" />}
-                              </div>
-
-                              {/* Notification Text and Details */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                    <span className={`font-bold text-xs leading-snug break-words ${
-                                      notif.isRead ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'
-                                    }`}>
-                                      {notif.title}
-                                    </span>
-                                    {!notif.isRead && (
-                                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-[var(--theme-primary)] text-white shrink-0">
-                                        Baru
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
-                                    {notif.time}
-                                  </span>
-                                </div>
-
-                                <p className="text-xs text-slate-600 dark:text-slate-300/90 mt-1 leading-relaxed break-words whitespace-normal">
-                                  {notif.description}
-                                </p>
-
-                                {/* Action Bar */}
-                                <div className="mt-2.5 pt-2 border-t border-slate-200/50 dark:border-[var(--theme-card-border)] flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 truncate">
-                                    {notif.isRead ? 'Status: Sudah dibaca' : 'Status: Belum dibaca'}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSingleNotifRead(notif.id)}
-                                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                                      notif.isRead
-                                        ? 'text-slate-600 dark:text-slate-300 hover:text-[var(--theme-primary-text)] hover:bg-slate-200/50 dark:hover:bg-[var(--theme-surface-subtle)]'
-                                        : 'text-[var(--theme-primary-text)] bg-white dark:bg-[var(--theme-card-bg)] border border-[var(--theme-primary-border)] hover:brightness-95 shadow-xs font-bold'
-                                    }`}
-                                    title={notif.isRead ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}
-                                  >
-                                    {notif.isRead ? (
-                                      <>
-                                        <RotateCcw className="w-3 h-3 text-slate-400" />
-                                        <span>Tandai Belum Dibaca</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Check className="w-3 h-3 text-[var(--theme-primary)]" />
-                                        <span>Tandai Dibaca</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <NotificationBell isOpen={activePanel === 'notifications'} onToggle={() => handleTogglePanel('notifications')} onClose={() => setActivePanel('none')} config={notificationConfig} />
 
               {/* 4. Pengaturan Tampilan & Warna Tema Button */}
               <div className="relative">

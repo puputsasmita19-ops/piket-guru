@@ -1,3 +1,4 @@
+import { sanitizeNotificationConfig, type NotificationConfig } from '../../types/notification.types';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import type { SchoolSettings } from '../../types';
@@ -136,7 +137,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -164,6 +165,26 @@ export class SchoolSettingsService {
    * Authoritative Lobby TV configuration persistence in settings/school_config.
    * Enforces server-side administrator role verification at the storage layer.
    */
+  public static async saveNotificationSettings(config: NotificationConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists() || userSnap.data().role !== 'ADMIN' || userSnap.data().isActive !== true) {
+      throw new Error('Hanya administrator aktif yang dapat mengubah notifikasi.');
+    }
+    const notificationConfig = sanitizeNotificationConfig(config);
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      expected = { ...snap.data(), notificationConfig } as SchoolSettings;
+      // Update only this section; never overwrite another admin's GPS/profile edits.
+      transaction.update(ref, { notificationConfig, updatedAt: serverTimestamp() });
+    });
+    void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui pengaturan notifikasi realtime sekolah' });
+    return this.receipt(expected);
+  }
+
   public static async saveTvSettings(lobbyTv: LobbyTvConfig, userId: string): Promise<SchoolSettingsSaveResult> {
     const uid = this.actor(userId);
 

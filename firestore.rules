@@ -88,6 +88,29 @@ service cloud.firestore {
       return !data.keys().hasAny(['pin', 'pinHash', 'pinSalt', 'scryptHash', 'hashedPin', 'password', 'token', 'secret', 'credential', 'authSecret', 'privateKey']);
     }
 
+    // Lightweight activity summaries. Private AUTH entries are written only by Admin SDK.
+    match /notificationEvents/{eventId} {
+      allow read: if isValidActiveUser() && (
+        resource.data.scope == 'SCHOOL' ||
+        (resource.data.scope == 'USER' && resource.data.actorId == request.auth.uid)
+      );
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasOnly(['id', 'scope', 'actorId', 'actorName', 'module', 'action', 'createdAt']) &&
+        request.resource.data.keys().hasAll(['id', 'scope', 'actorId', 'actorName', 'module', 'action', 'createdAt']) &&
+        request.resource.data.id == eventId &&
+        request.resource.data.scope == 'SCHOOL' &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.actorName is string && request.resource.data.actorName.size() <= 160 &&
+        request.resource.data.actorName == getUserData(request.auth.uid).get('fullName', 'Petugas') &&
+        request.resource.data.module in ['ATTENDANCE', 'DUTY_BOOK', 'TARDINESS', 'PERMITS', 'SUBSTITUTIONS', 'VISITORS', 'INCIDENTS', 'SCHEDULES'] &&
+        request.resource.data.action in ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'ATTENDANCE', 'IMPORT', 'CHECK_IN', 'CHECK_OUT', 'VERIFY', 'UNLOCK'] &&
+        request.resource.data.createdAt is string && request.resource.data.createdAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z');
+      // A retry cannot edit somebody else's event, message, action, or timestamp.
+      allow update: if isStaff() && resource.data.scope == 'SCHOOL' &&
+        resource.data.actorId == request.auth.uid && request.resource.data == resource.data;
+      allow delete: if false;
+    }
+
     // -------------------------------------------------------------
     // 1. SETTINGS & CONFIGURATION
     // -------------------------------------------------------------

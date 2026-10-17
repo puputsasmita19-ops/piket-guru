@@ -1,0 +1,21 @@
+// Exercises real Express auth middleware/routes with a synthetic Admin SDK.
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import vm from 'node:vm';
+import { build } from 'esbuild';
+import express from 'express';
+const require=createRequire(import.meta.url);
+const f={writes:[],profile:{fullName:'Alice Verified',role:'GURU',isActive:true,permissions:['attendance.view']},failEvents:false};
+const mocks={admin:`const f=globalThis.f;export const testSignerCapability={};export const adminAuth={verifyIdToken:async token=>{if(token!=='TEST_ONLY')throw Error('INVALID');return{uid:'alice',auth_time:2000,email:'private@example.invalid'}}};export const adminDb={collection:c=>({doc:id=>({get:async()=>({exists:true,data:()=>f.profile}),set:async data=>{if(c==='notificationEvents'&&f.failEvents)throw Error('TEST_NOTIFICATION_FAILED');f.writes.push({c,id,data})}})})};`,rate:`export const AuthRateLimiter={loginMiddleware:(_r,_s,n)=>n(),createPinActionLimiter:()=>((_r,_s,n)=>n())};export const getClientIp=()=> 'TEST_IP';`,credential:`export const CredentialStore={};`};
+const r=await build({stdin:{contents:"export{authRouter}from'./src/server/routes/authRoutes';",resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,platform:'node',format:'cjs',external:['express','firebase-admin/firestore'],plugins:[{name:'synthetic-admin',setup(b){for(const[filter,path]of[[/firebaseAdmin\.js$/,'admin'],[/rateLimiter\.js$/,'rate'],[/credentialStore\.js$/,'credential']])b.onResolve({filter},()=>({path,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}));}}]});
+const c=vm.createContext({f,module:{exports:{}},require,console:{warn(){}},process,Buffer,setTimeout,clearTimeout});vm.runInContext(r.outputFiles[0].text,c);
+const app=express();app.use(express.json());app.use('/api/auth',c.module.exports.authRouter);const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));const url=`http://127.0.0.1:${server.address().port}/api/auth`;
+const post=(path,body,token='TEST_ONLY')=>fetch(url+path,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(body)});
+let passed=0;const check=async(name,fn)=>{f.writes=[];await fn();passed++;console.log('PASS',name)};
+try {
+ await check('verified login emits a private summary without token/IP/email/details',async()=>{assert.equal((await post('/record-login',{method:'GOOGLE',userId:'bob',userName:'Forged'})).status,200);const event=f.writes.find(w=>w.c==='notificationEvents').data;assert.equal(event.actorId,'alice');assert.equal(event.actorName,'Alice Verified');assert.equal(event.scope,'USER');assert.equal(event.module,'AUTH');assert.equal(event.action,'LOGIN');assert.equal(Object.keys(event).length,7);assert.ok(!JSON.stringify(event).includes('private@example.invalid'));});
+ await check('logout is server-attributed and ignores forged user/action/reason',async()=>{assert.equal((await post('/record-logout',{userId:'bob',action:'LOGIN',reason:'FORGED'})).status,200);const event=f.writes.find(w=>w.c==='notificationEvents').data;assert.equal(event.actorId,'alice');assert.equal(event.action,'LOGOUT');assert.equal(f.writes.find(w=>w.c==='auditLogs').data.metadata.reason,'MANUAL');});
+ await check('missing/invalid tokens and inactive accounts cannot create session notifications',async()=>{assert.equal((await post('/record-logout',{},null)).status,401);assert.equal((await post('/record-logout',{},'WRONG')).status,401);f.profile.isActive=false;assert.equal((await post('/record-login',{})).status,403);f.profile.isActive=true;assert.equal(f.writes.length,0);});
+ await check('secondary notification failure does not break audit recording or logout',async()=>{f.failEvents=true;assert.equal((await post('/record-logout',{})).status,200);assert.equal(f.writes.length,1);assert.equal(f.writes[0].c,'auditLogs');f.failEvents=false;});
+ console.log(`${passed} session endpoint scenarios passed. Identity verification used a synthetic SDK, not production Firebase.`);
+} finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

@@ -473,6 +473,16 @@ export async function recordServerAuditLog(entry: {
       logDoc.metadata = entry.metadata;
     }
     await adminDb.collection('auditLogs').doc(id).set(logDoc);
+    // Private session summaries are constructed from the verified server identity.
+    // Never expose IP, email, token, PIN, or full audit metadata in the notification feed.
+    if (['LOGIN', 'LOGOUT'].includes(logDoc.action) && logDoc.status === 'SUCCESS' && entry.userId && entry.userId !== 'system') {
+      try {
+        await adminDb.collection('notificationEvents').doc(id).set({
+          id, scope: 'USER', actorId: entry.userId, actorName: String(logDoc.userName).slice(0, 160),
+          module: 'AUTH', action: logDoc.action, createdAt: logDoc.timestamp,
+        });
+      } catch (error) { console.warn('[SESSION_NOTIFICATION] Failed to save session summary:', error); }
+    }
   } catch (err) {
     console.warn('[SERVER_AUDIT] Failed to record audit log:', err);
   }
@@ -1951,6 +1961,19 @@ authRouter.post('/record-login', requireAuth, async (req: Request, res: Response
     },
   });
 
+  res.json({ success: true });
+});
+
+/** POST /api/auth/record-logout: called before signOut while the ID token is valid. */
+authRouter.post('/record-logout', requireAuth, async (req: Request, res: Response) => {
+  const caller = (req as any).user;
+  const profile = (req as any).callerData || {};
+  const reason = req.body?.reason === 'INACTIVITY_TIMEOUT' ? 'INACTIVITY_TIMEOUT' : 'MANUAL';
+  await recordServerAuditLog({
+    userId: caller.uid, userName: profile.fullName || 'Pengguna', role: profile.role || 'GURU',
+    action: 'LOGOUT', module: 'USERS', status: 'SUCCESS',
+    details: reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason },
+  });
   res.json({ success: true });
 });
 

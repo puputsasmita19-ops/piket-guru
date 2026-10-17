@@ -84,17 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (currentUser) {
       if (options?.reason === 'INACTIVITY_TIMEOUT') {
-        void AuditService.log({
-          action: 'LOGOUT',
-          module: 'USERS',
-          status: 'SUCCESS',
-          details: 'Sesi berakhir otomatis karena inaktivitas pengguna (30 menit)',
-          userId: currentUser.id,
-          userName: currentUser.fullName,
-          role: currentUser.role,
-          loginId: currentUser.loginId,
-          metadata: { reason: 'INACTIVITY_TIMEOUT' },
-        });
+        await AuditService.recordLogout('INACTIVITY_TIMEOUT').catch(() => {});
       } else if (options?.reason === 'SESSION_INVALID') {
         void AuditService.log({
           action: 'SECURITY', module: 'USERS', status: 'BLOCKED',
@@ -115,16 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           metadata: { reason: 'ACCOUNT_DEACTIVATED' },
         });
       } else {
-        void AuditService.log({
-          action: 'LOGOUT',
-          module: 'USERS',
-          status: 'SUCCESS',
-          details: 'Logout manual dari aplikasi',
-          userId: currentUser.id,
-          userName: currentUser.fullName,
-          role: currentUser.role,
-          loginId: currentUser.loginId,
-        });
+        await AuditService.recordLogout('MANUAL').catch(() => {});
       }
     }
 

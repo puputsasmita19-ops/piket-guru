@@ -13,5 +13,6 @@ export interface AnnouncementRecord extends BaseEntityMetadata {
   targetRole?: string; // 'SEMUA' | 'GURU' | 'TENDIK' | 'SATPAM'
   isActive: boolean;
   createdAt: string;
+  updatedAt?: string;
   createdBy: string;
 }

@@ -1,3 +1,4 @@
+import { operationalEventFromAudit } from '../../types/notification.types';
 import {
   collection,
   doc,
@@ -593,6 +594,8 @@ export class FirestoreService {
     batch.set(docRef, payload, { merge: true });
     batch.set(auditRef, logRecord);
     await batch.commit();
+    const event = operationalEventFromAudit(logRecord as AuditLogRecord);
+    if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
 
     // Update scoped cache for active user
     try {

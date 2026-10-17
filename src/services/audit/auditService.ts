@@ -1,6 +1,7 @@
 import { auth } from '../firebase/firebaseAuth';
 import { AuditLogAction, AuditLogModule, AuditLogRecord, AuditLogStatus } from '../../types/master.types';
 import { UserRole } from '../../types';
+import { operationalEventFromAudit } from '../../types/notification.types';
 import { normalizeAuditStatus } from './auditEventRegistry';
 
 const AUDIT_QUEUE_STORAGE_KEY = 'piket_guru_audit_offline_queue';
@@ -11,6 +12,8 @@ async function writeAuditRecord(id: string, record: AuditLogRecord): Promise<voi
     import('firebase/firestore'), import('../firebase/firebase'),
   ]);
   await setDoc(doc(db, 'auditLogs', id), record);
+  const event = operationalEventFromAudit(record);
+  if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
 }
 
 /**
@@ -219,6 +222,31 @@ export class AuditService {
         metadata: { authMethod: method, fallback: true },
       });
     }
+  }
+
+  /** Record the verified logout before Firebase signOut; never hold logout indefinitely. */
+  public static async recordLogout(reason: 'MANUAL' | 'INACTIVITY_TIMEOUT'): Promise<void> {
+    const user = auth?.currentUser;
+    if (!user) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          const token = await user.getIdToken();
+          if (controller.signal.aborted || auth.currentUser?.uid !== user.uid) return;
+          const response = await fetch('/api/auth/record-logout', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ reason }), signal: controller.signal, keepalive: true,
+          });
+          if (!response.ok) throw new Error('LOGOUT_AUDIT_UNAVAILABLE');
+        })(),
+        new Promise<void>(resolve => { timer = setTimeout(() => { controller.abort(); resolve(); }, 1500); }),
+      ]);
+    } catch {
+      void this.log({ action: 'LOGOUT', module: 'USERS', status: 'SUCCESS', userId: user.uid,
+        details: reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason, fallback: true } });
+    } finally { if (timer) clearTimeout(timer); }
   }
 
   /**
