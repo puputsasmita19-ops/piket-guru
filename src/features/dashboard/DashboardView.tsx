@@ -1,3 +1,4 @@
+import { FeatureIllustration } from '../../components/common/FeatureIllustration';
 import { getModuleStyle } from '../../config/moduleAppearance';
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect } from 'react';
@@ -11,6 +12,7 @@ import {
   ShieldCheck,
   Users,
   ChevronRight,
+  ChevronDown,
   TrendingUp,
   Megaphone,
   MessageSquare,
@@ -90,6 +92,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     title: '',
   });
 
+  const [showDutyDetails, setShowDutyDetails] = useState(false);
+  const toggleDutyDetails = (reveal = false) => {
+    setShowDutyDetails(value => !value);
+    if (reveal && !showDutyDetails) requestAnimationFrame(() => {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      document.getElementById('personal-duty-details')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    });
+  };
   const todayName = getCurrentDayName();
   const todayISO = getTodayISODate();
 
@@ -222,16 +232,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
   return (
     <div className="space-y-6">
-      <section className="dashboard-welcome rounded-2xl border border-[var(--theme-card-border)] bg-[var(--theme-card-bg)] p-4 sm:p-6">
-        <p className="flex items-center gap-2 text-xs sm:text-sm font-medium text-[var(--theme-primary-text)]"><Building2 className="h-4 w-4" />{settings.schoolName}</p>
-        <h1 className="mt-2 text-xl sm:text-2xl font-bold leading-snug tracking-tight text-slate-900 dark:text-white">Selamat bertugas, {currentUser?.fullName}</h1>
-        <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Mulai dari kegiatan yang ingin Anda kerjakan.</p>
+      <section className="dashboard-welcome">
+        <div><p className="dashboard-eyebrow">{settings.schoolName}</p><h1>Halo, {currentUser?.fullName || 'selamat datang'}<span className="welcome-dot">.</span></h1><p className="dashboard-intro">Semoga kegiatan sekolah hari ini berjalan lancar.</p></div>
+        <span className="dashboard-avatar" aria-hidden="true">{currentUser?.fullName?.charAt(0) || 'P'}</span>
+      </section>
+
+      <section className="dashboard-feature-banner" aria-label="Kegiatan piket hari ini">
+        <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />
+        <div className="min-w-0 flex-1"><p className="banner-eyebrow">PIKET GURU • HARI INI</p><h2>{isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis'}</h2>
+          <p className="banner-description">{myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.'}</p>
+          <button type="button" className="banner-action" aria-expanded={showDutyDetails} aria-controls="personal-duty-details" onClick={() => toggleDutyDetails(true)}>{showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas'}<ChevronRight className="w-4 h-4" /></button>
+        </div>
       </section>
 
       <QuickActions onNavigate={onNavigateTab} />
 
       {/* PERSONAL DUTY STATUS CARD (TEACHER DUTY HUD) */}
-      <Card className="border-[var(--theme-primary-border)]/60 bg-linear-to-b from-[var(--theme-primary-light)]/40 to-white dark:from-[var(--theme-primary-light)]/20 dark:to-[var(--theme-card-bg)] shadow-md">
+      <section className="dashboard-duty-disclosure" id="personal-duty-details">
+        <button type="button" className="duty-disclosure-toggle" onClick={() => toggleDutyDetails()} aria-expanded={showDutyDetails} aria-controls="personal-duty-body"><span><BookOpenCheck className="w-5 h-5" />Rincian tugas Anda</span><ChevronDown className={`w-4 h-4 transition-transform ${showDutyDetails ? 'rotate-180' : ''}`} /></button>
+        {showDutyDetails && <div id="personal-duty-body" className="pt-3">      <Card className="border-[var(--theme-primary-border)]/60 bg-linear-to-b from-[var(--theme-primary-light)]/40 to-white dark:from-[var(--theme-primary-light)]/20 dark:to-[var(--theme-card-bg)] shadow-md">
         <CardContent className="p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--theme-primary-border)]/40 pb-4">
             <div className="flex items-center gap-3">
@@ -370,6 +389,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           )}
         </CardContent>
       </Card>
+
+        </div>}
+      </section>
 
       {/* METRIC STAT CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

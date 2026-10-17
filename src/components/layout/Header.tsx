@@ -182,7 +182,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       <header
-        className="shrink-0 sticky top-0 z-40 border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
+        className="app-topbar shrink-0 sticky top-0 z-40 border-b border-slate-200/80 dark:border-[var(--theme-card-border)] transition-colors"
         style={{ backgroundColor: 'var(--theme-header-bg)' }}
       >
         <div className="app-header-inner max-w-7xl mx-auto w-full px-2 sm:px-4 lg:px-6">

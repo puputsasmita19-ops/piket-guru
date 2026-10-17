@@ -107,7 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         data-tour="sidebar-nav"
         aria-label="Menu utama aplikasi"
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
+        className={`app-sidebar fixed top-0 left-0 bottom-0 z-50 w-64 bg-white dark:bg-[var(--theme-card-bg)] border-r border-slate-200/80 dark:border-[var(--theme-card-border)] flex flex-col transition-all duration-200 ease-in-out shrink-0 select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${
           isDesktopHidden
@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/70 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-xs tracking-tight">
-              Menu Aplikasi
+              Navigasi
             </span>
             {isPinned && !isDesktopHidden && (
               <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-md">

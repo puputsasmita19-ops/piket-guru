@@ -41,11 +41,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
     <nav
       data-tour="mobile-nav"
       aria-label="Navigasi Utama Mobile"
-      className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-md border-t border-slate-200/80 dark:border-[var(--theme-card-border)] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] pb-safe transition-colors duration-200 print:hidden"
+      className="app-mobile-nav fixed bottom-0 left-0 right-0 z-40 backdrop-blur-md border-t border-slate-200/80 dark:border-[var(--theme-card-border)] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] pb-safe transition-colors duration-200 print:hidden"
       style={{ backgroundColor: 'var(--theme-header-bg)' }}
     >
       <div
-        className="grid h-16 max-w-lg mx-auto items-center px-1.5 sm:px-3"
+        className="mobile-nav-inner grid h-16 max-w-lg mx-auto items-center px-1.5 sm:px-3"
         style={{ gridTemplateColumns: `repeat(${visibleItems.length + 1}, minmax(0, 1fr))` }}
       >
         {visibleItems.map((item) => {
@@ -122,7 +122,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
                 : 'font-medium text-slate-600 dark:text-slate-400'
             }`}
           >
-            Menu
+            Lainnya
           </span>
         </button>
       </div>

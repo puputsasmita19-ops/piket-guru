@@ -819,3 +819,128 @@ button.bg-\[var\(--theme-primary\)\],
   .app-content[data-module] .module-summary-card[data-module] { background: #fff !important; border-color: #cbd5e1 !important; box-shadow: none !important; }
   .app-content[data-module] .page-header h1 > .app-icon { background: transparent; color: #0f172a !important; }
 }
+
+/* Modern everyday workspace: soft paper cards, personal shortcuts and clear
+   bottom navigation. Scoped to the authenticated app; print, login and TV retain
+   their own styles. All colors continue to use the selected school theme. */
+@media screen {
+  .app-shell { --workspace-shadow: 0 6px 22px rgb(15 23 42 / 4%); }
+  .dark .app-shell { --workspace-shadow: 0 6px 22px rgb(0 0 0 / 12%); }
+  .app-shell .app-topbar { background: var(--theme-card-bg) !important; border-color: var(--theme-card-border); }
+  .app-shell .app-content { padding-top: 24px; }
+  .app-content:not([data-module="command-center"]):not([data-module="kiosk"]) .app-card {
+    border-radius: 22px; box-shadow: var(--workspace-shadow); border-color: var(--theme-card-border) !important;
+  }
+  .app-content:not([data-module="command-center"]):not([data-module="kiosk"]) .app-card-header { border-radius: 21px 21px 0 0; background: var(--theme-card-bg); padding-block: 18px; }
+  .app-content[data-module] .page-header { padding: 4px 0 8px; border: 0; border-radius: 0; background: transparent !important; box-shadow: none; }
+  .app-content[data-module] .page-header h1 { letter-spacing: -.025em; }
+  .app-content[data-module] .module-summary-card[data-module] { border: 1px solid var(--theme-card-border) !important; background: var(--theme-card-bg) !important; box-shadow: var(--workspace-shadow); }
+  .app-content .app-button { border-radius: 13px; font-weight: 650; }
+  .app-shell .app-sidebar { background: var(--theme-card-bg); border-color: var(--theme-card-border); }
+  .app-shell .module-nav-item { border-radius: 14px; min-height: 48px; font-size: 12px; }
+  .app-shell .module-nav-item[aria-current="page"] { box-shadow: none; }
+  .app-shell .module-nav-item .module-nav-icon { border-radius: 11px; background: transparent !important; }
+  .app-sidebar-scrim { backdrop-filter: none; }
+  .app-content[data-module] .dashboard-welcome { border: 0; border-radius: 0; padding: 0; background: transparent !important; box-shadow: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .dashboard-welcome > div { min-width: 0; }
+  .dashboard-eyebrow { font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 5px; }
+  .dashboard-welcome h1 { font-size: clamp(20px, 2.2vw, 27px); line-height: 1.35; font-weight: 750; letter-spacing: -.035em; overflow-wrap: anywhere; }
+  .welcome-dot { color: var(--theme-primary-text); }
+  .dashboard-intro { margin-top: 6px; font-size: 12px; color: #64748b; line-height: 1.5; }
+  .dashboard-avatar { height: 46px; width: 46px; border-radius: 17px; background: var(--theme-primary-light); color: var(--theme-primary-text); font-size: 18px; font-weight: 750; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--theme-primary-border); }
+  .dashboard-feature-banner { display: flex; align-items: center; gap: 18px; border: 1px solid var(--theme-card-border); background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary-light) 48%, var(--theme-card-bg)), var(--theme-card-bg)); border-radius: 24px; padding: 22px 24px; }
+  .banner-eyebrow { font-size: 9px; font-weight: 750; letter-spacing: .12em; color: var(--theme-primary-text); margin-bottom: 7px; }
+  .dashboard-feature-banner h2 { font-size: clamp(17px, 1.8vw, 22px); font-weight: 750; line-height: 1.35; letter-spacing: -.025em; }
+  .banner-description { font-size: 12px; color: #64748b; line-height: 1.6; margin-top: 5px; }
+  .banner-action { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 750; color: var(--theme-primary-text); text-decoration: underline; text-underline-offset: 5px; text-decoration-color: var(--theme-primary-border); cursor: pointer; }
+  .feature-illustration { --art-paper: var(--theme-card-bg); position: relative; display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; flex: none; color: var(--module-ink); }
+  .feature-illustration-shadow { position: absolute; width: 42px; height: 43px; border-radius: 12px; background: var(--module-icon-bg); transform: translate(5px, 5px) rotate(9deg); }
+  .feature-illustration-sheet { position: absolute; width: 44px; height: 44px; border: 1px solid var(--module-border); background: var(--art-paper); border-radius: 13px; transform: rotate(-7deg); box-shadow: 0 2px 3px rgb(15 23 42 / 3%); }
+  .feature-illustration .feature-illustration-glyph { width: 35px; height: 35px; z-index: 1; transform: rotate(-3deg); }
+  .feature-illustration-dot { position: absolute; height: 6px; width: 6px; border-radius: 3px; bottom: 4px; right: 2px; background: var(--module-ink); opacity: .65; }
+  .feature-illustration.banner-illustration { width: 86px; height: 86px; }
+  .banner-illustration .feature-illustration-shadow { width: 68px; height: 68px; border-radius: 18px; }
+  .banner-illustration .feature-illustration-sheet { width: 68px; height: 68px; border-radius: 19px; }
+  .banner-illustration .feature-illustration-glyph { width: 52px; height: 52px; }
+  .shortcut-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .shortcut-section-heading h2 { font-size: 18px; font-weight: 750; letter-spacing: -.025em; line-height: 1.4; }
+  .shortcut-section-heading p { font-size: 12px; color: #64748b; margin-top: 3px; }
+  .shortcut-edit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 4px; cursor: pointer; font-size: 13px; font-weight: 750; color: var(--theme-primary-text); text-decoration: underline; text-underline-offset: 5px; text-decoration-color: var(--theme-primary-border); flex-shrink: 0; }
+  .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+  .app-content .quick-action.shortcut-tile { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; min-height: 154px; padding: 16px; gap: 0; border: 1px solid var(--theme-card-border) !important; border-radius: 23px; background: var(--theme-card-bg) !important; box-shadow: var(--workspace-shadow); cursor: pointer; transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
+  .shortcut-tile .feature-illustration { margin: -3px 0 11px -5px; }
+  .shortcut-tile-title { font-size: 15px; font-weight: 750; line-height: 1.4; letter-spacing: -.02em; color: #182333; overflow-wrap: anywhere; }
+  .shortcut-tile-description { display: block; font-size: 11px; line-height: 1.5; margin-top: 4px; color: #64748b; }
+  .shortcut-add { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; min-height: 80px; padding: 14px 18px; border-radius: 22px; border: 1px dashed var(--theme-primary-border); background: color-mix(in srgb, var(--theme-primary-light) 55%, var(--theme-card-bg)); text-align: left; cursor: pointer; }
+  .shortcut-add-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 13px; color: var(--theme-primary-text); background: var(--theme-card-bg); flex: none; }
+  .shortcut-add strong { font-size: 13px; font-weight: 750; color: var(--theme-primary-text); }
+  .shortcut-add > span > span { display: block; margin-top: 3px; font-size: 11px; color: #64748b; }
+  .shortcut-editor-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--theme-card-border); border-radius: 15px; }
+  .shortcut-editor-row.is-selected { background: var(--module-tint); border-color: var(--module-border); }
+  .shortcut-order { font-size: 10px; font-weight: 750; color: var(--module-ink); }
+  .shortcut-order-button { width: 44px; min-width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; color: var(--theme-primary-text); }
+  .shortcut-order-button:disabled { opacity: .3; cursor: default; }
+  .shortcut-order-button:not(:disabled):hover { background: var(--theme-primary-light); }
+  .dashboard-duty-disclosure { scroll-margin-top: 82px; border: 1px solid var(--theme-card-border); border-radius: 18px; background: var(--theme-card-bg); padding: 5px 14px; }
+  .duty-disclosure-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 50px; cursor: pointer; font-size: 13px; font-weight: 700; }
+  .duty-disclosure-toggle > span { display: flex; align-items: center; gap: 10px; }
+  .duty-disclosure-toggle > span > svg { color: var(--theme-primary-text); }
+  .app-shell .app-mobile-nav { background: var(--theme-card-bg) !important; backdrop-filter: none; box-shadow: 0 -3px 18px rgb(15 23 42 / 3%); border-color: var(--theme-card-border); }
+  .app-mobile-nav .mobile-nav-inner { height: 72px; }
+  .app-shell .module-mobile-item .module-mobile-icon,
+  .app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-icon { background: transparent !important; color: #738096 !important; box-shadow: none; transform: none; height: 31px; width: 40px; }
+  .app-shell .module-mobile-item .module-mobile-icon svg { width: 27px; height: 27px; }
+  .app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-icon { color: var(--module-ink) !important; }
+  .app-shell .module-mobile-item .module-mobile-label { font-size: 11.5px; margin-top: 4px; }
+  .app-shell .module-mobile-item[aria-current="page"]::before { content: ''; position: absolute; top: 0; width: 17px; height: 3px; border-radius: 3px; background: var(--module-ink); }
+  .dark .dashboard-eyebrow, .dark .dashboard-intro, .dark .banner-description, .dark .shortcut-section-heading p, .dark .shortcut-add > span > span { color: #a2aec0; }
+  .dark .shortcut-tile-title { color: #edf1f8; }
+  .dark .app-shell .module-mobile-item .module-mobile-icon { color: #a2aec0 !important; }
+  .dark .app-shell .module-mobile-item:is([aria-current="page"], [data-active="true"]) .module-mobile-icon { color: var(--module-ink) !important; }
+  :is(.banner-action, .shortcut-edit, .shortcut-add, .shortcut-order-button, .duty-disclosure-toggle):focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 3px; }
+  @media (hover: hover) {
+    .app-content .quick-action.shortcut-tile:hover { transform: translateY(-2px); border-color: var(--module-border) !important; box-shadow: 0 9px 25px rgb(15 23 42 / 8%); }
+  }
+  @media (min-width: 640px) {
+    .shortcut-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
+    .app-content .quick-action.shortcut-tile { padding: 20px; min-height: 168px; }
+    .shortcut-tile-title { font-size: 17px; }
+    .shortcut-tile-description { font-size: 12px; }
+  }
+  @media (max-width: 1023px) {
+    .app-shell .app-content { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  }
+  @media (max-width: 639px) {
+    .app-shell .app-content { padding-top: 20px; padding-inline: 16px; }
+    .dashboard-welcome { gap: 12px !important; }
+    .dashboard-avatar { width: 40px; height: 40px; border-radius: 14px; font-size: 16px; }
+    .dashboard-eyebrow { font-size: 10px; }
+    .dashboard-intro { display: none; }
+    .dashboard-feature-banner { padding: 17px 15px; gap: 13px; border-radius: 21px; }
+    .feature-illustration.banner-illustration { width: 59px; height: 68px; }
+    .banner-illustration .feature-illustration-shadow, .banner-illustration .feature-illustration-sheet { width: 48px; height: 53px; border-radius: 14px; }
+    .banner-illustration .feature-illustration-glyph { width: 38px; height: 38px; }
+    .banner-description { font-size: 11px; }
+    .banner-eyebrow { display: none; }
+    .app-content .quick-action.shortcut-tile { min-height: 130px; padding: 14px; }
+    .shortcut-tile .feature-illustration { width: 44px; height: 44px; margin-bottom: 8px; }
+    .shortcut-tile .feature-illustration-shadow { width: 33px; height: 33px; border-radius: 10px; }
+    .shortcut-tile .feature-illustration-sheet { width: 34px; height: 34px; border-radius: 10px; }
+    .shortcut-tile .feature-illustration-glyph { width: 28px; height: 28px; }
+    .shortcut-section-heading { margin-bottom: 13px; }
+    .shortcut-section-heading h2 { font-size: 17px; }
+    .shortcut-section-heading p { font-size: 11px; }
+    .shortcut-editor-row .module-icon { display: none; }
+    .shortcut-editor-row label > span:last-child { font-size: 12px; }
+    .app-content[data-module] .page-header h1 { font-size: 21px; }
+  }
+  @media (max-width: 359px) {
+    .app-content .quick-action.shortcut-tile { min-height: 128px; padding: 13px; border-radius: 20px; }
+    .shortcut-tile-title { font-size: 14px; }
+    .shortcut-tile-description { font-size: 10px; }
+    .shortcut-grid { gap: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-content .quick-action.shortcut-tile { transition: none; transform: none !important; }
+  }
+}
