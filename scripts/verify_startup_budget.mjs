@@ -6,12 +6,12 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { build } from 'esbuild';
 
-const graph = await build({ stdin:{contents:"export {default} from './src/App';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,splitting:true,write:false,format:'esm',platform:'browser',outdir:'startup-graph-only',metafile:true,external:['crypto'] });
+const graph = await build({ stdin:{contents:"export {default} from './src/App';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,splitting:true,write:false,format:'esm',platform:'browser',outdir:'startup-graph-only',metafile:true,loader:{'.png':'dataurl'},external:['crypto'] });
 const outputs=graph.metafile.outputs, seen=new Set();
 function visit(file){if(seen.has(file))return;seen.add(file);for(const dep of outputs[file]?.imports||[]){if(dep.kind!=='dynamic-import'&&!dep.external)visit(dep.path in outputs?dep.path:path.posix.join(path.posix.dirname(file),dep.path));}}
 visit(Object.keys(outputs).find(file=>outputs[file].entryPoint==='<stdin>'));
 const initialInputs=new Set([...seen].flatMap(file=>Object.keys(outputs[file]?.inputs||{})));
-for(const forbidden of ['@firebase/firestore','services/firebase/firestoreService','services/firebase/attendanceService','services/firebase/incidentService','services/firebase/visitorService']){
+for(const forbidden of ['@firebase/firestore','services/firebase/firestoreService','services/firebase/attendanceService','services/firebase/incidentService','services/firebase/visitorService','vendor/leaflet','features/attendance/AttendanceLocationMap']){
  assert.ok(![...initialInputs].some(file=>file.includes(forbidden)),`${forbidden} must stay outside the login static graph`);
  console.log('PASS deferred from login:',forbidden);
 }

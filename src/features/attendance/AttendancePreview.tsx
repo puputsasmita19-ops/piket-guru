@@ -16,7 +16,6 @@ import {
   Image as ImageIcon,
   Check,
   X,
-  Radio,
   Trash2,
 } from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
@@ -38,6 +37,8 @@ import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate, toEpochMs } from '../../utils/dateUtils';
 import { isScheduleMatchingUser } from '../../utils/scheduleUtils';
+import AttendanceMapPreview from './AttendanceMapPreview';
+import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
 
@@ -65,7 +66,7 @@ const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = 
       ) : status.tone === 'error' ? (
         <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
       ) : (
-        <RefreshCw className="w-4 h-4 shrink-0 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] mt-0.5 animate-spin" />
+        <Clock className="w-4 h-4 shrink-0 mt-0.5" />
       )}
       <div className="flex-1 font-semibold">{status.message}</div>
     </div>
@@ -89,6 +90,10 @@ export const AttendancePreview: React.FC = () => {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [coords, setCoords] = useState<LocationCoordinates | null>(null);
   const [geofence, setGeofence] = useState<GeofenceResult | null>(null);
+  const gpsRequestRef = React.useRef(0);
+  const validSchoolLocation = Number.isFinite(settings.schoolLat) && Math.abs(settings.schoolLat) <= 90 &&
+    Number.isFinite(settings.schoolLng) && Math.abs(settings.schoolLng) <= 180 &&
+    Number.isFinite(settings.allowedRadiusMeters) && settings.allowedRadiusMeters > 0;
 
   // Form State
   const [selectedScheduleId, setSelectedScheduleId] = useState<string>('');
@@ -213,6 +218,10 @@ export const AttendancePreview: React.FC = () => {
 
   // 2. Fetch live GPS position on mount & manual refresh (2.5s max UI wait limit)
   const refreshGpsLocation = async (isManual = false) => {
+    if (!settingsReady || !validSchoolLocation) return;
+    const requestId = ++gpsRequestRef.current;
+    setCoords(null);
+    setGeofence(null);
     setIsLocating(true);
     setIsProvisional(false);
     setGpsError(null);
@@ -221,6 +230,7 @@ export const AttendancePreview: React.FC = () => {
         timeoutMs: 2500, // Capped at strictly 2.5 seconds
         desiredAccuracyMeters: 20,
         onProgress: (pos, isProv) => {
+          if (requestId !== gpsRequestRef.current) return;
           setCoords(pos);
           setIsProvisional(isProv);
           // Calculate distance immediately on every received reading
@@ -236,6 +246,7 @@ export const AttendancePreview: React.FC = () => {
         },
       });
 
+      if (requestId !== gpsRequestRef.current) return;
       setCoords(position);
       setIsProvisional(false);
 
@@ -256,6 +267,7 @@ export const AttendancePreview: React.FC = () => {
         setTimeout(() => setFeedbackSuccess(null), 3500);
       }
     } catch (err: any) {
+      if (requestId !== gpsRequestRef.current) return;
       console.warn('GPS detection error:', err);
       setGpsError(err.message || 'Gagal membaca koordinat GPS.');
       setCoords(null);
@@ -266,18 +278,21 @@ export const AttendancePreview: React.FC = () => {
         status: 'GPS_ERROR',
       });
     } finally {
-      setIsLocating(false);
+      if (requestId === gpsRequestRef.current) setIsLocating(false);
     }
   };
 
   useEffect(() => {
-    if (settings.schoolLat && settings.schoolLng) {
-      refreshGpsLocation();
-    }
+    setCoords(null);
+    setGeofence(null);
+    setGpsError(null);
+    if (settingsReady && validSchoolLocation) refreshGpsLocation();
+    else setIsLocating(false);
     return () => {
+      ++gpsRequestRef.current;
       LocationService.clearCurrentWatcher();
     };
-  }, [settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
+  }, [settingsReady, settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
 
   // Today's schedule for current logged in user (strictly bound by ID/UID akun, with legacy teacher fallback)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
@@ -712,85 +727,40 @@ export const AttendancePreview: React.FC = () => {
               <CardHeader
                 title={`Formulir Presensi: ${currentUser?.fullName}`}
                 subtitle={`Hari ini: ${formatIndonesianDate(new Date())}`}
-                action={
-                  <Badge
-                    variant={
-                      isLocating
-                        ? 'neutral'
-                        : geofence?.status === 'DALAM_LOKASI'
-                        ? 'success'
-                        : geofence?.status === 'AKURASI_RENDAH'
-                        ? 'warning'
-                        : 'danger'
-                    }
-                    icon={
-                      isLocating ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                      )
-                    }
-                  >
-                    {isLocating
-                      ? isProvisional
-                        ? `Menyelaraskan GPS (±${Math.round(coords?.accuracy || 0)}m)`
-                        : 'Mencari Sinyal GPS...'
-                      : geofence?.status === 'DALAM_LOKASI'
-                      ? 'Dalam Radius Sekolah'
-                      : geofence?.status === 'AKURASI_RENDAH'
-                      ? 'Akurasi GPS Rendah'
-                      : geofence?.status === 'GPS_ERROR'
-                      ? 'GPS Belum Terhubung'
-                      : 'Di Luar Radius'}
+                action={!isLocating && settingsReady && validSchoolLocation ? (
+                  <Badge variant={geofence?.status === 'DALAM_LOKASI' ? 'success' : geofence?.status === 'AKURASI_RENDAH' ? 'warning' : geofence?.status === 'DI_LUAR_LOKASI' ? 'danger' : 'neutral'} icon={<ShieldCheck className="w-3.5 h-3.5" />}>
+                    {geofence?.status === 'DALAM_LOKASI' ? 'Dalam Radius Sekolah' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi GPS Rendah' : geofence?.status === 'DI_LUAR_LOKASI' ? 'Di Luar Radius' : 'GPS Belum Terhubung'}
                   </Badge>
-                }
+                ) : undefined}
               />
               <CardContent className="p-5 sm:p-6 space-y-6">
                 {/* Geolocation Status HUD */}
-                <div data-tour="gps-status" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div data-tour="gps-status" className="attendance-gps-panel p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-card-border)] space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-2xl text-white shadow-sm flex items-center justify-center ${
-                        isLocating
-                          ? 'bg-[var(--theme-primary)] shadow-[var(--theme-ring)] animate-pulse'
-                          : geofence?.isWithinRadius
-                          ? 'bg-emerald-600 shadow-emerald-500/20'
-                          : 'bg-rose-600 shadow-rose-500/20'
-                      }`}>
-                        {isLocating ? (
-                          <Radio className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <Navigation className="w-5 h-5" />
-                        )}
+                    <div className="gps-search-heading" role="status" aria-live="polite" aria-atomic="true">
+                      <div className={isLocating ? 'gps-search-indicator' : 'p-2.5 rounded-2xl bg-[var(--theme-card-bg)] text-slate-800 dark:text-slate-100'} aria-hidden="true" data-gps-search={isLocating ? 'active' : 'idle'}>
+                        <MapPin className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                            Pusat Geofence: {settings.schoolName}
-                          </h4>
-                          <ContextualHelp
-                            title="Lokasi & Radius GPS"
-                            content="Verifikasi koordinat GPS. Presensi valid jika perangkat berada dalam radius sekolah yang ditentukan."
-                          />
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Batas Toleransi: <strong>{settings.allowedRadiusMeters} meter</strong> dari koordinat sekolah
-                        </p>
+                        <h4 className="gps-search-title">{isLocating ? (isProvisional ? 'Menyempurnakan posisi Anda' : 'Mencari posisi Anda') : !settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : gpsError ? 'Lokasi belum siap' : coords ? 'Lokasi GPS diperbarui' : 'Siapkan lokasi Anda'}</h4>
+                        <p className="gps-search-caption">{isLocating ? (isProvisional && coords ? `Pembacaan sementara ±${Math.round(coords.accuracy)} m · maksimal 2,5 detik.` : 'Izinkan akses lokasi pada browser · maksimal 2,5 detik.') : settingsReady && validSchoolLocation ? `${settings.schoolName} · radius ${settings.allowedRadiusMeters} m` : 'Pengaturan koordinat dan radius harus tersedia dari admin.'}</p>
                       </div>
                     </div>
-
                     <Button
                       data-tour="refresh-gps-button"
-                      variant="outline"
-                      size="sm"
-                      className="text-xs self-start sm:self-center shrink-0 min-h-[40px]"
-                      isLoading={isLocating}
-                      leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />}
+                      variant="outline" size="sm"
+                      className="text-xs self-start sm:self-center shrink-0 min-h-[44px]"
+                      disabled={isLocating || isCheckingOut || !settingsReady || !validSchoolLocation}
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
                       onClick={() => refreshGpsLocation(true)}
-                    >
-                      {isLocating ? 'Menyelaraskan (2,5s)...' : 'Perbarui Koordinat GPS'}
-                    </Button>
+                    >{isLocating ? 'Mencari lokasi…' : gpsError ? 'Coba GPS lagi' : 'Perbarui GPS'}</Button>
                   </div>
+
+                  {settingsReady && validSchoolLocation && <AttendanceMapPreview
+                    schoolLat={settings.schoolLat} schoolLng={settings.schoolLng}
+                    radiusMeters={settings.allowedRadiusMeters} schoolName={settings.schoolName}
+                    coords={coords} provisional={isProvisional}
+                  />}
 
                   {gpsError ? (
                     <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs space-y-1">
@@ -802,11 +772,11 @@ export const AttendancePreview: React.FC = () => {
                         {gpsError}
                       </p>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 italic pt-1">
-                        Langkah berikutnya: Pindah ke area terbuka, pastikan izin lokasi browser aktif, lalu klik tombol "Perbarui Koordinat GPS" di atas.
+                        Pindah ke area terbuka, aktifkan izin lokasi browser, lalu ketuk "Coba GPS lagi".
                       </p>
                     </div>
-                  ) : coords ? (
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
+                  ) : coords && !isLocating ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
                       <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
                         <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Jarak Sekolah:</span>
                         <span className={`font-bold font-mono text-sm block mt-0.5 ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
@@ -854,9 +824,7 @@ export const AttendancePreview: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="pt-2 text-center text-xs text-slate-400">
-                      {isLocating ? 'Sedang mencari satelit GPS...' : 'GPS belum disinkronkan. Klik tombol Perbarui di atas.'}
-                    </div>
+                    !isLocating && <p className="text-xs text-slate-500 dark:text-slate-400">Posisi Anda akan muncul setelah GPS terbaca. Peta tidak menggantikan validasi lokasi.</p>
                   )}
                 </div>
 
@@ -1049,7 +1017,7 @@ export const AttendancePreview: React.FC = () => {
                           size="lg"
                           className="w-full sm:w-auto"
                           isLoading={isCheckingOut}
-                          disabled={isCheckingOut || isSubmitting}
+                          disabled={isCheckingOut || isSubmitting || isLocating || !settingsReady || !validSchoolLocation}
                           leftIcon={<Clock className="w-5 h-5" />}
                           onClick={handleCheckOut}
                         >
