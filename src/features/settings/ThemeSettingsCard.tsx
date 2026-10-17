@@ -76,8 +76,8 @@ export const ThemeSettingsCard: React.FC = () => {
       {/* 1. Pastel Theme Palette Card */}
       <Card>
         <CardHeader
-          title="Pilihan Tema Tampilan (Warna Pastel)"
-          subtitle="Pilih skema warna pastel lembut sesuai kenyamanan visual Anda. Langsung diterapkan pada antarmuka aplikasi."
+          title="Pilihan Tema Tampilan"
+          subtitle="Krem Hangat memakai palet krem, kuning, jingga, dan merah. Pilihan tema lain tetap tersedia."
         />
         <CardContent className="p-5 sm:p-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

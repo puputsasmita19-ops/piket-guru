@@ -9,7 +9,7 @@
     <meta property="og:description" content="Jadwal dan Buku Piket Digital Sekolah - Presensi GPS, Laporan Kejadian, dan Administrasi Piket Terintegrasi" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#fffef8" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -36,18 +36,18 @@
           var savedPastel = localStorage.getItem('piket_guru_pastel_theme') || 'default';
           document.documentElement.setAttribute('data-pastel-theme', savedPastel);
 
-          var darkColors = { default: '#0f172a', sky: '#0c1a26', mint: '#0a1f17', lavender: '#181028', peach: '#1f140b', rose: '#200d13' };
-          var lightColors = { default: '#2563eb', sky: '#0284c7', mint: '#059669', lavender: '#7c3aed', peach: '#ea580c', rose: '#e11d48' };
+          var darkColors = { default: '#24221d', sky: '#0c1a26', mint: '#0a1f17', lavender: '#181028', peach: '#1f140b', rose: '#200d13' };
+          var lightColors = { default: '#fffef8', sky: '#0284c7', mint: '#059669', lavender: '#7c3aed', peach: '#ea580c', rose: '#e11d48' };
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) {
-            meta.setAttribute('content', isDark ? (darkColors[savedPastel] || '#0f172a') : (lightColors[savedPastel] || '#2563eb'));
+            meta.setAttribute('content', isDark ? (darkColors[savedPastel] || '#24221d') : (lightColors[savedPastel] || '#fffef8'));
           }
         } catch (e) {}
       })();
     </script>
   </head>
   <body class="font-sans antialiased text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-150">
-    <div id="root"><div role="status" aria-live="polite" style="min-height:100vh;display:flex;align-items:center;justify-content:center;font:14px system-ui,sans-serif;background:var(--theme-bg-app,#f8fafc);color:var(--theme-text,#475569)">Memuat Piket Guru…</div></div>
+    <div id="root"><div role="status" aria-live="polite" style="min-height:100vh;display:flex;align-items:center;justify-content:center;font:14px system-ui,sans-serif;background:var(--theme-bg-app,#f5f5dc);color:var(--theme-text,#475569)">Memuat Piket Guru…</div></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {

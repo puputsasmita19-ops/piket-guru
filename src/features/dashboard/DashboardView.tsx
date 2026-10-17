@@ -233,7 +233,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   return (
     <div className="space-y-6">
       <section className="dashboard-welcome">
-        <div><p className="dashboard-eyebrow">{settings.schoolName}</p><h1>Halo, {currentUser?.fullName || 'selamat datang'}<span className="welcome-dot">.</span></h1><p className="dashboard-intro">Semoga kegiatan sekolah hari ini berjalan lancar.</p></div>
+        <div><p className="dashboard-eyebrow">{settings.schoolName}</p><h1>Halo, {currentUser?.fullName || 'selamat datang'}</h1><p className="dashboard-intro">Semoga kegiatan sekolah hari ini berjalan lancar.</p></div>
         <span className="dashboard-avatar" aria-hidden="true">{currentUser?.fullName?.charAt(0) || 'P'}</span>
       </section>
 

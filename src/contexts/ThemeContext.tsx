@@ -11,19 +11,19 @@ export interface PastelThemeOption {
   primaryColor: string;
   pastelBg: string;
   accentColor: string;
-  swatchColors: [string, string, string]; // [primary, pastelSurface, border]
+  swatchColors: string[]; // Palette preview, including semantic accents when present.
 }
 
 export const PASTEL_THEMES: PastelThemeOption[] = [
   {
     id: 'default',
-    name: 'Tema Default',
-    tagline: 'Biru Klasik & Profesional',
-    description: 'Nuansa biru safir klasik yang elegan, terpercaya, dan optimal untuk operasional piket sehari-hari.',
-    primaryColor: '#2563eb',
-    pastelBg: '#eff6ff',
-    accentColor: '#1d4ed8',
-    swatchColors: ['#2563eb', '#bfdbfe', '#eff6ff'],
+    name: 'Krem Hangat',
+    tagline: 'Krem, Kuning & Jingga',
+    description: 'Latar krem lembut dengan aksen kuning, jingga, dan merah; ikon netral serta tulisan yang tetap jelas.',
+    primaryColor: '#fbc02d',
+    pastelBg: '#f5f5dc',
+    accentColor: '#ff8f00',
+    swatchColors: ['#f5f5dc', '#fbc02d', '#ff8f00', '#c62828'],
   },
   {
     id: 'sky',
@@ -163,7 +163,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Sync browser theme-color meta tag for seamless status bar integration
     const metaColors: Record<'dark' | 'light', Record<PastelTheme, string>> = {
       dark: {
-        default: '#0f172a',
+        default: '#24221d',
         sky: '#0c1a26',
         mint: '#0a1f17',
         lavender: '#181028',
@@ -171,7 +171,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         rose: '#200d13',
       },
       light: {
-        default: '#2563eb',
+        default: '#fffef8',
         sky: '#0284c7',
         mint: '#059669',
         lavender: '#7c3aed',
@@ -179,7 +179,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         rose: '#e11d48',
       },
     };
-    const targetMetaColor = metaColors[resolved ? 'dark' : 'light'][pastelTheme] || (resolved ? '#0f172a' : '#2563eb');
+    const targetMetaColor = metaColors[resolved ? 'dark' : 'light'][pastelTheme] || (resolved ? '#24221d' : '#fffef8');
     const metaTag = document.querySelector('meta[name="theme-color"]');
     if (metaTag) {
       metaTag.setAttribute('content', targetMetaColor);
@@ -204,7 +204,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           root.classList.remove('dark');
           root.style.colorScheme = 'light';
         }
-        const sysColor = metaColors[darkNow ? 'dark' : 'light'][pastelTheme] || (darkNow ? '#0f172a' : '#2563eb');
+        const sysColor = metaColors[darkNow ? 'dark' : 'light'][pastelTheme] || (darkNow ? '#24221d' : '#fffef8');
         if (metaTag) {
           metaTag.setAttribute('content', sysColor);
         }
