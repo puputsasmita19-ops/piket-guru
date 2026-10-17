@@ -1,0 +1,13 @@
+import { build } from 'esbuild'; import vm from 'node:vm'; import assert from 'node:assert/strict';
+const b = await build({ stdin: { contents: "export{buildDailyStatisticSeries}from'./src/features/dashboard/dashboardStatisticSeries';", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'cjs', platform: 'node' });
+const c = vm.createContext({ module: { exports: {} }, Date, Intl }); vm.runInContext(b.outputFiles[0].text, c); const { buildDailyStatisticSeries: series } = c.module.exports;
+const day = '2026-10-17', now = new Date('2026-10-17T12:00:00+07:00'); let count = 0;
+const check = (name, fn) => { fn(); count++; console.log('PASS', name); };
+check('empty records create a true zero series', () => assert.deepEqual(Array.from(series([], day, false, now)), [0,0,0,0,0,0,0]));
+check('cumulative values come from real event times', () => assert.deepEqual(Array.from(series(['08:00', '09:30'], day, false, now)), [0,0,0,0,1,2,2]));
+check('future scheduled shifts are represented as planned data', () => assert.equal(series(['07:00', '14:00'], day, true, now).at(-1), 2));
+check('UTC timestamps are grouped using the correct WIB day', () => assert.equal(series(['2026-10-16T23:00:00Z'], day, false, now).at(-1), 1));
+check('a timestamp from another local day never fabricates a daily trend', () => assert.equal(series(['2026-10-16T10:00:00Z'], day, false, now), null));
+check('missing or invalid event times keep the curve unavailable', () => { for (const v of [undefined, null, '', '99:12', '12:99', 'not-a-date', { seconds: Infinity }]) assert.equal(series(['08:00', v], day, false, now), null); });
+check('Date and Firestore timestamps are accepted', () => assert.equal(series([now, { seconds: now.getTime()/1000 }, { toDate: () => now }], day, false, now).at(-1), 3));
+console.log(`${count} statistic series checks passed. No production IO.`);
