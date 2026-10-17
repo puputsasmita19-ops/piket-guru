@@ -981,31 +981,43 @@ button.bg-\[var\(--theme-primary\)\],
 }
 
 @layer components {
-  .dashboard-info-row { display: grid; gap: 16px; min-width: 0; }
-  .dashboard-info-row > * { min-width: 0; }
-  .banner-announcements { display: flex; align-items: center; gap: 7px; min-height: 44px; font-size: 11px; font-weight: 650; color: var(--theme-primary-text); cursor: pointer; }
-  .dashboard-flash { min-width: 0; border-radius: 24px; border: 1px solid var(--theme-card-border); background: var(--theme-card-bg); padding: 18px; color: inherit; box-shadow: 0 5px 18px rgb(15 23 42 / .025); }
-  .flash-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-  .flash-eyebrow { font-size: 10px; font-weight: 750; letter-spacing: .12em; color: var(--theme-primary-text); }
-  .flash-page { font-size: 10px; color: var(--theme-subtle-text, #64748b); font-variant-numeric: tabular-nums; }
-  .flash-slide { animation: flash-info-enter .2s ease-out; }
-  .flash-slide h2 { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; font-weight: 750; min-height: 40px; }
+  .header-user-chip { border: 1px solid var(--theme-primary-border); background: var(--theme-primary-light); box-shadow: 0 1px 2px rgb(15 23 42 / .04); }
+  .dashboard-flash { min-width: 0; border-radius: 24px; border: 1px solid var(--theme-card-border); background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary-light) 48%, var(--theme-card-bg)), var(--theme-card-bg)); padding: 12px 18px; color: inherit; box-shadow: 0 5px 18px rgb(15 23 42 / .025); }
+  .flash-heading { display: flex; align-items: center; gap: 8px; height: 36px; margin-bottom: 4px; }
+  .flash-eyebrow { flex: 1; min-width: 0; font-size: 10px; font-weight: 750; letter-spacing: .1em; color: var(--theme-primary-text); }
+  .flash-page { flex: none; font-size: 10px; color: #64748b; font-variant-numeric: tabular-nums; }
+  .flash-announcements { min-height: 44px; font-size: 10px; font-weight: 650; color: var(--theme-primary-text); cursor: pointer; }
+  .flash-viewport { overflow: hidden; min-width: 0; touch-action: pan-y pinch-zoom; }
+  .flash-track { display: flex; width: 100%; transition: transform .32s cubic-bezier(.22, .68, .16, 1); }
+  .flash-slide { flex: 0 0 100%; min-width: 0; height: 164px; padding-right: 2px; }
+  .flash-slide h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.5; font-weight: 750; min-height: 36px; }
   .flash-slide h2 > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .flash-content { height: 144px; overflow: hidden; }
-  .flash-content li { padding: 7px 0; min-width: 0; }
+  .flash-content { height: 128px; overflow: hidden; }
+  .flash-content li { padding: 5px 0; min-width: 0; }
   .flash-content li + li { border-top: 1px solid var(--theme-card-border); }
   .flash-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; line-height: 1.5; }
-  .flash-item-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.6; color: var(--theme-subtle-text, #64748b); }
-  .flash-empty { font-size: 12px; line-height: 1.7; color: var(--theme-subtle-text, #64748b); padding-top: 14px; }
-  .flash-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid var(--theme-card-border); padding-top: 8px; }
+  .flash-item-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.6; color: #64748b; }
+  .flash-empty { font-size: 12px; line-height: 1.7; color: #64748b; padding-top: 10px; }
+  .flash-activity { display: flex; gap: 16px; align-items: center; height: 100%; }
+  .flash-activity h2 { font-size: clamp(18px, 2vw, 24px); line-height: 1.3; letter-spacing: -.02em; }
+  .flash-activity-description { font-size: 12px; line-height: 1.7; margin-top: 8px; color: #64748b; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .flash-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid var(--theme-card-border); padding-top: 4px; }
   .flash-open { display: inline-flex; align-items: center; gap: 3px; min-width: 0; min-height: 44px; text-align: left; font-size: 11px; line-height: 1.4; font-weight: 750; color: var(--theme-primary-text); cursor: pointer; }
   .flash-control { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; flex: none; border-radius: 11px; cursor: pointer; color: inherit; }
   .flash-control:hover { background: var(--theme-surface-subtle); }
   .flash-control:disabled { opacity: .35; cursor: default; }
-  :is(.flash-control, .flash-open, .banner-announcements):focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
-  .dark .flash-page, .dark .flash-item-detail, .dark .flash-empty { color: #b4bac6; }
-  @keyframes flash-info-enter { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-  @media (min-width: 1024px) { .dashboard-info-row.has-flash { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-  @media (max-width: 639px) { .dashboard-flash { padding: 15px; border-radius: 21px; } }
-  @media (prefers-reduced-motion: reduce) { .flash-slide { animation: none; } }
+  :is(.flash-control, .flash-open, .flash-announcements):focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
+  .dark :is(.flash-page, .flash-item-detail, .flash-empty, .flash-activity-description) { color: #b4bac6; }
+  @media (max-width: 639px) {
+    .dashboard-flash { padding: 9px 14px; border-radius: 21px; }
+    .flash-slide { height: 124px; }
+    .flash-slide h2 { font-size: 13px; }
+    .flash-content { height: 88px; }
+    .flash-content li:nth-child(n+3) { display: none; }
+    .flash-activity { gap: 12px; }
+    .flash-activity .banner-illustration { width: 48px; height: 48px; }
+    .flash-activity h2 { font-size: 18px; }
+    .flash-activity-description { font-size: 11px; margin-top: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .flash-track { transition: none; } }
 }

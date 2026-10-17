@@ -50,6 +50,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { theme, setTheme, pastelTheme, setPastelTheme, isDark, pastelThemesList } = useTheme();
   const { currentUser, logout } = useAuth();
+  const firstName = currentUser?.fullName.trim().split(/\s+/)[0] || 'Pengguna';
+  const displayFirstName = firstName.charAt(0).toLocaleUpperCase('id-ID') + firstName.slice(1).toLocaleLowerCase('id-ID');
   const { activeTab, subView } = useNavigation();
   const { isGuideMenuOpen, openGuideMenu, closeGuideMenu } = useGuide();
 
@@ -457,7 +459,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTogglePanel('user')}
-                    className={`max-w-full flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
+                    className={`header-user-chip max-w-full flex items-center justify-center gap-1.5 p-1 xs:p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-95 ${
                       activePanel === 'user'
                         ? 'bg-[var(--theme-primary-light)] ring-2 ring-[var(--theme-primary-border)]'
                         : 'hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
@@ -467,7 +469,7 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <div className="min-w-0 text-left">
                       <div className="text-[11px] sm:text-xs font-bold text-slate-900 dark:text-white truncate max-w-[72px] sm:max-w-[120px]">
-                        {(currentUser.fullName.trim().split(/\s+/)[0] || 'Pengguna').toLocaleUpperCase('id-ID')}
+                        {displayFirstName}
                       </div>
                       <div className="hidden lg:block text-[10px] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-medium">
                         {ROLE_LABELS[currentUser.role]}

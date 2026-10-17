@@ -275,7 +275,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     ...(hasPermission(PERMISSIONS.INCIDENT_VIEW) ? [{ id: 'incidents' as const, title: 'Insiden & Kejadian Terbaru', icon: AlertTriangle, items: [...todayIncidents].sort((a, b) => (b.waktu || '').localeCompare(a.waktu || '')).map(item => ({ id: item.id, title: `[${getIncidentCategoryDisplay(item)}] ${item.lokasi}`, detail: `${item.waktu} WIB · ${item.uraian}` })), emptyText: 'Belum ada kejadian yang dilaporkan hari ini.', actionLabel: 'Buka laporan kejadian', onAction: () => setDetailPanel('incidents') }] : []),
     ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: () => toggleDutyDetails(true) }] : []),
   ].filter(slide => flashConfig.panels[slide.id]);
-  const hasFlash = flashConfig.enabled && flashSlides.length > 0;
+  const activitySlide: DashboardFlashSlide = {
+    id: 'activity', title: isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis',
+    icon: myTodaySchedule ? Calendar : BookOpenCheck,
+    illustration: <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />,
+    description: myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.',
+    items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: () => toggleDutyDetails(true), expanded: showDutyDetails,
+  };
+  const dashboardSlides = [activitySlide, ...(flashConfig.enabled ? flashSlides : [])];
   const announcementBoard = (
 <Card>
         <CardHeader
@@ -496,17 +503,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         <UserAvatar user={currentUser} className="dashboard-avatar" />
       </section>
 
-      <div className={`dashboard-info-row ${hasFlash ? 'has-flash' : ''}`}>
-      <section className="dashboard-feature-banner" aria-label="Kegiatan piket hari ini">
-        <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />
-        <div className="min-w-0 flex-1"><p className="banner-eyebrow">PIKET GURU • HARI INI</p><h2>{isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis'}</h2>
-          <p className="banner-description">{myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.'}</p>
-          <button type="button" className="banner-action" aria-expanded={showDutyDetails} aria-controls="personal-duty-details" onClick={() => toggleDutyDetails(true)}>{showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas'}<ChevronRight className="w-4 h-4" /></button>
-          <button type="button" className="banner-announcements" onClick={openAnnouncements}><Megaphone className="w-4 h-4" />Papan pengumuman</button>
-        </div>
-      </section>
-      <DashboardFlashInfo config={flashConfig} slides={flashSlides} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
-      </div>
+      <DashboardFlashInfo config={flashConfig} slides={dashboardSlides} onAnnouncements={openAnnouncements} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
 
       <QuickActions onNavigate={onNavigateTab} />
 
