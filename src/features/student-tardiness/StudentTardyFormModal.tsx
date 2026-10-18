@@ -393,6 +393,10 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
       const payload: Partial<StudentTardyRecord> = {
         id: editingTardy.id,
+        updatedAt: editingTardy.updatedAt,
+        studentId: editingTardy.studentId,
+        createdAt: editingTardy.createdAt,
+        createdBy: editingTardy.createdBy,
         tanggal,
         jamDatang: sharedJamDatang,
         menitTerlambat: minutesLate,

@@ -2,6 +2,8 @@ import { FirestoreService } from './firestoreService';
 import { StudentTardyRecord, TardyStatus } from '../../types/studentTardy.types';
 import { UserProfile } from '../../types';
 import { processPhotoForStorage } from '../drive/photoUploadHelper';
+import { where } from 'firebase/firestore';
+import { getTodayISODate } from '../../utils/dateUtils';
 
 export class StudentTardyService {
   public static getBatchRecordId(tanggal: string, studentId: string, batchRequestId: string): string {
@@ -93,9 +95,13 @@ export class StudentTardyService {
     targetDate?: string,
     excludeRecordId?: string
   ): Promise<number> {
-    const records = await FirestoreService.getAll<StudentTardyRecord>('studentTardiness');
-    const dateStr = targetDate || new Date().toISOString().split('T')[0];
+    const dateStr = targetDate || getTodayISODate();
     const currentYearMonth = dateStr.substring(0, 7); // YYYY-MM
+    const [year, month] = currentYearMonth.split('-').map(Number);
+    const nextMonth = `${month === 12 ? year + 1 : year}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}-01`;
+    const records = await FirestoreService.getAll<StudentTardyRecord>('studentTardiness', [
+      where('tanggal', '>=', `${currentYearMonth}-01`), where('tanggal', '<', nextMonth),
+    ]);
 
     const matching = records.filter((r) => {
       if (excludeRecordId && r.id === excludeRecordId) {
@@ -137,16 +143,16 @@ export class StudentTardyService {
       : `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${crypto.randomUUID()}`;
 
     // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
-    const existingDoc = await FirestoreService.getById<StudentTardyRecord>('studentTardiness', id);
+    const existingDoc = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', id);
     const isNew = !existingDoc;
     if (!isEdit && existingDoc && data.batchRequestId && existingDoc.batchRequestId === data.batchRequestId) {
       return existingDoc;
     }
-    if (isEdit && existingDoc && data.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > data.updatedAt && existingDoc.updatedBy !== user.fullName) {
+    if (existingDoc && data.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== data.updatedAt) {
       throw new Error(`Konflik pembaruan: Catatan keterlambatan telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existingDoc);
 
     // Process photo upload to Google Drive if Drive storage is enabled
     let finalFotoUrl: string | undefined = data.fotoUrl || undefined;
@@ -202,15 +208,15 @@ export class StudentTardyService {
       batchRequestId: data.batchRequestId || existingDoc?.batchRequestId,
       dataSource: 'PRODUCTION',
       isDemo: false,
-      createdAt: data.createdAt || now,
-      createdBy: data.createdBy || user.fullName,
+      createdAt: existingDoc?.createdAt || data.createdAt || now,
+      createdBy: existingDoc?.createdBy || data.createdBy || user.fullName,
       updatedAt: now,
       updatedBy: user.fullName,
     };
 
     const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
 
-    await FirestoreService.setDocument('studentTardiness', id, payload);
+    await FirestoreService.setDocument('studentTardiness', id, payload, { expectedState: existingDoc });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -245,7 +251,9 @@ export class StudentTardyService {
     }>;
     allSuccessful: boolean;
   }> {
-    const existingRecords = await FirestoreService.getAll<StudentTardyRecord>('studentTardiness');
+    const existingRecords = await FirestoreService.getForDates<StudentTardyRecord>(
+      'studentTardiness', studentsData.map(item => item.tanggal || getTodayISODate())
+    );
     const results: Array<{
       studentId: string;
       namaSiswa: string;
@@ -257,7 +265,7 @@ export class StudentTardyService {
 
     for (const item of studentsData) {
       try {
-        const itemTanggal = item.tanggal || new Date().toISOString().split('T')[0];
+        const itemTanggal = item.tanggal || getTodayISODate();
 
         // Check for duplicate on the same date
         const duplicate = existingRecords.find(
@@ -357,7 +365,7 @@ export class StudentTardyService {
       }
     }
 
-    const existing = await FirestoreService.getById<StudentTardyRecord>('studentTardiness', tardyId);
+    const existing = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', tardyId);
     if (!existing) {
       throw new Error(`Catatan siswa terlambat dengan ID ${tardyId} tidak ditemukan.`);
     }
@@ -412,11 +420,11 @@ export class StudentTardyService {
       isCorrectedByAdmin: true,
       adminCorrection: correctionDetails,
       ruleSnapshot: existing.ruleSnapshot || ruleSnapshot,
-      updatedAt: new Date().toISOString(),
+      updatedAt: FirestoreService.nextUpdatedAt(existing),
       updatedBy: adminUser.fullName,
     };
 
-    await FirestoreService.setDocument('studentTardiness', tardyId, updatedRecord);
+    await FirestoreService.setDocument('studentTardiness', tardyId, updatedRecord, { expectedState: existing });
 
     await FirestoreService.logAudit({
       userId: adminUser.id,
@@ -449,17 +457,17 @@ export class StudentTardyService {
     tardyId: string,
     user: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getById<StudentTardyRecord>('studentTardiness', tardyId);
+    const existing = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', tardyId);
     if (!existing) return;
 
     const updated: StudentTardyRecord = {
       ...existing,
       status: 'SELESAI_MASUK_KELAS',
-      updatedAt: new Date().toISOString(),
+      updatedAt: FirestoreService.nextUpdatedAt(existing),
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('studentTardiness', tardyId, updated);
+    await FirestoreService.setDocument('studentTardiness', tardyId, updated, { expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,

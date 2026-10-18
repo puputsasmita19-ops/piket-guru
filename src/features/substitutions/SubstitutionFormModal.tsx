@@ -600,6 +600,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
 
         const payload: Partial<TeacherSubstitutionRecord> = {
           id: editingSubstitution.id,
+          updatedAt: editingSubstitution.updatedAt,
           tanggal,
           guruBerhalanganId: singleEntry.teacher.id,
           guruBerhalanganName: singleEntry.teacher.fullName,

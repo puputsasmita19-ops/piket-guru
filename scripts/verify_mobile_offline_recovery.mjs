@@ -60,5 +60,37 @@ try{
  const a=await page.evaluate(()=>window.test.OfflineStorage.syncLease('a','one')),b=await page.evaluate(()=>window.test.OfflineStorage.syncLease('a','two'));check('atomic lease rejects a second owner while the first lease is active',a&&!b);
  await page.evaluate(()=>window.test.OfflineStorage.syncLease('a','one',true));
  check('drafts are preserved after queue processing',await page.evaluate(async()=>!!await window.test.DraftService.getDraft('a','INCIDENT','draft')));
+ // Two pages use real, shared IndexedDB; both start with the same empty queue.
+ await page.goto(url+'/?uid=a');await page.waitForFunction(()=>window.test);
+ const second=await context.newPage();await second.goto(url+'/?uid=a');await second.waitForFunction(()=>window.test);
+ await context.setOffline(true);
+ const enqueue=target=>target.evaluate(async()=>{try{await window.test.SyncQueueService.enqueue(window.fixture.user,'TARDY_REPORT','studentTardiness','concurrent',{id:'concurrent',note:Math.random()});return true}catch(error){return error.message}});
+ const attempts=await Promise.all([enqueue(page),enqueue(second)]);
+ check('simultaneous tabs cannot replace the same queued submission',attempts.filter(v=>v===true).length===1&&attempts.some(v=>typeof v==='string'&&v.includes('masih dalam antrean')));
+ const original=await page.evaluate(async()=>(await window.test.OfflineStorage.getSyncItemsByUser('a'))[0].payload.note);
+ check('the winning offline payload remains intact in shared IndexedDB',await second.evaluate(async expected=>(await window.test.OfflineStorage.getSyncItemsByUser('a'))[0].payload.note===expected,original));
+ const retrySame=await second.evaluate(async()=>{const [item]=await window.test.OfflineStorage.getSyncItemsByUser('a');await window.test.SyncQueueService.enqueue(window.fixture.user,'TARDY_REPORT','studentTardiness','concurrent',item.payload);return(await window.test.OfflineStorage.getSyncItemsByUser('a')).length===1});
+ check('an identical retry reuses the existing queued submission',retrySame);
+
+ await context.setOffline(false);
+ const sending=page.evaluate(()=>window.test.SyncQueueService.triggerSync(window.fixture.user));
+ await poll(async()=>(await window.test.OfflineStorage.getSyncItemsByUser('a')).some(i=>i.status==='SENDING'));
+ const busyRemoval=await second.evaluate(async()=>{const [item]=await window.test.OfflineStorage.getSyncItemsByUser('a');try{await window.test.OfflineStorage.removeSyncItem(item.operationId);return false}catch(error){return error.message.includes('sedang dikirim')}});
+ check('atomic removal rejects a submission that another tab is sending',busyRemoval);
+ const rejected=await enqueue(second);
+ check('an in-flight submission cannot be overwritten by a later edit',typeof rejected==='string'&&rejected.includes('masih dalam antrean'));
+ await Promise.all([sending,second.evaluate(()=>window.test.SyncQueueService.triggerSync(window.fixture.user))]);
+ await poll(async()=>(await window.test.OfflineStorage.getSyncItemsByUser('a')).length===0);
+ check('two tabs deliver the original queued payload exactly once',writes.filter(w=>w.id==='concurrent').length===1&&writes.find(w=>w.id==='concurrent').note===original);
+ await second.close();
+ await context.setOffline(true);
+ await page.evaluate(()=>window.test.SyncQueueService.enqueue(window.fixture.user,'TARDY_REPORT','studentTardiness','abort-delete',{id:'abort-delete'}));
+ const deletion=await page.evaluate(async()=>{
+  const [item]=await window.test.OfflineStorage.getSyncItemsByUser('a'),original=IDBObjectStore.prototype.delete;
+  IDBObjectStore.prototype.delete=function(key){const request=original.call(this,key);if(this.name==='syncQueue')request.addEventListener('success',()=>this.transaction.abort());return request};
+  let rejected=false;try{await window.test.OfflineStorage.removeSyncItem(item.operationId)}catch{rejected=true}finally{IDBObjectStore.prototype.delete=original}
+  const preserved=(await window.test.OfflineStorage.getSyncItemsByUser('a')).some(i=>i.operationId===item.operationId);await window.test.OfflineStorage.removeSyncItem(item.operationId);return rejected&&preserved;
+ });check('aborted queue deletion never reports success or loses the stored submission',deletion);
+
  console.log(`${count} mobile persistence/recovery checks passed, no production services.`);
 }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

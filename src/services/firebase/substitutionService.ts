@@ -59,9 +59,9 @@ export class SubstitutionService {
     data: Omit<TeacherSubstitutionRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<TeacherSubstitutionRecord> {
-    const id = data.id || `inv-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `inv-${data.tanggal}-${crypto.randomUUID()}`;
     // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
-    const existingDoc = await FirestoreService.getById<TeacherSubstitutionRecord>('substitutions', id);
+    const existingDoc = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', id);
     if (existingDoc) {
       return existingDoc;
     }
@@ -79,7 +79,7 @@ export class SubstitutionService {
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('substitutions', id, payload);
+    await FirestoreService.setDocument('substitutions', id, payload, { expectedState: null });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -106,11 +106,11 @@ export class SubstitutionService {
       throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
     }
 
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
       throw new Error(`Konflik pembaruan: Catatan guru inval telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const updated: TeacherSubstitutionRecord = {
       ...existing,
       ...data,
@@ -121,7 +121,7 @@ export class SubstitutionService {
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('substitutions', existing.id, updated);
+    await FirestoreService.setDocument('substitutions', existing.id, updated, { expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -145,7 +145,7 @@ export class SubstitutionService {
     guruPenggantiName?: string,
     user?: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getById<TeacherSubstitutionRecord>('substitutions', substitutionId);
+    const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', substitutionId);
     if (!existing) return;
 
     const updated: TeacherSubstitutionRecord = {
@@ -153,11 +153,11 @@ export class SubstitutionService {
       status,
       ...(guruPenggantiId && { guruPenggantiId }),
       ...(guruPenggantiName && { guruPenggantiName }),
-      updatedAt: new Date().toISOString(),
+      updatedAt: FirestoreService.nextUpdatedAt(existing),
       updatedBy: user?.fullName || 'Petugas Piket',
     };
 
-    await FirestoreService.setDocument('substitutions', substitutionId, updated);
+    await FirestoreService.setDocument('substitutions', substitutionId, updated, { expectedState: existing });
     if (user) {
       await FirestoreService.logAudit({
         userId: user.id,
@@ -233,7 +233,9 @@ export class SubstitutionService {
     const { items, user, batchRequestId } = params;
     const groupId = params.groupId || `grp-${new Date().toISOString().split('T')[0]}-${batchRequestId.slice(0, 8)}`;
 
-    const existingRecords = await FirestoreService.getAll<TeacherSubstitutionRecord>('substitutions');
+    const existingRecords = await FirestoreService.getForDates<TeacherSubstitutionRecord>(
+      'substitutions', items.map(item => item.tanggal)
+    );
     const results: import('../../types/substitution.types').BatchSubstitutionItemResult[] = [];
 
     // Lacak penugasan yang baru saja berhasil disimpan dalam batch ini untuk mendeteksi konflik internal antar rincian

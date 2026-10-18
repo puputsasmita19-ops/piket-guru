@@ -20,6 +20,7 @@ import {
   serverTimestamp,
   deleteField,
   writeBatch,
+  runTransaction,
   QueryConstraint,
   Unsubscribe,
   QueryDocumentSnapshot,
@@ -116,8 +117,32 @@ export interface QueryDataOptions {
   cacheKey?: string;
 }
 
+export interface DocumentWriteOptions {
+  purgeLegacyCredentials?: boolean;
+  controlledReplace?: boolean;
+  /** null = create only; object = update only if this revision still exists. */
+  expectedState?: { updatedAt?: unknown } | null;
+}
+
 export class FirestoreService {
   public static sanitizeFirestorePayload = sanitizeFirestorePayload;
+
+  /** Advance even when two changes share a millisecond or a device clock moves backwards. */
+  public static nextUpdatedAt(previous?: { updatedAt?: unknown } | null): string {
+    const oldTime = typeof previous?.updatedAt === 'string' ? Date.parse(previous.updatedAt) : NaN;
+    return new Date(Math.max(Date.now(), Number.isFinite(oldTime) ? oldTime + 1 : 0)).toISOString();
+  }
+
+  private static assertUnchanged(snapshot: DocumentSnapshot, expected: DocumentWriteOptions['expectedState']): void {
+    const current = snapshot.exists() ? snapshot.data() : null;
+    const actualVersion = current?.updatedAt;
+    const expectedVersion = expected?.updatedAt;
+    const sameVersion = actualVersion === expectedVersion ||
+      (actualVersion?.isEqual && actualVersion.isEqual(expectedVersion));
+    if (snapshot.exists() !== (expected !== null) || !sameVersion) {
+      throw new Error('Konflik pembaruan: Data telah berubah dari perangkat atau sesi lain. Muat ulang data terbaru sebelum menyimpan.');
+    }
+  }
 
   /**
    * Sanitizes browser cache by purging any cached demo/seed data across all collections
@@ -308,6 +333,17 @@ export class FirestoreService {
     return this.getAll<T>(collectionName, constraints, { operationalOnly: false });
   }
 
+  /** Operational validation must not scan every archived record (and its photos). */
+  public static async getForDates<T>(collectionName: string, dates: string[]): Promise<T[]> {
+    const uniqueDates = [...new Set(dates)];
+    const records: T[] = [];
+    // Small chunks also work with older deployed query configurations.
+    for (let start = 0; start < uniqueDates.length; start += 10) {
+      records.push(...await this.getAll<T>(collectionName, [where('tanggal', 'in', uniqueDates.slice(start, start + 10))]));
+    }
+    return records;
+  }
+
   /**
    * Get count of operational vs seed records for a collection
    */
@@ -364,13 +400,15 @@ export class FirestoreService {
     collectionName: string,
     id: string,
     data: Partial<T>,
-    options: { purgeLegacyCredentials?: boolean; controlledReplace?: boolean } = {}
+    options: DocumentWriteOptions = {}
   ): Promise<void> {
     const docRef = doc(db, collectionName, id);
     const rawPayload: Record<string, any> = {
       ...data,
       id,
-      updatedAt: new Date().toISOString(),
+      updatedAt: options.expectedState !== undefined
+        ? (data as any).updatedAt || this.nextUpdatedAt(options.expectedState)
+        : new Date().toISOString(),
     };
 
     // System collections that do not require entity data-source tagging
@@ -404,19 +442,19 @@ export class FirestoreService {
       payload.privateKey = deleteField();
     }
 
-    if (options.controlledReplace) {
+    if (options.expectedState !== undefined) {
+      await runTransaction(db, async transaction => {
+        this.assertUnchanged(await transaction.get(docRef), options.expectedState);
+        transaction.set(docRef, payload, { merge: !options.controlledReplace });
+      });
+    } else if (options.controlledReplace) {
       await setDoc(docRef, payload, { merge: false });
     } else {
       await setDoc(docRef, payload, { merge: true });
     }
 
-    // Update scoped cache for active user
-    try {
-      const currentUid = auth?.currentUser?.uid || 'guest';
-      const existing = await this.getAllRaw<T>(collectionName);
-      const updated = existing.filter((item) => item.id !== id).concat(payload as unknown as T);
-      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
-    } catch {}
+    // Active query listeners own their exact caches. Never download the entire
+    // collection after a write, or build a partial/stale cache from one record.
   }
 
   /**
@@ -449,23 +487,8 @@ export class FirestoreService {
     fields: Record<string, any>
   ): Promise<void> {
     const docRef = doc(db, collectionName, id);
-    const cleanFields: Record<string, any> = {};
-    for (const [key, value] of Object.entries(fields)) {
-      if (value !== undefined) {
-        cleanFields[key] = value;
-      }
-    }
+    const cleanFields = sanitizeFirestorePayload(fields);
     await updateDoc(docRef, cleanFields);
-
-    // Update scoped cache for active user
-    try {
-      const currentUid = auth?.currentUser?.uid || 'guest';
-      const existing = await this.getAllRaw<any>(collectionName);
-      const updated = existing.map((item) =>
-        item.id === id ? { ...item, ...cleanFields } : item
-      );
-      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
-    } catch {}
   }
 
   /**
@@ -525,14 +548,17 @@ export class FirestoreService {
       recordId?: string;
       details: string;
       metadata?: Record<string, any>;
-    }
+    },
+    options: DocumentWriteOptions = {}
   ): Promise<void> {
     const batch = writeBatch(db);
     const docRef = doc(db, collectionName, id);
     const rawPayload: Record<string, any> = {
       ...data,
       id,
-      updatedAt: new Date().toISOString(),
+      updatedAt: options.expectedState !== undefined
+        ? (data as any).updatedAt || this.nextUpdatedAt(options.expectedState)
+        : new Date().toISOString(),
       dataSource: (data as any)?.dataSource || 'PRODUCTION',
       isDemo: (data as any)?.isDemo || false,
     };
@@ -565,18 +591,19 @@ export class FirestoreService {
 
     const logRecord = sanitizeFirestorePayload(rawAuditLog);
 
-    batch.set(docRef, payload, { merge: true });
-    batch.set(auditRef, logRecord);
-    await batch.commit();
+    if (options.expectedState !== undefined) {
+      await runTransaction(db, async transaction => {
+        this.assertUnchanged(await transaction.get(docRef), options.expectedState);
+        transaction.set(docRef, payload, { merge: !options.controlledReplace });
+        transaction.set(auditRef, logRecord);
+      });
+    } else {
+      batch.set(docRef, payload, { merge: !options.controlledReplace });
+      batch.set(auditRef, logRecord);
+      await batch.commit();
+    }
     const event = operationalEventFromAudit(logRecord as AuditLogRecord);
     if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
 
-    // Update scoped cache for active user
-    try {
-      const currentUid = auth?.currentUser?.uid || 'guest';
-      const existing = await this.getAllRaw<T>(collectionName);
-      const updated = existing.filter((item) => item.id !== id).concat(payload as unknown as T);
-      OfflineStorage.setScopedCache(currentUid, collectionName, updated).catch(() => {});
-    } catch {}
   }
 }

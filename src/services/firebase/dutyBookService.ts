@@ -67,8 +67,8 @@ export class DutyBookService {
 
     this.checkWriteAuthority(user, isNew);
 
-    const now = new Date().toISOString();
-    const existing = await FirestoreService.getById<DutyBookRecord>('dutyBooks', id);
+    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+    const now = FirestoreService.nextUpdatedAt(existing);
 
     if (existing) {
       if (user.role === 'GURU' && existing.petugasId !== user.id) {
@@ -117,7 +117,7 @@ export class DutyBookService {
         petugasName: payload.petugasName,
         isNew,
       },
-    });
+    }, { expectedState: existing });
 
     return payload;
   }
@@ -138,8 +138,8 @@ export class DutyBookService {
     this.checkWriteAuthority(user, isNew);
     this.validateMandatorySections(record);
 
-    const now = new Date().toISOString();
-    const existing = await FirestoreService.getById<DutyBookRecord>('dutyBooks', id);
+    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+    const now = FirestoreService.nextUpdatedAt(existing);
 
     if (existing) {
       if (user.role === 'GURU' && existing.petugasId !== user.id) {
@@ -195,7 +195,7 @@ export class DutyBookService {
         submittedAt: now,
         isNew,
       },
-    });
+    }, { expectedState: existing });
 
     return payload;
   }
@@ -218,7 +218,7 @@ export class DutyBookService {
       throw new Error('Akses ditolak: Anda tidak memiliki wewenang untuk mengesahkan dan menyelesaikan buku piket.');
     }
 
-    const existing = await FirestoreService.getById<DutyBookRecord>('dutyBooks', dutyBook.id);
+    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
     if (!existing) {
       throw new Error('Dokumen buku piket tidak ditemukan.');
     }
@@ -226,7 +226,7 @@ export class DutyBookService {
       throw new Error('Buku piket sudah berstatus Selesai dan terkunci.');
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const updated: DutyBookRecord = {
       ...existing,
       status: 'DIKUNCI',
@@ -257,7 +257,7 @@ export class DutyBookService {
         approvedBy: user.fullName,
         lockedBy: user.fullName,
       },
-    });
+    }, { expectedState: existing });
 
     return updated;
   }
@@ -283,7 +283,7 @@ export class DutyBookService {
       throw new Error('Alasan pengembalian jurnal ke draft wajib diisi.');
     }
 
-    const existing = await FirestoreService.getById<DutyBookRecord>('dutyBooks', dutyBook.id);
+    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
     if (!existing) {
       throw new Error('Dokumen buku piket tidak ditemukan.');
     }
@@ -291,7 +291,7 @@ export class DutyBookService {
       throw new Error('Akses ditolak: Buku piket berstatus Selesai hanya dapat dibuka kunci oleh Administrator.');
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const updated: DutyBookRecord = {
       ...existing,
       status: 'DRAFT',
@@ -315,7 +315,7 @@ export class DutyBookService {
         petugasName: dutyBook.petugasName,
         revisionReason: reason.trim(),
       },
-    });
+    }, { expectedState: existing });
 
     return updated;
   }
@@ -336,12 +336,12 @@ export class DutyBookService {
       throw new Error('Alasan pembukaan kunci untuk koreksi wajib diisi.');
     }
 
-    const existing = await FirestoreService.getById<DutyBookRecord>('dutyBooks', dutyBook.id);
+    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
     if (!existing) {
       throw new Error('Dokumen buku piket tidak ditemukan.');
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const { lockedAt, lockedBy, ...rest } = existing;
     const updated: DutyBookRecord = {
       ...rest,
@@ -366,7 +366,7 @@ export class DutyBookService {
         petugasName: dutyBook.petugasName,
         unlockReason: reason.trim(),
       },
-    });
+    }, { expectedState: existing });
 
     return updated;
   }

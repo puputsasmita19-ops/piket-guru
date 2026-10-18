@@ -32,6 +32,21 @@ let isSyncInProgress = false;
 let isSyncCancelled = false;
 let lastSuccessfulSyncAt: string | null = null;
 
+function canonicalSubmission(value: any): any {
+  if (Array.isArray(value)) return value.map(canonicalSubmission);
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonicalSubmission(value[key])]));
+  }
+  return value;
+}
+
+async function submissionFingerprint(payload: any, attachments?: { [key: string]: Blob }): Promise<string> {
+  const hash = async (value: BufferSource) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', value)), b => b.toString(16).padStart(2, '0')).join('');
+  const photos: [string, string][] = [];
+  for (const key of Object.keys(attachments || {}).sort()) photos.push([key, await hash(await attachments![key].arrayBuffer())]);
+  return hash(new TextEncoder().encode(JSON.stringify([canonicalSubmission(payload), photos])));
+}
+
 export class SyncQueueService {
   /**
    * Subscribe to queue status changes for UI badges and drawers
@@ -132,9 +147,12 @@ export class SyncQueueService {
       retryCount: existing?.retryCount || 0,
       status: 'PENDING_NETWORK',
       schemaVersion: 2,
+      submissionFingerprint: await submissionFingerprint({ operationType, collectionName, recordId, payload }, attachments),
     };
 
-    await OfflineStorage.enqueueSyncItem(item);
+    // Queue entries are immutable submissions. Replacing one while a sender
+    // holds an older copy can lose the replacement when that sender removes it.
+    await OfflineStorage.enqueueSyncItem(item, { createOnly: true });
     await this.refreshStatus(user.id);
 
     // If reachable, schedule background sync
@@ -344,9 +362,9 @@ export class SyncQueueService {
           // 5. Execute operation idempotently
           await this.executeOperation(item, currentUser);
 
+          await OfflineStorage.removeSyncItem(item.operationId, { allowSending: true });
           succeeded++;
           lastSuccessfulSyncAt = new Date().toISOString();
-          await OfflineStorage.removeSyncItem(item.operationId);
         } catch (err: any) {
           failed++;
           console.error(`[SYNC_QUEUE] Error syncing item ${item.operationId}:`, err);
@@ -501,11 +519,11 @@ export class SyncQueueService {
       case 'DUTYBOOK_SUBMIT': {
         const { DutyBookService } = await import('../firebase/dutyBookService');
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
-        const { record, isSubmitOnly } = item.payload;
+        const { record, isSubmitOnly, originalUpdatedAt } = item.payload;
         if (isSubmitOnly) {
-          await DutyBookService.submitJournal(record, user);
+          await DutyBookService.submitJournal(record, user, originalUpdatedAt);
         } else {
-          await DutyBookService.saveDraft(record, user);
+          await DutyBookService.saveDraft(record, user, originalUpdatedAt);
         }
         break;
       }

@@ -520,6 +520,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
         // Edit mode (single)
         const payload: Partial<StudentPermitRecord> = {
           id: editingPermit.id,
+          updatedAt: editingPermit.updatedAt,
           groupId: editingPermit.groupId,
           studentId: singleStudentId,
           tanggal,

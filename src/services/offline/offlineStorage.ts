@@ -47,6 +47,8 @@ export interface QueueItem<T = any> {
   status: QueueItemStatus;
   lastError?: string;
   schemaVersion: number;
+  /** Hash of the original submission, unchanged by upload/sync progress. */
+  submissionFingerprint?: string;
 }
 
 export interface ScopedCacheRecord<T = any> {
@@ -380,11 +382,15 @@ export class OfflineStorage {
   // SYNC QUEUE MANAGEMENT
   // ==========================================
 
-  public static async enqueueSyncItem(item: QueueItem): Promise<void> {
+  public static async enqueueSyncItem(item: QueueItem, options: { createOnly?: boolean } = {}): Promise<void> {
     if (!item.userId) return;
     if (this.isTrustedDevice() && !this.isIndexedDBSupported) throw new Error('Penyimpanan offline browser tidak tersedia. Jangan tutup formulir sebelum data terkirim.');
 
     if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      if (options.createOnly && memoryStore.syncQueue.has(item.operationId)) {
+        if (item.submissionFingerprint && memoryStore.syncQueue.get(item.operationId)?.submissionFingerprint === item.submissionFingerprint) return;
+        throw new Error('Data ini masih dalam antrean sinkronisasi. Selesaikan atau hapus kiriman sebelumnya sebelum mengirim perubahan baru.');
+      }
       memoryStore.syncQueue.set(item.operationId, item);
       return;
     }
@@ -394,12 +400,21 @@ export class OfflineStorage {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction('syncQueue', 'readwrite');
         const store = tx.objectStore('syncQueue');
-        const req = store.put(item);
+        let conflict = false;
+        const req = options.createOnly ? store.get(item.operationId) : store.put(item);
+        if (options.createOnly) req.onsuccess = () => {
+          if (req.result && item.submissionFingerprint && req.result.submissionFingerprint === item.submissionFingerprint) return;
+          if (req.result) { conflict = true; tx.abort(); }
+          else store.put(item);
+        };
         tx.oncomplete = () => resolve();
-        tx.onabort = () => reject(tx.error || new Error('Penyimpanan lokal dibatalkan.'));
+        tx.onabort = () => reject(conflict
+          ? new Error('Data ini masih dalam antrean sinkronisasi. Selesaikan atau hapus kiriman sebelumnya sebelum mengirim perubahan baru.')
+          : tx.error || new Error('Penyimpanan lokal dibatalkan.'));
         tx.onerror = () => reject(tx.error || req.error);
       });
     } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Data ini masih dalam antrean')) throw err;
       console.warn('[OFFLINE_STORAGE] Antrean belum tersimpan secara permanen:', err);
       throw new Error('Antrean belum berhasil disimpan di perangkat. Jangan tutup formulir; periksa ruang penyimpanan lalu coba lagi.');
     }
@@ -429,21 +444,26 @@ export class OfflineStorage {
     });
   }
 
-  public static async removeSyncItem(operationId: string): Promise<void> {
-    memoryStore.syncQueue.delete(operationId);
-
+  public static async removeSyncItem(operationId: string, options: { allowSending?: boolean } = {}): Promise<void> {
+    const busyError = () => new Error('Data sedang dikirim ke server. Harap tunggu hingga pengiriman selesai.');
+    if (!options.allowSending && memoryStore.syncQueue.get(operationId)?.status === 'SENDING') throw busyError();
     if (this.isIndexedDBSupported) {
-      try {
         const db = await this.getDb();
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction('syncQueue', 'readwrite');
           const store = tx.objectStore('syncQueue');
-          const req = store.delete(operationId);
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
+          let busy = false;
+          const req = store.get(operationId);
+          req.onsuccess = () => {
+            if (!options.allowSending && req.result?.status === 'SENDING') { busy = true; tx.abort(); }
+            else store.delete(operationId);
+          };
+          tx.oncomplete = () => resolve();
+          tx.onabort = () => reject(busy ? busyError() : tx.error || new Error('Penghapusan antrean lokal dibatalkan.'));
+          tx.onerror = () => reject(tx.error || req.error);
         });
-      } catch {}
     }
+    memoryStore.syncQueue.delete(operationId);
   }
 
   public static async getSyncItemsByUser(userId: string): Promise<QueueItem[]> {

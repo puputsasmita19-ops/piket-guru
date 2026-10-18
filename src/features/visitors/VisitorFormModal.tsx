@@ -712,6 +712,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
       const payload: Partial<VisitorRecord> = {
         id: visitorId,
+        updatedAt: editingVisitor?.updatedAt,
         tanggal,
         jamMasuk,
         jamKeluar: editingVisitor?.jamKeluar || jamKeluar,

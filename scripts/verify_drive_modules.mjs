@@ -10,6 +10,7 @@ const f = { currentUid: 'test-officer', records: new Map(), writes: [], files: n
 const io = {
   firebase: `export const auth={currentUser:{get uid(){return globalThis.f.currentUid},getIdToken:async()=> 'TEST_TOKEN'}};export const db={};`,
   firestoreService: `const f=globalThis.f;export class FirestoreService {
+    static nextUpdatedAt(previous){return new Date(Math.max(Date.now(),Date.parse(previous?.updatedAt)||0)+1).toISOString();}
     static async getById(c,id){return f.records.get(c+'/'+id)||null;}
     static async getByIdStrict(c,id){return this.getById(c,id);}
     static async getAll(c){return [...f.records.entries()].filter(([key])=>key.startsWith(c+'/')).map(([,v])=>v);}
@@ -18,12 +19,12 @@ const io = {
     static async setDocumentWithAudit(c,id,data){return this.setDocument(c,id,data);}
     static async logAudit(){}
   }`,
-  firestore: `export const doc=(_db,c,id)=>({c,id});export const getDoc=async(ref)=>{
+  firestore: `export const where=(...values)=>values;export const doc=(_db,c,id)=>({c,id});export const getDoc=async(ref)=>{
     const value=ref.c==='settings'?globalThis.f.settings:globalThis.f.records.get(ref.c+'/'+ref.id);
     return {exists:()=>!!value,data:()=>value};};
     export const setDoc=async(ref,data)=>{const f=globalThis.f;if(f.failWrite){f.failWrite=false;throw Error('TEST_WRITE_FAILED');}f.records.set(ref.c+'/'+ref.id,data);f.writes.push({c:ref.c,id:ref.id,data});};
-    export const serverTimestamp=()=> 'TEST_TIME';export const runTransaction=async()=>{throw Error('Checkout must not run in upload tests');};`,
-  offline: `export class OfflineStorage{static async updateSyncItem(){globalThis.f.conversions++;}}`,
+    export const serverTimestamp=()=> 'TEST_TIME';export const runTransaction=async(_,fn)=>{const ops=[];await fn({get:getDoc,set:(ref,data)=>ops.push([ref,data])});for(const[ref,data]of ops)await setDoc(ref,data)};`,
+  offline: `export class OfflineStorage{static getProjectId(){return "demo-test";}static async updateSyncItem(){globalThis.f.conversions++;}}`,
   drafts: `export class DraftService{static async blobToDataUrl(blob){return blob.dataUrl;}}`,
   duty: 'export class DutyBookService{}', permits: 'export class StudentPermitService{}', substitutions: 'export class SubstitutionService{}',
 };
@@ -136,14 +137,14 @@ await test('explicitly disabled storage still supports legacy documents', async 
 });
 await test('incident queue preserves existing references and attachment metadata', async () => {
   const payload = incident(['/api/drive/photo/old', 'attachment:photo_1']);
-  const item = { operationType: 'INCIDENT_REPORT', payload, attachments: { photo_1: { dataUrl: b } }, createdAt: 'TEST_TIME' };
+  const item = { userId:user.id,projectId:'demo-test', operationType: 'INCIDENT_REPORT', payload, attachments: { photo_1: { dataUrl: b } }, createdAt: 'TEST_TIME' };
   await sync.prepareAttachments(item);
   assert.equal(payload.photos[0].url, '/api/drive/photo/old'); assert.equal(payload.photos[1].url, b); assert.equal(payload.photos[1].caption, 'Caption 1');
   assert.equal(sync.validateUserAuthority(item, user), null);
   await sync.executeOperation(item, user); assert.equal(f.uploads.length, 1); assert.equal(f.uploads[0].module, 'incidents');
 });
 await test('visitor queue dispatch uploads the attachment via the same service', async () => {
-  const item = { operationType: 'VISITOR_REPORT', payload: { record: visitor(), isUpdate: false }, attachments: { visitor_photo: { dataUrl: b } } };
+  const item = { userId:user.id,projectId:'demo-test', operationType: 'VISITOR_REPORT', payload: { record: visitor(), isUpdate: false }, attachments: { visitor_photo: { dataUrl: b } } };
   await sync.prepareAttachments(item); assert.equal(sync.validateUserAuthority(item, user), null);
   await sync.executeOperation(item, user); assert.equal(f.uploads[0].base64, b); assert.equal(f.uploads[0].module, 'visitors');
   assert.notEqual(sync.validateUserAuthority(item, { ...user, isActive: false }), null);

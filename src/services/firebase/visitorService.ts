@@ -87,7 +87,7 @@ export class VisitorService {
     const id = data.id || `vis-${data.tanggal}-${crypto.randomUUID()}`;
     data.id = id;
     // Idempotency check: jika tamu telah tercatat di server (misal respons jaringan terputus), kembalikan tanpa membuat log audit ganda
-    const existingDoc = await FirestoreService.getById<VisitorRecord>('visitors', id);
+    const existingDoc = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', id);
     if (existingDoc) {
       return existingDoc;
     }
@@ -114,7 +114,7 @@ export class VisitorService {
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('visitors', id, payload);
+    await FirestoreService.setDocument('visitors', id, payload, { expectedState: null });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -141,11 +141,11 @@ export class VisitorService {
       throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
     }
 
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
       throw new Error(`Konflik pembaruan: Data buku tamu telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const cleanData = { ...data };
     // Only process an explicitly provided photo; partial edits preserve the old one.
     if (cleanData.fotoUrl) {
@@ -177,7 +177,7 @@ export class VisitorService {
       delete updated.keteranganLainnya;
     }
 
-    await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true });
+    await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true, expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -198,7 +198,7 @@ export class VisitorService {
     visitorId: string,
     user: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getById<VisitorRecord>('visitors', visitorId);
+    const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', visitorId);
     if (!existing) return;
 
     const exitTime = formatTime(new Date());
@@ -206,11 +206,11 @@ export class VisitorService {
       ...existing,
       jamKeluar: exitTime,
       status: 'SELESAI',
-      updatedAt: new Date().toISOString(),
+      updatedAt: FirestoreService.nextUpdatedAt(existing),
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('visitors', visitorId, updated);
+    await FirestoreService.setDocument('visitors', visitorId, updated, { expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,

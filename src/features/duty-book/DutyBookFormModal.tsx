@@ -324,7 +324,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
           'DUTYBOOK_SUBMIT',
           'dutyBooks',
           payload.id,
-          { record: payload, isSubmitOnly: false }
+          { record: payload, isSubmitOnly: false, originalUpdatedAt }
         );
         await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
         setSuccessMessage('Offline — Draf jurnal tersimpan di perangkat dan masuk ke antrean kirim!');
@@ -360,7 +360,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
             'DUTYBOOK_SUBMIT',
             'dutyBooks',
             payload.id,
-            { record: payload, isSubmitOnly: false }
+            { record: payload, isSubmitOnly: false, originalUpdatedAt }
           );
           await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
           setSuccessMessage('Koneksi terputus. Data diamankan ke antrean sinkronisasi offline!');
@@ -440,7 +440,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
           'DUTYBOOK_SUBMIT',
           'dutyBooks',
           payload.id,
-          { record: payload, isSubmitOnly: true }
+          { record: payload, isSubmitOnly: true, originalUpdatedAt }
         );
         await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
         setSuccessMessage('Offline — Jurnal resmi tersimpan di antrean perangkat & akan dikirim otomatis!');
@@ -480,7 +480,7 @@ export const DutyBookFormModal: React.FC<DutyBookFormModalProps> = ({
             'DUTYBOOK_SUBMIT',
             'dutyBooks',
             payload.id,
-            { record: payload, isSubmitOnly: true }
+            { record: payload, isSubmitOnly: true, originalUpdatedAt }
           );
           await DraftService.deleteDraft(currentUser.id, 'DUTY_BOOK', draftKey);
           setSuccessMessage('Koneksi terputus. Jurnal diamankan di antrean sinkronisasi offline!');

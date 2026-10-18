@@ -108,18 +108,18 @@ export class IncidentService {
     record.id = id;
 
     // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
-    const existingDoc = await FirestoreService.getById<IncidentRecord>('incidents', id);
+    const existingDoc = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', id);
     if (needsGeneratedId && existingDoc) {
       return existingDoc;
     }
     // Forms reserve IDs before saving so retries keep the same photo identity.
     // A reserved ID is still a creation until its document exists on the server.
     const isNew = !existingDoc;
-    if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt > record.updatedAt && existingDoc.updatedBy !== user.fullName) {
+    if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== record.updatedAt) {
       throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existingDoc);
     const photos = await processMultiplePhotosForStorage(record.photos || [], 'incidents', id);
 
     const rawPayload: IncidentRecord = {
@@ -155,7 +155,7 @@ export class IncidentService {
         tanggal: payload.tanggal,
         pelaporId: payload.pelaporId,
       },
-    });
+    }, { expectedState: existingDoc });
 
     return payload;
   }
@@ -169,10 +169,10 @@ export class IncidentService {
     user: UserProfile,
     resolutionNote?: string
   ): Promise<void> {
-    const existing = await FirestoreService.getById<IncidentRecord>('incidents', incidentId);
+    const existing = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', incidentId);
     if (!existing) return;
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const updated: IncidentRecord = {
       ...existing,
       status: newStatus,
@@ -203,7 +203,7 @@ export class IncidentService {
         newStatus,
         incidentId,
       },
-    });
+    }, { expectedState: existing });
   }
 
   /**

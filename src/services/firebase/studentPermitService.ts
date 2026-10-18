@@ -84,9 +84,9 @@ export class StudentPermitService {
     data: Omit<StudentPermitRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<StudentPermitRecord> {
-    const id = data.id || `pmt-${data.tanggal}-${Date.now().toString(36)}`;
+    const id = data.id || `pmt-${data.tanggal}-${crypto.randomUUID()}`;
     // Idempotency check: jika dokumen telah tercatat di server (misal kegagalan respons jaringan), kembalikan tanpa duplikasi audit log
-    const existingDoc = await FirestoreService.getById<StudentPermitRecord>('studentPermits', id);
+    const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', id);
     if (existingDoc) {
       return existingDoc;
     }
@@ -109,7 +109,7 @@ export class StudentPermitService {
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('studentPermits', id, payload);
+    await FirestoreService.setDocument('studentPermits', id, payload, { expectedState: null });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -136,11 +136,11 @@ export class StudentPermitService {
       throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
     }
 
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt > data.updatedAt && existing.updatedBy !== user.fullName) {
+    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
       throw new Error(`Konflik pembaruan: Surat izin telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
     }
 
-    const now = new Date().toISOString();
+    const now = FirestoreService.nextUpdatedAt(existing);
     const cleanData = { ...data };
 
     // If jenisIzin is not LAINNYA, delete keteranganLainnya
@@ -167,7 +167,7 @@ export class StudentPermitService {
       delete updated.keteranganLainnya;
     }
 
-    await FirestoreService.setDocument('studentPermits', existing.id, updated, { controlledReplace: true });
+    await FirestoreService.setDocument('studentPermits', existing.id, updated, { controlledReplace: true, expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,
@@ -192,7 +192,7 @@ export class StudentPermitService {
   ): Promise<Record<string, StudentPermitRecord>> {
     if (!studentIds || studentIds.length === 0) return {};
 
-    const allPermits = await FirestoreService.getAllRaw<StudentPermitRecord>('studentPermits');
+    const allPermits = await FirestoreService.getForDates<StudentPermitRecord>('studentPermits', [tanggal]);
     const result: Record<string, StudentPermitRecord> = {};
 
     for (const p of allPermits) {
@@ -257,7 +257,7 @@ export class StudentPermitService {
 
       try {
         // Idempotency: Jika dokumen dengan ID ini sudah tercatat di Firestore, kembalikan tanpa duplikasi
-        const existingDoc = await FirestoreService.getById<StudentPermitRecord>('studentPermits', permitId);
+        const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
         if (existingDoc) {
           resultItems.push({
             studentId: std.studentId,
@@ -316,7 +316,7 @@ export class StudentPermitService {
           updatedBy: user.fullName,
         };
 
-        await FirestoreService.setDocument('studentPermits', permitId, record);
+        await FirestoreService.setDocument('studentPermits', permitId, record, { expectedState: null });
         await FirestoreService.logAudit({
           userId: user.id,
           userName: user.fullName,
@@ -366,7 +366,7 @@ export class StudentPermitService {
     user: UserProfile,
     customReturnTime?: string
   ): Promise<void> {
-    const existing = await FirestoreService.getById<StudentPermitRecord>('studentPermits', permitId);
+    const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
     if (!existing) return;
 
     const returnTime = customReturnTime || formatTime(new Date());
@@ -382,11 +382,11 @@ export class StudentPermitService {
       ...existing,
       jamKembali: returnTime,
       status: 'SUDAH_KEMBALI',
-      updatedAt: new Date().toISOString(),
+      updatedAt: FirestoreService.nextUpdatedAt(existing),
       updatedBy: user.fullName,
     };
 
-    await FirestoreService.setDocument('studentPermits', permitId, updated);
+    await FirestoreService.setDocument('studentPermits', permitId, updated, { expectedState: existing });
     await FirestoreService.logAudit({
       userId: user.id,
       userName: user.fullName,

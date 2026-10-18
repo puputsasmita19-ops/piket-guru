@@ -12,11 +12,15 @@ const fixture = {
   requests: [], uploads: [], files: new Map(), statusCode: 200, uploadCode: 200,
 };
 const mocks = {
+  sdk: `export const where=(...values)=>values;`,
   firebase: `export const auth = { currentUser: { uid: 'test-officer', getIdToken: async () => 'TEST_TOKEN' } };`,
   firestoreService: `
     const f = globalThis.fixture;
     export class FirestoreService {
       static async getById(c, id) { return f.records.get(id) || null; }
+      static async getByIdStrict(c,id) { return this.getById(c,id); }
+      static nextUpdatedAt(previous) { return new Date(Math.max(Date.now(), Date.parse(previous?.updatedAt)||0)+1).toISOString(); }
+      static async getForDates(c, dates) { return [...f.records.values()].filter(r=>dates.includes(r.tanggal)); }
       static async getAll() { return [...f.records.values()]; }
       static sanitizeFirestorePayload(value) { return JSON.parse(JSON.stringify(value)); }
       static async setDocument(c, id, data) {
@@ -34,6 +38,7 @@ const result = await build({
   },
   bundle: true, write: false, platform: 'node', format: 'cjs',
   plugins: [{ name: 'isolated-io', setup(b) {
+    b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'sdk',namespace:'mock'}));
     b.onResolve({ filter: /\/(firebase|firebaseAuth|firestoreService)$/ }, (args) => {
       const name = args.path.split('/').pop().replace('firebaseAuth', 'firebase');
       return { path: name, namespace: 'mock' };

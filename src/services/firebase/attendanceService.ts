@@ -1,7 +1,6 @@
 import {
   doc,
   getDoc,
-  setDoc,
   runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -170,7 +169,15 @@ export class AttendanceService {
     };
 
     try {
-      await setDoc(docRef, record);
+      // Re-check after photo upload inside the transaction: another tab may
+      // have checked in meanwhile, including an admin allowed to update records.
+      await runTransaction(db, async transaction => {
+        const latest = await transaction.get(docRef);
+        if (latest.exists()) {
+          throw new Error(`Presensi masuk hari ini (${tanggal}) sudah pernah tercatat pada pukul ${formatTime(latest.data().jamMasuk)}.`);
+        }
+        transaction.set(docRef, FirestoreService.sanitizeFirestorePayload(record));
+      });
     } catch (wErr: any) {
       if (wErr?.code === 'permission-denied' || String(wErr?.message).includes('permission-denied')) {
         throw new AttendanceError(

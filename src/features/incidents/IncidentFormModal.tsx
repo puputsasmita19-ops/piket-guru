@@ -387,7 +387,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
       photos,
       createdAt: editingIncident ? editingIncident.createdAt : new Date().toISOString(),
       createdBy: editingIncident ? editingIncident.createdBy : currentUser?.fullName || 'Petugas',
-      updatedAt: new Date().toISOString(),
+      updatedAt: editingIncident?.updatedAt || new Date().toISOString(),
       updatedBy: currentUser?.fullName || 'Petugas',
     };
 
