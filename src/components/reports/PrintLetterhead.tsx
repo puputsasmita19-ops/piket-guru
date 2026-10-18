@@ -15,8 +15,9 @@ export function PrintLetterhead({ settings, showLogo = true }: { settings: Schoo
 
 export function ReportSignatures({ settings, date, city }: { settings: SchoolSettings; date: string; city?: string }) {
   return <div data-report-signatures style={{ color: '#000', background: '#fff', breakInside: 'avoid', pageBreakInside: 'avoid', paddingTop: '20px', fontSize: '10pt' }}>
-    <p style={{ textAlign: 'right', margin: '0 0 12px' }}>{[city ?? settings.reportCity, date].filter(Boolean).join(', ')}</p>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', textAlign: 'center' }}>{reportSigners(settings).map(signer => <div key={signer.key} data-signer={signer.key} style={{ minWidth: 0 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '20px', rowGap: '8px', textAlign: 'center' }}>
+      {reportSigners(settings).map(signer => <p key={signer.key} data-signer-heading={signer.key} style={{ margin: 0, minWidth: 0, overflowWrap: 'anywhere' }}>{signer.key === 'principal' ? 'Mengetahui' : [city ?? settings.reportCity, date].filter(Boolean).join(', ')}</p>)}
+      {reportSigners(settings).map(signer => <div key={signer.key} data-signer={signer.key} style={{ minWidth: 0 }}>
       <p style={{ margin: 0 }}>{signer.role},</p>
       <div style={{ height: '68px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{signer.signature && <img src={signer.signature} alt={`Tanda tangan ${signer.role}`} style={{ maxWidth: '120px', maxHeight: '64px', objectFit: 'contain' }}/>}</div>
       <p style={{ margin: 0, fontWeight: 700, textDecoration: 'underline', overflowWrap: 'anywhere' }}>{signer.name || '________________'}</p>

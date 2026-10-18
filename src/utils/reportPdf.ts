@@ -53,17 +53,25 @@ async function pdfDocument(settings: SchoolSettings) {
   const signatures = (y: number, date?: string, city?: string) => {
     if (!config.showSignatures) return y;
     const signers = reportSigners(settings), half = width / 2;
+    const dateText = [city ?? settings.reportCity, date || new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'Asia/Jakarta' }).format(new Date())].filter(Boolean).join(', ');
+    doc.setFont('PiketReport', 'normal'); doc.setFontSize(9);
+    const headingHeight = Math.max(1, doc.splitTextToSize(dateText, half - 8).length) * 9 * PT * 1.25;
     const nameHeights = signers.map(s => { doc.setFont('PiketReport', 'bold'); doc.setFontSize(9); return doc.splitTextToSize(s.name || '________________', half - 8).length * 9 * PT * 1.25; });
-    const height = 38 + Math.max(...nameHeights);
+    doc.setFont('PiketReport', 'normal'); doc.setFontSize(8);
+    const idHeight = Math.max(...signers.map(s => s.id ? doc.splitTextToSize(`${s.idType || 'ID'}: ${s.id}`, half - 8).length * 8 * PT * 1.25 : 0));
+    const height = 6 + headingHeight + 2 + 24 + Math.max(...nameHeights) + 2 + idHeight;
     if (y + height > bottom) { doc.addPage(); y = config.marginTopMm; }
-    y += 6;
-    const dateText = date || new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'Asia/Jakarta' }).format(new Date());
-    y += write([city ?? settings.reportCity, dateText].filter(Boolean).join(', '), right, y, 9, false, 'right') + 2;
+    const top = y + 6, roleY = top + headingHeight + 2;
     signers.forEach((s, i) => {
       const x = left + half * i, center = x + half / 2;
-      write(s.role + ',', center, y, 9, false, 'center', half - 6);
-      const asset = assets.find(a => a.key === s.key); if (asset) image(asset, x + 8, y + 3, half - 16, 17);
-      const nameY = y + 24; write(s.name || '________________', center, nameY, 9, true, 'center', half - 8);
+      write(s.key === 'principal' ? 'Mengetahui' : dateText, center, top, 9, false, 'center', half - 8);
+      write(s.role + ',', center, roleY, 9, false, 'center', half - 6);
+      const asset = assets.find(a => a.key === s.key); if (asset) image(asset, x + 8, roleY + 3, half - 16, 17);
+      const nameY = roleY + 24; write(s.name || '________________', center, nameY, 9, true, 'center', half - 8);
+      // Underline each name line, including wrapped names; never underline the ID.
+      doc.setFont('PiketReport', 'bold'); doc.setFontSize(9); doc.setDrawColor(0); doc.setLineWidth(.2);
+      const lines = doc.splitTextToSize(s.name || '________________', half - 8) as string[];
+      lines.forEach((line, index) => { const w = doc.getTextWidth(line), baseline = nameY + index * 9 * PT * 1.25; doc.line(center - w / 2, baseline + .7, center + w / 2, baseline + .7); });
       if (s.id) write(`${s.idType || 'ID'}: ${s.id}`, center, nameY + nameHeights[i] + 1, 8, false, 'center', half - 8);
     });
     return y + height;
