@@ -5,9 +5,10 @@ import { letterheadLogo, letterheadLines, normalizeLetterhead, reportSigners } f
 export function PrintLetterhead({ settings, showLogo = true }: { settings: SchoolSettings; showLogo?: boolean }) {
   const config = normalizeLetterhead(settings.letterheadConfig, settings), logo = letterheadLogo(settings);
   return <div data-print-letterhead style={{ color: '#000', background: '#fff', fontFamily: config.fontFamily, paddingBottom: '8px', borderBottom: config.borderStyle === 'none' ? 'none' : config.borderStyle === 'double' ? '4px double #000' : '1px solid #000', breakInside: 'avoid', width: '100%' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: showLogo && logo ? `${config.logoWidthMm + 3}mm minmax(0, 1fr) ${config.logoWidthMm + 3}mm` : 'minmax(0, 1fr)', alignItems: 'center', width: '100%' }}>
       {showLogo && logo && <img src={logo} alt="Logo kop surat" style={{ width: `${config.logoWidthMm}mm`, maxHeight: '32mm', objectFit: 'contain', flexShrink: 0 }} />}
-      <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{letterheadLines(config).map((line, index) => <p key={index} style={{ margin: '1px 0', fontSize: `${line.size}pt`, fontWeight: line.bold ? 700 : 400, lineHeight: 1.25, overflowWrap: 'anywhere' }}>{line.text}</p>)}</div>
+      <div data-letterhead-text style={{ minWidth: 0, textAlign: 'center' }}>{letterheadLines(config).map((line, index) => <p key={index} style={{ margin: '1px 0', fontSize: `${line.size}pt`, fontWeight: line.bold ? 700 : 400, lineHeight: 1.25, overflowWrap: 'anywhere' }}>{line.text}</p>)}</div>
+      {showLogo && logo && <div aria-hidden="true"/>}
     </div>
   </div>;
 }

@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Piket Guru">
   <rect width="512" height="512" rx="112" fill="#f5f5dc"/>
-  <rect x="44" y="44" width="424" height="424" rx="88" fill="#fbc02d"/>
   <path d="M166 365V150h107c63 0 91 33 91 79s-30 79-91 79h-43v57" fill="none" stroke="#24221d" stroke-width="32" stroke-linejoin="round" stroke-linecap="round"/>
   <path d="m252 234 25 25 52-53" fill="none" stroke="#24221d" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

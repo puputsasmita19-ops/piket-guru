@@ -47,7 +47,7 @@ import {
   SubstitutionSummary,
   VisitorSummary,
 } from '../../services/reports/reportService';
-import { ExportUtils } from '../../utils/exportUtils';
+import type { OperationalReport } from '../../utils/operationalReport';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   ScheduleItem,
@@ -248,6 +248,10 @@ export const ReportsPreview: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Print Modals
+  const [isReportActionsOpen, setIsReportActionsOpen] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [settingsReady, setSettingsReady] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isPhotoRecapPrintOpen, setIsPhotoRecapPrintOpen] = useState<boolean>(false);
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -321,6 +325,7 @@ export const ReportsPreview: React.FC = () => {
       .then((data) => {
         if (data && active) {
           setSettings(data);
+          setSettingsReady(true);
           if (data.academicSemester?.academicYear) {
             setSemesterAcademicYear(data.academicSemester.academicYear);
           }
@@ -366,6 +371,8 @@ export const ReportsPreview: React.FC = () => {
       setIsLoadingData(false);
     };
 
+    const pending = new Set(['attendance', 'dutyBooks', 'incidents', 'studentTardiness', 'studentPermits', 'substitutions', 'visitors']);
+    const ready = (collection: string) => { pending.delete(collection); if (active && pending.size === 0) setIsLoadingData(false); };
     const dateConstraints = [
       where('tanggal', '>=', startDate),
       where('tanggal', '<=', endDate),
@@ -376,7 +383,7 @@ export const ReportsPreview: React.FC = () => {
       (data) => {
         if (active) {
           setAttendanceList(data);
-          setIsLoadingData(false);
+          ready('attendance');
         }
       },
       handleError,
@@ -384,48 +391,43 @@ export const ReportsPreview: React.FC = () => {
     );
     const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
       'dutyBooks',
-      (data) => active && setDutyBooks(data),
+      (data) => { if (active) { setDutyBooks(data); ready('dutyBooks'); } },
       handleError,
       dateConstraints
     );
     const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
       'incidents',
-      (data) => active && setIncidents(data),
+      (data) => { if (active) { setIncidents(data); ready('incidents'); } },
       handleError,
       dateConstraints
     );
     const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
       'studentTardiness',
-      (data) => active && setStudentTardiness(data),
+      (data) => { if (active) { setStudentTardiness(data); ready('studentTardiness'); } },
       handleError,
       dateConstraints
     );
     const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
       'studentPermits',
-      (data) => active && setStudentPermits(data),
+      (data) => { if (active) { setStudentPermits(data); ready('studentPermits'); } },
       handleError,
       dateConstraints
     );
     const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
       'substitutions',
-      (data) => active && setSubstitutions(data),
+      (data) => { if (active) { setSubstitutions(data); ready('substitutions'); } },
       handleError,
       dateConstraints
     );
     const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
       'visitors',
-      (data) => active && setVisitors(data),
+      (data) => { if (active) { setVisitors(data); ready('visitors'); } },
       handleError,
       dateConstraints
     );
 
-    const timer = setTimeout(() => {
-      if (active) setIsLoadingData(false);
-    }, 1200);
-
     return () => {
       active = false;
-      clearTimeout(timer);
       unsubAtt();
       unsubBooks();
       unsubInc();
@@ -756,234 +758,161 @@ export const ReportsPreview: React.FC = () => {
     return filteredPhotoItems.filter((p) => selectedPhotoIds.has(p.id));
   }, [filteredPhotoItems, selectedPhotoIds]);
 
-  // --- EXPORT TO CSV / EXCEL HANDLERS ---
-  const handleExportAttendanceCsv = async () => {
-    const headers = ['No', 'NIP', 'Nama Guru', 'Mata Pelajaran', 'Total Shift', 'Hadir (GPS)', 'Luar Radius', 'Tidak Hadir', 'Persentase'];
-    const rows = attendanceSummaries.map((s, idx) => [
-      idx + 1,
-      `'${s.nip}`,
-      s.fullName,
-      teachers.find((t) => t.id === s.teacherId)?.mataPelajaran || '-',
-      s.totalShift,
-      s.hadir,
-      s.terlambatOrOutside,
-      s.tidakHadir,
-      `${s.percentage}%`,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Kehadiran_Piket_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'REPORTS',
-      details: `Mengekspor data rekapitulasi kehadiran guru piket ke CSV/Excel periode ${startDate} s.d ${endDate}`,
+  // The Word export uses the same complete filtered arrays as the active report tab.
+  // Group related fields into readable cells rather than squeezing 13–16 spreadsheet columns onto paper.
+  const activeWordReport = useMemo<OperationalReport | null>(() => {
+    const make = (title: string, headers: string[], rows: OperationalReport['rows'], groups: [string, number[]][]): OperationalReport => ({
+      title, period: `${periodLabel} (${startDate} s.d. ${endDate})`, headers: groups.map(([label]) => label),
+      rows: rows.map(row => groups.map(([, indexes]) => indexes.map(index => `${headers[index]}: ${row[index] ?? '-'}`).join('\n'))),
     });
-  };
-
-  const handleExportIncidentsCsv = async () => {
-    const headers = ['ID Insiden', 'Tanggal', 'Waktu', 'Kategori', 'Tingkat', 'Lokasi', 'Pihak Terlibat', 'Uraian Kronologis', 'Tindakan Awal', 'Status', 'Petugas'];
-    const rows = filteredIncidents.map((i) => [
-      i.id,
-      i.tanggal,
-      i.waktu,
-      getIncidentCategoryDisplay(i),
-      i.tingkatKeparahan,
-      i.lokasi,
-      i.pihakTerlibat,
-      i.uraian,
-      i.tindakanAwal,
-      i.status,
-      i.penanggungJawab,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Kejadian_Insiden_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'REPORTS',
-      details: `Mengekspor rekapitulasi data insiden kejadian ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportDutyBooksCsv = async () => {
-    const headers = ['ID Buku Piket', 'Tanggal', 'Hari', 'Jam Tugas', 'Petugas Piket', 'Ruang/Pos', 'Kondisi Keamanan', 'Kondisi Kebersihan', 'Kondisi Siswa', 'Catatan Piket', 'Tindak Lanjut', 'Status'];
-    const rows = filteredDutyBooks.map((b) => [
-      b.id,
-      b.tanggal,
-      b.hari,
-      `${b.jamMulai} - ${b.jamSelesai}`,
-      b.petugasName,
-      b.ruangName,
-      b.kondisiKeamanan || '-',
-      b.kondisiKebersihan || '-',
-      b.kondisiSiswa || '-',
-      b.catatanPiket || '-',
-      b.tindakLanjut || '-',
-      getDutyBookDisplayStatus(b.status).label,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Jurnal_Buku_Piket_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'DUTY_BOOK',
-      details: `Mengekspor arsip jurnal buku piket ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportTardinessCsv = async () => {
-    const headers = ['No', 'ID', 'Tanggal', 'Jam Tiba', 'Menit Terlambat', 'NISN', 'Nama Siswa', 'Kelas', 'Alasan', 'Bentuk Pembinaan', 'Poin Pelanggaran', 'Status', 'Petugas Piket'];
-    const rows = filteredTardiness.map((r, idx) => [
-      idx + 1,
-      r.id,
-      r.tanggal,
-      r.jamDatang,
-      r.menitTerlambat,
-      `'${r.nisn}`,
-      r.namaSiswa,
-      r.kelas,
-      getTardyReasonDisplay(r),
-      getDisciplineActionDisplay(r),
-      r.poinPelanggaran,
-      r.status,
-      r.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Keterlambatan_Siswa_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'TARDINESS',
-      details: `Mengekspor rekapitulasi keterlambatan siswa ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportPermitsCsv = async () => {
-    const headers = ['No', 'ID', 'Tanggal', 'Jam Keluar', 'Jam Kembali', 'NISN', 'Nama Siswa', 'Kelas', 'Jenis Izin', 'Alasan', 'Penjemput', 'Nama Penjemput', 'No HP Ortu', 'Guru Mapel', 'Status', 'Petugas'];
-    const rows = filteredPermits.map((r, idx) => [
-      idx + 1,
-      r.id,
-      r.tanggal,
-      r.jamKeluar,
-      r.jamKembali || '-',
-      `'${r.nisn}`,
-      r.namaSiswa,
-      r.kelas,
-      getStudentPermitTypeDisplay(r),
-      r.alasan,
-      r.penjemput,
-      r.namaPenjemput || '-',
-      r.noHpOrangTua || '-',
-      r.guruPengajarName || '-',
-      r.status,
-      r.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Izin_Keluar_Siswa_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'PERMITS',
-      details: `Mengekspor rekapitulasi perizinan siswa meninggalkan sekolah ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportSubstitutionsCsv = async () => {
-    const headers = ['No', 'ID', 'Tanggal', 'Guru Berhalangan', 'Mata Pelajaran', 'Kelas', 'Jam Pelajaran', 'Alasan', 'Guru Pengganti (Inval)', 'Materi & Tugas', 'Status', 'Petugas Piket'];
-    const rows = filteredSubstitutions.map((r, idx) => [
-      idx + 1,
-      r.id,
-      r.tanggal,
-      r.guruBerhalanganName,
-      r.mataPelajaran,
-      r.kelas,
-      r.jamPelajaran,
-      getSubstitutionReasonDisplay(r),
-      r.guruPenggantiName || 'Belum Ditugaskan',
-      r.materiDanTugasSiswa,
-      r.status,
-      r.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Guru_Pengganti_Inval_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'SUBSTITUTIONS',
-      details: `Mengekspor data guru pengganti (inval) ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportVisitorsCsv = async () => {
-    const headers = ['No', 'ID', 'Tanggal', 'Jam Masuk', 'Jam Keluar', 'Nama Tamu', 'Instansi', 'Kategori', 'No HP', 'No Identitas', 'No Badge', 'Tujuan Bertemu', 'Keperluan', 'Status', 'Petugas'];
-    const rows = filteredVisitors.map((r, idx) => [
-      idx + 1,
-      r.id,
-      r.tanggal,
-      r.jamMasuk,
-      r.jamKeluar || '-',
-      r.namaTamu,
-      r.instansiAsal,
-      getVisitorCategoryDisplay(r),
-      r.noHp || '-',
-      r.nomorIdentitas ? `'${r.nomorIdentitas}` : '-',
-      r.nomorBadge,
-      r.tujuanBertemu,
-      r.keperluan,
-      r.status,
-      r.petugasPiketName,
-    ]);
-
-    ExportUtils.exportToCsv(`Rekap_Buku_Tamu_${startDate}_${endDate}`, headers, rows);
-
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'EXPORT',
-      module: 'VISITORS',
-      details: `Mengekspor buku tamu sekolah ke CSV/Excel periode ${startDate} s.d ${endDate}`,
-    });
-  };
-
-  const handleExportActiveTab = () => {
     switch (activeTab) {
-      case 'attendance':
-        return handleExportAttendanceCsv();
-      case 'incidents':
-        return handleExportIncidentsCsv();
-      case 'dutyBooks':
-        return handleExportDutyBooksCsv();
-      case 'studentTardiness':
-        return handleExportTardinessCsv();
-      case 'studentPermits':
-        return handleExportPermitsCsv();
-      case 'substitutions':
-        return handleExportSubstitutionsCsv();
-      case 'visitors':
-        return handleExportVisitorsCsv();
-      case 'photoRecap':
-        setIsPhotoRecapPrintOpen(true);
-        return;
+      case 'attendance': {
+        const headers = ['No', 'NIP', 'Nama Guru', 'Mata Pelajaran', 'Total Shift', 'Hadir (GPS)', 'Luar Radius', 'Tidak Hadir', 'Persentase'];
+        const rows = attendanceSummaries.map((s, idx) => [
+          idx + 1,
+          s.nip,
+          s.fullName,
+          teachers.find((t) => t.id === s.teacherId)?.mataPelajaran || '-',
+          s.totalShift,
+          s.hadir,
+          s.terlambatOrOutside,
+          s.tidakHadir,
+          `${s.percentage}%`,
+        ]);
+        return make('Rekap Kehadiran Guru Piket', headers, rows, [["Identitas Guru", [1, 2]], ["Mata Pelajaran", [3]], ["Total Shift", [4]], ["Kehadiran", [5, 6, 7]], ["Persentase", [8]]]);
+      }
+      case 'incidents': {
+        const headers = ['ID Insiden', 'Tanggal', 'Waktu', 'Kategori', 'Tingkat', 'Lokasi', 'Pihak Terlibat', 'Uraian Kronologis', 'Tindakan Awal', 'Status', 'Petugas'];
+        const rows = filteredIncidents.map((i) => [
+          i.id,
+          i.tanggal,
+          i.waktu,
+          getIncidentCategoryDisplay(i),
+          i.tingkatKeparahan,
+          i.lokasi,
+          i.pihakTerlibat,
+          i.uraian,
+          i.tindakanAwal,
+          i.status,
+          i.penanggungJawab,
+        ]);
+        return make('Rekap Insiden dan Kejadian', headers, rows, [["Waktu / ID", [0, 1, 2]], ["Kategori / Tingkat", [3, 4]], ["Pihak / Lokasi", [5, 6]], ["Kronologi", [7]], ["Tindakan / Status", [8, 9]], ["Petugas", [10]]]);
+      }
+      case 'dutyBooks': {
+        const headers = ['ID Buku Piket', 'Tanggal', 'Hari', 'Jam Tugas', 'Petugas Piket', 'Ruang/Pos', 'Kondisi Keamanan', 'Kondisi Kebersihan', 'Kondisi Siswa', 'Catatan Piket', 'Tindak Lanjut', 'Status'];
+        const rows = filteredDutyBooks.map((b) => [
+          b.id,
+          b.tanggal,
+          b.hari,
+          `${b.jamMulai} - ${b.jamSelesai}`,
+          b.petugasName,
+          b.ruangName,
+          b.kondisiKeamanan || '-',
+          b.kondisiKebersihan || '-',
+          b.kondisiSiswa || '-',
+          b.catatanPiket || '-',
+          b.tindakLanjut || '-',
+          getDutyBookDisplayStatus(b.status).label,
+        ]);
+        return make('Rekap Jurnal Buku Piket Digital', headers, rows, [["Waktu / ID", [0, 1, 2, 3]], ["Petugas / Pos", [4, 5]], ["Kondisi Sekolah", [6, 7, 8]], ["Catatan / Tindak Lanjut", [9, 10]], ["Status", [11]]]);
+      }
+      case 'studentTardiness': {
+        const headers = ['No', 'ID', 'Tanggal', 'Jam Tiba', 'Menit Terlambat', 'NISN', 'Nama Siswa', 'Kelas', 'Alasan', 'Bentuk Pembinaan', 'Poin Pelanggaran', 'Status', 'Petugas Piket'];
+        const rows = filteredTardiness.map((r, idx) => [
+          idx + 1,
+          r.id,
+          r.tanggal,
+          r.jamDatang,
+          r.menitTerlambat,
+          r.nisn,
+          r.namaSiswa,
+          r.kelas,
+          getTardyReasonDisplay(r),
+          getDisciplineActionDisplay(r),
+          r.poinPelanggaran,
+          r.status,
+          r.petugasPiketName,
+        ]);
+        return make('Rekap Siswa Terlambat', headers, rows, [["Waktu / ID", [1, 2, 3]], ["Identitas Siswa", [5, 6, 7]], ["Keterlambatan / Poin", [4, 10]], ["Alasan / Pembinaan", [8, 9]], ["Status / Petugas", [11, 12]]]);
+      }
+      case 'studentPermits': {
+        const headers = ['No', 'ID', 'Tanggal', 'Jam Keluar', 'Jam Kembali', 'NISN', 'Nama Siswa', 'Kelas', 'Jenis Izin', 'Alasan', 'Penjemput', 'Nama Penjemput', 'No HP Ortu', 'Guru Mapel', 'Status', 'Petugas'];
+        const rows = filteredPermits.map((r, idx) => [
+          idx + 1,
+          r.id,
+          r.tanggal,
+          r.jamKeluar,
+          r.jamKembali || '-',
+          r.nisn,
+          r.namaSiswa,
+          r.kelas,
+          getStudentPermitTypeDisplay(r),
+          r.alasan,
+          r.penjemput,
+          r.namaPenjemput || '-',
+          r.noHpOrangTua || '-',
+          r.guruPengajarName || '-',
+          r.status,
+          r.petugasPiketName,
+        ]);
+        return make('Rekap Izin Keluar Siswa', headers, rows, [["Waktu / ID", [1, 2, 3, 4]], ["Identitas Siswa", [5, 6, 7]], ["Izin / Alasan", [8, 9]], ["Penjemput / Kontak", [10, 11, 12]], ["Guru / Status / Petugas", [13, 14, 15]]]);
+      }
+      case 'substitutions': {
+        const headers = ['No', 'ID', 'Tanggal', 'Guru Berhalangan', 'Mata Pelajaran', 'Kelas', 'Jam Pelajaran', 'Alasan', 'Guru Pengganti (Inval)', 'Materi & Tugas', 'Status', 'Petugas Piket'];
+        const rows = filteredSubstitutions.map((r, idx) => [
+          idx + 1,
+          r.id,
+          r.tanggal,
+          r.guruBerhalanganName,
+          r.mataPelajaran,
+          r.kelas,
+          r.jamPelajaran,
+          getSubstitutionReasonDisplay(r),
+          r.guruPenggantiName || 'Belum Ditugaskan',
+          r.materiDanTugasSiswa,
+          r.status,
+          r.petugasPiketName,
+        ]);
+        return make('Rekap Guru Pengganti Inval', headers, rows, [["Tanggal / ID", [1, 2]], ["Guru / Pelajaran", [3, 4]], ["Kelas / Jam", [5, 6]], ["Alasan / Materi", [7, 9]], ["Guru Pengganti", [8]], ["Status / Petugas", [10, 11]]]);
+      }
+      case 'visitors': {
+        const headers = ['No', 'ID', 'Tanggal', 'Jam Masuk', 'Jam Keluar', 'Nama Tamu', 'Instansi', 'Kategori', 'No HP', 'No Identitas', 'No Badge', 'Tujuan Bertemu', 'Keperluan', 'Status', 'Petugas'];
+        const rows = filteredVisitors.map((r, idx) => [
+          idx + 1,
+          r.id,
+          r.tanggal,
+          r.jamMasuk,
+          r.jamKeluar || '-',
+          r.namaTamu,
+          r.instansiAsal,
+          getVisitorCategoryDisplay(r),
+          r.noHp || '-',
+          r.nomorIdentitas || '-',
+          r.nomorBadge,
+          r.tujuanBertemu,
+          r.keperluan,
+          r.status,
+          r.petugasPiketName,
+        ]);
+        return make('Rekap Buku Tamu Digital', headers, rows, [["Waktu / ID", [1, 2, 3, 4]], ["Tamu / Instansi", [5, 6]], ["Kategori / Identitas", [7, 8, 9]], ["Badge / Tujuan", [10, 11]], ["Keperluan", [12]], ["Status / Petugas", [13, 14]]]);
+      }
+      default: return null;
     }
+  }, [activeTab, periodLabel, startDate, endDate, attendanceSummaries, teachers, filteredIncidents, filteredDutyBooks, filteredTardiness, filteredPermits, filteredSubstitutions, filteredVisitors]);
+
+  const handleExportWord = async () => {
+    if (isExportingWord || !activeWordReport?.rows.length || !settingsReady || isLoadingData || dataLoadError || !dateValidation.isValid) return;
+    setIsExportingWord(true); setExportError('');
+    try {
+      const service = await import('../../utils/operationalReport');
+      const assets = await service.loadReportAssets(settings), bytes = service.operationalReportDocx(activeWordReport, settings, assets);
+      const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = `${activeWordReport.title.replace(/[^\p{L}\p{N} -]/gu, '')}-${startDate}-${endDate}.docx`;
+      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      if (currentUser) void FirestoreService.logAudit({ userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role, action: 'EXPORT', module: 'REPORTS', details: `Mengekspor Word ${activeWordReport.title}: ${activeWordReport.rows.length} catatan, periode ${startDate} s.d. ${endDate}` }).catch(console.warn);
+    } catch (e) { setExportError(e instanceof Error ? e.message : 'Dokumen Word belum dapat disiapkan. Coba kembali.'); }
+    finally { setIsExportingWord(false); }
   };
 
   return (
@@ -1053,22 +982,10 @@ export const ReportsPreview: React.FC = () => {
             </>
           ) : (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
-                onClick={() => setIsPrintModalOpen(true)}
-              >
-                Pratinjau & Cetak Rekap Resmi
-              </Button>
-
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Download className="w-4 h-4" />}
-                onClick={handleExportActiveTab}
-              >
-                Ekspor Excel Tab Aktif
+              <Button variant="primary" size="sm" leftIcon={<Printer className="w-4 h-4"/>}
+                disabled={!dateValidation.isValid || isLoadingData || !!dataLoadError || !settingsReady}
+                onClick={() => { setExportError(''); setIsReportActionsOpen(true); }}>
+                Pratinjau & Ekspor
               </Button>
             </>
           )}
@@ -2356,6 +2273,23 @@ export const ReportsPreview: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      <Modal isOpen={isReportActionsOpen} onClose={() => { if (!isExportingWord) setIsReportActionsOpen(false); }} title="Pratinjau & Ekspor Laporan" maxWidth="md">
+        <div className="space-y-4 text-sm">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Periode: {periodLabel}. Kop dan tanda tangan mengikuti pengaturan admin.</p>
+          <section className="rounded-xl border border-[var(--theme-card-border)] p-4 space-y-2">
+            <h3 className="font-semibold">Rekap lengkap</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Gabungan seluruh modul pada periode ini. Periksa tata letak sebelum mencetak atau menyimpan PDF.</p>
+            <Button size="sm" variant="outline" disabled={isExportingWord} leftIcon={<Printer className="w-4 h-4"/>} onClick={() => { setIsReportActionsOpen(false); setIsPrintModalOpen(true); }}>Pratinjau & Cetak Resmi</Button>
+          </section>
+          <section className="rounded-xl border border-[var(--theme-card-border)] p-4 space-y-2">
+            <h3 className="font-semibold">Word tab aktif</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{activeWordReport?.title} · {activeWordReport?.rows.length || 0} catatan. Mencakup seluruh hasil filter yang tampil pada tab ini.</p>
+            <Button size="sm" disabled={isExportingWord || !activeWordReport?.rows.length} leftIcon={<Download className="w-4 h-4"/>} onClick={() => void handleExportWord()}>{isExportingWord ? 'Menyiapkan Word…' : 'Unduh Word Tab Aktif'}</Button>
+          </section>
+          {exportError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{exportError}</p>}
+        </div>
+      </Modal>
 
       {/* MONTHLY REPORT PRINT MODAL (ALL MODULES CONNECTED) */}
       <MonthlyReportPrintModal

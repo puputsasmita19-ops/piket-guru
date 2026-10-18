@@ -76,7 +76,9 @@ try {
     await page.pdf({ path: out + '/kop-foto-2.pdf', preferCSSPageSize: true, printBackground: true });
 
     await page.emulateMedia({media:'screen'});
-    await page.setContent(html); await page.pdf({ path: out + '/kop-laporan.pdf', preferCSSPageSize: true, printBackground: true });
+    await page.setContent(html);
+    check('HTML/PDF letterhead text is centered on the whole printable width',await page.locator('.letterhead').evaluate(e=>{const a=e.getBoundingClientRect(),b=e.querySelector('[data-letterhead-text]').getBoundingClientRect();return Math.abs(a.left+a.width/2-b.left-b.width/2)<1}));
+    await page.pdf({ path: out + '/kop-laporan.pdf', preferCSSPageSize: true, printBackground: true });
     await page.screenshot({ path: out + '/kop-laporan.png', fullPage: true });
   }
   await page.goto(url + '/?limited&brandingSettings#settings'); await page.waitForFunction(() => window.fixture?.force); await page.waitForTimeout(50);
