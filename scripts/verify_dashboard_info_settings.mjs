@@ -13,7 +13,7 @@ const b = await build({ stdin: { contents: "export{SchoolSettingsService}from'./
   for (const [filter, path] of [[/\/(?:firebase|firebaseAuth)$/, 'firebase'], [/^firebase\/firestore$/, 'sdk'], [/auditService$/, 'audit'], [/locationService$/, 'location']]) b.onResolve({ filter }, () => ({ path, namespace: 'mock' }));
   b.onLoad({ filter: /.*/, namespace: 'mock' }, a => ({ contents: mocks[a.path], loader: 'js' }));
 } }] });
-const c = vm.createContext({ f, module: { exports: {} }, console, localStorage: { setItem() {}, getItem() { return null; } } });
+const c = vm.createContext({ f, module: { exports: {} }, console, TextEncoder, TextDecoder, localStorage: { setItem() {}, getItem() { return null; } } });
 vm.runInContext(b.outputFiles[0].text, c);
 const { SchoolSettingsService: service, sanitizeDashboardInfoConfig: sanitize } = c.module.exports;
 let n = 0;
@@ -23,7 +23,9 @@ check('invalid config cannot create an unbounded rotation frequency', () => asse
 check('expanded reading intervals remain valid including one minute', () => { for (const intervalMs of [2000,2500,3000,4000,5000,6000,7000,8000,10000,12000,15000,20000,30000,45000,60000]) assert.equal(sanitize({intervalMs}).intervalMs, intervalMs); });
 check('only known panels are persisted and false is retained', () => { const v = sanitize({ enabled: false, autoPlay: false, intervalMs: 2500, panels: { dutyRoster: false, unknown: true } }); assert.equal(v.intervalMs, 2500); assert.equal(v.panels.dutyRoster, false); assert.equal(Object.keys(v.panels).length, 4); assert.equal(v.enabled, false); });
 const config = sanitize({ intervalMs: 2500, panels: { incidents: false } });
+config.welcome = { enabled: true, mode: 'interval', category: 'islamic', templateId: 'islamic-ease', customMessage: 'Salam sekolah', intervalMinutes: 30 };
 await service.saveDashboardInfoSettings(config, 'admin');
+check('welcome settings persist through the actual admin transaction alongside existing panels', () => { assert.equal(f.state.dashboardInfoConfig.welcome.category, 'islamic'); assert.equal(f.state.dashboardInfoConfig.welcome.mode, 'interval'); assert.equal(f.state.dashboardInfoConfig.welcome.intervalMinutes, 30); assert.equal(f.state.dashboardInfoConfig.panels.incidents, false); });
 check('admin save changes only dashboard configuration and timestamp', () => { assert.deepEqual(Object.keys(f.writes[0]).sort(), ['dashboardInfoConfig', 'updatedAt']); assert.equal(f.state.schoolLat, -8); assert.equal(f.state.notificationConfig.enabled, false); });
 check('dashboard configuration save is audited', () => assert.equal(f.audits.at(-1).module, 'SETTINGS'));
 await service.saveDashboardInfoSettings(sanitize({ intervalMs: 60000 }), 'admin');

@@ -880,11 +880,11 @@ button.bg-\[var\(--theme-primary\)\],
   .app-shell .module-nav-item[aria-current="page"] { box-shadow: none; }
   .app-shell .module-nav-item .module-nav-icon { border-radius: 11px; background: transparent !important; }
   .app-sidebar-scrim { backdrop-filter: none; }
-  .app-content[data-module] .dashboard-welcome { border: 0; border-radius: 0; padding: 0; background: transparent !important; box-shadow: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .app-content[data-module] .dashboard-welcome { border: 0; border-radius: 0; padding: 0; background: transparent !important; box-shadow: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 16px; row-gap: 4px; }
   .dashboard-welcome > div { min-width: 0; }
-  .dashboard-eyebrow { font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 5px; }
-  .dashboard-welcome h1 { font-size: clamp(20px, 2.2vw, 27px); line-height: 1.35; font-weight: 750; letter-spacing: -.035em; overflow-wrap: anywhere; }
-  .dashboard-intro { margin-top: 6px; font-size: 12px; color: #64748b; line-height: 1.5; }
+  .dashboard-eyebrow { font-size: 12px; font-weight: 500; color: #64748b; margin-bottom: 4px; }
+  .dashboard-welcome h1 { font-size: clamp(18px, 1.8vw, 23px); line-height: 1.4; font-weight: 650; letter-spacing: -.025em; overflow-wrap: anywhere; }
+  .dashboard-intro { grid-column: 1 / -1; margin-top: 2px; font-size: 12px; color: #64748b; line-height: 1.6; overflow-wrap: anywhere; }
   .dashboard-avatar { height: 56px; width: 56px; border-radius: 17px; background: var(--theme-primary-light); color: var(--theme-primary-text); font-size: 18px; font-weight: 750; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--theme-primary-border); }
   .dashboard-feature-banner { display: flex; align-items: center; gap: 18px; border: 1px solid var(--theme-card-border); background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary-light) 48%, var(--theme-card-bg)), var(--theme-card-bg)); border-radius: 24px; padding: 22px 24px; }
   .banner-eyebrow { font-size: 9px; font-weight: 750; letter-spacing: .12em; color: var(--theme-primary-text); margin-bottom: 7px; }
@@ -949,10 +949,10 @@ button.bg-\[var\(--theme-primary\)\],
   }
   @media (max-width: 639px) {
     .app-shell .app-content { padding-top: 20px; padding-inline: 16px; }
-    .dashboard-welcome { gap: 12px !important; }
+    .dashboard-welcome { column-gap: 12px !important; row-gap: 3px !important; }
     .dashboard-avatar { width: 48px; height: 48px; border-radius: 14px; font-size: 16px; }
-    .dashboard-eyebrow { font-size: 10px; }
-    .dashboard-intro { display: none; }
+    .dashboard-eyebrow { font-size: 12px; }
+    .dashboard-intro { display: block; }
     .dashboard-feature-banner { padding: 17px 15px; gap: 13px; border-radius: 21px; }
     .feature-illustration.banner-illustration { width: 59px; height: 68px; }
     .banner-illustration .feature-illustration-shadow, .banner-illustration .feature-illustration-sheet { width: 48px; height: 53px; border-radius: 14px; }

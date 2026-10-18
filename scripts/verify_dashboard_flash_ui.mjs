@@ -128,18 +128,18 @@ try {
   await page.getByRole('dialog', { name: 'Pusat Notifikasi' }).getByRole('button', { name: 'Buka pengumuman', exact: true }).click(); await dialog.waitFor();
   check('removed announcement shows an explicit unavailable message', await dialog.getByRole('status').getByText(/sudah tidak tersedia/).isVisible()); await page.keyboard.press('Escape');
   // Admin toggles reuse the shared school settings document; failures keep the draft.
-  await page.goto(origin + '/#settings'); await page.getByRole('heading', { name: 'Flash Info Dashboard', exact: true }).waitFor();
+  await page.goto(origin + '/#settings'); await page.getByRole('heading', { name: 'Sapaan & Flash Info Dashboard', exact: true }).waitFor();
   await page.getByRole('switch', { name: 'Ganti slide otomatis', exact: true }).check();
   check('admin has 15 interval choices including half-seconds and up to one minute', await page.getByLabel('Jeda pergantian slide').locator('option').count() === 15 && await page.getByRole('option', { name: '2,5 detik', exact: true }).count() === 1 && await page.getByRole('option', { name: '60 detik', exact: true }).count() === 1);
   await page.getByLabel('Jeda pergantian slide').selectOption('15000');
   await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).uncheck();
   await page.evaluate(() => window.fixture.failSettingsSave = true);
-  await page.getByRole('button', { name: 'Simpan flash info' }).click();
+  await page.getByRole('button', { name: 'Simpan info dashboard' }).click();
   await page.getByRole('alert').waitFor(); check('failed settings save preserves interval and panel draft', await page.getByLabel('Jeda pergantian slide').inputValue() === '15000' && !await page.getByRole('checkbox', { name: 'Laporan Insiden & Kejadian Terbaru', exact: true }).isChecked());
   await page.evaluate(() => window.fixture.failSettingsSave = false);
-  await page.getByRole('button', { name: 'Simpan flash info' }).click(); await page.getByRole('status').filter({ hasText: 'Pengaturan flash info tersimpan' }).waitFor();
+  await page.getByRole('button', { name: 'Simpan info dashboard' }).click(); await page.getByRole('status').filter({ hasText: 'Pengaturan info dashboard tersimpan' }).waitFor();
   check('admin can save interval and selected panels', await page.evaluate(() => window.fixture.settingsSaves.at(-1).config.intervalMs === 15000 && window.fixture.settingsSaves.at(-1).config.panels.incidents === false));
-  await page.getByRole('switch', { name: /Tampilkan flash info/ }).uncheck(); await page.getByRole('button', { name: 'Simpan flash info' }).click();
+  await page.getByRole('switch', { name: /Tampilkan flash info/ }).uncheck(); await page.getByRole('button', { name: 'Simpan info dashboard' }).click();
   await page.evaluate(() => { location.hash = '#dashboard'; }); await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).waitFor();
   check('admin OFF retains only the activity slide in the same compact panel', await flash.locator('.flash-page').innerText() === '1 / 1' && await flash.getByRole('button', { name: 'Info berikutnya' }).isDisabled());
   await page.getByRole('button', { name: 'Papan pengumuman', exact: true }).click(); await dialog.waitFor();
@@ -149,7 +149,7 @@ try {
   await page.evaluate(() => { window.fixture.user = { ...window.fixture.user, role: 'GURU', permissions: ['dashboard.view'] }; window.fixture.permissions = ['dashboard.view']; window.fixture.emitSchool({ ...window.fixture.settings, dashboardInfoConfig: { enabled: true, autoPlay: false, intervalMs: 3000 } }); window.fixture.force(); });
   check('restricted teacher sees only activity and allowed announcements', await flash.locator('.flash-slide:not([data-loop-clone])').count() === 2);
   await page.evaluate(() => { location.hash = '#settings'; }); await page.waitForTimeout(100);
-  check('non-admin cannot use the dashboard info settings form', await page.getByRole('button', { name: 'Simpan flash info' }).count() === 0);
+  check('non-admin cannot use the dashboard info settings form', await page.getByRole('button', { name: 'Simpan info dashboard' }).count() === 0);
   check('UI actions do not create operational school records', await page.evaluate(() => window.fixture.writes.length === 0));
   check('all exercised interactions have no runtime errors', errors.length === 0);
   console.log(`${count} dashboard/header/notification browser scenarios passed.`);

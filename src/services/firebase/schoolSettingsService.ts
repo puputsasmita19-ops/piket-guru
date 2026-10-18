@@ -225,7 +225,7 @@ export class SchoolSettingsService {
     const uid = this.actor(userId);
     const userSnap = await getDocFromServer(doc(db, 'users', uid));
     if (!userSnap.exists() || userSnap.data().role !== 'ADMIN' || userSnap.data().isActive !== true) {
-      throw new Error('Hanya administrator aktif yang dapat mengubah flash info.');
+      throw new Error('Hanya administrator aktif yang dapat mengubah info dashboard.');
     }
     const dashboardInfoConfig = sanitizeDashboardInfoConfig(config);
     const ref = doc(db, 'settings', 'school_config');
@@ -236,7 +236,7 @@ export class SchoolSettingsService {
       expected = { ...snap.data(), dashboardInfoConfig } as SchoolSettings;
       transaction.update(ref, { dashboardInfoConfig, updatedAt: serverTimestamp() });
     });
-    void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui panel dan pergantian slide flash info dashboard' });
+    void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui sapaan, kalimat penyemangat, dan flash info dashboard' });
     return this.receipt(expected);
   }
 
