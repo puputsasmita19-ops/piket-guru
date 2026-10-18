@@ -169,6 +169,10 @@ export interface PrintLayoutConfig {
   showSignatures: boolean;
   /** Reports only. Individual entry/admit slips retain their original signers. */
   signatureOrder?: 'principal_left' | 'coordinator_left';
+  showPageNumbers?: boolean;
+  pageNumberPosition?: 'left' | 'center' | 'right';
+  pageNumberFormat?: 'page_of_total' | 'page_only';
+  pageNumberStart?: number;
 }
 
 export interface LetterheadConfig {

@@ -249,7 +249,7 @@ export const ReportsPreview: React.FC = () => {
 
   // Print Modals
   const [isReportActionsOpen, setIsReportActionsOpen] = useState(false);
-  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [isExportingDocument, setIsExportingDocument] = useState(false);
   const [exportError, setExportError] = useState('');
   const [settingsReady, setSettingsReady] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
@@ -900,19 +900,23 @@ export const ReportsPreview: React.FC = () => {
     }
   }, [activeTab, periodLabel, startDate, endDate, attendanceSummaries, teachers, filteredIncidents, filteredDutyBooks, filteredTardiness, filteredPermits, filteredSubstitutions, filteredVisitors]);
 
-  const handleExportWord = async () => {
-    if (isExportingWord || !activeWordReport?.rows.length || !settingsReady || isLoadingData || dataLoadError || !dateValidation.isValid) return;
-    setIsExportingWord(true); setExportError('');
+  const handleExportActiveDocument = async (format: 'word' | 'pdf') => {
+    if (isExportingDocument || !activeWordReport?.rows.length || !settingsReady || isLoadingData || dataLoadError || !dateValidation.isValid) return;
+    setIsExportingDocument(true); setExportError('');
     try {
-      const service = await import('../../utils/operationalReport');
-      const assets = await service.loadReportAssets(settings), bytes = service.operationalReportDocx(activeWordReport, settings, assets);
-      const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      const url = URL.createObjectURL(blob), link = document.createElement('a');
-      link.href = url; link.download = `${activeWordReport.title.replace(/[^\p{L}\p{N} -]/gu, '')}-${startDate}-${endDate}.docx`;
-      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      if (currentUser) void FirestoreService.logAudit({ userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role, action: 'EXPORT', module: 'REPORTS', details: `Mengekspor Word ${activeWordReport.title}: ${activeWordReport.rows.length} catatan, periode ${startDate} s.d. ${endDate}` }).catch(console.warn);
-    } catch (e) { setExportError(e instanceof Error ? e.message : 'Dokumen Word belum dapat disiapkan. Coba kembali.'); }
-    finally { setIsExportingWord(false); }
+      const fileTitle = `${activeWordReport.title.replace(/[^\p{L}\p{N} -]/gu, '')}-${startDate}-${endDate}`;
+      if (format === 'pdf') {
+        const pdf = await import('../../utils/reportPdf'); pdf.downloadPdf(await pdf.createReportPdf(activeWordReport, settings), fileTitle);
+      } else {
+        const service = await import('../../utils/operationalReport');
+        const assets = await service.loadReportAssets(settings), bytes = service.operationalReportDocx(activeWordReport, settings, assets);
+        const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = fileTitle + '.docx';
+        document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      }
+      if (currentUser) void FirestoreService.logAudit({ userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role, action: 'EXPORT', module: 'REPORTS', details: `Mengekspor ${format === 'word' ? 'Word' : 'PDF'} ${activeWordReport.title}: ${activeWordReport.rows.length} catatan, periode ${startDate} s.d. ${endDate}` }).catch(console.warn);
+    } catch (e) { setExportError(e instanceof Error ? e.message : 'Dokumen belum dapat disiapkan. Coba kembali.'); }
+    finally { setIsExportingDocument(false); }
   };
 
   return (
@@ -977,7 +981,7 @@ export const ReportsPreview: React.FC = () => {
                 disabled={selectedPhotosList.length === 0}
                 className="font-bold cursor-pointer shadow-sm"
               >
-                Cetak / Ekspor PDF Lampiran Foto ({selectedPhotosList.length})
+                Pratinjau Dokumentasi Foto ({selectedPhotosList.length})
               </Button>
             </>
           ) : (
@@ -2070,7 +2074,7 @@ export const ReportsPreview: React.FC = () => {
                   onClick={() => setIsPhotoRecapPrintOpen(true)}
                   disabled={filteredPhotoItems.length === 0}
                 >
-                  Cetak & Ekspor PDF A4 ({selectedPhotosList.length} Foto)
+                  Pratinjau / Unduh PDF Foto ({selectedPhotosList.length} Foto)
                 </Button>
               </div>
             </CardContent>
@@ -2274,18 +2278,19 @@ export const ReportsPreview: React.FC = () => {
         </Modal>
       )}
 
-      <Modal isOpen={isReportActionsOpen} onClose={() => { if (!isExportingWord) setIsReportActionsOpen(false); }} title="Pratinjau & Ekspor Laporan" maxWidth="md">
+      <Modal isOpen={isReportActionsOpen} onClose={() => { if (!isExportingDocument) setIsReportActionsOpen(false); }} title="Pratinjau & Ekspor Laporan" maxWidth="md">
         <div className="space-y-4 text-sm">
           <p className="text-xs text-slate-500 dark:text-slate-400">Periode: {periodLabel}. Kop dan tanda tangan mengikuti pengaturan admin.</p>
           <section className="rounded-xl border border-[var(--theme-card-border)] p-4 space-y-2">
             <h3 className="font-semibold">Rekap lengkap</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Gabungan seluruh modul pada periode ini. Periksa tata letak sebelum mencetak atau menyimpan PDF.</p>
-            <Button size="sm" variant="outline" disabled={isExportingWord} leftIcon={<Printer className="w-4 h-4"/>} onClick={() => { setIsReportActionsOpen(false); setIsPrintModalOpen(true); }}>Pratinjau & Cetak Resmi</Button>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Gabungan seluruh modul pada periode ini. Periksa tata letak sebelum mencetak atau mengunduh PDF.</p>
+            <Button size="sm" variant="outline" disabled={isExportingDocument} leftIcon={<Printer className="w-4 h-4"/>} onClick={() => { setIsReportActionsOpen(false); setIsPrintModalOpen(true); }}>Pratinjau & Cetak Resmi</Button>
           </section>
           <section className="rounded-xl border border-[var(--theme-card-border)] p-4 space-y-2">
-            <h3 className="font-semibold">Word tab aktif</h3>
+            <h3 className="font-semibold">Unduhan tab aktif</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">{activeWordReport?.title} · {activeWordReport?.rows.length || 0} catatan. Mencakup seluruh hasil filter yang tampil pada tab ini.</p>
-            <Button size="sm" disabled={isExportingWord || !activeWordReport?.rows.length} leftIcon={<Download className="w-4 h-4"/>} onClick={() => void handleExportWord()}>{isExportingWord ? 'Menyiapkan Word…' : 'Unduh Word Tab Aktif'}</Button>
+            <Button size="sm" disabled={isExportingDocument || !activeWordReport?.rows.length} leftIcon={<Download className="w-4 h-4"/>} onClick={() => void handleExportActiveDocument('word')}>{isExportingDocument ? 'Menyiapkan dokumen…' : 'Unduh Word Tab Aktif'}</Button>
+            <Button size="sm" variant="outline" disabled={isExportingDocument || !activeWordReport?.rows.length} leftIcon={<Download className="w-4 h-4"/>} onClick={() => void handleExportActiveDocument('pdf')}>Unduh PDF Tab Aktif</Button>
           </section>
           {exportError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{exportError}</p>}
         </div>

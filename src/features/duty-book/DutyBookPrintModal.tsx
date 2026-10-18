@@ -43,7 +43,7 @@ export const DutyBookPrintModal: React.FC<DutyBookPrintModalProps> = ({
             leftIcon={<Printer className="w-4 h-4" />}
             onClick={handlePrint}
           >
-            Cetak Dokumen / Simpan PDF
+            Cetak Dokumen
           </Button>
         </div>
 

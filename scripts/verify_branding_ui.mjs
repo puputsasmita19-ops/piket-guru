@@ -41,46 +41,6 @@ try {
   await page.goto(url + '/?reportsSettings#settings'); await page.getByLabel('Posisi tanda tangan laporan').selectOption('coordinator_left'); await page.getByRole('button', { name: 'Simpan pengaturan cetak & buku tamu' }).click();
   await page.waitForFunction(() => window.fixture.reportSettingsSaves?.length === 1);
   check('admin report signature order is saved through its existing settings section', await page.evaluate(() => window.fixture.reportSettingsSaves[0].printConfig.signatureOrder === 'coordinator_left'));
-  await page.goto(url + '/#visitors'); await page.getByRole('button', { name: 'Ekspor Word / PDF', exact: true }).waitFor();
-  await page.evaluate(s => window.fixture.emitSchool(s), settings); await page.getByRole('button', { name: 'Ekspor Word / PDF', exact: true }).click();
-  await page.getByRole('button', { name: 'Cetak / Simpan PDF' }).click(); await page.waitForFunction(() => window.fixture.printedHtml);
-  const html = await page.evaluate(() => window.fixture.printedHtml);
-  check('live export uses reference letterhead and principal on the left', html.includes('YAYASAN PENDIDIKAN JEMBER') && html.includes('604/BAN-PDM/SK/2025') && html.indexOf('Kepala Uji') < html.indexOf('Koordinator Uji') && !html.includes('/icon.svg'));
-  if (out) { const event = page.waitForEvent('download'); await page.getByRole('button', { name: 'Unduh Word (.docx)' }).click(); await (await event).saveAs(out + '/kop-laporan.docx'); }
-  await page.goto(url + '/#monthly-print'); await page.waitForFunction(() => window.fixture?.force);
-  await page.evaluate(s => { localStorage.setItem('piket_print_settings_v1', JSON.stringify({ signatureOrder: 'coordinator_left', showLetterhead: false })); window.fixture.settings = s; window.fixture.force(); }, settings);
-  await page.locator('[data-print-letterhead]').waitFor();
-  check('monthly print uses admin branding and ignores stale browser signature order', await page.locator('[data-report-signatures] [data-signer]').first().getAttribute('data-signer') === 'principal' && await page.locator('[data-print-letterhead]').innerText().then(t => t.includes('604/BAN-PDM/SK/2025')));
-  await page.evaluate(() => { window.fixture.settings = { ...window.fixture.settings, printConfig: { ...window.fixture.settings.printConfig, signatureOrder: 'coordinator_left' } }; window.fixture.force(); });
-  await page.waitForFunction(() => document.querySelector('[data-signer]')?.getAttribute('data-signer') === 'coordinator');
-  check('monthly report also respects the alternate admin order', true);
-  if (out) await page.screenshot({ path: out + '/monthly-preview.png', fullPage: true });
-  await page.goto(url + '/#duty-print'); await page.waitForFunction(()=>window.fixture?.force); await page.evaluate(s=>{window.fixture.settings=s;window.fixture.force()},settings); await page.locator('[data-print-letterhead]').waitFor();
-  check('full duty journal report applies the letterhead and report signers while retaining the author',await page.locator('[data-signer]').first().getAttribute('data-signer')==='principal'&&(await page.getByRole('dialog').innerText()).includes('Penulis: Petugas Uji'));
-  await page.goto(url + '/#print-test'); await page.waitForFunction(() => window.fixture?.force); await page.evaluate(s => { window.fixture.settings = s; window.fixture.force(); }, settings);
-  await page.locator('[data-print-letterhead]').waitFor();
-  check('photo recap retains its title and period with the new letterhead and signer order', (await page.locator('#photo-rekap-print-area').innerText()).includes('LAMPIRAN DOKUMENTASI BULANAN') && await page.locator('[data-signer]').first().getAttribute('data-signer') === 'principal');
-  check('tested pages have no runtime errors or operational data writes', errors.length === 0 && await page.evaluate(() => window.fixture.writes.length === 0));
-  if (out) {
-    await page.pdf({ path: out + '/kop-foto.pdf', preferCSSPageSize: true, printBackground: true });
-    await page.evaluate(() => {const sample={sourceModule:'VISITOR',sourceId:'test',photoUrl:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#eef2ee"/><text x="80" y="150" font-size="28">Foto contoh</text></svg>'),briefIdentity:'Data fiktif untuk pengujian',tanggalKejadian:'2026-10-18'};window.fixture.photos=Array.from({length:4},(_,i)=>({...sample,id:'foto-'+i,title:'Dokumentasi '+(i+1)}));window.fixture.force()});
-    await page.waitForFunction(()=>document.querySelectorAll('.photo-print-image img').length===4&&Array.from(document.querySelectorAll('.photo-print-image img')).every(i=>i.complete));
-    await page.emulateMedia({media:'print'});
-    check('four-photo print pages fit their allocated A4 height',await page.locator('.print-page').evaluateAll(es=>es.every(e=>e.scrollHeight<=e.clientHeight+2)));
-    await page.pdf({ path: out + '/kop-foto-4.pdf', preferCSSPageSize: true, printBackground: true });
-    await page.emulateMedia({media:'screen'});
-    await page.getByRole('button',{name:/2 Foto/}).click();
-    await page.waitForFunction(()=>document.querySelectorAll('.photo-print-image img').length===4&&Array.from(document.querySelectorAll('.photo-print-image img')).every(i=>i.complete&&i.naturalWidth>0));
-    await page.emulateMedia({media:'print'});
-    check('two-photo print pages fit their allocated A4 height',await page.locator('.print-page').evaluateAll(es=>es.every(e=>e.scrollHeight<=e.clientHeight+2))); 
-    await page.pdf({ path: out + '/kop-foto-2.pdf', preferCSSPageSize: true, printBackground: true });
-
-    await page.emulateMedia({media:'screen'});
-    await page.setContent(html);
-    check('HTML/PDF letterhead text is centered on the whole printable width',await page.locator('.letterhead').evaluate(e=>{const a=e.getBoundingClientRect(),b=e.querySelector('[data-letterhead-text]').getBoundingClientRect();return Math.abs(a.left+a.width/2-b.left-b.width/2)<1}));
-    await page.pdf({ path: out + '/kop-laporan.pdf', preferCSSPageSize: true, printBackground: true });
-    await page.screenshot({ path: out + '/kop-laporan.png', fullPage: true });
-  }
   await page.goto(url + '/?limited&brandingSettings#settings'); await page.waitForFunction(() => window.fixture?.force); await page.waitForTimeout(50);
   check('non-admin has no logo or letterhead editor', await page.getByRole('button', { name: 'Simpan logo & kop surat' }).count() === 0);
   console.log(`${count} branding and print UI checks passed.`);

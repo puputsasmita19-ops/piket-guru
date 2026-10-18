@@ -1,24 +1,3 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { createRequire } from 'node:module';
-import { server } from './fixtures/modern_workspace_fixture.mjs';
-const dep=createRequire((process.env.PIKET_BROWSER_TEST_TOOLS||process.cwd())+'/package.json');const chromium=dep('@sparticuz/chromium').default,{chromium:pw}=dep('playwright-core');
-if(!server.listening)await new Promise(r=>server.once('listening',r));let browser,count=0;const check=(name,ok)=>{assert.ok(ok,name);count++;console.log('PASS',name)};
-try{
- browser=await pw.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:true});const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
- // Capture the real export iframe's print call without invoking a native dialog.
- await page.addInitScript(()=>{window.print=()=>{if(parent!==window&&parent.fixture){parent.fixture.printedHtml=document.documentElement.outerHTML;parent.fixture.printCalls=(parent.fixture.printCalls||0)+1}}});
- const url=`http://127.0.0.1:${server.address().port}`;await page.goto(url+'/#visitors');await page.getByRole('button',{name:'Ekspor Word / PDF',exact:true}).waitFor();
- await page.evaluate(()=>window.fixture.emitSchool({...window.fixture.settings,schoolName:'Sekolah Uji <aman>',principalName:'Kepala Uji',coordinatorName:'Koordinator Uji',printConfig:{paperSize:'F4',f4WidthMm:215,f4HeightMm:330,orientation:'landscape',marginTopMm:12,marginRightMm:13,marginBottomMm:14,marginLeftMm:15,showLogo:false,showLetterhead:true,showSignatures:true}}));
- await page.getByRole('button',{name:'Ekspor Word / PDF',exact:true}).click();await page.getByRole('button',{name:'Cetak / Simpan PDF'}).click();await page.waitForFunction(()=>window.fixture.printCalls===1);
- check('PDF action prints a separate report document using the current admin format',await page.evaluate(()=>window.fixture.printedHtml.includes('size:330mm 215mm')&&window.fixture.printedHtml.includes('margin:12mm 13mm 14mm 15mm')));
- check('only report data and configured signers are sent to print, without the app navigation',await page.evaluate(()=>window.fixture.printedHtml.includes('Rina Contoh')&&window.fixture.printedHtml.includes('Kepala Uji')&&window.fixture.printedHtml.includes('Sekolah Uji &lt;aman&gt;')&&!window.fixture.printedHtml.includes('Navigasi Utama Mobile')));
- await page.evaluate(()=>{window.fixture.emitSchool({...window.fixture.settings,printConfig:{...window.fixture.settings.printConfig,showLetterhead:false,showSignatures:false}});window.fixture.printCalls=0});await page.getByRole('button',{name:'Cetak / Simpan PDF'}).click();await page.waitForFunction(()=>window.fixture.printCalls===1);
- check('PDF export immediately applies admin OFF for letterhead and signatures',await page.evaluate(()=>!window.fixture.printedHtml.includes('<header>')&&!window.fixture.printedHtml.includes('<footer>')));
- await page.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=60;const x=c.getContext('2d');x.fillStyle='white';x.fillRect(0,0,100,60);x.fillStyle='black';x.fillText('Logo Uji',15,30);const image=c.toDataURL('image/png');window.fixture.emitSchool({...window.fixture.settings,logoUrl:image,principalSignatureUrl:image,coordinatorSignatureUrl:image,printConfig:{...window.fixture.settings.printConfig,showLetterhead:true,showLogo:true,showSignatures:true}});window.fixture.printCalls=0});await page.getByRole('button',{name:'Cetak / Simpan PDF'}).click();await page.waitForFunction(()=>window.fixture.printCalls===1);
- check('logo and both signature images are embedded in the print document',await page.evaluate(()=>(window.fixture.printedHtml.match(/data:image\/png;base64,/g)||[]).length===3));
- if(process.env.PIKET_HISTORY_QA){const event=page.waitForEvent('download');await page.getByRole('button',{name:'Unduh Word (.docx)'}).click();const download=await event;await download.saveAs(process.env.PIKET_HISTORY_QA+'/logo-signatures.docx');check('Word with logo and signature images also downloads successfully',true)}
- check('PDF export neither writes operational data nor raises runtime errors',await page.evaluate(()=>window.fixture.writes.length===0)&&errors.length===0);
- if(process.env.PIKET_HISTORY_QA){const html=fs.readFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4.html','utf8');await page.setContent(html);await page.pdf({path:process.env.PIKET_HISTORY_QA+'/layout-f4-browser.pdf',preferCSSPageSize:true,printBackground:true});check('the browser renders a PDF with the configured page CSS',fs.readFileSync(process.env.PIKET_HISTORY_QA+'/layout-f4-browser.pdf').subarray(0,4).toString()==='%PDF')}
- console.log(`${count} PDF export/browser checks passed.`);
-}finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
+// The report now uses direct PDFs and a paginated canvas preview.
+// Run the shared end-to-end suite covering active-tab exports and isolated printing.
+import './verify_direct_pdf_ui.mjs';

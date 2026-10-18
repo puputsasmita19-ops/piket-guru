@@ -40,4 +40,6 @@ check('branding rejects unsafe or private URLs before saving',fixture.writes.len
 await assert.rejects(()=>service.saveBrandingSettings('/icon.svg','',{schoolName:''},'admin'));
 check('blank letterhead school name cannot be saved',fixture.writes.length===current);
 check('default report signature order is principal left',fixture.settings.printConfig.signatureOrder==='principal_left');
+await service.saveOperationalReportSettings({...fixture.settings.printConfig,showPageNumbers:false,pageNumberPosition:'right',pageNumberFormat:'page_only',pageNumberStart:7},fixture.settings.visitorConfig,'admin');
+check('admin page numbering settings persist without changing GPS/branding',fixture.settings.printConfig.showPageNumbers===false&&fixture.settings.printConfig.pageNumberPosition==='right'&&fixture.settings.printConfig.pageNumberStart===7&&fixture.settings.appLogoUrl==='/icon.svg'&&fixture.settings.schoolLat===-8);
 console.log(`${count} operational settings/access checks passed.`);
