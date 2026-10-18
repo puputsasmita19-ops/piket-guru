@@ -1,8 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Piket Guru — buku pendidikan dan tanda kehadiran">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Piket Guru — pendidikan dan tanda kehadiran">
   <rect width="512" height="512" rx="112" fill="#f5f5dc"/>
-  <g fill="none" stroke="#24221d" stroke-width="23" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M256 166c-36-25-80-31-128-24v190c48-7 92-1 128 24 22-15 48-24 76-26"/>
-    <path d="M256 166c36-25 80-31 128-24v104M256 166v190"/>
-    <path d="m324 296 26 26 51-56"/>
+  <g fill="none" stroke="#24221d" stroke-width="24" stroke-linejoin="round" stroke-linecap="round">
+    <path d="m124 210 132-66 132 66-132 66zM176 240v68c30 20 55 28 82 26M388 210v62"/>
+    <path d="m280 334 31 31 73-76"/>
   </g>
 </svg>
