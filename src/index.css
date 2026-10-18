@@ -1154,3 +1154,52 @@ button.bg-\[var\(--theme-primary\)\],
   .history-pagination { flex-wrap: wrap; gap: 10px; }
   .history-pagination > div { max-width: 100%; flex-wrap: wrap; }
 }
+
+/* Login: compact layout, decorative motion and an accessible moving credit. */
+.login-page { isolation: isolate; justify-content: flex-start; padding-block: clamp(8px, 3vh, 28px); }
+.login-card { z-index: 1; }
+.login-backdrop-host { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.login-motion-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; background: var(--theme-bg-app); }
+.login-ocean-video { width: 100%; height: 100%; object-fit: cover; object-position: center 52%; }
+.login-motion-wash { position: absolute; inset: 0; background: rgb(255 255 255 / .57); }
+.login-motion-backdrop[data-intensity="clear"] .login-motion-wash { background: rgb(255 255 255 / .25); }
+.dark .login-motion-wash { background: rgb(10 17 25 / .73); }
+.dark .login-motion-backdrop[data-intensity="clear"] .login-motion-wash { background: rgb(10 17 25 / .5); }
+.login-gradient-motion { position: absolute; inset: -18%; overflow: hidden; background: var(--theme-bg-app); }
+.login-gradient-motion > span { position: absolute; width: 75%; height: 70%; border-radius: 50%; background: radial-gradient(ellipse, var(--theme-primary-light), transparent 68%); animation: login-drift 32s ease-in-out infinite alternate; opacity: .85; }
+.login-gradient-motion > span:nth-child(2) { left: 35%; top: 30%; animation-delay: -13s; background: radial-gradient(ellipse, var(--theme-primary), transparent 68%); opacity: .22; }
+.login-gradient-motion > span:nth-child(3) { left: -15%; top: 48%; animation-delay: -22s; }
+.login-motion-backdrop[data-speed="normal"] .login-gradient-motion > span { animation-duration: 22s; }
+.login-motion-backdrop[data-speed="fast"] .login-gradient-motion > span { animation-duration: 14s; }
+.login-motion-backdrop[data-motion="paused"] .login-gradient-motion > span { animation-play-state: paused; }
+@keyframes login-drift { to { transform: translate3d(18%, -12%, 0) scale(1.14); } }
+.login-page .login-footer { position: relative; gap: 3px; padding: 2px 5px; border-radius: 14px; background: color-mix(in srgb, var(--theme-card-bg) 94%, transparent); margin-top: 8px; }
+.login-page .login-footer-action { position: relative; flex: 0 0 44px; width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; border-radius: 12px; }
+.login-footer-action::before { content: ''; position: absolute; inset: 6px; border: 1px solid var(--theme-card-border); background: var(--theme-card-bg); border-radius: 10px; }
+.login-footer-action:hover::before { background: var(--theme-surface-subtle); }
+.login-page .login-footer-action > svg, .login-page .login-footer-action > div { position: relative; width: 16px; height: 16px; }
+.login-credit, .login-credit-static { min-width: 0; flex: 1; color: var(--theme-text-muted, #64748b); font-size: 11px; font-weight: 400; line-height: 1.5; text-align: left; }
+.login-credit { min-height: 44px; overflow: hidden; cursor: pointer; border-radius: 8px; }
+.login-credit:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 1px; }
+.login-credit-track { display: flex; width: max-content; animation: login-credit-loop var(--credit-duration, 30s) linear infinite; }
+.login-credit-track > span { flex: none; white-space: nowrap; padding-right: 36px; }
+.login-credit-track[data-paused="true"] { animation-play-state: paused; }
+.login-credit-static { overflow-wrap: anywhere; padding: 5px 0; }
+.dark :is(.login-credit, .login-credit-static) { color: #cbd5e1; }
+@keyframes login-credit-loop { to { transform: translateX(-50%); } }
+@media (max-width: 639px), (max-height: 820px) {
+  .login-page { padding-block: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-bottom)); }
+  .login-card { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .login-card > * { margin-block: 0 !important; }
+  .login-branding { padding-top: 0; }
+  .login-branding > div:first-child { width: 36px; height: 36px; margin-inline: auto; }
+  .login-branding h1 { font-size: 20px; }
+  .login-pin-pad { gap: 6px; padding-top: 0; }
+  .login-pin-pad > button { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-gradient-motion > span, .login-credit-track { animation: none !important; transform: none !important; }
+  .login-credit-track { width: auto; display: block; }
+  .login-credit-track > span:first-child { white-space: normal; padding: 0; overflow-wrap: anywhere; }
+  .login-credit-track > span:last-child { display: none; }
+}

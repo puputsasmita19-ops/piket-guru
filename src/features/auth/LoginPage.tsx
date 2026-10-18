@@ -1,3 +1,6 @@
+import { LoginBackdrop } from './LoginBackdrop';
+import { LoginCredit } from './LoginCredit';
+import { sanitizeLoginAppearance } from '../../types/loginAppearance.types';
 import { AppClock } from '../../components/common/AppClock';
 import { appLogo } from '../../utils/reportBranding';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -496,13 +499,14 @@ export const LoginPage: React.FC = () => {
   return (
     <div
       onFocusCapture={() => preloadAuthenticatedShell()}
-      className="min-h-screen min-h-[100dvh] flex flex-col justify-start sm:justify-center items-center px-3 py-4 sm:p-6 selection:text-white transition-colors duration-200 relative overflow-x-hidden overflow-y-auto"
+      className="login-page min-h-screen min-h-[100dvh] flex flex-col justify-start sm:justify-center items-center px-3 py-4 sm:p-6 selection:text-white transition-colors duration-200 relative overflow-x-hidden overflow-y-auto"
       style={{
         backgroundColor: 'var(--theme-bg-app)',
       }}
     >
+      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop config={schoolSettings.loginAppearance} /></div>
       {/* Main App Card */}
-      <div className="relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
+      <div className="login-card relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
         {/* Integrated Theme Settings Button & Popover */}
         <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30" ref={themePickerRef}>
           <button
@@ -639,7 +643,7 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Header Branding & Real-time Date/Time */}
-        <div className="text-center space-y-1.5 sm:space-y-2 pt-1 sm:pt-0 px-8 sm:px-10">
+        <div className="login-branding text-center space-y-1.5 sm:space-y-2 pt-1 sm:pt-0 px-8 sm:px-10">
           {appLogo(schoolSettings) ? (
             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-surface-subtle)] p-1 flex items-center justify-center mx-auto shadow-md border border-slate-200 dark:border-[var(--theme-card-border)]">
               <img
@@ -919,7 +923,7 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Virtual Numeric Keypad (Ergonomic for HP & Touch) */}
-        <div className="grid grid-cols-3 gap-2 pt-0.5">
+        <div className="login-pin-pad grid grid-cols-3 gap-2 pt-0.5">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
             <button
               key={num}
@@ -985,7 +989,7 @@ export const LoginPage: React.FC = () => {
           <label htmlFor="trusted-device-checkbox" className="text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
             <span className="font-semibold text-slate-800 dark:text-slate-200">Perangkat Pribadi / Tepercaya</span>
             <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Aktifkan draf & penyimpanan lokal persisten. Jangan centang jika menggunakan perangkat bersama.
+              Simpan draf di perangkat ini. Jangan aktifkan pada perangkat bersama.
             </span>
           </label>
         </div>
@@ -1019,7 +1023,7 @@ export const LoginPage: React.FC = () => {
           onClick={handleGoogleLogin}
           title="Masuk dengan Google sebagai Administrator"
           aria-label="Masuk dengan Google sebagai Administrator"
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] hover:border-[var(--theme-primary-border)] hover:bg-[var(--theme-primary-light)]/40 dark:hover:bg-[var(--theme-surface-subtle)] shadow-xs transition-all duration-150 flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)] focus:ring-offset-2 dark:focus:ring-offset-[var(--theme-card-bg)]"
+          className="login-footer-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] hover:border-[var(--theme-primary-border)] hover:bg-[var(--theme-primary-light)]/40 dark:hover:bg-[var(--theme-surface-subtle)] shadow-xs transition-all duration-150 flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)] focus:ring-offset-2 dark:focus:ring-offset-[var(--theme-card-bg)]"
         >
           {isGoogleSubmitting ? (
             <div className="w-5 h-5 border-2 border-[var(--theme-primary)] border-t-transparent rounded-full animate-spin" />
@@ -1036,7 +1040,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsContactAdminModalOpen(true)}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] shrink-0 rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] hover:bg-[var(--theme-surface-subtle)] text-slate-700 dark:text-slate-200 flex items-center justify-center transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)] focus:ring-offset-2 dark:focus:ring-offset-[var(--theme-card-bg)]"
+            className="login-footer-action w-11 h-11 min-w-[44px] min-h-[44px] shrink-0 rounded-xl sm:rounded-2xl bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] hover:bg-[var(--theme-surface-subtle)] text-slate-700 dark:text-slate-200 flex items-center justify-center transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)] focus:ring-offset-2 dark:focus:ring-offset-[var(--theme-card-bg)]"
             title={supportContact.buttonLabel || 'Hubungi Admin'}
             aria-label={supportContact.buttonLabel || 'Hubungi Admin'}
           >
@@ -1049,15 +1053,7 @@ export const LoginPage: React.FC = () => {
             )}
           </button>
         )}
-        <p
-          className="min-w-0 flex-1 truncate text-[11px] sm:text-xs leading-normal text-slate-500 dark:text-slate-400"
-          title={`Dikembangkan oleh ${schoolSettings.appCreator || DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'}`}
-        >
-          Dikembangkan oleh{' '}
-          <span className="font-medium text-slate-700 dark:text-slate-300">
-            {schoolSettings.appCreator || DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'}
-          </span>
-        </p>
+        <LoginCredit text={`Dikembangkan oleh ${schoolSettings.appCreator || DEFAULT_SCHOOL_SETTINGS.appCreator || 'Tim Pengembang Sistem Piket'}`} config={sanitizeLoginAppearance(schoolSettings.loginAppearance)} />
       </footer>
 
       {/* Modal: Kontak Administrator Sekolah */}

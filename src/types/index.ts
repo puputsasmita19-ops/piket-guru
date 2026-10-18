@@ -235,6 +235,7 @@ export interface SchoolSettings {
   schoolLocationUnlockedAt?: DateValue;
   schoolLocationUnlockedBy?: string;
   loginSupportContact?: LoginSupportContact;
+  loginAppearance?: import('./loginAppearance.types').LoginAppearanceConfig;
   // Signers and report configuration
   reportCity?: string;
   principalName?: string;

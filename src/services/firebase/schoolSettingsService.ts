@@ -1,3 +1,4 @@
+import { sanitizeLoginAppearance, type LoginAppearanceConfig } from '../../types/loginAppearance.types';
 import { normalizeLetterhead, validateBrandLogo } from '../../utils/reportBranding';
 import type { LetterheadConfig } from '../../types';
 import { sanitizeDashboardInfoConfig, type DashboardInfoConfig } from '../../types/dashboardInfo.types';
@@ -143,7 +144,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -218,6 +219,22 @@ export class SchoolSettingsService {
       transaction.update(ref, { printConfig, visitorConfig, updatedAt: serverTimestamp() });
     });
     void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui format cetak laporan operasional dan pilihan tujuan buku tamu' });
+    return this.receipt(expected);
+  }
+
+  public static async saveLoginAppearanceSettings(config: LoginAppearanceConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const user = await getDocFromServer(doc(db, 'users', uid));
+    if (!user.exists() || user.data().role !== 'ADMIN' || user.data().isActive !== true) throw new Error('Hanya administrator aktif yang dapat mengubah tampilan login.');
+    const loginAppearance = sanitizeLoginAppearance(config), ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      transaction.update(ref, { loginAppearance, updatedAt: serverTimestamp() });
+      expected = { ...snap.data(), loginAppearance } as SchoolSettings;
+    });
+    void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui motion background dan teks pengembang halaman login' });
     return this.receipt(expected);
   }
 

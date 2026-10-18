@@ -1,5 +1,5 @@
 /**
- * Piket Guru Service Worker v1.4.28 - Offline Resilience, Asset Cache & Controlled Updates
+ * Piket Guru Service Worker v1.4.29 - Offline Resilience, Asset Cache & Controlled Updates
  *
  * Key guarantees:
  * 1. Cache assets only from same-origin GET requests; never HTML fallback for scripts, CSS, or APIs.
@@ -8,7 +8,7 @@
  * 4. Automatic cleanup of previous build asset caches on activate without touching user drafts or sync queue.
  */
 
-const CACHE_VERSION = 'v1.4.28';
+const CACHE_VERSION = 'v1.4.29';
 const STATIC_CACHE_NAME = `piketguru-shell-${CACHE_VERSION}`;
 const ASSET_CACHE_NAME = `piketguru-assets-${CACHE_VERSION}`;
 
@@ -69,6 +69,7 @@ self.addEventListener('fetch', (event) => {
 
   // 1. STRICT NETWORK-ONLY: Never cache or serve HTML fallbacks for API, Firebase, Auth, Tokens
   if (
+    event.request.headers.has('range') || // Let the browser handle partial video responses.
     url.pathname.startsWith('/api/') ||
     url.pathname.includes('/auth/') ||
     url.hostname.includes('firestore.googleapis.com') ||

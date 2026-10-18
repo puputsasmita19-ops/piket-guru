@@ -3,6 +3,8 @@ export const WELCOME_CATEGORIES = {
   motivation: 'Motivasi', inspiration: 'Inspirasi', humor: 'Jenaka',
 } as const;
 export type WelcomeCategory = keyof typeof WELCOME_CATEGORIES;
+export interface WelcomeTemplate { id: string; category: Exclude<WelcomeCategory, 'all'>; text: string; }
+export const MAX_CUSTOM_WELCOME_TEMPLATES = 50;
 export const WELCOME_INTERVALS = [5, 15, 30, 60] as const;
 export const WELCOME_TEMPLATES = [
   { id: 'general-smooth', category: 'general', text: 'Semoga kegiatan sekolah hari ini berjalan lancar.' },
@@ -28,16 +30,36 @@ export interface DashboardWelcomeConfig {
   templateId: string;
   customMessage: string;
   intervalMinutes: number;
+  templates?: WelcomeTemplate[];
 }
-export function sanitizeDashboardWelcomeConfig(value?: Partial<DashboardWelcomeConfig> | null): DashboardWelcomeConfig {
+function normalizeCustomTemplates(value: unknown): WelcomeTemplate[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>(), texts = new Set(WELCOME_TEMPLATES.map(t => t.text.toLocaleLowerCase('id-ID')));
+  const result: WelcomeTemplate[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^custom-[a-z0-9-]{1,70}$/.test(item.id) || ids.has(item.id)) continue;
+    const text = typeof item.text === 'string' ? item.text.replace(/\s+/g, ' ').trim().slice(0, 180) : '';
+    const key = text.toLocaleLowerCase('id-ID');
+    if (!text || texts.has(key) || item.category === 'all' || !Object.hasOwn(WELCOME_CATEGORIES, item.category || '')) continue;
+    ids.add(item.id); texts.add(key); result.push({ id: item.id, category: item.category, text });
+    if (result.length === MAX_CUSTOM_WELCOME_TEMPLATES) break;
+  }
+  return result;
+}
+export function getWelcomeTemplates(value?: Partial<DashboardWelcomeConfig> | null): WelcomeTemplate[] {
+  return [...WELCOME_TEMPLATES, ...normalizeCustomTemplates(value?.templates)];
+}
+export function sanitizeDashboardWelcomeConfig(value?: Partial<DashboardWelcomeConfig> | null): DashboardWelcomeConfig & { templates: WelcomeTemplate[] } {
   const v = value && typeof value === 'object' ? value : {};
+  const templates = normalizeCustomTemplates(v.templates);
   return {
     enabled: v.enabled !== false,
     mode: ['fixed', 'daily', 'interval', 'custom'].includes(v.mode!) ? v.mode! : 'fixed',
     category: Object.hasOwn(WELCOME_CATEGORIES, v.category || '') ? v.category! : 'all',
-    templateId: WELCOME_TEMPLATES.some(t => t.id === v.templateId) ? v.templateId! : WELCOME_TEMPLATES[0].id,
+    templateId: [...WELCOME_TEMPLATES, ...templates].some(t => t.id === v.templateId) ? v.templateId! : WELCOME_TEMPLATES[0].id,
     customMessage: typeof v.customMessage === 'string' ? v.customMessage.replace(/\s+/g, ' ').trim().slice(0, 180) : '',
     intervalMinutes: WELCOME_INTERVALS.includes(v.intervalMinutes as typeof WELCOME_INTERVALS[number]) ? v.intervalMinutes! : 15,
+    templates,
   };
 }
 const wibParts = new Intl.DateTimeFormat('en-GB', {
@@ -46,13 +68,14 @@ const wibParts = new Intl.DateTimeFormat('en-GB', {
 /** Local calculation only: rotation never writes to Firestore or starts a listener. */
 export function getDashboardWelcome(value?: Partial<DashboardWelcomeConfig> | null, now: Date | number = Date.now()) {
   const config = sanitizeDashboardWelcomeConfig(value);
+  const templates = getWelcomeTemplates(config);
   const parts = Object.fromEntries(wibParts.formatToParts(now).map(p => [p.type, p.value]));
   const hour = Number(parts.hour);
   const greeting = `Selamat ${hour >= 4 && hour < 11 ? 'pagi' : hour >= 11 && hour < 15 ? 'siang' : hour >= 15 && hour < 18 ? 'sore' : 'malam'}`;
-  let message: string = WELCOME_TEMPLATES.find(t => t.id === config.templateId)!.text;
+  let message: string = templates.find(t => t.id === config.templateId)!.text;
   if (config.mode === 'custom') message = config.customMessage || WELCOME_TEMPLATES[0].text;
   if (config.mode === 'daily' || config.mode === 'interval') {
-    const pool = WELCOME_TEMPLATES.filter(t => config.category === 'all' || t.category === config.category);
+    const pool = templates.filter(t => config.category === 'all' || t.category === config.category);
     const day = Math.floor(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000);
     const slot = config.mode === 'daily' ? day : day * (1440 / config.intervalMinutes) + Math.floor((hour * 60 + Number(parts.minute)) / config.intervalMinutes);
     message = pool[slot % pool.length].text;

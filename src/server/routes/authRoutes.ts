@@ -1,3 +1,4 @@
+import { sanitizeLoginAppearance } from '../../types/loginAppearance.types.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -359,6 +360,8 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
     appLogoUrl: '/icon.svg',
     appName: 'PIKET GURU',
     appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
+    appCreator: 'Tim Pengembang Sistem Piket',
+    loginAppearance: sanitizeLoginAppearance(),
     loginSupportContact: {
       enabled: true,
       adminName: 'Admin Piket Sekolah',
@@ -410,6 +413,8 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
           appName: data.appName || DEFAULT_CONFIG.appName,
           appSubtitle: data.appSubtitle || DEFAULT_CONFIG.appSubtitle,
           loginSupportContact: sanitizedContact,
+          appCreator: typeof data.appCreator === 'string' ? data.appCreator.trim().slice(0, 120) || DEFAULT_CONFIG.appCreator : DEFAULT_CONFIG.appCreator,
+          loginAppearance: sanitizeLoginAppearance(data.loginAppearance),
         },
         source: 'DATABASE',
         status: 'OPERATIONAL',

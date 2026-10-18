@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { server } from './fixtures/modern_workspace_fixture.mjs';
+const dep = createRequire((process.env.PIKET_BROWSER_TEST_TOOLS || process.cwd()) + '/package.json');
+const { chromium: pw } = dep('playwright-core'), chromium = dep('@sparticuz/chromium').default;
+if (!server.listening) await new Promise(r => server.once('listening', r));
+let browser, count = 0; const check = (name, value) => { assert.ok(value, name); count++; console.log('PASS', name); };
+try {
+  browser = await pw.launch({ executablePath: await chromium.executablePath(), args: chromium.args, headless: true });
+  const context = await browser.newContext(), page = await context.newPage(); const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort());
+  await page.setViewportSize({ width: 360, height: 800 }); await page.goto(`http://127.0.0.1:${server.address().port}/#settings`);
+  await page.getByText('Tambah & kelola template (0)', { exact: true }).click();
+  await page.getByLabel('Kategori template baru', { exact: true }).selectOption('motivation');
+  await page.getByLabel('Isi template baru', { exact: true }).fill('Semangat bersama untuk sekolah yang lebih baik.');
+  await page.getByRole('button', { name: 'Tambahkan ke template', exact: true }).click();
+  check('new sentence joins the fixed template options and categorized list', await page.getByLabel('Template kalimat', { exact: true }).locator('option').count() === 16 && (await page.getByRole('list', { name: 'Template tambahan' }).innerText()).includes('Motivasi'));
+  const id = await page.getByLabel('Template kalimat', { exact: true }).locator('option').filter({ hasText: 'Semangat bersama untuk sekolah yang lebih baik.' }).getAttribute('value');
+  await page.getByLabel('Template kalimat', { exact: true }).selectOption(id);
+  await page.getByLabel('Isi template baru', { exact: true }).fill('Semangat bersama untuk sekolah yang lebih baik.'); await page.getByRole('button', { name: 'Tambahkan ke template', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'sudah ada' }).waitFor(); check('duplicate sentence is rejected without adding a second copy', await page.getByLabel('Template kalimat', { exact: true }).locator('option').count() === 16);
+  await page.getByRole('button', { name: 'Edit template 1', exact: true }).click(); await page.getByLabel('Isi template baru', { exact: true }).fill('Semangat bertugas, kita saling membantu.'); await page.getByRole('button', { name: 'Perbarui template', exact: true }).click();
+  check('editing preserves the selected template ID and updates its preview', await page.getByLabel('Template kalimat', { exact: true }).inputValue() === id && (await page.getByLabel('Pratinjau sapaan dashboard').innerText()).includes('Semangat bertugas, kita saling membantu.'));
+  await page.evaluate(() => { window.fixture.failSettingsSave = true; }); await page.getByRole('button', { name: 'Simpan info dashboard' }).click(); await page.getByRole('alert').filter({ hasText: 'belum tersimpan' }).waitFor();
+  check('failed save retains the custom template draft', await page.getByLabel('Template kalimat', { exact: true }).inputValue() === id);
+  await page.evaluate(() => { window.fixture.failSettingsSave = false; }); await page.getByRole('button', { name: 'Simpan info dashboard' }).click(); await page.getByRole('status').filter({ hasText: 'tersimpan' }).waitFor();
+  check('save persists the category and sentence inside welcome settings', await page.evaluate(() => { const w = window.fixture.settings.dashboardInfoConfig.welcome; return w.templates.length === 1 && w.templates[0].category === 'motivation' && w.templateId === w.templates[0].id; }));
+  await page.evaluate(() => { location.hash = '#dashboard'; }); await page.locator('.dashboard-intro').waitFor(); check('users see the saved added sentence on their dashboard', await page.locator('.dashboard-intro').innerText() === 'Semangat bertugas, kita saling membantu.');
+  await page.evaluate(() => { location.hash = '#settings'; }); await page.getByText('Tambah & kelola template (1)', { exact: true }).click(); await page.getByRole('button', { name: 'Hapus template 1', exact: true }).click();
+  check('deleting the selected custom template safely restores the default', await page.getByLabel('Template kalimat', { exact: true }).inputValue() === 'general-smooth' && await page.getByLabel('Template kalimat', { exact: true }).locator('option').count() === 15);
+  check('mobile template editor does not overflow horizontally', await page.evaluate(() => document.documentElement.scrollWidth === innerWidth));
+  await page.evaluate(() => { window.fixture.user = { ...window.fixture.user, role: 'GURU' }; window.fixture.force(); }); await page.getByRole('button', { name: 'Simpan info dashboard' }).waitFor({ state: 'detached' });
+  check('teachers have no template editor and no operational records were created', await page.getByLabel('Isi template baru', { exact: true }).count() === 0 && await page.evaluate(() => window.fixture.writes.length === 0) && errors.length === 0);
+  console.log(`${count} added-template UI checks passed.`);
+} finally { if (browser) await browser.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); }

@@ -1,3 +1,4 @@
+import { LoginAppearanceSettingsCard } from './LoginAppearanceSettingsCard';
 import { BrandingSettingsCard } from './BrandingSettingsCard';
 import { appLogo } from '../../utils/reportBranding';
 import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
@@ -69,7 +70,7 @@ import { AnnouncementRecord } from '../../types/announcement.types';
 import { StudentTardySettingsCard } from './StudentTardySettingsCard';
 import { LessonPeriodSettingsCard } from './LessonPeriodSettingsCard';
 
-type SettingsTab = 'branding' | 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
+type SettingsTab = 'login_appearance' | 'branding' | 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
 const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
@@ -784,6 +785,7 @@ export const SettingsView: React.FC = () => {
           {isAdmin && <button type="button" onClick={() => setActiveTab('branding')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'branding' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><ImageIcon className="w-3.5 h-3.5"/>Logo & Kop Surat</button>}
           {isAdmin && <button onClick={() => setActiveTab('operational_reports')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'operational_reports' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><FileText className="w-3.5 h-3.5"/>Cetak & Buku Tamu</button>}
+          {isAdmin && <button type="button" onClick={() => setActiveTab('login_appearance')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'login_appearance' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><Palette className="w-3.5 h-3.5"/>Halaman Login</button>}
           {isAdmin && <button onClick={() => setActiveTab('dashboard_info')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'dashboard_info' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
             <Layers className="w-3.5 h-3.5" />Info Dashboard
@@ -2148,6 +2150,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB: PENGATURAN KETERLAMBATAN SISWA (ADMIN) */}
+      {activeTab === 'login_appearance' && isAdmin && <LoginAppearanceSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'branding' && isAdmin && <BrandingSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'operational_reports' && isAdmin && <OperationalReportSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'dashboard_info' && isAdmin && <DashboardInfoSettingsCard settings={settings} onSaved={setSettings} />}
