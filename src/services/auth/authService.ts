@@ -42,6 +42,10 @@ class AuthService {
   private initialized = false;
   private usersRequest: Promise<UserSummaryItem[]> | null = null;
   private currentFirebaseUser: User | null = null;
+  private usersVerified = false;
+  private usersUpdatedAt = 0;
+
+  public getUsersListStatus() { return { verified: this.usersVerified, updatedAt: this.usersUpdatedAt }; }
 
   constructor() {
     if (typeof window !== 'undefined' && auth) {
@@ -96,16 +100,17 @@ class AuthService {
   }
 
   private async fetchUsersList(): Promise<UserSummaryItem[]> {
+    this.usersVerified = false;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch('/api/auth/users-summary', { signal: controller.signal, priority: 'low' });
+      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'low' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
       if (data.success && Array.isArray(data.users)) {
-        this.usersList = data.users.map((u: any) => ({
+        this.usersList = data.users.filter((u: any) => u && typeof u.id === 'string' && u.id && u.isActive === true && typeof u.fullName === 'string').map((u: any) => ({
           id: u.id,
           userId: u.id,
           loginId: u.loginId || '',
@@ -116,6 +121,8 @@ class AuthService {
           isActive: u.isActive !== false,
           avatarUrl: u.avatarUrl,
         }));
+        this.usersVerified = true;
+        this.usersUpdatedAt = Date.now();
         return this.usersList;
       }
       return [];
@@ -131,11 +138,10 @@ class AuthService {
     }
   }
 
-  public async getUsersList(): Promise<UserSummaryItem[]> {
+  public async getUsersList(options: { forceRefresh?: boolean } = {}): Promise<UserSummaryItem[]> {
     await this.init();
-    if (this.usersList.length === 0) {
-      await this.refreshUsersList();
-    }
+    const age = Date.now() - this.usersUpdatedAt;
+    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 15000) return this.refreshUsersList();
     return this.usersList;
   }
 

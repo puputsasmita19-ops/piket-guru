@@ -11,7 +11,7 @@ const mocks={
  firebase:`export const auth={currentUser:null};`,
  sdk:`import{auth}from'firebase';const f=window.fixture;f.emitUser=(u)=>{auth.currentUser=u;for(const cb of [...f.authCallbacks])void cb(u)};export function onAuthStateChanged(a,cb){f.authSubscriptions++;f.authCallbacks.add(cb);queueMicrotask(()=>{if(f.authCallbacks.has(cb))void cb(auth.currentUser)});return()=>{f.authCallbacks.delete(cb);f.authUnsubscribes++}};export async function signOut(){f.signOuts++;f.emitUser(null)};export async function signInWithCustomToken(){const u=f.firebaseUser(f.loginUid);f.emitUser(u);return{user:u}};export class GoogleAuthProvider{setCustomParameters(){}};export async function signInWithPopup(){if(f.popupPromise)await f.popupPromise;if(f.popupError)throw Object.assign(Error(f.popupError),{code:f.popupError});const u=f.firebaseUser(f.loginUid);f.emitUser(u);return{user:u}};`,
  store:`const f=window.fixture;export class FirestoreService{static async getByIdStrict(c,id){f.strictReads++;if(f.deferProfile[id])return f.deferProfile[id];if(f.readError)throw Object.assign(Error(f.readError),{code:f.readError});return f.profiles[id]||null}static subscribeToDocument(c,id,cb){f.profileSubscriptions++;f.profileCallbacks.set(id,cb);queueMicrotask(()=>{if(f.profileSubscriptions<8&&f.profileCallbacks.get(id)===cb)cb(f.profiles[id]||null)});return()=>{f.profileUnsubscribes++;if(f.profileCallbacks.get(id)===cb)f.profileCallbacks.delete(id)}}}`,
- offline:`const f=window.fixture;export const OfflineStorage={isTrustedDevice:()=>true,setTrustedDevice(){},teardownActiveListeners(){f.teardowns++},clearDisplayCacheOnly:async()=>{},getPendingCount:async()=>({total:f.pending,syncQueueCount:f.pending,draftsCount:0}),purgeUserData:async()=>{f.purges++},getVerifiedProfile:async id=>f.verified[id]||null,saveVerifiedProfile:async p=>{f.verified[p.id]=p}};`,
+ offline:`const f=window.fixture;export const OfflineStorage={isTrustedDevice:()=>f.trusted!==false,setTrustedDevice(v){f.trusted=v},teardownActiveListeners(){f.teardowns++},clearDisplayCacheOnly:async()=>{},getPendingCount:async()=>({total:f.pending,syncQueueCount:f.pending,draftsCount:0}),purgeUserData:async()=>{f.purges++},getVerifiedProfile:async id=>f.verified[id]||null,saveVerifiedProfile:async p=>{f.verified[p.id]=p}};`,
  queue:`export const SyncQueueService={cancelSync(){},refreshStatus:async()=>{},triggerSync:async()=>{window.fixture.syncs++}};`,
  bootstrap:`export const preloadAuthenticatedShell=()=>{};`,
  audit:`export const AuditService={log:async()=>{},recordLogin:async()=>{},recordLogout:async()=>{},recordLoginFailure:async()=>{}};`,
@@ -24,7 +24,7 @@ const profile=id=>({id,fullName:'Test '+id,role:'GURU',permissions:['dashboard.v
 function setup(){
  const f={authCallbacks:new Set(),authSubscriptions:0,authUnsubscribes:0,strictReads:0,profileSubscriptions:0,profileUnsubscribes:0,profileCallbacks:new Map(),profiles:{teacher:profile('teacher'),other:profile('other')},deferProfile:{},verified:{},signOuts:0,teardowns:0,purges:0,pending:0,syncs:0,loginUid:'teacher',requests:[],popupPromise:null,popupError:null,readError:null,
  firebaseUser:id=>({uid:id,email:id+'@example.invalid',getIdTokenResult:async()=>({authTime:'2026-10-16T00:00:00Z',claims:{}})})};
- const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'https://test.invalid',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){w.fixture=f;w.fetch=async(url)=>{f.requests.push(url);assert.equal(url,'/api/auth/login');return{ok:true,json:async()=>({success:true,customToken:'TEST_TOKEN',user:f.profiles[f.loginUid]})}}}});
+ const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'https://test.invalid',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){w.fixture=f;w.fetch=async(url)=>{f.requests.push(url);assert.equal(url,'/api/auth/login');return{ok:f.loginOk!==false,json:async()=>f.loginOk===false?({success:false,error:'PIN salah.'}):({success:true,customToken:'TEST_TOKEN',user:f.profiles[f.loginUid]})}}}});
  const win=dom.window;win.console.error=()=>{};win.console.warn=()=>{};win.eval(result.outputFiles[0].text);
  const ui=within(win.document.body);const wait=cb=>waitFor(cb,{container:win.document.body});
  return {f,win,ui,wait,close:()=>{win.unmount();win.close()}};
@@ -61,5 +61,21 @@ await check('guide remains manually usable when sessionStorage is blocked',async
 });
 await check('feature render error has a readable fallback and resets when the page changes',async({win,ui,wait})=>{
  win.renderBoundary('broken',true);await ui.findByRole('alert');win.renderBoundary('dashboard',false);await ui.findByText('Dashboard ready');
+});
+const preference = win => { const key = Object.keys(win.localStorage).find(k => k.startsWith('piket_last_login_v1:')); return key ? JSON.parse(win.localStorage.getItem(key)) : null; };
+await check('successful PIN login remembers only verified UID, and logout keeps this display preference', async({f,win,ui,wait})=>{
+ await win.testAuth.loginWithPin('teacher','123456'); await wait(()=>assert.equal(ui.getByTestId('user').textContent,'teacher'));
+ assert.equal(preference(win).uid,'teacher'); assert.deepEqual(Object.keys(preference(win)).sort(),['uid','updatedAt','version']);
+ await win.testAuth.logout(); await wait(()=>assert.equal(ui.getByTestId('user').textContent,'signed-out')); assert.equal(preference(win).uid,'teacher');
+});
+await check('wrong PIN and cancelled Google login cannot overwrite last successful account', async({f,win,ui,wait})=>{
+ await win.testAuth.loginWithPin('teacher','123456'); await win.testAuth.logout(); f.loginOk=false;
+ assert.equal((await win.testAuth.loginWithPin('other','000000')).success,false); assert.equal(preference(win).uid,'teacher');
+ f.popupError='auth/popup-closed-by-user'; assert.equal((await win.testAuth.loginWithGoogle()).success,false); assert.equal(preference(win).uid,'teacher');
+});
+await check('verified Google login updates the preference and switching to a shared device removes it', async({f,win,ui,wait})=>{
+ f.loginUid='other'; assert.equal((await win.testAuth.loginWithGoogle()).success,true); await wait(()=>assert.equal(ui.getByTestId('user').textContent,'other')); assert.equal(preference(win).uid,'other');
+ win.testAuth.setTrustedDevice(false); await wait(()=>assert.equal(win.testAuth.isTrustedDevice,false)); assert.equal(preference(win),null);
+ await win.testAuth.logout(); assert.equal((await win.testAuth.loginWithPin('other','123456')).success,true); assert.equal(preference(win),null);
 });
 console.log(`${passed} actual React provider/guide/error-boundary DOM flows passed. Firebase IO was mocked.`);

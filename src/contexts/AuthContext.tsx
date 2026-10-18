@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { authService } from '../services/auth/authService';
+import { LastLoginPreference } from '../services/auth/lastLoginPreference';
 import { auth } from '../services/firebase/firebaseAuth';
 import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
@@ -67,8 +68,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setTrustedDevice = useCallback((trusted: boolean) => {
     OfflineStorage.setTrustedDevice(trusted);
+    if (!trusted) LastLoginPreference.forget();
     setIsTrustedDeviceState(trusted);
   }, []);
+
+  useEffect(() => {
+    const updateTrust = (e: StorageEvent) => {
+      if (e.key === 'piket_device_trusted_v2' || e.key === null) setIsTrustedDeviceState(OfflineStorage.isTrustedDevice());
+    };
+    window.addEventListener('storage', updateTrust);
+    return () => window.removeEventListener('storage', updateTrust);
+  }, []);
+
+  useEffect(() => { if (!isTrustedDeviceState) LastLoginPreference.forget(false); }, [isTrustedDeviceState]);
 
   // State for pending unsynced offline data modal confirmation on logout
   const [pendingLogoutPrompt, setPendingLogoutPrompt] = useState<{
@@ -340,6 +352,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (res.success && res.user) {
+        LastLoginPreference.remember(res.user, OfflineStorage.isTrustedDevice());
         setCurrentUser(res.user);
         setIsOfflineSession(false);
         setIsLoading(false);
@@ -397,6 +410,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: valRes.error || 'Akun Google ini tidak terdaftar atau belum diaktifkan dalam database sekolah.',
         };
       }
+      LastLoginPreference.remember(valRes.profile, OfflineStorage.isTrustedDevice());
       setCurrentUser(valRes.profile);
       setIsOfflineSession(!!valRes.isOfflineSession);
       setIsLoading(false);

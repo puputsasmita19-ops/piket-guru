@@ -803,16 +803,7 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     }
 
     // 3. Reset rate limiter on success for canonical userId and all known aliases
-    await AuthRateLimiter.recordLoginSuccess(userId, ip);
-    if (rawIdentifier !== userId) {
-      await AuthRateLimiter.recordLoginSuccess(rawIdentifier, ip);
-    }
-    if (userData.loginId) {
-      await AuthRateLimiter.recordLoginSuccess(userData.loginId, ip);
-    }
-    if (userData.nip) {
-      await AuthRateLimiter.recordLoginSuccess(userData.nip, ip);
-    }
+    await AuthRateLimiter.recordLoginSuccessForIdentifiers([userId, rawIdentifier, userData.loginId, userData.nip], ip);
 
     if (isRequestAborted(req)) {
       if (!res.headersSent) {

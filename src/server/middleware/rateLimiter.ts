@@ -1277,6 +1277,15 @@ export class AuthRateLimiter {
     }
   }
 
+  /** Clear each verified account alias once, then inspect the shared IP bucket once. */
+  public static async recordLoginSuccessForIdentifiers(identifiers: string[], ip: string): Promise<void> {
+    const keys = new Set(identifiers.filter(id => typeof id === 'string' && id.trim()).map(toAccountIdKey));
+    await Promise.all([...keys].map(key => activeStoreDriver.reset(key)));
+    const ipKey = toIpKey(ip);
+    const ipLock = await activeStoreDriver.isLocked(ipKey);
+    if (!ipLock.locked) await activeStoreDriver.reset(ipKey);
+  }
+
   public static async recordActionSuccess(actionName: string, targetId: string, ip: string): Promise<void> {
     const actKey = toActionKey(actionName, targetId);
     const idKey = toAccountIdKey(targetId);

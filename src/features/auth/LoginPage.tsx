@@ -1,9 +1,10 @@
+import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
 import { LoginCredit } from './LoginCredit';
 import { sanitizeLoginAppearance } from '../../types/loginAppearance.types';
 import { AppClock } from '../../components/common/AppClock';
 import { appLogo } from '../../utils/reportBranding';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Lock,
   Delete,
@@ -50,6 +51,14 @@ export const LoginPage: React.FC = () => {
     pastelThemesList,
   } = useTheme();
 
+  const trustedRef = useRef(isTrustedDevice); trustedRef.current = isTrustedDevice;
+  const selectedUidRef = useRef<string | null>(null);
+  const selectionTouchedRef = useRef(false);
+  const loginBusyRef = useRef(false);
+  const mountedRef = useRef(false);
+  const usersLoadedRef = useRef(false);
+  const lastListActivityRef = useRef(0);
+
   const [showThemePicker, setShowThemePicker] = useState<boolean>(false);
   const [usersList, setUsersList] = useState<UserSummaryItem[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(true);
@@ -61,6 +70,7 @@ export const LoginPage: React.FC = () => {
   const [hasError, setHasError] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState<boolean>(false);
+  loginBusyRef.current = isSubmitting || isGoogleSubmitting;
   const isLoginSlow = useSlowOperation(isSubmitting);
   const [isContactAdminModalOpen, setIsContactAdminModalOpen] = useState<boolean>(false);
 
@@ -107,25 +117,55 @@ export const LoginPage: React.FC = () => {
       });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchUsers = async () => {
-      setIsLoadingUsers(true);
-      try {
-        const users = await authService.getUsersList();
-        if (cancelled) return;
-        setUsersList(users);
-        if (users.length > 0) {
-          // Preserve an ID typed while the user list was still loading.
-          setSelectedIdentifier((previous) => previous || users[0].loginId || users[0].nip || users[0].id);
-        }
-      } finally {
-        if (!cancelled) setIsLoadingUsers(false);
+  const refreshLoginUsers = useCallback(async (forceRefresh = false) => {
+    if (!mountedRef.current || loginBusyRef.current) return;
+    if (!usersLoadedRef.current) setIsLoadingUsers(true);
+    try {
+      const users = await authService.getUsersList({ forceRefresh });
+      if (!mountedRef.current || loginBusyRef.current) return;
+      // A failed request must not erase the remembered UID or pretend the account was deleted.
+      if (authService.getUsersListStatus?.().verified === false) return;
+      const active = users.filter(u => u.isActive === true);
+      usersLoadedRef.current = true;
+      setUsersList(active);
+      const uid = selectedUidRef.current || (!selectionTouchedRef.current ? LastLoginPreference.read(trustedRef.current) : null);
+      if (!uid) {
+        if (!selectionTouchedRef.current) setSelectedIdentifier('');
+        return;
       }
-    };
-    fetchUsers();
-    return () => { cancelled = true; };
+      const user = active.find(u => u.id === uid);
+      if (user) {
+        selectedUidRef.current = user.id;
+        setSelectedIdentifier(user.loginId || user.nip || user.id);
+      } else {
+        selectedUidRef.current = null;
+        setSelectedIdentifier(''); setPin('');
+        if (LastLoginPreference.read(trustedRef.current) === uid) LastLoginPreference.forget(false);
+      }
+    } catch { /* Manual login stays available while user summaries are unavailable. */ }
+    finally { if (mountedRef.current) setIsLoadingUsers(false); }
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void refreshLoginUsers(true);
+    const visible = () => { if (!document.hidden) void refreshLoginUsers(); };
+    const online = () => { void refreshLoginUsers(true); };
+    const preference = LastLoginPreference.subscribe(() => {
+      if (!selectionTouchedRef.current && !loginBusyRef.current) { selectedUidRef.current = null; void refreshLoginUsers(true); }
+    });
+    window.addEventListener('focus', visible); document.addEventListener('visibilitychange', visible); window.addEventListener('online', online);
+    return () => { mountedRef.current = false; preference(); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', online); };
+  }, [refreshLoginUsers]);
+
+  useEffect(() => {
+    if (!isComboboxOpen) return;
+    lastListActivityRef.current = Date.now();
+    void refreshLoginUsers();
+    // Refresh only while the list is being viewed; no continuous polling on idle login screens.
+    const timer = window.setInterval(() => { if (!document.hidden && Date.now() - lastListActivityRef.current < 120000) void refreshLoginUsers(); }, 30000);
+    return () => window.clearInterval(timer);
+  }, [isComboboxOpen, refreshLoginUsers]);
 
   // Filter users by search query (case-insensitive & trimmed)
   const filteredUsers = useMemo(() => {
@@ -201,6 +241,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const handlePinInput = (num: string) => {
+    selectionTouchedRef.current = true;
     if (pin.length < 6) {
       setPin((prev) => prev + num);
       if (errorMessage) {
@@ -227,6 +268,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleSelectUser = (user: UserSummaryItem) => {
+    selectionTouchedRef.current = true; selectedUidRef.current = user.id;
     const identifier = user.loginId || user.nip || user.id;
     setSelectedIdentifier(identifier);
     setPin('');
@@ -236,6 +278,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleComboboxKeyDown = (e: React.KeyboardEvent) => {
+    lastListActivityRef.current = Date.now();
     if (!isComboboxOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -285,7 +328,7 @@ export const LoginPage: React.FC = () => {
     setErrorMessage('');
     setHasError(false);
     try {
-      const res = await loginWithPin(selectedIdentifier, pin);
+      const res = await loginWithPin(selectedUidRef.current || selectedIdentifier, pin);
       if (!res.success) {
         const rawErr = (res.error || '').trim();
         let displayMsg = 'PIN salah. Silakan coba lagi.';
@@ -419,13 +462,14 @@ export const LoginPage: React.FC = () => {
     }
   }, [showThemePicker, isContactAdminModalOpen]);
 
-  const selectedUser = usersList.find(
+  const selectedMatches = selectedIdentifier.trim() ? usersList.filter(
     (u) =>
       (u.loginId && u.loginId === selectedIdentifier) ||
-      u.nip === selectedIdentifier ||
+      (u.nip && u.nip === selectedIdentifier) ||
       u.id === selectedIdentifier ||
       u.userId === selectedIdentifier
-  );
+  ) : [];
+  const selectedUser = selectedUidRef.current ? usersList.find(u => u.id === selectedUidRef.current) : selectedMatches.length === 1 ? selectedMatches[0] : undefined;
 
   const supportContact = schoolSettings.loginSupportContact || DEFAULT_LOGIN_SUPPORT_CONTACT;
 
@@ -682,6 +726,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  selectionTouchedRef.current = true;
                   setIsManualInput(!isManualInput);
                   setIsComboboxOpen(false);
                 }}
@@ -698,6 +743,8 @@ export const LoginPage: React.FC = () => {
                 type="text"
                 value={selectedIdentifier}
                 onChange={(e) => {
+                  selectionTouchedRef.current = true; selectedUidRef.current = null;
+                  setIsManualInput(true);
                   setSelectedIdentifier(e.target.value);
                   setPin('');
                   setErrorMessage('');
@@ -753,7 +800,7 @@ export const LoginPage: React.FC = () => {
                         ref={searchInputRef}
                         type="text"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => { lastListActivityRef.current = Date.now(); setSearchQuery(e.target.value); }}
                         onKeyDown={handleComboboxKeyDown}
                         placeholder="Cari nama atau ID login..."
                         className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-[var(--theme-input-bg)] border border-slate-200 dark:border-[var(--theme-card-border)] rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
@@ -791,7 +838,7 @@ export const LoginPage: React.FC = () => {
                     ) : (
                       filteredUsers.map((u, idx) => {
                         const identifierValue = u.loginId || u.nip || u.id;
-                        const isSelected = selectedIdentifier === identifierValue;
+                        const isSelected = selectedUidRef.current ? selectedUidRef.current === u.id : selectedIdentifier === identifierValue;
                         const isHighlighted = highlightedIndex === idx;
 
                         return (
@@ -869,6 +916,7 @@ export const LoginPage: React.FC = () => {
                 maxLength={6}
                 value={pin}
                 onChange={(e) => {
+                  selectionTouchedRef.current = true;
                   const val = e.target.value.replace(/\D/g, '').slice(0, 6);
                   setPin(val);
                   if (errorMessage) {
@@ -991,7 +1039,7 @@ export const LoginPage: React.FC = () => {
           <label htmlFor="trusted-device-checkbox" className="text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
             <span className="font-semibold text-slate-800 dark:text-slate-200">Perangkat Pribadi / Tepercaya</span>
             <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Simpan draf di perangkat ini. Jangan aktifkan pada perangkat bersama.
+              Ingat akun & simpan draf. Jangan aktifkan pada perangkat bersama.
             </span>
           </label>
         </div>
