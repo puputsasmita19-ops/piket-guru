@@ -75,6 +75,7 @@ export const LoginPage: React.FC = () => {
   const themePickerRef = useRef<HTMLDivElement>(null);
 
   // Dynamic School & App Branding Settings
+  const [publicAppearanceReady, setPublicAppearanceReady] = useState(false);
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
     try {
       const cached = localStorage.getItem('piket_guru_school_config');
@@ -92,7 +93,8 @@ export const LoginPage: React.FC = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.config) {
-          setSchoolSettings((prev) => ({ ...prev, ...data.config }));
+          setSchoolSettings((prev) => ({ ...prev, ...data.config, loginAppearance: sanitizeLoginAppearance(data.config.loginAppearance) }));
+          setPublicAppearanceReady(true);
           try {
             localStorage.setItem('piket_guru_school_config', JSON.stringify(data.config));
           } catch {
@@ -504,7 +506,7 @@ export const LoginPage: React.FC = () => {
         backgroundColor: 'var(--theme-bg-app)',
       }}
     >
-      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop config={schoolSettings.loginAppearance} /></div>
+      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop config={publicAppearanceReady ? schoolSettings.loginAppearance : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' }} /></div>
       {/* Main App Card */}
       <div className="login-card relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
         {/* Integrated Theme Settings Button & Popover */}

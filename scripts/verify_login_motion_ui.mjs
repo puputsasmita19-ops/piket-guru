@@ -11,7 +11,7 @@ try {
   browser = await pw.launch({ executablePath: await chromium.executablePath(), args: chromium.args, headless: true });
   const ctx = await browser.newContext({ hasTouch: true }), page = await ctx.newPage(), errors = []; page.setDefaultTimeout(12000);
   page.on('pageerror', e => errors.push(e.message));
-  let config = {}, videoRequests = 0, videoAfterLogin = true;
+  let config = { mediaPolicy: 'always', background: 'ocean' }, videoRequests = 0, videoAfterLogin = true;
   await page.route('**/*', async r => { const u = new URL(r.request().url()); if (u.hostname !== '127.0.0.1') return r.abort(); if (u.pathname === '/login-ocean.mp4') { videoRequests++; videoAfterLogin &&= await page.getByRole('button', { name: 'Masuk Sekarang', exact: true }).count() === 1; } return r.continue(); });
   await page.route('**/api/auth/public-config', r => r.fulfill({ json: { success: true, config: { appCreator: 'Tim Pengembang Sistem Piket untuk Seluruh Warga Sekolah', loginAppearance: config } } }));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -35,7 +35,7 @@ try {
   await credit.click(); check('tap pauses the credit', await track.evaluate(e => getComputedStyle(e).animationPlayState === 'paused')); await credit.click(); check('tap resumes the credit on touch devices', await track.evaluate(e => getComputedStyle(e).animationPlayState === 'running'));
   await page.getByRole('button', { name: 'Hubungi Admin', exact: true }).click(); await page.getByRole('dialog', { name: 'Hubungi Admin' }).waitFor(); check('small help icon retains its existing contact action', true); await page.getByRole('button', { name: 'Tutup dialog' }).click();
   await page.goto(origin + '/?loginSettings#settings'); await page.getByRole('switch', { name: 'Aktifkan motion background', exact: true }).waitFor();
-  await page.getByLabel('Jenis latar login', { exact: true }).selectOption('gradient'); await page.getByLabel('Kecepatan latar', { exact: true }).selectOption('fast'); await page.getByRole('switch', { name: 'Teks pengembang berjalan', exact: true }).uncheck();
+  await page.getByLabel('Pemakaian data latar', { exact: true }).selectOption('always'); await page.getByLabel('Jenis latar login', { exact: true }).selectOption('gradient'); await page.getByLabel('Kecepatan latar', { exact: true }).selectOption('fast'); await page.getByRole('switch', { name: 'Teks pengembang berjalan', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Simpan tampilan login' }).click(); await page.getByRole('status').filter({ hasText: 'Tampilan login tersimpan' }).waitFor();
   config = await page.evaluate(() => window.fixture.settings.loginAppearance);
   check('admin saves background, speed and running-text choices', config.background === 'gradient' && config.speed === 'fast' && config.runningCredit === false);
@@ -43,7 +43,7 @@ try {
   config = { motionEnabled: false, runningCredit: true }; await page.reload(); await page.locator('.login-footer').waitFor(); check('motion OFF leaves a working plain login', await page.locator('.login-motion-backdrop').count() === 0 && await page.getByRole('button', { name: 'Masuk Sekarang', exact: true }).isVisible());
   const quiet = await ctx.newPage(); const quietRequests = []; await quiet.emulateMedia({ reducedMotion: 'reduce' });
   await quiet.route('**/*', r => { if (r.request().url().includes('/login-ocean.mp4')) quietRequests.push(r.request().url()); return new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort(); });
-  await quiet.route('**/api/auth/public-config', r => r.fulfill({ json: { success: true, config: { loginAppearance: { motionEnabled: true, background: 'ocean', runningCredit: true } } } }));
+  await quiet.route('**/api/auth/public-config', r => r.fulfill({ json: { success: true, config: { loginAppearance: { motionEnabled: true, background: 'ocean', mediaPolicy: 'always', runningCredit: true } } } }));
   await quiet.goto(origin + '/?quiet#login-ui'); await quiet.locator('.login-credit-track').waitFor(); await quiet.waitForTimeout(800);
   check('reduced motion downloads no video and shows static readable credit', quietRequests.length === 0 && await quiet.locator('.login-credit-track').evaluate(e => getComputedStyle(e).animationName === 'none' && getComputedStyle(e.children[1]).display === 'none'));
   await quiet.addInitScript(() => { Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true, addEventListener() {}, removeEventListener() {} } }); });

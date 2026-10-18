@@ -31,7 +31,7 @@ check('dashboard configuration save is audited', () => assert.equal(f.audits.at(
 await service.saveDashboardInfoSettings(sanitize({ intervalMs: 60000 }), 'admin');
 check('long interval is retained by the actual settings service', () => assert.equal(f.state.dashboardInfoConfig.intervalMs, 60000));
 await service.saveLoginAppearanceSettings({ motionEnabled: false, background: 'gradient', speed: 'fast', intensity: 'clear', runningCredit: false, creditDuration: 45, secret: 'DROP_ME' }, 'admin');
-check('login appearance writes only its own sanitized public fields', () => { assert.deepEqual(Object.keys(f.writes.at(-1)).sort(), ['loginAppearance', 'updatedAt']); assert.equal(f.state.loginAppearance.motionEnabled, false); assert.equal(f.state.loginAppearance.creditDuration, 45); assert.equal(Object.keys(f.state.loginAppearance).length, 6); assert.equal(f.state.loginAppearance.secret, undefined); });
+check('login appearance writes only its own sanitized public fields', () => { assert.deepEqual(Object.keys(f.writes.at(-1)).sort(), ['loginAppearance', 'updatedAt']); assert.equal(f.state.loginAppearance.motionEnabled, false); assert.equal(f.state.loginAppearance.creditDuration, 45); assert.equal(Object.keys(f.state.loginAppearance).length, 7); assert.equal(f.state.loginAppearance.secret, undefined); });
 const latestLogin = JSON.stringify(f.state.loginAppearance);
 const latest = JSON.stringify(f.state.dashboardInfoConfig);
 await service.saveProfile({ ...f.state, schoolName: 'Sekolah Diperbarui', schoolLat: 0, loginAppearance: { motionEnabled: true }, dashboardInfoConfig: { enabled: false } }, 'admin');
