@@ -78,7 +78,7 @@ export const IncidentPreview: React.FC = () => {
   useEffect(() => {
     setIncidents([]); setHistoryError('');
     if (history.range.error) return;
-    return FirestoreService.subscribeToCollection<IncidentRecord>('incidents', data => setIncidents([...data].sort((a,b) => b.tanggal.localeCompare(a.tanggal))), error => setHistoryError(error.message), history.constraints);
+    return FirestoreService.subscribeToCollection<IncidentRecord>('incidents', data => setIncidents([...data].sort((a,b) => b.tanggal.localeCompare(a.tanggal))), error => setHistoryError(error.message), history.constraints, { cacheKey: history.key });
   }, [history.constraints, history.range.error]);
 
   // Save / Update

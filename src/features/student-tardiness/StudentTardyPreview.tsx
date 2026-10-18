@@ -98,7 +98,7 @@ export const StudentTardyPreview: React.FC = () => {
     if (history.range.error) return;
     return FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', data => {
       setTardyList([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
-    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints, { cacheKey: history.key });
   }, [history.constraints, history.range.error]);
 
   // Check if user has permission to edit a specific tardy record

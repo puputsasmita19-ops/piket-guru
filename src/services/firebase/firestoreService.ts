@@ -1,3 +1,4 @@
+import { sharedLiveSource } from './sharedLiveSource';
 import { operationalEventFromAudit } from '../../types/notification.types';
 import {
   collection,
@@ -9,6 +10,7 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  queryEqual,
   where,
   orderBy,
   limit,
@@ -110,6 +112,8 @@ export function sanitizeFirestorePayload<T>(value: T): T {
 export interface QueryDataOptions {
   /** If true (default), returns only operational / production records. Set to false to include seed records. */
   operationalOnly?: boolean;
+  /** Explicit identity for a bounded offline view; never reuse a collection-wide cache. */
+  cacheKey?: string;
 }
 
 export class FirestoreService {
@@ -143,6 +147,7 @@ export class FirestoreService {
     options: QueryDataOptions = { operationalOnly: true }
   ): Promise<T[]> {
     const currentUid = auth?.currentUser?.uid || 'guest';
+    const cacheName = constraints.length ? options.cacheKey ? `${collectionName}:query:${options.cacheKey}` : null : collectionName;
     try {
       const colRef = collection(db, collectionName);
       const q = query(colRef, ...constraints);
@@ -150,7 +155,7 @@ export class FirestoreService {
       const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
 
       // Update scoped cache for current user account
-      OfflineStorage.setScopedCache(currentUid, collectionName, items).catch(() => {});
+      if (cacheName) OfflineStorage.setScopedCache(currentUid, cacheName, items).catch(() => {});
 
       if (options.operationalOnly !== false) {
         return items.filter(isOperationalRecord);
@@ -159,7 +164,8 @@ export class FirestoreService {
     } catch (err) {
       console.error(`Error fetching collection ${collectionName}:`, err);
       // Fallback to isolated scoped cache for current user if network is offline
-      const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
+      if (!cacheName || !/unavailable|deadline-exceeded|offline|network|Failed to fetch/i.test(`${(err as any)?.code || ''} ${(err as any)?.message || ''}`)) throw err;
+      const cached = await OfflineStorage.getScopedCache<T>(currentUid, cacheName);
       if (cached && Array.isArray(cached.data)) {
         if (options.operationalOnly !== false) {
           return cached.data.filter(isOperationalRecord);
@@ -223,6 +229,7 @@ export class FirestoreService {
     } catch (err: any) {
       console.error(`Error in getPaginated for ${collectionName}:`, err);
       // Fallback for offline cached records
+      if (constraints.length || lastDocCursor || !/unavailable|deadline-exceeded|offline|network|Failed to fetch/i.test(`${err?.code || ''} ${err?.message || ''}`)) throw err;
       const currentUid = auth?.currentUser?.uid || 'guest';
       const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
       if (cached && Array.isArray(cached.data)) {
@@ -270,51 +277,25 @@ export class FirestoreService {
     constraints: QueryConstraint[] = [],
     options: QueryDataOptions = { operationalOnly: true }
   ): Unsubscribe {
-    const currentUid = auth?.currentUser?.uid || 'guest';
-    const colRef = collection(db, collectionName);
-    const q = query(colRef, ...constraints);
-
-    // Load cached data right away for instant offline rendering
-    OfflineStorage.getScopedCache<T>(currentUid, collectionName).then((cached) => {
-      if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
-        if (options.operationalOnly !== false) {
-          onData(cached.data.filter(isOperationalRecord));
-        } else {
-          onData(cached.data);
-        }
-      }
-    }).catch(() => {});
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
-        // Cache full snapshot to scoped cache
-        OfflineStorage.setScopedCache(currentUid, collectionName, items).catch(() => {});
-
-        if (options.operationalOnly !== false) {
-          onData(items.filter(isOperationalRecord));
-        } else {
-          onData(items);
-        }
-      },
-      async (error) => {
-        console.warn(`Snapshot listener warning for ${collectionName}:`, error);
-        // Fallback to scoped cache on offline listener interruption
-        const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
-        if (cached && Array.isArray(cached.data)) {
-          if (options.operationalOnly !== false) {
-            onData(cached.data.filter(isOperationalRecord));
-          } else {
-            onData(cached.data);
-          }
-        }
-        if (onError) onError(error);
-      }
-    );
-
-    // Register active listener with unified teardown manager
-    return OfflineStorage.registerListener(unsubscribe);
+    const uid = auth?.currentUser?.uid || 'guest', q = query(collection(db, collectionName), ...constraints);
+    const cacheName = constraints.length ? options.cacheKey ? `${collectionName}:query:${options.cacheKey}` : null : collectionName;
+    const stop = sharedLiveSource<typeof q, T[]>(`${uid}:collection:${collectionName}:${cacheName || 'no-cache'}`, q, (a, b) => queryEqual(a, b), (next, fail) => {
+      let active = true, received = false;
+      // Only an exact view cache may seed the UI. A late cache read must not
+      // overwrite a newer snapshot or deliver data after account teardown.
+      if (cacheName) void OfflineStorage.getScopedCache<T>(uid, cacheName).then(cached => {
+        if (active && !received && (auth?.currentUser?.uid || 'guest') === uid && cached) next(cached.data);
+      }).catch(() => {});
+      const unsubscribe = onSnapshot(q, snapshot => {
+        if (!active || (auth?.currentUser?.uid || 'guest') !== uid) return;
+        received = true;
+        const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as unknown as T));
+        if (cacheName) void OfflineStorage.setScopedCache(uid, cacheName, items).catch(() => {});
+        next(items);
+      }, error => { if (active) { received = true; fail(error); } });
+      return () => { active = false; unsubscribe(); };
+    }, items => onData(options.operationalOnly !== false ? items.filter(isOperationalRecord) : [...items]), onError);
+    return OfflineStorage.registerListener(stop);
   }
 
   /**
@@ -447,22 +428,15 @@ export class FirestoreService {
     onData: (data: T | null) => void,
     onError?: (err: Error) => void
   ): Unsubscribe {
-    const docRef = doc(db, collectionName, id);
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          onData({ id: snapshot.id, ...snapshot.data() } as unknown as T);
-        } else {
-          onData(null);
-        }
-      },
-      (error) => {
-        console.warn(`Doc listener warning for ${collectionName}/${id}:`, error);
-        if (onError) onError(error);
-      }
-    );
-    return OfflineStorage.registerListener(unsubscribe);
+    const uid = auth?.currentUser?.uid || 'guest', path = `${collectionName}/${id}`;
+    const stop = sharedLiveSource(`${uid}:document`, path, (a, b) => a === b, (next, fail) => {
+      let active = true;
+      const unsubscribe = onSnapshot(doc(db, collectionName, id), snapshot => {
+        if (active && (auth?.currentUser?.uid || 'guest') === uid) next(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } as unknown as T : null);
+      }, error => { if (active) fail(error); });
+      return () => { active = false; unsubscribe(); };
+    }, onData, onError);
+    return OfflineStorage.registerListener(stop);
   }
 
   /**

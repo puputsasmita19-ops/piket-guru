@@ -1,3 +1,4 @@
+import { useWibToday } from '../../hooks/useWibToday';
 import { DashboardStatistics, type DashboardStatistic } from './DashboardStatistics';
 import { buildDailyStatisticSeries } from './dashboardStatisticSeries';
 import { DashboardFlashInfo, type DashboardFlashSlide } from './DashboardFlashInfo';
@@ -118,8 +119,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       document.getElementById('personal-duty-details')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
     });
   };
-  const todayName = getCurrentDayName();
-  const todayISO = getTodayISODate();
+  const todayISO = useWibToday();
+  const todayName = getCurrentDayName(todayISO);
 
   useEffect(() => {
     AnnouncementService.bootstrapIfEmpty();
@@ -138,19 +139,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       'attendance',
       setAttendance,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
       'dutyBooks',
       setDutyBooks,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
       'incidents',
       setIncidents,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>(
       'announcements',
@@ -159,31 +160,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         setIsLoadingAnnouncements(false);
       },
       undefined,
-      [where('isActive', '==', true)]
+      [where('isActive', '==', true)], { cacheKey: 'active' }
     );
     const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
       'studentTardiness',
       setStudentTardiness,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
       'studentPermits',
       setStudentPermits,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
       'substitutions',
       setSubstitutions,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
     const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
       'visitors',
       setVisitors,
       undefined,
-      [where('tanggal', '==', todayISO)]
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
 
     return () => {
@@ -200,7 +201,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       unsubSubs();
       unsubVisitors();
     };
-  }, []);
+  }, [todayISO]);
 
   // Today's schedules & operational items
   const todaySchedules = schedules.filter((s) => s.hari === todayName);

@@ -81,6 +81,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logoutInProgressRef.current = true;
     const logoutEpoch = ++sessionEpochRef.current;
     const currentUser = currentUserRef.current;
+    SyncQueueService.cancelSync();
+    if (currentUser) await import('../services/offline/draftService').then(m => m.DraftService.flushPending(currentUser.id)).catch(() => {});
 
     if (currentUser) {
       if (options?.reason === 'INACTIVITY_TIMEOUT') {
@@ -126,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentUser = currentUserRef.current;
     if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED' && options?.reason !== 'SESSION_INVALID') {
       try {
+        await import('../services/offline/draftService').then(m => m.DraftService.flushPending(currentUser.id));
         const counts = await OfflineStorage.getPendingCount(currentUser.id);
         if (counts.total > 0) {
           setPendingLogoutPrompt({ counts, options });

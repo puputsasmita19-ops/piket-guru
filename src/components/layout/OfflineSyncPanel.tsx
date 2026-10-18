@@ -205,13 +205,23 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => setTrustedDevice(!isTrustedDevice)}
+              onClick={async () => {
+                if (isTrustedDevice && (await OfflineStorage.getPendingCount(currentUser.id)).total > 0) {
+                  setFeedback('Selesaikan antrean dan draf sebelum beralih ke perangkat publik.'); return;
+                }
+                setTrustedDevice(!isTrustedDevice);
+                if (!isTrustedDevice) {
+                  try { await OfflineStorage.persistMemoryWork(); setFeedback('Perangkat pribadi aktif. Antrean tersimpan di HP ini.'); }
+                  catch { setFeedback('Penyimpanan perangkat belum tersedia. Jangan tutup tab sebelum data terkirim.'); }
+                }
+              }}
               className="text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:underline cursor-pointer shrink-0 ml-2"
             >
               [Ubah]
             </button>
           </div>
 
+          {!isTrustedDevice && <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-200 px-1">Mode publik menyimpan antrean sementara. Untuk mempertahankan data setelah tab ditutup, gunakan mode Pribadi pada HP milik sendiri sebelum mulai bekerja.</p>}
           <div className="flex items-center justify-between py-1 px-1 text-[11px]">
             <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
               <Database className="w-3.5 h-3.5 text-slate-400 shrink-0" />

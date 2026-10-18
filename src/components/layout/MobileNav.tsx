@@ -80,8 +80,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
               <span
                 className={`module-mobile-label text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
                   isActive
-                    ? 'font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
-                    : 'font-medium text-slate-600 dark:text-slate-400'
+                    ? 'font-normal text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
+                    : 'font-normal text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {item.label}
@@ -118,8 +118,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMore, isMoreOpen = f
           <span
             className={`module-mobile-label text-[10px] mt-1 tracking-tight leading-tight transition-colors ${
               isMoreActive
-                ? 'font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
-                : 'font-medium text-slate-600 dark:text-slate-400'
+                ? 'font-normal text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]'
+                : 'font-normal text-slate-600 dark:text-slate-400'
             }`}
           >
             Lainnya

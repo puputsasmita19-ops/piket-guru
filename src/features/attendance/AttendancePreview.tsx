@@ -173,7 +173,7 @@ export const AttendancePreview: React.FC = () => {
     const constraints = activeTab === 'presensi' ? [where('tanggal', '==', todayISO)] : history.constraints;
     return FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', data => {
       setAttendanceList([...data].sort((a,b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk)));
-    }, error => setHistoryError(error.message || 'Riwayat presensi belum dapat dimuat.'), constraints);
+    }, error => setHistoryError(error.message || 'Riwayat presensi belum dapat dimuat.'), constraints, { cacheKey: activeTab === 'presensi' ? `today:${todayISO}` : history.key });
   }, [activeTab, history.constraints, history.range.error, todayISO]);
 
   useEffect(() => {
@@ -660,10 +660,10 @@ export const AttendancePreview: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="page-actions flex items-center gap-2 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] p-1 rounded-xl">
+        <div data-tour="attendance-tabs" className="attendance-tabs page-actions flex items-center justify-center gap-2 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('presensi')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 text-center px-3 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               activeTab === 'presensi'
                 ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -673,7 +673,7 @@ export const AttendancePreview: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('riwayat')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 text-center px-3 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               activeTab === 'riwayat'
                 ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'

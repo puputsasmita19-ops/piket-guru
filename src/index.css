@@ -1101,3 +1101,56 @@ button.bg-\[var\(--theme-primary\)\],
   @media (min-width: 1024px) { .dashboard-statistics { grid-template-columns: repeat(4, minmax(0, 1fr)); } .dashboard-statistic { height: 104px; } .statistic-title { font-size: 12px; } .statistic-detail { font-size: 11px; } }
   @media (prefers-reduced-motion: reduce) { .dashboard-statistic { transition: none; } }
 }
+
+/* Mobile ergonomics: compact clocks, bounded filters and clear guided steps. */
+.app-clock { color: #475569; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.dark .app-clock { color: #cbd5e1; }
+.app-clock-login { display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 10.5px; margin: 6px -24px 0; white-space: nowrap; }
+.app-clock-login .app-clock-time { padding-left: 9px; border-left: 1px solid var(--theme-card-border); }
+.app-clock-mobile { display: flex; flex-direction: column; justify-content: center; font-size: 10px; min-width: 76px; white-space: nowrap; }
+.app-clock-mobile .app-clock-time { color: var(--theme-primary-text); font-size: 11.5px; letter-spacing: .01em; }
+.app-clock-time { font-family: ui-monospace, monospace; font-weight: 500; white-space: nowrap; }
+.app-clock-zone { font-family: inherit; font-size: .85em; }
+@media (max-width: 359px) {
+  .app-header-inner > .flex { column-gap: 2px; }
+  .app-header-actions { gap: 0; }
+  .app-clock-mobile { min-width: 74px; }
+  .app-clock-mobile .app-clock-time { font-size: 10.5px; }
+}
+.app-clock-desktop { display: flex; flex-direction: column; align-items: center; font-size: 11px; }
+.app-shell .module-mobile-label { font-weight: 400 !important; }
+.app-shell .app-mobile-nav .module-mobile-label { white-space: nowrap; font-size: clamp(10px, 2.7vw, 11.5px); line-height: 16px; min-height: 16px; }
+.attendance-tabs { text-align: center; }
+.guide-blocker { position: fixed; inset: 0; z-index: 9990; background: transparent; }
+.guide-spotlight { position: fixed; z-index: 9991; pointer-events: none; border: 2px solid var(--theme-primary-text); border-radius: 14px; box-shadow: 0 0 0 9999px rgb(15 23 42 / .28); }
+.guide-card { position: fixed; z-index: 9999; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; background: var(--theme-card-bg); color: #0f172a; border: 1px solid var(--theme-card-border); border-radius: 20px; box-shadow: 0 12px 40px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.5; outline: none; animation: guide-appear .18s ease-out; }
+.dark .guide-card { color: #f1f5f9; }
+.guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.guide-progress { color: var(--theme-primary-text); font-size: 11px; }
+.guide-card h2 { font-size: 15px; line-height: 1.4; font-weight: 600; margin: 0; }
+.guide-card p { margin: 0; }
+.guide-location { font-size: 11px; color: #64748b; }
+.dark .guide-location { color: #b4bac6; }
+.guide-result { display: flex; align-items: flex-start; gap: 8px; padding: 9px; background: var(--theme-surface-subtle); border-radius: 12px; font-size: 12px; }
+.guide-card footer, .guide-card footer > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.guide-card footer { padding-top: 4px; }
+.guide-card button { min-width: 40px; min-height: 44px; cursor: pointer; }
+.guide-heading button { display: flex; align-items: center; justify-content: center; }
+.guide-card button:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
+@keyframes guide-appear { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .guide-card { animation: none; } }
+@media (max-width: 767px) {
+  .history-controls { padding: 10px; gap: 8px; border-radius: 14px; }
+  .history-controls-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 8px; }
+  .history-field { font-size: 11px; width: 100%; overflow: hidden; }
+  .history-field :is(select, input) { min-height: 44px; padding: 8px; text-overflow: ellipsis; }
+  .history-view-toggle { grid-column: auto; justify-self: end; max-width: 100%; }
+  .history-view-toggle button { min-width: 48px; min-height: 38px; padding: 0 3px; gap: 4px; }
+  .attendance-tabs { width: 100%; justify-content: center; }
+  .attendance-tabs button { min-height: 44px; white-space: normal; }
+  .app-content .page-header > :first-child { min-width: 0; }
+  .app-content .page-actions { max-width: 100%; flex-wrap: wrap; }
+  .app-card-header .app-card-actions { max-width: 100%; }
+  .history-pagination { flex-wrap: wrap; gap: 10px; }
+  .history-pagination > div { max-width: 100%; flex-wrap: wrap; }
+}

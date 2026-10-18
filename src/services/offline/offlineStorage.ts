@@ -128,10 +128,23 @@ export class OfflineStorage {
     try {
       if (trusted) {
         localStorage.setItem('piket_device_trusted_v2', 'true');
+        // Promote existing session-only work when the owner marks a personal HP.
+        void this.persistMemoryWork().catch(error => console.warn('Data masih tersimpan sementara:', error));
       } else {
         localStorage.removeItem('piket_device_trusted_v2');
       }
     } catch {}
+  }
+
+  public static async persistMemoryWork(): Promise<void> {
+    if (!this.isTrustedDevice()) return;
+    if (!this.isIndexedDBSupported) throw new Error('Penyimpanan permanen browser tidak tersedia.');
+    for (const draft of [...memoryStore.drafts.values()]) {
+      await this.saveDraft(draft.userId, draft.formType, draft.recordId, draft.data, draft.attachments);
+    }
+    for (const item of [...memoryStore.syncQueue.values()]) {
+      await this.enqueueSyncItem(item); memoryStore.syncQueue.delete(item.operationId);
+    }
   }
 
   /**
@@ -207,7 +220,7 @@ export class OfflineStorage {
       });
     }
 
-    return this.dbPromise;
+    return this.dbPromise.catch(error => { this.dbPromise = null; throw error; });
   }
 
   // ==========================================
@@ -261,9 +274,11 @@ export class OfflineStorage {
         const tx = db.transaction('drafts', 'readwrite');
         const store = tx.objectStore('drafts');
         const req = store.put(draft);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error || new Error('Penyimpanan lokal dibatalkan.'));
+        tx.onerror = () => reject(tx.error || req.error);
       });
+      memoryStore.drafts.delete(id);
     } catch (err: any) {
       console.warn('[OFFLINE_STORAGE] IndexedDB draft save failed, using memory fallback:', err);
       memoryStore.drafts.set(id, draft);
@@ -367,6 +382,7 @@ export class OfflineStorage {
 
   public static async enqueueSyncItem(item: QueueItem): Promise<void> {
     if (!item.userId) return;
+    if (this.isTrustedDevice() && !this.isIndexedDBSupported) throw new Error('Penyimpanan offline browser tidak tersedia. Jangan tutup formulir sebelum data terkirim.');
 
     if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
       memoryStore.syncQueue.set(item.operationId, item);
@@ -379,17 +395,38 @@ export class OfflineStorage {
         const tx = db.transaction('syncQueue', 'readwrite');
         const store = tx.objectStore('syncQueue');
         const req = store.put(item);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error || new Error('Penyimpanan lokal dibatalkan.'));
+        tx.onerror = () => reject(tx.error || req.error);
       });
     } catch (err) {
-      console.warn('[OFFLINE_STORAGE] Failed to persist sync item to IndexedDB, fallback to memory:', err);
-      memoryStore.syncQueue.set(item.operationId, item);
+      console.warn('[OFFLINE_STORAGE] Antrean belum tersimpan secara permanen:', err);
+      throw new Error('Antrean belum berhasil disimpan di perangkat. Jangan tutup formulir; periksa ruang penyimpanan lalu coba lagi.');
     }
   }
 
   public static async updateSyncItem(item: QueueItem): Promise<void> {
     await this.enqueueSyncItem(item);
+  }
+
+  /** Atomic cross-tab lease, also used when Web Locks is unavailable. */
+  public static async syncLease(userId: string, owner: string, release = false): Promise<boolean> {
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) return true;
+    const db = await this.getDb(), key = `sync_lease:${CURRENT_PROJECT_ID}:${userId}`;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('metadata', 'readwrite'), store = tx.objectStore('metadata');
+      let acquired = false;
+      const request = store.get(key);
+      request.onsuccess = () => {
+        const lease = request.result;
+        if (release) { if (lease?.owner === owner) store.delete(key); return; }
+        if (!lease || lease.owner === owner || lease.expiresAt < Date.now()) {
+          acquired = true; store.put({ key, owner, expiresAt: Date.now() + 90000 });
+        }
+      };
+      tx.oncomplete = () => resolve(acquired);
+      tx.onabort = tx.onerror = () => reject(tx.error || new Error('Kunci antrean tidak tersedia.'));
+    });
   }
 
   public static async removeSyncItem(operationId: string): Promise<void> {

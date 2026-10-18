@@ -8,6 +8,8 @@
 import { OfflineStorage, DraftRecord } from './offlineStorage';
 
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingSaves = new Map<string, { userId: string; save: () => Promise<void> }>();
+const writes = new Map<string, Promise<void>>();
 
 export class DraftService {
   /**
@@ -21,7 +23,11 @@ export class DraftService {
     attachments?: { [key: string]: Blob }
   ): Promise<void> {
     if (!userId) return;
-    await OfflineStorage.saveDraft(userId, formType, recordId, data, attachments);
+    const key = `${userId}:${formType}:${recordId}`;
+    clearTimeout(debounceTimers.get(key)); debounceTimers.delete(key); pendingSaves.delete(key);
+    const write = (writes.get(key) || Promise.resolve()).catch(() => {}).then(() => OfflineStorage.saveDraft(userId, formType, recordId, data, attachments));
+    writes.set(key, write);
+    try { await write; } finally { if (writes.get(key) === write) writes.delete(key); }
   }
 
   /**
@@ -41,14 +47,23 @@ export class DraftService {
       clearTimeout(debounceTimers.get(timerKey)!);
     }
 
+    pendingSaves.set(timerKey, { userId, save: () => this.saveDraft(userId, formType, recordId, data, attachments) });
     const timer = setTimeout(() => {
       debounceTimers.delete(timerKey);
+      pendingSaves.delete(timerKey);
       this.saveDraft(userId, formType, recordId, data, attachments).catch((err) => {
         console.warn('[DRAFT_SERVICE] Debounced save failed:', err);
       });
     }, delayMs);
 
     debounceTimers.set(timerKey, timer);
+  }
+
+  /** Flush before mobile backgrounding/logout instead of losing the debounce window. */
+  public static async flushPending(userId?: string): Promise<void> {
+    const jobs = [...pendingSaves.values()].filter(job => !userId || job.userId === userId);
+    await Promise.all(jobs.map(job => job.save()));
+    await Promise.all([...writes.entries()].filter(([key]) => !userId || key.startsWith(`${userId}:`)).map(([, task]) => task));
   }
 
   /**
@@ -73,6 +88,8 @@ export class DraftService {
       clearTimeout(debounceTimers.get(timerKey)!);
       debounceTimers.delete(timerKey);
     }
+    pendingSaves.delete(timerKey);
+    await writes.get(timerKey)?.catch(() => {});
     await OfflineStorage.deleteDraft(userId, formType, recordId);
   }
 
@@ -105,3 +122,9 @@ export class DraftService {
   }
 }
 
+
+if (typeof window !== 'undefined') {
+  const flush = () => { void DraftService.flushPending().catch(error => console.warn('Draf belum tersimpan:', error)); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+  window.addEventListener('pagehide', flush);
+}

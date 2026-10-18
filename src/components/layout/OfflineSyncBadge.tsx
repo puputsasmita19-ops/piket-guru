@@ -131,7 +131,7 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative z-40 shrink-0 inline-block">
+    <div ref={containerRef} data-tour="sync-status" className="relative z-40 shrink-0 inline-block">
       <button
         ref={triggerButtonRef}
         type="button"

@@ -1,3 +1,4 @@
+import { AppClock } from '../common/AppClock';
 import { appLogo, DEFAULT_APP_LOGO } from '../../utils/reportBranding';
 import { NotificationBell } from './NotificationBell';
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,7 +24,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useGuide } from '../../contexts/GuideContext';
 import { APP_NAME, DEFAULT_SCHOOL_SETTINGS, ROLE_LABELS } from '../../config/constants';
-import { formatIndonesianDate, formatShortIndonesianDate, formatTimeWithSeconds, formatTimeRaw } from '../../utils/dateUtils';
 import { Badge } from '../common/Badge';
 import { ProfileModal } from '../../features/auth/ProfileModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -40,9 +40,6 @@ interface HeaderProps {
   onToggleDesktopSidebar?: () => void;
 }
 
-const mobileWeekdayFormatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' });
-const mobileCompactDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Jakarta' });
-
 type HeaderPanel = 'none' | 'sync' | 'guide' | 'notifications' | 'theme' | 'user';
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,7 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
   const { activeTab, subView } = useNavigation();
   const { isGuideMenuOpen, openGuideMenu, closeGuideMenu } = useGuide();
 
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || APP_NAME);
   const [logoUrl, setLogoUrl] = useState(DEFAULT_APP_LOGO);
@@ -154,10 +150,6 @@ export const Header: React.FC<HeaderProps> = ({
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const unsub = FirestoreService.subscribeToDocument<SchoolSettings>(
@@ -219,17 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </Tooltip>
               )}
 
-              {/* Three compact lines keep weekday, date and seconds readable on mobile. */}
-              <div className="header-mobile-clock lg:hidden flex flex-col justify-center leading-[1.15] select-none font-mono tabular-nums text-left shrink-0" aria-label="Hari, tanggal, dan waktu WIB">
-                <span className="header-mobile-weekday text-[10px] min-[360px]:text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">{mobileWeekdayFormatter.format(currentTime)}</span>
-                <span className="text-[10px] min-[360px]:text-[11px] font-bold text-slate-700 dark:text-slate-200 tracking-tight whitespace-nowrap">
-                  <span className="inline min-[360px]:hidden">{mobileCompactDateFormatter.format(currentTime)}</span>
-                  <span className="hidden min-[360px]:inline">{formatShortIndonesianDate(currentTime)}</span>
-                </span>
-                <time className="header-mobile-time text-[11px] min-[360px]:text-[12px] font-extrabold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] tracking-wider whitespace-nowrap" dateTime={currentTime.toISOString()}>
-                  {formatTimeRaw(currentTime)}
-                </time>
-              </div>
+              <div className="lg:hidden"><AppClock variant="mobile"/></div>
 
               {/* App Identity on Desktop (>= sm) */}
               <div className="hidden lg:flex items-center gap-2 sm:gap-3 min-w-0">
@@ -258,15 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Center Section: Realtime Date & Time on Desktop (>= sm) */}
-            <div className="hidden lg:flex flex-col items-center justify-center px-1 sm:px-4 shrink-0 text-center select-none font-mono tabular-nums">
-              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                {formatIndonesianDate(currentTime)}
-              </div>
-              <div className="text-[11px] font-mono text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-bold tracking-wide">
-                {formatTimeWithSeconds(currentTime)}
-              </div>
-            </div>
+            <div className="hidden lg:flex"><AppClock variant="desktop"/></div>
 
             {/* Right Section: Icons, Profile & Logout */}
             <div className="app-header-actions flex items-center justify-end gap-0.5 min-[400px]:gap-1 sm:gap-1.5 md:gap-2 min-w-0 flex-1 lg:flex-none">

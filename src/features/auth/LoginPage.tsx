@@ -1,3 +1,4 @@
+import { AppClock } from '../../components/common/AppClock';
 import { appLogo } from '../../utils/reportBranding';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
@@ -32,7 +33,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, DEFAULT_LOGIN_SUPPORT_CONTACT, ROLE_LABELS } from '../../config/constants';
 import { SchoolSettings, LoginContactType } from '../../types';
-import { formatIndonesianDate } from '../../utils/dateUtils';
 import { preloadAuthenticatedShell } from '../../appBootstrap';
 import { useSlowOperation } from '../../hooks/useSlowOperation';
 
@@ -62,15 +62,6 @@ export const LoginPage: React.FC = () => {
   const [isContactAdminModalOpen, setIsContactAdminModalOpen] = useState<boolean>(false);
 
   // Real-time Indonesian date and time clock
-  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Combobox Search & Keyboard Nav State
   const [isComboboxOpen, setIsComboboxOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -673,23 +664,7 @@ export const LoginPage: React.FC = () => {
               {schoolSettings.schoolName || DEFAULT_SCHOOL_SETTINGS.schoolName}
             </p>
 
-            {/* Real-time Indonesian Date and Clock */}
-            <div className="inline-flex items-center justify-center gap-1.5 px-2.5 py-0.5 mt-1 rounded-full bg-slate-100 dark:bg-[var(--theme-surface-subtle)] border border-slate-200/70 dark:border-[var(--theme-card-border)] text-[10.5px] text-slate-600 dark:text-slate-300">
-              <Calendar className="w-3 h-3 text-[var(--theme-primary)] flex-shrink-0" />
-              <span>{formatIndonesianDate(currentTime)}</span>
-              <span className="text-slate-300 dark:text-slate-600">•</span>
-              <Clock className="w-3 h-3 text-[var(--theme-primary)] flex-shrink-0" />
-              <span className="font-mono font-medium tabular-nums">
-                {new Intl.DateTimeFormat('id-ID', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                  hour12: false,
-                  timeZone: 'Asia/Jakarta',
-                }).format(currentTime)}{' '}
-                WIB
-              </span>
-            </div>
+            <AppClock variant="login"/>
           </div>
         </div>
 

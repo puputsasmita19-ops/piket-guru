@@ -73,7 +73,7 @@ export const DutyBookPreview: React.FC = () => {
     if (history.range.error) return;
     return FirestoreService.subscribeToCollection<DutyBookRecord>('dutyBooks', data => {
       setDutyBooks([...data].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
-    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints);
+    }, error => setHistoryError(error.message || 'Riwayat belum dapat dimuat.'), history.constraints, { cacheKey: history.key });
   }, [history.constraints, history.range.error]);
 
   // Save Draft (Guru or Admin)

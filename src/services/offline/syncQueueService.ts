@@ -62,9 +62,9 @@ export class SyncQueueService {
       return true;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(`/manifest.json?_t=${Date.now()}`, {
         method: 'HEAD',
         cache: 'no-store',
@@ -74,7 +74,7 @@ export class SyncQueueService {
       return res.ok || res.status === 304;
     } catch {
       return false;
-    }
+    } finally { clearTimeout(timeoutId); }
   }
 
   /**
@@ -82,7 +82,17 @@ export class SyncQueueService {
    */
   public static cancelSync(): void {
     isSyncCancelled = true;
-    isSyncInProgress = false;
+  }
+
+  /** A real reconnect may retry transient network work immediately. */
+  public static async resumeNetwork(user: UserProfile): Promise<void> {
+    if (auth.currentUser?.uid !== user.id || isSyncInProgress) return;
+    for (const item of await OfflineStorage.getSyncItemsByUser(user.id)) {
+      if (item.status === 'PENDING_NETWORK' && /unavailable|deadline-exceeded|network|Failed to fetch|offline|koneksi|terhubung|timeout/i.test(item.lastError || '')) {
+        item.nextRetryAt = 0;
+        await OfflineStorage.updateSyncItem(item);
+      }
+    }
   }
 
   /**
@@ -251,24 +261,11 @@ export class SyncQueueService {
     succeeded: number;
     failed: number;
   }> {
-    const leaseKey = `piket_sync_lease_${currentUser.id}`;
-    const now = Date.now();
-
-    if (typeof localStorage !== 'undefined') {
-      const existingLease = localStorage.getItem(leaseKey);
-      if (existingLease && Number(existingLease) > now) {
-        return { processed: 0, succeeded: 0, failed: 0 };
-      }
-      localStorage.setItem(leaseKey, String(now + 25000)); // 25s lease
-    }
-
-    try {
-      return await this.runSyncProcess(currentUser);
-    } finally {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(leaseKey);
-      }
-    }
+    const owner = `${Date.now()}:${Math.random()}`;
+    if (!await OfflineStorage.syncLease(currentUser.id, owner)) return { processed: 0, succeeded: 0, failed: 0 };
+    const heartbeat = setInterval(() => { void OfflineStorage.syncLease(currentUser.id, owner).then(owned => { if (!owned) isSyncCancelled = true; }).catch(() => { isSyncCancelled = true; }); }, 10000);
+    try { return await this.runSyncProcess(currentUser); }
+    finally { clearInterval(heartbeat); await OfflineStorage.syncLease(currentUser.id, owner, true).catch(() => {}); }
   }
 
   private static async runSyncProcess(currentUser: UserProfile): Promise<{
@@ -304,6 +301,14 @@ export class SyncQueueService {
       const items = await OfflineStorage.getSyncItemsByUser(currentUser.id);
       const currentTime = Date.now();
 
+      // Recover a browser/process interruption only after the stale send window.
+      // Web Locks/lease protection has already been acquired for this account.
+      for (const item of items) {
+        if (item.status === 'SENDING' && currentTime - new Date(item.updatedAt || item.createdAt).getTime() > 120000) {
+          item.status = 'PENDING_NETWORK'; item.nextRetryAt = undefined;
+          await OfflineStorage.updateSyncItem(item);
+        }
+      }
       // Only pick items in PENDING_NETWORK whose backoff window has passed
       const eligibleItems = items.filter(
         (i) => i.status === 'PENDING_NETWORK' && (!i.nextRetryAt || i.nextRetryAt <= currentTime)
@@ -347,6 +352,7 @@ export class SyncQueueService {
           console.error(`[SYNC_QUEUE] Error syncing item ${item.operationId}:`, err);
 
           const errorMessage = err?.message || String(err);
+          const networkFailure = /unavailable|deadline-exceeded|network|Failed to fetch|offline|koneksi|terhubung|timeout|timed out/i.test(`${err?.code || ''} ${errorMessage}`);
           const isPermanent =
             errorMessage.includes('permission-denied') ||
             errorMessage.includes('Akses ditolak') ||
@@ -364,13 +370,13 @@ export class SyncQueueService {
           } else {
             // Transient network failure: exponential backoff
             item.retryCount = (item.retryCount || 0) + 1;
-            if (item.retryCount >= 5) {
+            if (item.retryCount >= 5 && !networkFailure) {
               item.status = 'NEEDS_ACTION';
               item.lastError = `Batas maksimal 5 kali percobaan tercapai: ${errorMessage}`;
             } else {
               item.status = 'PENDING_NETWORK';
               item.lastError = errorMessage;
-              const backoffMs = Math.min(3000 * Math.pow(2, item.retryCount), 60000);
+              const backoffMs = Math.min(3000 * Math.pow(2, Math.min(item.retryCount, 8)), 60000) + Math.random() * 3000;
               item.nextRetryAt = Date.now() + backoffMs;
             }
           }
@@ -390,6 +396,9 @@ export class SyncQueueService {
    * Verify user has active permission/role to execute this operation
    */
   private static validateUserAuthority(item: QueueItem, user: UserProfile): string | null {
+    if (item.userId !== user.id || item.projectId !== OfflineStorage.getProjectId()) {
+      return 'Data antrean berasal dari akun atau proyek berbeda. Sinkronisasi dihentikan.';
+    }
     if (user.isActive === false) {
       return 'Akun dinonaktifkan oleh Administrator. Sinkronisasi dihentikan.';
     }

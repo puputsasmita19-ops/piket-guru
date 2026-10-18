@@ -1,3 +1,4 @@
+import { useAutomaticSync } from './hooks/useAutomaticSync';
 import React, { lazy, Suspense } from 'react';
 import { useNavigation } from './contexts/NavigationContext';
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
@@ -23,6 +24,7 @@ import { PERMISSIONS } from './config/permissions';
 
 
 export default function AuthenticatedShell() {
+  useAutomaticSync();
   const { activeTab, setActiveTab } = useNavigation();
   const renderActiveView = () => {
     switch (activeTab) {
