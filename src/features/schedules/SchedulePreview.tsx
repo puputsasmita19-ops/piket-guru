@@ -32,6 +32,7 @@ import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { RecurringScheduleModal } from './RecurringScheduleModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { getScheduleRecurrence } from '../../utils/scheduleUtils';
 import { getCurrentDayName } from '../../utils/dateUtils';
 
 export const SchedulePreview: React.FC = () => {
@@ -77,9 +78,7 @@ export const SchedulePreview: React.FC = () => {
 
   // Firestore Real-Time Subscriptions
   useEffect(() => {
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
+    const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => { if (data) setSettings(data); });
 
     const unsubSchedules = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
       setSchedules(data);
@@ -103,6 +102,7 @@ export const SchedulePreview: React.FC = () => {
     });
 
     return () => {
+      unsubSettings();
       unsubSchedules();
       unsubUsers();
       unsubTeachers();
@@ -134,49 +134,23 @@ export const SchedulePreview: React.FC = () => {
     });
   };
 
-  // Save / Update Schedule
-  const handleSaveSchedule = async (scheduleData: ScheduleItem) => {
-    await FirestoreService.setDocument('schedules', scheduleData.id, scheduleData);
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: editingSchedule ? 'UPDATE' : 'CREATE',
-      module: 'SCHEDULES',
-      recordId: scheduleData.id,
-      details: `${editingSchedule ? 'Memperbarui' : 'Menambahkan'} jadwal piket: ${scheduleData.petugasName} (${scheduleData.hari} di ${scheduleData.ruangName})`,
-    });
+  // Creation is atomic across all chosen days/officers, with stable slot identities.
+  const handleSaveMultipleSchedules = async (items: ScheduleItem[]) => {
+    if (!currentUser || !isAdmin) throw new Error('Sesi administrator tidak tersedia. Masuk kembali.');
+    await ScheduleService.createSchedules(items, currentUser);
   };
-
-  // Save Multiple Schedules at once
-  const handleSaveMultipleSchedules = async (schedulesList: ScheduleItem[]) => {
-    for (const sch of schedulesList) {
-      await FirestoreService.setDocument('schedules', sch.id, sch);
-    }
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'CREATE',
-      module: 'SCHEDULES',
-      details: `Menambahkan ${schedulesList.length} jadwal piket bersamaan (${schedulesList[0]?.hari || ''} di ${schedulesList[0]?.ruangName || ''})`,
-    });
+  const handleSaveSchedule = async (schedule: ScheduleItem) => {
+    if (!currentUser || !isAdmin) throw new Error('Hanya administrator yang dapat mengubah jadwal.');
+    if (!editingSchedule) return handleSaveMultipleSchedules([schedule]);
+    const latest = await FirestoreService.getAllStrict<ScheduleItem>('schedules');
+    const conflict = ScheduleService.checkConflict(schedule, latest);
+    if (schedule.status !== 'DIBATALKAN' && conflict.hasConflict) throw new Error(conflict.reason);
+    await FirestoreService.setDocumentWithAudit('schedules', schedule.id, { ...schedule, updatedAt: FirestoreService.nextUpdatedAt(editingSchedule), updatedBy: currentUser.id }, {
+      userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role, action: 'UPDATE', module: 'SCHEDULES', recordId: schedule.id,
+      details: `Memperbarui jadwal piket: ${schedule.petugasName} (${schedule.hari} di ${schedule.ruangName})`,
+    }, { expectedState: editingSchedule });
   };
-
-  // Generate Recurring Schedules
-  const handleGenerateRecurring = async (newSchedules: ScheduleItem[]) => {
-    for (const item of newSchedules) {
-      await FirestoreService.setDocument('schedules', item.id, item);
-    }
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Admin',
-      role: currentUser?.role || 'ADMIN',
-      action: 'CREATE',
-      module: 'SCHEDULES',
-      details: `Menjalankan generator otomatis membuat ${newSchedules.length} alokasi jadwal piket mingguan.`,
-    });
-  };
+  const handleGenerateRecurring = handleSaveMultipleSchedules;
 
   // Delete Schedule
   const handleDeleteSchedule = async () => {
@@ -397,6 +371,7 @@ export const SchedulePreview: React.FC = () => {
                       <Clock className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
                       <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
                     </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{getScheduleRecurrence(item) === 'ONCE' ? `Sekali: ${item.tanggal}` : `Setiap ${item.hari.toLowerCase()}`}</p>
                     {item.keterangan && (
                       <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/50 p-2 rounded-lg">
                         "{item.keterangan}"
@@ -492,6 +467,7 @@ export const SchedulePreview: React.FC = () => {
                     </td>
                     <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
                       {item.jamMulai} - {item.jamSelesai} WIB
+                      <span className="block font-sans text-xs text-slate-500">{getScheduleRecurrence(item) === 'ONCE' ? item.tanggal : 'Berulang mingguan'}</span>
                     </td>
                     <td className="p-4">
                       <Badge

@@ -1,6 +1,57 @@
 import { DayOfWeek, SchoolSettings, UserProfile, UserRole, ScheduleItem } from '../types';
 import { TeacherRecord, StaffRecord } from '../types/master.types';
 import { DEFAULT_DAILY_SCHEDULES } from '../config/constants';
+import { getCurrentDayName, getTodayISODate } from './dateUtils';
+
+export function getScheduleRecurrence(schedule: { recurrence?: 'WEEKLY' | 'ONCE' }): 'WEEKLY' | 'ONCE' {
+  return schedule.recurrence === 'ONCE' ? 'ONCE' : 'WEEKLY';
+}
+
+export function isScheduleOnDate(schedule: ScheduleItem, dateISO: string): boolean {
+  if (schedule.status === 'DIBATALKAN') return false;
+  return getScheduleRecurrence(schedule) === 'ONCE'
+    ? schedule.tanggal === dateISO
+    : schedule.hari === getCurrentDayName(`${dateISO}T12:00:00+07:00`);
+}
+
+export function filterOfficerCandidates(candidates: OfficerCandidate[], search: string): OfficerCandidate[] {
+  const terms = search.trim().toLocaleLowerCase('id-ID').split(/\s+/).filter(Boolean);
+  return candidates.filter(c => {
+    const text = [c.fullName, c.loginId, c.nip, c.nuptk, c.role, c.mataPelajaran, c.divisi].join(' ').toLocaleLowerCase('id-ID');
+    return terms.every(term => text.includes(term));
+  });
+}
+
+/** Stable identity for new slots; a retry cannot create another copy. */
+export function scheduleSlotId(schedule: Pick<ScheduleItem, 'hari' | 'tanggal' | 'recurrence' | 'petugasId' | 'ruangId' | 'jamMulai' | 'jamSelesai'>): string {
+  const recurrence = getScheduleRecurrence(schedule);
+  return ['sch-v2', recurrence, recurrence === 'ONCE' ? schedule.tanggal : schedule.hari,
+    schedule.petugasId, schedule.ruangId, schedule.jamMulai, schedule.jamSelesai]
+    .map(part => encodeURIComponent(part).replace(/~/g, '%7E')).join('~');
+}
+
+export function schedulePeriodsOverlap(a: Pick<ScheduleItem, 'hari' | 'tanggal' | 'recurrence'>, b: Pick<ScheduleItem, 'hari' | 'tanggal' | 'recurrence'>): boolean {
+  const aOnce = getScheduleRecurrence(a) === 'ONCE', bOnce = getScheduleRecurrence(b) === 'ONCE';
+  if (aOnce && bOnce) return Boolean(a.tanggal) && a.tanggal === b.tanggal;
+  if (aOnce) return Boolean(a.tanggal) && getCurrentDayName(`${a.tanggal}T12:00:00+07:00`) === b.hari;
+  if (bOnce) return Boolean(b.tanggal) && getCurrentDayName(`${b.tanggal}T12:00:00+07:00`) === a.hari;
+  return a.hari === b.hari;
+}
+
+/** Count weekly occurrences arithmetically; never generate future Firestore documents. */
+export function countScheduleOccurrences(schedule: ScheduleItem, startDate: string, endDate: string): number {
+  if (schedule.status === 'DIBATALKAN' || !startDate || !endDate || startDate > endDate) return 0;
+  // Keep historical report semantics for legacy records; only new explicit templates expand.
+  if (schedule.recurrence !== 'WEEKLY') return schedule.tanggal >= startDate && schedule.tanggal <= endDate ? 1 : 0;
+  const created = schedule.createdAt && Number.isFinite(Date.parse(schedule.createdAt)) ? getTodayISODate(schedule.createdAt) : '';
+  const start = new Date(`${created > startDate ? created : startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  const weekday = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'].indexOf(schedule.hari);
+  if (weekday < 0 || !Number.isFinite(+start) || !Number.isFinite(+end)) return 0;
+  const days = Math.floor((+end - +start) / 86400000);
+  const offset = (weekday - start.getUTCDay() + 7) % 7;
+  return days < offset ? 0 : Math.floor((days - offset) / 7) + 1;
+}
 
 export interface ShiftHoursResult {
   start: string;

@@ -61,7 +61,7 @@ import { VisitorRecord } from '../../types/visitor.types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
-import { isScheduleMatchingUser } from '../../utils/scheduleUtils';
+import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
@@ -227,7 +227,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [todayISO]);
 
   // Today's schedules & operational items
-  const todaySchedules = schedules.filter((s) => s.hari === todayName);
+  const todaySchedules = schedules.filter((s) => isScheduleOnDate(s, todayISO));
   const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
   const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
   const todayIncidents = incidents.filter((i) => i.tanggal === todayISO);
@@ -239,10 +239,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
-  const myTodaySchedule = schedules.find((s) => s.hari === todayName && isMySchedule(s));
+  const myTodaySchedule = schedules.find((s) => isScheduleOnDate(s, todayISO) && isMySchedule(s));
   const myAttendance = attendance.find((a) => a.tanggal === todayISO && a.userId === currentUser?.id);
   const myDutyBook = dutyBooks.find((b) => b.tanggal === todayISO && (b.petugasId === currentUser?.id || (teachers.some(t => t.userId === currentUser?.id && t.id === b.petugasId))));
-  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && s.hari !== todayName);
+  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;

@@ -39,7 +39,7 @@ import { AttendanceRecord, AttendanceStatus, ScheduleItem, SchoolSettings } from
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate, toEpochMs } from '../../utils/dateUtils';
-import { isScheduleMatchingUser } from '../../utils/scheduleUtils';
+import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
@@ -266,12 +266,12 @@ export const AttendancePreview: React.FC = () => {
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
   const todayUserSchedules = schedules.filter(
-    (s) => s.hari === todayName && (isAdmin || isMySchedule(s))
+    (s) => isScheduleOnDate(s, todayISO) && (isAdmin || isMySchedule(s))
   );
 
   useEffect(() => {
-    if (todayUserSchedules.length > 0 && !selectedScheduleId) {
-      setSelectedScheduleId(todayUserSchedules[0].id);
+    if (!todayUserSchedules.some(s => s.id === selectedScheduleId)) {
+      setSelectedScheduleId(todayUserSchedules[0]?.id || '');
     }
   }, [todayUserSchedules, selectedScheduleId]);
 
@@ -422,7 +422,7 @@ export const AttendancePreview: React.FC = () => {
 
     let currentSchedule: ScheduleItem | undefined = undefined;
     if (selectedScheduleId) {
-      currentSchedule = schedules.find((s) => s.id === selectedScheduleId);
+      currentSchedule = todayUserSchedules.find((s) => s.id === selectedScheduleId);
     } else if (todayUserSchedules.length > 0) {
       currentSchedule = todayUserSchedules[0];
     }

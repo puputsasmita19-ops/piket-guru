@@ -1,4 +1,5 @@
 import { ScheduleItem, AttendanceRecord, isOperationalRecord } from '../../types';
+import { countScheduleOccurrences } from '../../utils/scheduleUtils';
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { IncidentRecord } from '../../types/incident.types';
 import { TeacherRecord, IncidentCategoryRecord } from '../../types/master.types';
@@ -103,9 +104,9 @@ export class ReportService {
     };
     const counts = new Map(operationalTeachers.map(teacher => [teacher, { shifts: 0, hadir: 0, outside: 0 }]));
     for (const schedule of schedules) {
-      if (!isOperationalRecord(schedule) || !(schedule.tanggal >= startDate && schedule.tanggal <= endDate)) continue;
+      if (!isOperationalRecord(schedule)) continue;
       const teacher = resolveTeacher(schedule.petugasId, schedule.petugasName);
-      if (teacher) counts.get(teacher)!.shifts++;
+      if (teacher) counts.get(teacher)!.shifts += countScheduleOccurrences(schedule, startDate, endDate);
     }
     for (const attendance of operationalAttendance) {
       if (!(attendance.tanggal >= startDate && attendance.tanggal <= endDate)) continue;

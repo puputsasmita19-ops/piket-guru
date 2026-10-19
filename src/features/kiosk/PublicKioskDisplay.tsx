@@ -1,3 +1,4 @@
+import { isScheduleOnDate } from '../../utils/scheduleUtils';
 import { appLogo } from '../../utils/reportBranding';
 import { Megaphone } from '../../components/icons';
 import { MapPin } from '../../components/icons';
@@ -103,8 +104,8 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
 
   // Filtered operational records for public consumption (safe, non-sensitive)
   const todaySchedules = useMemo(
-    () => schedules.filter((s) => s.hari === todayName),
-    [schedules, todayName]
+    () => schedules.filter((s) => isScheduleOnDate(s, todayISO)),
+    [schedules, todayISO]
   );
   const todaySubs = useMemo(
     () => substitutions.filter((s) => s.tanggal === todayISO),

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { ScheduleItem, DayOfWeek, SchoolSettings, UserProfile } from '../../types';
 import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types';
 import { DAYS_LIST } from '../../config/constants';
-import { getTodayISODate } from '../../utils/dateUtils';
-import { buildOfficerCandidates, OfficerCandidate } from '../../utils/scheduleUtils';
+import { OfficerPicker } from './OfficerPicker';
+import { buildOfficerCandidates, OfficerCandidate, scheduleSlotId } from '../../utils/scheduleUtils';
 import { CalendarRange, Sparkles, CheckSquare, Square, AlertTriangle } from '../../components/icons';
 
 interface RecurringScheduleModalProps {
@@ -51,15 +51,23 @@ export const RecurringScheduleModal: React.FC<RecurringScheduleModalProps> = ({
   const [jamMulai, setJamMulai] = useState('06:30');
   const [jamSelesai, setJamSelesai] = useState('15:30');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedOfficers, setSelectedOfficers] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const generating = useRef(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) { initialized.current = false; return; }
+    if (!initialized.current && candidates.length) {
+      initialized.current = true;
+      setSelectedOfficers(candidates.map(c => c.userId));
+      setError('');
       const initDays = activeDaysInSettings.filter((d) => d !== 'MINGGU' || isSundayActiveInSettings);
       setSelectedDays(initDays.length > 0 ? initDays : ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT']);
       setJamMulai(settings?.workHours?.start || '06:30');
       setJamSelesai(settings?.workHours?.end || '15:30');
     }
-  }, [isOpen, settings, activeDaysInSettings, isSundayActiveInSettings]);
+  }, [isOpen, settings, activeDaysInSettings, isSundayActiveInSettings, candidates]);
 
   const toggleDay = (day: DayOfWeek) => {
     if (selectedDays.includes(day)) {
@@ -70,24 +78,32 @@ export const RecurringScheduleModal: React.FC<RecurringScheduleModalProps> = ({
   };
 
   const handleGenerate = async () => {
-    if (selectedDays.length === 0 || candidates.length === 0 || rooms.length === 0) return;
+    if (generating.current) return;
+    const chosen = candidates.filter(c => selectedOfficers.includes(c.userId));
+    const activeRooms = rooms.filter(r => r.isActive !== false);
+    setError('');
+    if (!selectedDays.length || !chosen.length || !activeRooms.length) { setError('Pilih hari, petugas aktif, dan pos aktif.'); return; }
+    if (jamMulai >= jamSelesai) { setError('Jam selesai harus setelah jam mulai.'); return; }
+    if (chosen.length < activeRooms.length) { setError('Jumlah petugas harus mencukupi jumlah pos agar satu orang tidak bertugas di beberapa pos pada jam yang sama.'); return; }
+    generating.current = true;
 
     setIsGenerating(true);
     const newSchedules: ScheduleItem[] = [];
-    const todayISO = getTodayISODate();
+
 
     // Round-robin distribution of officer candidates to rooms across selected days
     let officerIndex = 0;
 
     selectedDays.forEach((day) => {
-      rooms.forEach((room) => {
-        const officer = candidates[officerIndex % candidates.length];
+      activeRooms.forEach((room) => {
+        const officer = chosen[officerIndex % chosen.length];
         officerIndex++;
 
-        newSchedules.push({
+        const item: ScheduleItem = {
           id: `sch-rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           hari: day,
-          tanggal: todayISO,
+          tanggal: '',
+          recurrence: 'WEEKLY',
           jamMulai,
           jamSelesai,
           petugasId: officer.userId, // strictly users.id
@@ -97,14 +113,19 @@ export const RecurringScheduleModal: React.FC<RecurringScheduleModalProps> = ({
           ruangName: room.name,
           status: 'TERJADWAL',
           keterangan: 'Jadwal Rutin Mingguan',
-        });
+        };
+        item.id = scheduleSlotId(item);
+        newSchedules.push(item);
       });
     });
 
     try {
       await onGenerate(newSchedules);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Jadwal belum tersimpan. Periksa koneksi lalu coba lagi.');
     } finally {
+      generating.current = false;
       setIsGenerating(false);
     }
   };
@@ -112,17 +133,19 @@ export const RecurringScheduleModal: React.FC<RecurringScheduleModalProps> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title="Generator Jadwal Piket Otomatis (Recurring)"
+      onClose={() => { if (!generating.current) onClose(); }}
+      title="Alokasi Jadwal Mingguan Otomatis"
       maxWidth="md"
     >
-      <div className="space-y-5">
+      <fieldset disabled={isGenerating} className="space-y-5 min-w-0">
+        {error && <p role="alert" tabIndex={-1} className="text-sm rounded-xl p-3 bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200">{error}</p>}
+        <OfficerPicker candidates={candidates} selected={selectedOfficers} onChange={setSelectedOfficers} multiple disabled={isGenerating} />
         <div className="p-3.5 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)] text-xs flex items-start gap-2.5">
           <Sparkles className="w-5 h-5 text-[var(--theme-primary)] flex-shrink-0" />
           <div>
             <span className="font-bold block">Alokasi Otomatis Akun Petugas ke Pos Piket</span>
             <p className="mt-0.5">
-              Sistem akan mendistribusikan {candidates.length} akun petugas aktif secara merata ke {rooms.length} pos piket untuk hari-hari yang Anda pilih. ID akun tersimpan secara atomik untuk presensi.
+              Sistem mendistribusikan {selectedOfficers.length} petugas terpilih ke pos aktif pada hari yang Anda pilih. Jadwal berulang setiap minggu sampai diubah atau dihapus. Untuk menugaskan beberapa petugas pada pos yang sama, gunakan Tambah Jadwal → Multi-petugas.
             </p>
           </div>
         </div>
@@ -202,21 +225,21 @@ export const RecurringScheduleModal: React.FC<RecurringScheduleModalProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" disabled={isGenerating} onClick={onClose}>
             Batal
           </Button>
           <Button
             variant="primary"
             size="sm"
             isLoading={isGenerating}
-            disabled={candidates.length === 0 || rooms.length === 0 || selectedDays.length === 0}
+            disabled={isGenerating || !selectedOfficers.length || !rooms.some(r => r.isActive !== false) || !selectedDays.length}
             onClick={handleGenerate}
             leftIcon={<CalendarRange className="w-4 h-4" />}
           >
             Generate Jadwal Mingguan
           </Button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 };

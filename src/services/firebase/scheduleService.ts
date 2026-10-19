@@ -1,4 +1,11 @@
 import { FirestoreService } from './firestoreService';
+import { auth, db } from './firebase';
+import { doc, runTransaction } from 'firebase/firestore';
+import { OfflineStorage } from '../offline/offlineStorage';
+import { operationalEventFromAudit } from '../../types/notification.types';
+import { schedulePeriodsOverlap, scheduleSlotId, getScheduleRecurrence } from '../../utils/scheduleUtils';
+import { DAYS_LIST } from '../../config/constants';
+import { getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 import { ScheduleItem, DayOfWeek, ScheduleStatus, UserProfile, UserRole } from '../../types';
 import { TeacherRecord, RoomRecord } from '../../types/master.types';
 
@@ -76,59 +83,78 @@ export class ScheduleService {
     return updated;
   }
 
-  /**
-   * Check for schedule conflicts:
-   * 1. Same teacher assigned at same day/date with overlapping hours
-   * 2. Same room assigned at same day/date with overlapping hours
-   */
+  /** Multiple officers may share a post. Only an officer's overlapping duties conflict. */
   public static checkConflict(
-    newSchedule: {
-      id?: string;
-      hari: DayOfWeek;
-      tanggal?: string;
-      jamMulai: string;
-      jamSelesai: string;
-      petugasId: string;
-      ruangId: string;
-    },
+    newSchedule: { id?: string; hari: DayOfWeek; tanggal?: string; recurrence?: 'WEEKLY' | 'ONCE'; jamMulai: string; jamSelesai: string; petugasId: string; ruangId: string },
     existingSchedules: ScheduleItem[]
   ): { hasConflict: boolean; reason?: string } {
     for (const item of existingSchedules) {
-      if (newSchedule.id && item.id === newSchedule.id) continue;
-      if (item.status === 'DIBATALKAN') continue;
-
-      // If both schedules specify a specific calendar date, conflict occurs only if dates match exactly.
-      // If either schedule does not specify a specific date (recurring day template), then check day of week match.
-      const hasSpecificDates = Boolean(newSchedule.tanggal && item.tanggal);
-      const isDateMatching = hasSpecificDates
-        ? item.tanggal === newSchedule.tanggal
-        : item.hari === newSchedule.hari;
-
-      if (isDateMatching) {
-        // Check time overlap: (StartA < EndB) and (EndA > StartB)
-        const isTimeOverlap =
-          newSchedule.jamMulai < item.jamSelesai && newSchedule.jamSelesai > item.jamMulai;
-
-        if (isTimeOverlap) {
-          const dateLabel = item.tanggal ? `tanggal ${item.tanggal}` : `hari ${item.hari}`;
-          if (item.petugasId === newSchedule.petugasId) {
-            return {
-              hasConflict: true,
-              reason: `Petugas "${item.petugasName}" sudah memiliki jadwal piket pada ${dateLabel} (${item.jamMulai} - ${item.jamSelesai}) di ${item.ruangName}.`,
-            };
-          }
-
-          if (item.ruangId === newSchedule.ruangId) {
-            return {
-              hasConflict: true,
-              reason: `Pos/Ruangan "${item.ruangName}" sudah dialokasikan untuk ${item.petugasName} pada ${dateLabel} (${item.jamMulai} - ${item.jamSelesai}).`,
-            };
-          }
-        }
+      if ((newSchedule.id && item.id === newSchedule.id) || item.status === 'DIBATALKAN' || item.petugasId !== newSchedule.petugasId) continue;
+      if (schedulePeriodsOverlap({ ...newSchedule, tanggal: newSchedule.tanggal || '' }, item) &&
+          newSchedule.jamMulai < item.jamSelesai && newSchedule.jamSelesai > item.jamMulai) {
+        return { hasConflict: true, reason: `Petugas "${item.petugasName}" sudah dijadwalkan ${getScheduleRecurrence(item) === 'ONCE' ? item.tanggal : 'setiap ' + item.hari} (${item.jamMulai} - ${item.jamSelesai}) di ${item.ruangName}. Ubah jadwal yang sudah ada atau pilih jam lain.` };
       }
     }
-
     return { hasConflict: false };
+  }
+
+  /** One transaction saves all selected days/officers and its audit, or saves none. */
+  public static async createSchedules(schedules: ScheduleItem[], actor: UserProfile): Promise<void> {
+    if (!schedules.length || schedules.length > 400) throw new Error('Pilih 1–400 jadwal dalam satu penyimpanan.');
+    if (actor.role !== 'ADMIN' || actor.isActive === false || auth.currentUser?.uid !== actor.id) throw new Error('Hanya administrator aktif yang dapat mengatur jadwal.');
+    const uid = actor.id;
+    let active = true;
+    const release = OfflineStorage.registerListener(() => { active = false; });
+    const assertSession = () => {
+      if (!active || auth.currentUser?.uid !== uid) throw new Error('Sesi berubah. Buka kembali formulir jadwal.');
+    };
+    try {
+      assertSession();
+      for (const item of schedules) {
+        const validTime = /^([01]\d|2[0-3]):[0-5]\d$/;
+        if (!validTime.test(item.jamMulai) || !validTime.test(item.jamSelesai) || item.jamMulai >= item.jamSelesai) throw new Error('Jam selesai harus setelah jam mulai.');
+        if (!DAYS_LIST.includes(item.hari)) throw new Error('Hari jadwal tidak valid.');
+        if (!item.petugasId || !item.ruangId) throw new Error('Petugas dan pos piket wajib dipilih.');
+        if (getScheduleRecurrence(item) === 'ONCE' && (!/^\d{4}-\d{2}-\d{2}$/.test(item.tanggal) || getTodayISODate(`${item.tanggal}T12:00:00+07:00`) !== item.tanggal || getCurrentDayName(`${item.tanggal}T12:00:00+07:00`) !== item.hari)) throw new Error('Tanggal dan hari jadwal tidak sesuai.');
+      }
+      const ids = schedules.map(scheduleSlotId);
+      if (new Set(ids).size !== ids.length) throw new Error('Terdapat pilihan jadwal ganda dalam formulir.');
+      const latest = await FirestoreService.getAllStrict<ScheduleItem>('schedules');
+      assertSession();
+      schedules.forEach((item, i) => {
+        const check = this.checkConflict({ ...item, id: ids[i] }, [...latest, ...schedules.slice(0, i)]);
+        if (item.status !== 'DIBATALKAN' && check.hasConflict) throw new Error(check.reason);
+      });
+      const refs = ids.map(id => doc(db, 'schedules', id));
+      const officerIds = [...new Set(schedules.map(s => s.petugasId))];
+      const roomIds = [...new Set(schedules.map(s => s.ruangId))];
+      const now = new Date().toISOString();
+      const auditId = `audit-schedule-${crypto.randomUUID()}`;
+      const audit = { id: auditId, timestamp: now, userId: uid, userName: actor.fullName, role: actor.role,
+        action: 'CREATE' as const, module: 'SCHEDULES' as const, status: 'SUCCESS' as const,
+        recordId: ids[0], target: 'Jadwal piket', details: `Menambahkan ${schedules.length} jadwal piket: ${[...new Set(schedules.map(s => s.hari))].join(', ')}.` };
+      await runTransaction(db, async transaction => {
+        assertSession();
+        const existing = await Promise.all(refs.map(ref => transaction.get(ref)));
+        const officers = await Promise.all(officerIds.map(id => transaction.get(doc(db, 'users', id))));
+        const rooms = await Promise.all(roomIds.map(id => transaction.get(doc(db, 'rooms', id))));
+        assertSession();
+        if (existing.some(s => s.exists())) throw new Error('Jadwal ini sudah tersimpan. Muat data terbaru lalu gunakan menu Ubah Jadwal bila ingin memperbaruinya.');
+        if (officers.some(s => !s.exists() || s.data()?.isActive === false)) throw new Error('Ada petugas yang sudah dihapus atau dinonaktifkan. Periksa kembali pilihan.');
+        if (rooms.some(s => !s.exists() || s.data()?.isActive === false)) throw new Error('Ada pos yang sudah dihapus atau dinonaktifkan. Periksa kembali pilihan.');
+        schedules.forEach((item, i) => {
+          const officer = officers[officerIds.indexOf(item.petugasId)].data()!;
+          const room = rooms[roomIds.indexOf(item.ruangId)].data()!;
+          transaction.set(refs[i], FirestoreService.sanitizeFirestorePayload({ ...item, id: ids[i],
+            petugasName: officer.fullName, petugasRole: officer.role, ruangName: room.name,
+            recurrence: getScheduleRecurrence(item), tanggal: getScheduleRecurrence(item) === 'ONCE' ? item.tanggal : '',
+            createdAt: now, updatedAt: now, updatedBy: uid, dataSource: 'PRODUCTION', isDemo: false }));
+        });
+        transaction.set(doc(db, 'auditLogs', auditId), audit);
+      });
+      const event = operationalEventFromAudit(audit);
+      if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
+    } finally { release(); }
   }
 
   /**

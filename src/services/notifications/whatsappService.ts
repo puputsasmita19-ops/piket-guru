@@ -36,7 +36,7 @@ export class WhatsAppService {
 Halo Bapak/Ibu *${schedule.petugasName}*,
 
 Mengingatkan jadwal tugas piket Anda di *${schoolName}*:
-📅 *Hari/Tanggal:* ${schedule.hari}, ${formatIndonesianDate(schedule.tanggal)}
+📅 *Hari/Tanggal:* ${schedule.recurrence === 'ONCE' ? `${schedule.hari}, ${formatIndonesianDate(schedule.tanggal)}` : `Setiap ${schedule.hari} (berulang mingguan)`}
 ⏰ *Waktu Shift:* ${schedule.jamMulai} - ${schedule.jamSelesai} WIB
 📍 *Pos/Lokasi:* ${schedule.ruangName}
 

@@ -55,6 +55,8 @@ export type ScheduleStatus = 'TERJADWAL' | 'BERJALAN' | 'SELESAI' | 'DIGANTIKAN'
 export interface ScheduleItem extends BaseEntityMetadata {
   id: string;
   tanggal: string;
+  /** Absent on legacy records: keep their existing weekly behavior. */
+  recurrence?: 'WEEKLY' | 'ONCE';
   hari: DayOfWeek;
   jamMulai: string;
   jamSelesai: string;
