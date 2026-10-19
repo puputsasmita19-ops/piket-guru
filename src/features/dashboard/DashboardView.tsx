@@ -125,13 +125,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   });
 
   const [showDutyDetails, setShowDutyDetails] = useState(false);
-  const toggleDutyDetails = (reveal = false) => {
-    setShowDutyDetails(value => !value);
-    if (reveal && !showDutyDetails) requestAnimationFrame(() => {
+  const [dutyRevealRequest, setDutyRevealRequest] = useState(0);
+  const toggleDutyDetails = () => setShowDutyDetails(value => !value);
+  const revealDutyDetails = () => {
+    // A link to the details always opens them, even if they were already expanded.
+    setShowDutyDetails(true);
+    setDutyRevealRequest(value => value + 1);
+  };
+  useEffect(() => {
+    if (!dutyRevealRequest) return;
+    // Run after React commits the expanded body; repeat clicks still bring it into view.
+    const frame = requestAnimationFrame(() => {
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       document.getElementById('personal-duty-details')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
     });
-  };
+    return () => cancelAnimationFrame(frame);
+  }, [dutyRevealRequest]);
   const todayISO = useWibToday();
   const todayName = getCurrentDayName(todayISO);
 
@@ -294,7 +303,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     { id: 'announcements' as const, title: 'Pengumuman & Instruksi Piket', icon: Megaphone, items: visibleAnnouncements.map(a => ({ id: a.id, title: a.title, detail: a.content })), emptyText: isLoadingAnnouncements ? 'Memuat pengumuman…' : 'Belum ada pengumuman aktif untuk Anda.', actionLabel: 'Buka pengumuman', onAction: openAnnouncements },
     ...(hasPermission(PERMISSIONS.SCHEDULE_VIEW) ? [{ id: 'dutyRoster' as const, title: 'Guru Bertugas Hari Ini', icon: Users, items: todaySchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Tidak ada jadwal piket hari ini.', actionLabel: 'Buka daftar guru', onAction: () => setDetailPanel('dutyRoster') }] : []),
     ...(hasPermission(PERMISSIONS.INCIDENT_VIEW) ? [{ id: 'incidents' as const, title: 'Insiden & Kejadian Terbaru', icon: AlertTriangle, items: [...todayIncidents].sort((a, b) => (b.waktu || '').localeCompare(a.waktu || '')).map(item => ({ id: item.id, title: `[${getIncidentCategoryDisplay(item)}] ${item.lokasi}`, detail: `${item.waktu} WIB · ${item.uraian}` })), emptyText: 'Belum ada kejadian yang dilaporkan hari ini.', actionLabel: 'Buka laporan kejadian', onAction: () => setDetailPanel('incidents') }] : []),
-    ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: () => toggleDutyDetails(true) }] : []),
+    ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body' }] : []),
   ].filter(slide => flashConfig.panels[slide.id]);
   const bookStage = todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status) : null;
   const statistics: (DashboardStatistic & { permission: PermissionKey })[] = [
@@ -313,7 +322,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     icon: myTodaySchedule ? Calendar : BookOpenCheck,
     illustration: <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />,
     description: myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.',
-    items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: () => toggleDutyDetails(true), expanded: showDutyDetails,
+    items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: showDutyDetails ? toggleDutyDetails : revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body',
   };
   const dashboardSlides = [activitySlide, ...(flashConfig.enabled ? flashSlides : [])];
   const announcementBoard = (

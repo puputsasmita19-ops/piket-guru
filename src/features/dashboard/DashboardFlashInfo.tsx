@@ -13,6 +13,7 @@ export interface DashboardFlashSlide {
   actionLabel: string;
   onAction: () => void;
   expanded?: boolean;
+  controls?: string;
 }
 
 /** One horizontal viewport. Rotating/swiping only changes presentation, never queries. */
@@ -126,7 +127,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
         {cards.map(({ item, logicalIndex, clone, key }, position) => {
           const Icon = item.icon;
           const active = trackIndex === position;
-          return <div key={key} data-loop-clone={clone || undefined} className={`flash-slide ${item.id === 'activity' ? 'flash-activity-slide' : ''}`} role="group" aria-roledescription="slide" aria-label={`${logicalIndex + 1} dari ${slides.length}: ${item.title}`} aria-hidden={!active} inert={!active}>
+          return <div key={key} data-slide-id={item.id} data-loop-clone={clone || undefined} className={`flash-slide ${item.id === 'activity' ? 'flash-activity-slide' : ''} ${item.id === 'operations' ? 'flash-operations-slide' : ''}`} role="group" aria-roledescription="slide" aria-label={`${logicalIndex + 1} dari ${slides.length}: ${item.title}`} aria-hidden={!active} inert={!active}>
             {item.id === 'activity' ? <div className="flash-activity">{item.illustration}<div className="min-w-0"><h2>{item.title}</h2><p className="flash-activity-description">{item.description}</p></div></div> : <>
               <h2><Icon className="w-4 h-4 shrink-0" /><span>{item.title}</span></h2>
               <div className="flash-content">{item.items.length ? <ul>{item.items.slice(0, 3).map(row => <li key={row.id}><p className="flash-item-title">{row.title}</p>{row.detail && <p className="flash-item-detail">{row.detail}</p>}</li>)}</ul> : <p className="flash-empty">{item.emptyText}</p>}</div>
@@ -136,7 +137,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
       </div>
     </div>
     <div className="flash-controls">
-      <button type="button" className="flash-open" onClick={slide.onAction} aria-expanded={slide.id === 'activity' ? slide.expanded : undefined} aria-controls={slide.id === 'activity' ? 'personal-duty-details' : undefined}>{slide.actionLabel}<ChevronRight className="w-3.5 h-3.5 shrink-0" /></button>
+      <button type="button" className="flash-open" onClick={slide.onAction} aria-expanded={slide.expanded} aria-controls={slide.controls}>{slide.actionLabel}<ChevronRight className="w-3.5 h-3.5 shrink-0" /></button>
       <div className="flex shrink-0 gap-1">
         <button type="button" className="flash-control" aria-label="Info sebelumnya" disabled={slides.length < 2} onClick={() => change(-1)}><ChevronLeft className="w-4 h-4" /></button>
         {config.autoPlay && !reducedMotion && slides.length > 1 && <button type="button" className="flash-control" aria-label={paused ? 'Putar flash info' : 'Jeda flash info'} aria-pressed={paused} onClick={togglePlayback}>{paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}</button>}
