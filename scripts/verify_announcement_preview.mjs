@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {build} from 'esbuild';
+const result=await build({entryPoints:['src/utils/announcementPreview.ts'],bundle:true,write:false,format:'cjs',platform:'node'});
+const context=vm.createContext({module:{exports:{}}});vm.runInContext(result.outputFiles[0].text,context);
+const {announcementPreview:preview}=context.module.exports;
+let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS',name)};
+check('short text stays intact without a misleading ellipsis',()=>assert.equal(preview('Rapat pukul 07.00.'),'Rapat pukul 07.00.'));
+check('line breaks and repeated whitespace collapse only in the preview',()=>{const source='  Baris pertama\n\n Baris kedua.\t ';assert.equal(preview(source),'Baris pertama Baris kedua.');assert.ok(source.includes('\n\n'))});
+check('long paragraphs are bounded at a word boundary with an ellipsis',()=>{const text='Petugas piket membaca pengumuman. '.repeat(50),out=preview(text);assert.ok(out.endsWith('…')&&out.length<=241&&out.length<text.length);assert.ok(out.slice(0,-1).endsWith('pengumuman.')||text.includes(out.slice(0,-1)+' '))});
+check('unbroken text and URLs are bounded even without spaces',()=>{const out=preview('https://sekolah/'+('a'.repeat(2000)));assert.equal(out.length,241);assert.ok(out.endsWith('…'))});
+check('Unicode characters are not split into broken surrogates',()=>{const out=preview('😀'.repeat(500));assert.equal(Array.from(out).length,241);assert.equal(out.includes('\uFFFD'),false);assert.ok(out.endsWith('…'))});
+check('empty and malformed legacy fields do not crash the dashboard',()=>{for(const value of ['',undefined,null,14,{}])assert.equal(preview(value),'')});
+console.log(`${count} announcement excerpt cases passed.`);

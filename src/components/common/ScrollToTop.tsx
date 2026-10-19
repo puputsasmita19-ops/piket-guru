@@ -190,16 +190,14 @@ export const ScrollToTop: React.FC<ScrollToTopProps> = ({
         onClick={handleScrollToTop}
         aria-label="Kembali ke atas"
         title="Kembali ke atas"
-        className={`fixed z-30 flex items-center justify-center rounded-2xl print:hidden cursor-pointer
-          w-11 h-11 sm:w-12 sm:h-12 min-w-[44px] min-h-[44px]
+        tabIndex={shouldShow ? 0 : -1}
+        aria-hidden={!shouldShow}
+        className={`back-to-top-button fixed z-30 flex items-center justify-center rounded-xl print:hidden cursor-pointer
+          w-11 h-11 min-w-[44px] min-h-[44px]
           right-4 bottom-20 lg:bottom-8 lg:right-8
-          bg-white/95 dark:bg-[var(--theme-card-bg)]/95 text-slate-700 dark:text-slate-200
-          hover:text-[var(--theme-primary)] dark:hover:text-[var(--theme-primary-text)] hover:bg-white dark:hover:bg-[var(--theme-card-bg)]
-          hover:border-[var(--theme-primary-border)] dark:hover:border-[var(--theme-primary-border)]
-          active:scale-95 active:bg-slate-100 dark:active:bg-[var(--theme-surface-subtle)]
-          border border-slate-200/90 dark:border-[var(--theme-card-border)]
-          shadow-lg hover:shadow-xl shadow-slate-900/10 dark:shadow-black/40
-          backdrop-blur-md transition-all duration-300 motion-reduce:transition-none
+          bg-transparent border-0 text-slate-700 dark:text-slate-200
+          hover:text-[var(--theme-primary)] dark:hover:text-[var(--theme-primary-text)]
+          active:scale-95 transition-[opacity,transform,color] duration-200 motion-reduce:transition-none
           focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950
           ${
             shouldShow
@@ -213,7 +211,8 @@ export const ScrollToTop: React.FC<ScrollToTopProps> = ({
           marginBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5] transition-transform group-hover:-translate-y-0.5" aria-hidden="true" />
+        <span className="back-to-top-surface" aria-hidden="true" />
+        <ArrowUp className="back-to-top-icon relative w-[18px] h-[18px] sm:w-5 sm:h-5" aria-hidden="true" />
       </button>
     </Tooltip>
   );

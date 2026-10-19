@@ -1223,3 +1223,75 @@ button.bg-\[var\(--theme-primary\)\],
 @keyframes welcome-rise-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-8px); opacity: 0; } }
 @keyframes welcome-down-in { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .welcome-message-text { animation: none !important; transform: none !important; opacity: 1 !important; } }
+
+@layer components {
+  /* A teaser, not the full board: keep a readable inset and a bounded excerpt. */
+  .dashboard-flash { color: #1e293b; }
+  .dark .dashboard-flash { color: #f1f5f9; }
+  .flash-eyebrow, .flash-page { font-size: 11px; }
+  .flash-announcements, .flash-open { font-size: 12px; }
+  .flash-announcement-slide { padding: 6px 4px 16px; }
+  .flash-announcement-slide h2 { font-size: 15px; overflow-wrap: anywhere; }
+  .flash-announcement-slide .flash-content { padding-top: 8px; }
+  .flash-announcement-slide :is(.flash-item-title, .flash-item-detail) {
+    display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+    white-space: normal; overflow-wrap: anywhere; word-break: normal; max-width: 100%;
+  }
+  .flash-announcement-slide .flash-item-title {
+    -webkit-line-clamp: 2; font-size: 14px; line-height: 1.5;
+    max-height: 3em;
+  }
+  .flash-announcement-slide .flash-item-detail {
+    -webkit-line-clamp: 3; font-size: 13px; line-height: 1.65;
+    max-height: 4.95em; margin-top: 5px;
+  }
+  .flash-announcement-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--theme-primary-text); }
+  .flash-announcement-slide .flash-empty { font-size: 13px; overflow-wrap: anywhere; }
+  /* The visible surface is smaller; the touch target remains 44 × 44 px. */
+  .back-to-top-surface {
+    position: absolute; width: 36px; height: 36px; border-radius: 12px; pointer-events: none;
+    background: rgb(255 255 255 / .6);
+    background: color-mix(in srgb, var(--theme-card-bg, #fff) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-card-border, #cbd5e1) 55%, transparent);
+    box-shadow: 0 2px 8px rgb(15 23 42 / .07); backdrop-filter: blur(5px);
+    transition: background-color .15s ease;
+  }
+  .back-to-top-icon { opacity: .85; pointer-events: none; }
+  .back-to-top-button:is(:hover, :focus-visible, :active) .back-to-top-surface {
+    background: color-mix(in srgb, var(--theme-card-bg, #fff) 88%, transparent);
+  }
+  @media (min-width: 640px) {
+    .flash-announcement-slide h2 { font-size: 16px; }
+    .flash-announcement-slide .flash-item-title { font-size: 15px; }
+    .flash-announcement-slide .flash-item-detail { font-size: 14px; }
+    .back-to-top-surface { width: 40px; height: 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .back-to-top-surface { transition: none; } }
+  @media (prefers-reduced-transparency: reduce) {
+    .back-to-top-surface { background: var(--theme-card-bg, #fff); backdrop-filter: none; }
+  }
+}
+
+/* Scope board typography so explicit utility sizes elsewhere remain unchanged. */
+.announcement-board { font-size: 15px; overflow-wrap: anywhere; }
+.announcement-board .app-card-header h3 { font-size: 16px; line-height: 1.5; }
+.announcement-board .text-xs,
+.announcement-board .app-card-header p,
+.announcement-board .app-card-actions button,
+.announcement-board .announcement-priority,
+.announcement-board button[aria-label^="Edit pengumuman"],
+.announcement-board .announcement-meta { font-size: 13px; line-height: 1.6; }
+.announcement-board .announcement-title { font-size: 16px; line-height: 1.5; }
+.announcement-board .announcement-body { font-size: 15px; line-height: 1.7; }
+.announcement-board :is([role="alert"], [role="status"]) { font-size: 14px; line-height: 1.6; }
+@media (min-width: 640px) {
+  .announcement-board .app-card-header h3 { font-size: 18px; }
+  .announcement-board .text-xs,
+  .announcement-board .app-card-header p,
+  .announcement-board .app-card-actions button,
+  .announcement-board .announcement-priority,
+  .announcement-board button[aria-label^="Edit pengumuman"],
+  .announcement-board .announcement-meta { font-size: 14px; }
+  .announcement-board .announcement-title { font-size: 17px; }
+  .announcement-board .announcement-body { font-size: 16px; }
+}

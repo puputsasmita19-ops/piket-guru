@@ -326,7 +326,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   };
   const dashboardSlides = [activitySlide, ...(flashConfig.enabled ? flashSlides : [])];
   const announcementBoard = (
-<Card>
+<Card className="announcement-board">
         <CardHeader
           title="Papan Pengumuman & Instruksi Khusus Piket"
           subtitle="Pemberitahuan resmi dari Kepala Sekolah dan Koordinator Piket"
@@ -378,15 +378,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex flex-1 min-w-[140px] flex-wrap items-center gap-2">
                       <Badge
                         variant={ann.priority === 'DARURAT' ? 'danger' : ann.priority === 'PENTING' ? 'warning' : 'info'}
-                        size="sm"
+                        size="sm" className="announcement-priority"
                       >
                         {ann.priority}
                       </Badge>
-                      <h4 className="font-bold text-sm break-words min-w-0 [overflow-wrap:anywhere]">{ann.title}</h4>
-                    </div>
 
                     {isAdmin && <div className="flex items-center gap-1 shrink-0">
                       {announcementConfig.allowPublishedEditing && <button type="button"
@@ -407,15 +404,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                     </div>}
                   </div>
 
-                  <p className="text-sm mt-2 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] opacity-90">
+                  <h4 className="announcement-title mt-2 font-bold break-words min-w-0 [overflow-wrap:anywhere]">{ann.title}</h4>
+                  <p className="announcement-body mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] opacity-90">
                     {ann.content}
                   </p>
 
-                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5">
+                  <div className="announcement-meta flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5">
                     <span>Oleh: <strong>{ann.authorName}</strong></span>
                     <span>{formatShortIndonesianDate(ann.date)}</span>
                   </div>
-                  {announcementConfig.showUpdateInfo && ann.updatedBy && ann.updatedAt && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 break-words">Diperbarui {formatShortIndonesianDate(ann.updatedAt)}, {formatTime(ann.updatedAt)}{ann.updatedByName ? ` oleh ${ann.updatedByName}` : ''}</p>}
+                  {announcementConfig.showUpdateInfo && ann.updatedBy && ann.updatedAt && <p className="announcement-meta mt-2 text-slate-500 dark:text-slate-400 break-words">Diperbarui {formatShortIndonesianDate(ann.updatedAt)}, {formatTime(ann.updatedAt)}{ann.updatedByName ? ` oleh ${ann.updatedByName}` : ''}</p>}
                 </div>
               ))}
             </div>
