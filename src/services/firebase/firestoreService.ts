@@ -127,6 +127,25 @@ export interface DocumentWriteOptions {
 export class FirestoreService {
   public static sanitizeFirestorePayload = sanitizeFirestorePayload;
 
+  /** One-shot reads and pending transaction callbacks are bound to their session. */
+  private static sessionScope() {
+    const uid = auth?.currentUser?.uid || 'guest';
+    let active = true;
+    const close = OfflineStorage.registerListener(() => { active = false; });
+    return {
+      uid, close,
+      assertActive: () => {
+        if (!active || (auth?.currentUser?.uid || 'guest') !== uid) {
+          throw Object.assign(new Error('Sesi berubah. Buka kembali halaman dengan akun yang sedang aktif.'), { code: 'SESSION_CHANGED' });
+        }
+      },
+    };
+  }
+
+  private static isNetworkReadFailure(error: any): boolean {
+    return /unavailable|deadline-exceeded|offline|network|Failed to fetch/i.test(`${error?.code || ''} ${error?.message || ''}`);
+  }
+
   /** Advance even when two changes share a millisecond or a device clock moves backwards. */
   public static nextUpdatedAt(previous?: { updatedAt?: unknown } | null): string {
     const oldTime = typeof previous?.updatedAt === 'string' ? Date.parse(previous.updatedAt) : NaN;
@@ -171,12 +190,14 @@ export class FirestoreService {
     constraints: QueryConstraint[] = [],
     options: QueryDataOptions = { operationalOnly: true }
   ): Promise<T[]> {
-    const currentUid = auth?.currentUser?.uid || 'guest';
+    const scope = this.sessionScope();
+    const currentUid = scope.uid;
     const cacheName = constraints.length ? options.cacheKey ? `${collectionName}:query:${options.cacheKey}` : null : collectionName;
     try {
       const colRef = collection(db, collectionName);
       const q = query(colRef, ...constraints);
       const snapshot = await getDocs(q);
+      scope.assertActive();
       const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
 
       // Update scoped cache for current user account
@@ -187,10 +208,12 @@ export class FirestoreService {
       }
       return items;
     } catch (err) {
+      scope.assertActive();
       console.error(`Error fetching collection ${collectionName}:`, err);
       // Fallback to isolated scoped cache for current user if network is offline
-      if (!cacheName || !/unavailable|deadline-exceeded|offline|network|Failed to fetch/i.test(`${(err as any)?.code || ''} ${(err as any)?.message || ''}`)) throw err;
+      if (!cacheName || !this.isNetworkReadFailure(err)) throw err;
       const cached = await OfflineStorage.getScopedCache<T>(currentUid, cacheName);
+      scope.assertActive();
       if (cached && Array.isArray(cached.data)) {
         if (options.operationalOnly !== false) {
           return cached.data.filter(isOperationalRecord);
@@ -198,7 +221,7 @@ export class FirestoreService {
         return cached.data;
       }
       return [];
-    }
+    } finally { scope.close(); }
   }
 
   /**
@@ -210,10 +233,22 @@ export class FirestoreService {
     collectionName: string,
     constraints: QueryConstraint[] = []
   ): Promise<T[]> {
-    const colRef = collection(db, collectionName);
-    const q = query(colRef, ...constraints);
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
+    const scope = this.sessionScope();
+    try {
+      const colRef = collection(db, collectionName);
+      const q = query(colRef, ...constraints);
+      const snapshot = await getDocs(q);
+      scope.assertActive();
+      // getDocs may resolve from the SDK's own cache without throwing. Strict
+      // backup/security reads must reject that result as well as our own cache.
+      if (snapshot.metadata?.fromCache === true) {
+        throw Object.assign(new Error('Koneksi server diperlukan untuk membaca data terbaru secara ketat.'), { code: 'unavailable' });
+      }
+      return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
+    } catch (error) {
+      scope.assertActive();
+      throw error;
+    } finally { scope.close(); }
   }
 
   /**
@@ -227,6 +262,7 @@ export class FirestoreService {
     lastDocCursor: QueryDocumentSnapshot | null = null,
     options: QueryDataOptions = { operationalOnly: true }
   ): Promise<PaginatedResult<T>> {
+    const scope = this.sessionScope();
     try {
       const colRef = collection(db, collectionName);
       const paginationConstraints: QueryConstraint[] = lastDocCursor
@@ -235,6 +271,7 @@ export class FirestoreService {
 
       const q = query(colRef, ...paginationConstraints);
       const snapshot = await getDocs(q);
+      scope.assertActive();
       const rawDocs = snapshot.docs;
 
       const hasMore = rawDocs.length > pageSize;
@@ -252,11 +289,12 @@ export class FirestoreService {
         hasMore,
       };
     } catch (err: any) {
+      scope.assertActive();
       console.error(`Error in getPaginated for ${collectionName}:`, err);
       // Fallback for offline cached records
-      if (constraints.length || lastDocCursor || !/unavailable|deadline-exceeded|offline|network|Failed to fetch/i.test(`${err?.code || ''} ${err?.message || ''}`)) throw err;
-      const currentUid = auth?.currentUser?.uid || 'guest';
-      const cached = await OfflineStorage.getScopedCache<T>(currentUid, collectionName);
+      if (constraints.length || lastDocCursor || !this.isNetworkReadFailure(err)) throw err;
+      const cached = await OfflineStorage.getScopedCache<T>(scope.uid, collectionName);
+      scope.assertActive();
       if (cached && Array.isArray(cached.data)) {
         const filtered = options.operationalOnly !== false ? cached.data.filter(isOperationalRecord) : cached.data;
         return {
@@ -267,7 +305,7 @@ export class FirestoreService {
         };
       }
       throw err;
-    }
+    } finally { scope.close(); }
   }
 
   /**
@@ -278,18 +316,23 @@ export class FirestoreService {
     collectionName: string,
     constraints: QueryConstraint[] = []
   ): Promise<number> {
+    const scope = this.sessionScope();
     try {
       const colRef = collection(db, collectionName);
       const q = query(colRef, ...constraints);
       const snapshot = await getCountFromServer(q);
+      scope.assertActive();
       return snapshot.data().count;
     } catch (err: any) {
-      console.warn(`[FirestoreService] getCountFromServer failed for ${collectionName} (falling back to local estimate):`, err);
-      // Fallback: estimate from scoped offline cache
-      const currentUid = auth?.currentUser?.uid || 'guest';
-      const cached = await OfflineStorage.getScopedCache<any>(currentUid, collectionName);
-      return cached && Array.isArray(cached.data) ? cached.data.length : 0;
-    }
+      scope.assertActive();
+      // A whole-collection cache cannot answer a filtered count. Authorization,
+      // index and server failures must never masquerade as zero records.
+      if (constraints.length || !this.isNetworkReadFailure(err)) throw err;
+      const cached = await OfflineStorage.getScopedCache<any>(scope.uid, collectionName);
+      scope.assertActive();
+      if (cached && Array.isArray(cached.data)) return cached.data.length;
+      throw err;
+    } finally { scope.close(); }
   }
 
   /**
@@ -335,13 +378,17 @@ export class FirestoreService {
 
   /** Operational validation must not scan every archived record (and its photos). */
   public static async getForDates<T>(collectionName: string, dates: string[]): Promise<T[]> {
-    const uniqueDates = [...new Set(dates)];
-    const records: T[] = [];
-    // Small chunks also work with older deployed query configurations.
-    for (let start = 0; start < uniqueDates.length; start += 10) {
-      records.push(...await this.getAll<T>(collectionName, [where('tanggal', 'in', uniqueDates.slice(start, start + 10))]));
-    }
-    return records;
+    const scope = this.sessionScope();
+    try {
+      const uniqueDates = [...new Set(dates)];
+      const records: T[] = [];
+      // Small chunks also work with older deployed query configurations.
+      for (let start = 0; start < uniqueDates.length; start += 10) {
+        records.push(...await this.getAll<T>(collectionName, [where('tanggal', 'in', uniqueDates.slice(start, start + 10))]));
+        scope.assertActive();
+      }
+      return records;
+    } finally { scope.close(); }
   }
 
   /**
@@ -363,17 +410,22 @@ export class FirestoreService {
    * Get single document by ID with safe null on error
    */
   public static async getById<T>(collectionName: string, id: string): Promise<T | null> {
+    const scope = this.sessionScope();
     try {
       const docRef = doc(db, collectionName, id);
       const snap = await getDoc(docRef);
+      scope.assertActive();
       if (snap.exists()) {
         return { id: snap.id, ...snap.data() } as unknown as T;
       }
       return null;
     } catch (err) {
+      // Preserve this display helper's safe-null contract without delivering
+      // stale account data or producing unhandled errors in legacy consumers.
+      try { scope.assertActive(); } catch { return null; }
       console.error(`Error getting document ${collectionName}/${id}:`, err);
       return null;
-    }
+    } finally { scope.close(); }
   }
 
   /**
@@ -382,12 +434,17 @@ export class FirestoreService {
    * Throws if permission denied, network unavailable, or query errors.
    */
   public static async getByIdStrict<T>(collectionName: string, id: string): Promise<T | null> {
-    const docRef = doc(db, collectionName, id);
-    const snap = await getDocFromServer(docRef);
-    if (!snap.exists()) {
-      return null;
-    }
-    return { id: snap.id, ...snap.data() } as unknown as T;
+    const scope = this.sessionScope();
+    try {
+      const docRef = doc(db, collectionName, id);
+      const snap = await getDocFromServer(docRef);
+      scope.assertActive();
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as unknown as T;
+    } catch (error) {
+      scope.assertActive();
+      throw error;
+    } finally { scope.close(); }
   }
 
   /**
@@ -442,16 +499,21 @@ export class FirestoreService {
       payload.privateKey = deleteField();
     }
 
-    if (options.expectedState !== undefined) {
-      await runTransaction(db, async transaction => {
-        this.assertUnchanged(await transaction.get(docRef), options.expectedState);
-        transaction.set(docRef, payload, { merge: !options.controlledReplace });
-      });
-    } else if (options.controlledReplace) {
-      await setDoc(docRef, payload, { merge: false });
-    } else {
-      await setDoc(docRef, payload, { merge: true });
-    }
+    const scope = this.sessionScope();
+    try {
+      scope.assertActive();
+      if (options.expectedState !== undefined) {
+        await runTransaction(db, async transaction => {
+          scope.assertActive();
+          const snapshot = await transaction.get(docRef);
+          scope.assertActive();
+          this.assertUnchanged(snapshot, options.expectedState);
+          transaction.set(docRef, payload, { merge: !options.controlledReplace });
+        });
+      } else {
+        await setDoc(docRef, payload, { merge: !options.controlledReplace });
+      }
+    } finally { scope.close(); }
 
     // Active query listeners own their exact caches. Never download the entire
     // collection after a write, or build a partial/stale cache from one record.
@@ -591,17 +653,27 @@ export class FirestoreService {
 
     const logRecord = sanitizeFirestorePayload(rawAuditLog);
 
-    if (options.expectedState !== undefined) {
-      await runTransaction(db, async transaction => {
-        this.assertUnchanged(await transaction.get(docRef), options.expectedState);
-        transaction.set(docRef, payload, { merge: !options.controlledReplace });
-        transaction.set(auditRef, logRecord);
-      });
-    } else {
-      batch.set(docRef, payload, { merge: !options.controlledReplace });
-      batch.set(auditRef, logRecord);
-      await batch.commit();
-    }
+    const scope = this.sessionScope();
+    try {
+      scope.assertActive();
+      if (scope.uid === 'guest' || auditEntry.userId !== scope.uid) {
+        throw Object.assign(new Error('Sesi penulis berubah. Buka kembali formulir dengan akun yang aktif.'), { code: 'SESSION_CHANGED' });
+      }
+      if (options.expectedState !== undefined) {
+        await runTransaction(db, async transaction => {
+          scope.assertActive();
+          const snapshot = await transaction.get(docRef);
+          scope.assertActive();
+          this.assertUnchanged(snapshot, options.expectedState);
+          transaction.set(docRef, payload, { merge: !options.controlledReplace });
+          transaction.set(auditRef, logRecord);
+        });
+      } else {
+        batch.set(docRef, payload, { merge: !options.controlledReplace });
+        batch.set(auditRef, logRecord);
+        await batch.commit();
+      }
+    } finally { scope.close(); }
     const event = operationalEventFromAudit(logRecord as AuditLogRecord);
     if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
 

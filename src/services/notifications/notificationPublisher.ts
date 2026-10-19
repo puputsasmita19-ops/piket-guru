@@ -1,43 +1,42 @@
 import { db } from '../firebase/firebase';
 import { auth } from '../firebase/firebaseAuth';
 import { doc, setDoc } from 'firebase/firestore';
-import { OfflineStorage } from '../offline/offlineStorage';
 import type { NotificationEvent } from '../../types/notification.types';
+import { enqueueNotification, pendingNotifications, acknowledgeNotification } from './notificationOutbox';
 
 // Tiny metadata outbox, isolated by Firebase project + authenticated UID. No photo data.
-const memory = new Map<string, NotificationEvent[]>();
 const running = new Set<string>();
-const key = (uid: string) => `piket_notification_outbox:${auth.app.options.projectId}:${uid}`;
-function read(uid: string): NotificationEvent[] {
-  try {
-    if (OfflineStorage.isTrustedDevice()) {
-      const parsed = JSON.parse(localStorage.getItem(key(uid)) || '[]');
-      if (Array.isArray(parsed)) return parsed.filter(e => e?.actorId === uid && e.scope === 'SCHOOL').slice(-100);
-    }
-  } catch { /* Memory remains available when browser storage is full. */ }
-  return memory.get(uid) || [];
-}
-function save(uid: string, items: NotificationEvent[]) {
-  memory.set(uid, items);
-  try {
-    if (OfflineStorage.isTrustedDevice()) {
-      if (items.length) localStorage.setItem(key(uid), JSON.stringify(items));
-      else localStorage.removeItem(key(uid));
-    }
-  } catch { /* Non-fatal metadata cache. */ }
-}
+const retryAfter = new Map<string, number>();
 export async function flushNotificationOutbox(): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || running.has(uid) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
   running.add(uid);
   try {
+    const pending = pendingNotifications(uid).slice(0, 100);
+    const keys = new Set(pending.map(event => `${uid}:${event.id}`));
+    for (const key of retryAfter.keys()) if (key.startsWith(`${uid}:`) && !keys.has(key)) retryAfter.delete(key);
+    const attempted = new Set<string>();
     for (let attempts = 0; attempts < 100; attempts++) {
-      const event = read(uid)[0];
-      if (!event) break;
       if (auth.currentUser?.uid !== uid) break;
+      // Re-read after each awaited send so arrivals during the flush are drained.
+      const event = pendingNotifications(uid).find(item => !attempted.has(item.id) &&
+        (retryAfter.get(`${uid}:${item.id}`) || 0) <= Date.now());
+      if (!event) break;
+      attempted.add(event.id);
+      const retryKey = `${uid}:${event.id}`;
       // setDoc with a stable event ID is safe to repeat; rules permit identical retries only.
-      await setDoc(doc(db, 'notificationEvents', event.id), event);
-      save(uid, read(uid).filter(e => e.id !== event.id));
+      try {
+        await setDoc(doc(db, 'notificationEvents', event.id), event);
+        acknowledgeNotification(event);
+        retryAfter.delete(retryKey);
+      } catch (error) {
+        if (auth.currentUser?.uid !== uid) break;
+        const code = (error as { code?: string })?.code || '';
+        if (!/permission-denied|invalid-argument/.test(code)) break;
+        // Retain a rejected event for retry, but let healthy later events through.
+        // Avoid retrying the same bad entry on every subsequent activity.
+        retryAfter.set(retryKey, Date.now() + 5 * 60_000);
+      }
     }
   } catch {
     // A notification is secondary. Never roll back a successful operational save.
@@ -46,6 +45,6 @@ export async function flushNotificationOutbox(): Promise<void> {
 export async function publishNotificationEvent(event: NotificationEvent): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || uid !== event.actorId || event.scope !== 'SCHOOL') return;
-  save(uid, [...read(uid).filter(e => e.id !== event.id), event].slice(-100));
+  enqueueNotification(event);
   await flushNotificationOutbox();
 }

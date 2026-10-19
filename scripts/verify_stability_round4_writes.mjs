@@ -1,0 +1,43 @@
+// Actual Firestore write transactions with session changes during reads/retries.
+// Based on the existing isolated optimistic transaction fixture.
+// all Firebase, Drive and cache IO is replaced. Never contacts production.
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
+import { build } from 'esbuild';
+const f={uid:'admin',active:new Set(),readGate:null,records:new Map(),versions:new Map(),writes:[],queries:[],audits:[],sources:[],cacheWrites:0,beforeCommit:null,deny:false,onPhoto:null};
+const sdk=`const f=globalThis.f;
+export const doc=(_,c,id)=>({c,id}),collection=(_,c)=>({c});
+export const query=(ref,...constraints)=>({...ref,constraints}),queryEqual=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+export const where=(field,op,value)=>({field,op,value}),orderBy=(...v)=>({order:v}),limit=n=>({limit:n}),startAfter=v=>({after:v});
+const key=r=>r.c+'/'+r.id;
+const snap=r=>{const value=structuredClone(f.records.get(key(r)));return{id:r.id,exists:()=>value!==undefined,data:()=>value}};
+export async function getDoc(r){return snap(r)};export const getDocFromServer=getDoc;
+export async function getDocs(q){f.queries.push(q);const values=[...f.records.entries()].filter(([k])=>k.startsWith(q.c+'/')).filter(([,v])=>(q.constraints||[]).every(c=>c.field?c.op==='in'?c.value.includes(v[c.field]):c.op==='>='?v[c.field]>=c.value:c.op==='<'?v[c.field]<c.value:v[c.field]===c.value:true));return{docs:values.map(([k])=>snap({c:q.c,id:k.slice(q.c.length+1)}))}};
+export const getCountFromServer=async()=>({data:()=>({count:0})});
+export const onSnapshot=(ref,next,error)=>{const s={ref,next,error,stops:0};f.sources.push(s);return()=>{s.stops++}};
+export const serverTimestamp=()=>({type:'serverTimestamp'}),deleteField=()=>({type:'deleteField'});
+function commit(ops){if(f.deny)throw Object.assign(Error('permission-denied'),{code:'permission-denied'});for(const o of ops){const k=key(o.ref);f.records.set(k,structuredClone(o.options?.merge?{...f.records.get(k),...o.data}:o.data));f.versions.set(k,(f.versions.get(k)||0)+1);f.writes.push(o)}};
+export const setDoc=async(ref,data,options)=>commit([{ref,data,options}]),updateDoc=async(ref,data)=>commit([{ref,data,options:{merge:true}}]),deleteDoc=async ref=>{f.records.delete(key(ref));f.versions.set(key(ref),(f.versions.get(key(ref))||0)+1)};
+export const writeBatch=()=>{const ops=[];return{set:(ref,data,options)=>ops.push({ref,data,options}),commit:async()=>commit(ops)}};
+export async function runTransaction(_,fn){for(let attempt=0;attempt<6;attempt++){const reads=new Map(),ops=[];const result=await fn({get:async ref=>{reads.set(key(ref),f.versions.get(key(ref))||0);if(f.readGate)await f.readGate;return snap(ref)},set:(ref,data,options)=>ops.push({ref,data,options}),update:(ref,data)=>ops.push({ref,data,options:{merge:true}})});if(f.beforeCommit){const hook=f.beforeCommit;f.beforeCommit=null;await hook()}if([...reads].some(([k,v])=>(f.versions.get(k)||0)!==v))continue;commit(ops);return result}throw Error('aborted')};`;
+const mocks={sdk,firebase:`export const db={};export const auth={get currentUser(){return globalThis.f.uid?{uid:globalThis.f.uid}:null}};`,offline:`export const OfflineStorage={getScopedCache:async()=>null,setScopedCache:async()=>{globalThis.f.cacheWrites++},registerListener:fn=>{globalThis.f.active.add(fn);return()=>{globalThis.f.active.delete(fn);fn()}}};`,audit:`export const AuditService={log:async entry=>{globalThis.f.audits.push(entry)}};`,photo:`export async function processPhotoForStorage(url){if(globalThis.f.onPhoto){const fn=globalThis.f.onPhoto;globalThis.f.onPhoto=null;await fn()}return{photoUrl:url.startsWith('data:')?'/api/drive/photo/test':url}};export async function processMultiplePhotosForStorage(photos){return photos};`,notifications:`export async function publishNotificationEvent(){}`};
+const names=['FirestoreService','DutyBookService','IncidentService','StudentPermitService','StudentTardyService','VisitorService','SubstitutionService','AttendanceService'];
+const entries=names.map(n=>`export{${n}}from'./src/services/firebase/${n[0].toLowerCase()+n.slice(1)}';`).join('\n');
+const built=await build({stdin:{contents:entries,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'cjs',platform:'node',plugins:[{name:'isolated-io',setup(b){for(const[path,filter]of[['sdk',/^firebase\/firestore$/],['firebase',/\/(?:firebase|firebaseAuth)$/],['offline',/offlineStorage$/],['audit',/auditService$/],['photo',/photoUploadHelper$/],['notifications',/notificationPublisher$/]])b.onResolve({filter},()=>({path,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}));}}]});
+const c=vm.createContext({f,module:{exports:{}},structuredClone,crypto:webcrypto,TextEncoder,Date,console:{log(){},warn(){},error(){}},setTimeout,clearTimeout});vm.runInContext(built.outputFiles[0].text,c);const s=c.module.exports.FirestoreService;
+const revision='2026-10-18T00:00:00.000Z',base={id:'one',updatedAt:revision,dataSource:'PRODUCTION',isDemo:false};
+const audit={userId:'admin',userName:'Admin',role:'ADMIN',action:'UPDATE',module:'INCIDENTS',details:'Synthetic test'};
+const put=(col,v)=>{const key=col+'/'+v.id;f.records.set(key,structuredClone(v));f.versions.set(key,(f.versions.get(key)||0)+1)};
+const cancel=()=>{for(const stop of [...f.active])stop();f.active.clear()};
+const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve}};
+const tick=async()=>{for(let i=0;i<20;i++)await Promise.resolve()};
+const changed=error=>error?.code==='SESSION_CHANGED';let count=0;
+const check=async(name,fn)=>{f.uid='admin';f.records.clear();f.versions.clear();f.writes=[];f.readGate=null;f.beforeCommit=null;f.active.clear();await fn();assert.equal(f.active.size,0,'scope cleanup');count++;console.log('PASS',name)};
+await check('audit actor must match the active Firebase account before committing',async()=>{f.uid='other-admin';await assert.rejects(s.setDocumentWithAudit('incidents','one',base,audit,{expectedState:null}),changed);assert.equal(f.writes.length,0)});
+for(const audited of [false,true])await check(`${audited?'audited':'ordinary'} pending transaction cannot write after account changes during its read`,async()=>{put('incidents',base);const g=deferred();f.readGate=g.promise;const result=audited?s.setDocumentWithAudit('incidents','one',{...base,note:'blocked'},audit,{expectedState:base}):s.setDocument('incidents','one',{...base,note:'blocked'},{expectedState:base});const rejected=assert.rejects(result,changed);await tick();f.uid='other-admin';cancel();g.resolve();await rejected;assert.equal(f.writes.length,0);assert.equal(f.records.get('incidents/one').note,undefined)});
+await check('same UID after logout/login still cannot resume a cancelled write',async()=>{put('incidents',base);const g=deferred();f.readGate=g.promise;const rejected=assert.rejects(s.setDocument('incidents','one',{...base,note:'blocked'},{expectedState:base}),changed);await tick();cancel();g.resolve();await rejected;assert.equal(f.writes.length,0)});
+await check('transaction retry cannot silently continue under a different account',async()=>{put('incidents',base);f.beforeCommit=()=>{put('incidents',{...base,updatedAt:'2026-10-18T00:00:01.000Z'});f.uid='other-admin'};await assert.rejects(s.setDocumentWithAudit('incidents','one',base,audit,{expectedState:base}),changed);assert.equal(f.writes.length,0)});
+await check('40 valid audited creates can proceed independently with 40 matching audit records',async()=>{await Promise.all(Array.from({length:40},(_,i)=>s.setDocumentWithAudit('incidents','record-'+i,{id:'record-'+i},audit,{expectedState:null})));assert.equal(f.writes.filter(w=>w.ref.c==='incidents').length,40);assert.equal(f.writes.filter(w=>w.ref.c==='auditLogs').length,40)});
+await check('ordinary batch path keeps payload and audit atomic for a matching active actor',async()=>{await s.setDocumentWithAudit('incidents','one',base,audit);assert.equal(f.writes.length,2);assert.ok(f.writes.some(w=>w.ref.c==='auditLogs'&&w.data.userId==='admin'))});
+console.log(`${count} round-4 write/session/atomic-audit scenarios passed. Synthetic IO, no production load test.`);
