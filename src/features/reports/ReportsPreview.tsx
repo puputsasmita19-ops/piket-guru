@@ -34,6 +34,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { MonthlyReportPrintModal } from './MonthlyReportPrintModal';
+import { AttendanceSummaryTable, filterAttendanceSummaries } from './AttendanceSummaryTable';
 import { PhotoRecapPrintModal } from './PhotoRecapPrintModal';
 import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { where } from 'firebase/firestore';
@@ -452,6 +453,8 @@ export const ReportsPreview: React.FC = () => {
     );
   }, [schedules, attendanceList, teachers, startDate, endDate, dateValidation.isValid]);
 
+  const filteredAttendanceSummaries = useMemo(() => filterAttendanceSummaries(attendanceSummaries, searchQuery), [attendanceSummaries, searchQuery]);
+
   const incidentSummaries = useMemo(() => {
     if (!dateValidation.isValid) return [];
     return ReportService.getIncidentCategorySummary(
@@ -768,7 +771,7 @@ export const ReportsPreview: React.FC = () => {
     switch (activeTab) {
       case 'attendance': {
         const headers = ['No', 'NIP', 'Nama Guru', 'Mata Pelajaran', 'Total Shift', 'Hadir (GPS)', 'Luar Radius', 'Tidak Hadir', 'Persentase'];
-        const rows = attendanceSummaries.map((s, idx) => [
+        const rows = filteredAttendanceSummaries.map((s, idx) => [
           idx + 1,
           s.nip,
           s.fullName,
@@ -898,7 +901,7 @@ export const ReportsPreview: React.FC = () => {
       }
       default: return null;
     }
-  }, [activeTab, periodLabel, startDate, endDate, attendanceSummaries, teachers, filteredIncidents, filteredDutyBooks, filteredTardiness, filteredPermits, filteredSubstitutions, filteredVisitors]);
+  }, [activeTab, periodLabel, startDate, endDate, filteredAttendanceSummaries, teachers, filteredIncidents, filteredDutyBooks, filteredTardiness, filteredPermits, filteredSubstitutions, filteredVisitors]);
 
   const handleExportActiveDocument = async (format: 'word' | 'pdf') => {
     if (isExportingDocument || !activeWordReport?.rows.length || !settingsReady || isLoadingData || dataLoadError || !dateValidation.isValid) return;
@@ -1209,8 +1212,8 @@ export const ReportsPreview: React.FC = () => {
             </div>
           )}
 
-          {/* Search bar */}
-          <div className="relative pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          {/* Attendance search is kept next to its compact table. */}
+          {activeTab !== 'attendance' && <div className="relative pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <Search className="w-4 h-4 absolute left-3 top-5 text-slate-400" />
             <input
               type="text"
@@ -1219,7 +1222,7 @@ export const ReportsPreview: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] focus:bg-white dark:focus:bg-[var(--theme-input-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
             />
-          </div>
+          </div>}
         </CardContent>
       </Card>
 
@@ -1345,68 +1348,13 @@ export const ReportsPreview: React.FC = () => {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader
-              title={`Rekapitulasi Kehadiran Guru Piket (${periodLabel})`}
-              subtitle="Statistik kehadiran berbasis validasi GPS Geolocation dan swafoto"
-            />
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
-                  <tr>
-                    <th className="p-4">Guru / Petugas Piket</th>
-                    <th className="p-4">NIP</th>
-                    <th className="p-4 text-center">Total Shift</th>
-                    <th className="p-4 text-center">Hadir (GPS)</th>
-                    <th className="p-4 text-center">Luar Radius</th>
-                    <th className="p-4 text-center">Persentase</th>
-                    <th className="p-4 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {attendanceSummaries.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-6 text-center text-slate-400">
-                        Tidak ada data jadwal piket pada periode ini.
-                      </td>
-                    </tr>
-                  ) : (
-                    attendanceSummaries.map((item) => (
-                      <tr key={item.teacherId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="p-4 font-bold text-slate-900 dark:text-white">
-                          {item.fullName}
-                        </td>
-                        <td className="p-4 font-mono text-slate-500 text-[11px]">
-                          {item.nip}
-                        </td>
-                        <td className="p-4 text-center font-mono">
-                          {item.totalShift}
-                        </td>
-                        <td className="p-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          {item.hadir}
-                        </td>
-                        <td className="p-4 text-center font-mono text-amber-600">
-                          {item.terlambatOrOutside}
-                        </td>
-                        <td className="p-4 text-center font-bold">
-                          <span className={`px-2 py-1 rounded-lg text-xs ${
-                            item.percentage >= 80 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {item.percentage}%
-                          </span>
-                        </td>
-                        <td className="p-4 text-center">
-                          <Badge variant={item.percentage >= 80 ? 'success' : 'warning'} size="sm">
-                            {item.percentage >= 80 ? 'Sangat Baik' : 'Cukup'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
+          <AttendanceSummaryTable
+            key={`${startDate}:${endDate}`}
+            items={attendanceSummaries}
+            periodLabel={periodLabel}
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+          />
         </div>
       )}
 
