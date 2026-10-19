@@ -88,6 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' };
   } | null>(null);
 
+  const [logoutCheckError, setLogoutCheckError] = useState<{ uid: string; message: string } | null>(null);
+  useEffect(() => { setLogoutCheckError(error => error?.uid === currentUser?.id ? error : null); }, [currentUser?.id]);
+
   const execLogout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
     if (logoutInProgressRef.current) return;
     logoutInProgressRef.current = true;
@@ -137,17 +140,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(async (options?: { force?: boolean; purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
+    setLogoutCheckError(null);
     const currentUser = currentUserRef.current;
     if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED' && options?.reason !== 'SESSION_INVALID') {
       try {
         await import('../services/offline/draftService').then(m => m.DraftService.flushPending(currentUser.id));
         const counts = await OfflineStorage.getPendingCount(currentUser.id);
+        if (currentUserRef.current?.id !== currentUser.id) return;
         if (counts.total > 0) {
           setPendingLogoutPrompt({ counts, options });
           return;
         }
       } catch (err) {
         console.warn('[AUTH_CONTEXT] Error inspecting pending counts on logout:', err);
+        if (currentUserRef.current?.id === currentUser.id) setLogoutCheckError({ uid: currentUser.id, message: 'Data tersimpan belum dapat diperiksa. Anda tetap masuk agar pekerjaan tidak terabaikan. Coba keluar lagi setelah penyimpanan perangkat pulih.' });
+        return;
       }
     }
     await execLogout(options);
@@ -549,6 +556,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+      {logoutCheckError && logoutCheckError.uid === currentUser?.id && <div role="alert" className="fixed bottom-20 sm:bottom-5 left-4 right-4 sm:left-auto sm:max-w-sm z-[100] rounded-xl border border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100 p-4 shadow-lg text-xs">
+        <p>{logoutCheckError.message}</p>
+        <button type="button" className="mt-2 min-h-11 px-3 rounded-lg font-semibold focus-visible:outline-2" onClick={() => setLogoutCheckError(null)}>Tutup pesan</button>
+      </div>}
 
       {/* Pending Unsynced Offline Data Confirmation Modal on Logout */}
       {pendingLogoutPrompt && (
@@ -584,12 +595,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 type="button"
                 onClick={async () => {
                   if (currentUser) {
-                    await SyncQueueService.triggerSync(currentUser);
-                    const freshCounts = await OfflineStorage.getPendingCount(currentUser.id);
-                    if (freshCounts.total === 0) {
-                      execLogout(pendingLogoutPrompt.options);
-                    } else {
-                      setPendingLogoutPrompt((prev) => prev ? { ...prev, counts: freshCounts } : null);
+                    try {
+                      await SyncQueueService.triggerSync(currentUser);
+                      const freshCounts = await OfflineStorage.getPendingCount(currentUser.id);
+                      if (currentUserRef.current?.id !== currentUser.id) return;
+                      if (freshCounts.total === 0) await execLogout(pendingLogoutPrompt.options);
+                      else setPendingLogoutPrompt((prev) => prev ? { ...prev, counts: freshCounts } : null);
+                    } catch {
+                      if (currentUserRef.current?.id === currentUser.id) setLogoutCheckError({ uid: currentUser.id, message: 'Sinkronisasi belum dapat dipastikan. Data tetap dipertahankan; coba lagi setelah koneksi atau penyimpanan pulih.' });
                     }
                   }
                 }}

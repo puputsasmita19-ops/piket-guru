@@ -104,10 +104,8 @@ export class SyncQueueService {
   public static async resumeNetwork(user: UserProfile): Promise<void> {
     if (auth.currentUser?.uid !== user.id || isSyncInProgress) return;
     for (const item of await OfflineStorage.getSyncItemsByUser(user.id)) {
-      if (item.status === 'PENDING_NETWORK' && /unavailable|deadline-exceeded|network|Failed to fetch|offline|koneksi|terhubung|timeout/i.test(item.lastError || '')) {
-        item.nextRetryAt = 0;
-        await OfflineStorage.updateSyncItem(item);
-      }
+      if (auth.currentUser?.uid !== user.id) return;
+      await OfflineStorage.resetSyncItemForRetry(item.operationId, user.id, true);
     }
   }
 
@@ -196,7 +194,8 @@ export class SyncQueueService {
       items,
     };
 
-    this.notifyListeners(summary);
+    if (auth.currentUser?.uid === userId) this.notifyListeners(summary);
+    else return { ...summary, items: [], pendingCount: 0, needsActionCount: 0, isSyncing: false };
     return summary;
   }
 
@@ -204,17 +203,9 @@ export class SyncQueueService {
    * Retry an item that previously required action or failed
    */
   public static async retryItem(operationId: string, user: UserProfile): Promise<void> {
-    const items = await OfflineStorage.getSyncItemsByUser(user.id);
-    const target = items.find((i) => i.operationId === operationId);
-    if (!target) return;
-
-    target.status = 'PENDING_NETWORK';
-    target.retryCount = 0;
-    target.nextRetryAt = undefined;
-    target.lastError = undefined;
-    target.updatedAt = new Date().toISOString();
-
-    await OfflineStorage.updateSyncItem(target);
+    if (auth.currentUser?.uid !== user.id) throw new Error('Sesi akun telah berubah. Masuk kembali dengan akun pemilik data.');
+    const changed = await OfflineStorage.resetSyncItemForRetry(operationId, user.id);
+    if (!changed) return;
     await this.refreshStatus(user.id);
     this.triggerSync(user).catch(() => {});
   }
@@ -254,11 +245,13 @@ export class SyncQueueService {
 
     // 2. Cross-tab lock protection via Web Locks API
     if (typeof navigator !== 'undefined' && 'locks' in navigator && (navigator as any).locks?.request) {
+      let callbackStarted = false;
       try {
         return await (navigator as any).locks.request(
           `piket_sync_lock_${currentUser.id}`,
           { ifAvailable: true },
           async (lock: any) => {
+            callbackStarted = true;
             if (!lock) {
               console.log('[SYNC_QUEUE] Another browser tab is currently syncing for this user.');
               return { processed: 0, succeeded: 0, failed: 0 };
@@ -267,6 +260,7 @@ export class SyncQueueService {
           }
         );
       } catch (lockErr) {
+        if (callbackStarted) throw lockErr; // A delivery/storage error is not a lock acquisition failure.
         console.warn('[SYNC_QUEUE] Web Locks API error, falling back to lease lock:', lockErr);
       }
     }
@@ -310,14 +304,14 @@ export class SyncQueueService {
 
     isSyncInProgress = true;
     isSyncCancelled = false;
-    await this.refreshStatus(currentUser.id);
 
     let processed = 0;
     let succeeded = 0;
     let failed = 0;
 
     try {
-      const items = await OfflineStorage.getSyncItemsByUser(currentUser.id);
+      await this.refreshStatus(currentUser.id);
+      const items = await OfflineStorage.getSyncItemsByUser(currentUser.id, { strict: true });
       const currentTime = Date.now();
 
       // Recover a browser/process interruption only after the stale send window.
@@ -405,7 +399,7 @@ export class SyncQueueService {
       }
     } finally {
       isSyncInProgress = false;
-      await this.refreshStatus(currentUser.id);
+      await this.refreshStatus(currentUser.id).catch(error => console.warn('[SYNC_QUEUE] Status akan diperbarui setelah penyimpanan pulih:', error));
     }
 
     return { processed, succeeded, failed };

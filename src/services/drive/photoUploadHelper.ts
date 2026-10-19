@@ -1,3 +1,4 @@
+import { auth } from '../firebase/firebaseAuth';
 import { DriveClientService } from './driveClientService';
 
 export interface ProcessedPhotoResult {
@@ -49,7 +50,13 @@ export async function processPhotoForStorage(
     return { photoUrl: photoInput, provider: 'google_drive' };
   }
 
+  const ownerUid = auth.currentUser?.uid;
+  const assertOwner = () => {
+    if (!ownerUid || auth.currentUser?.uid !== ownerUid) throw new Error('Sesi akun telah berubah. Simpan kembali dengan akun pemilik foto.');
+  };
+  assertOwner();
   const driveActive = await isDriveStorageActive();
+  assertOwner();
 
   if (!driveActive) {
     // Drive storage disabled or not connected -> keep original Base64 string
@@ -63,6 +70,7 @@ export async function processPhotoForStorage(
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
       JSON.stringify([module, recordId || '', clientPhotoId || '', photoInput])
     ));
+    assertOwner();
     const uploadId = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
     const uploadRes = await DriveClientService.uploadPhoto({
       base64: photoInput,
@@ -71,6 +79,7 @@ export async function processPhotoForStorage(
       recordId,
     });
 
+    assertOwner();
     if (!uploadRes.success || !uploadRes.fileId || !uploadRes.photoUrl) {
       throw new Error(uploadRes.error || 'Gagal mengunggah foto ke Google Drive.');
     }
@@ -97,8 +106,11 @@ export async function processMultiplePhotosForStorage<T extends { url: string; i
 ): Promise<T[]> {
   if (!photos || photos.length === 0) return [];
 
+  const ownerUid = auth.currentUser?.uid;
+  if (!ownerUid) throw new Error('Sesi berakhir. Silakan masuk kembali.');
   const processed: T[] = [];
   for (let i = 0; i < photos.length; i++) {
+    if (auth.currentUser?.uid !== ownerUid) throw new Error('Sesi akun telah berubah. Foto berikutnya belum dikirim.');
     const p = photos[i];
     if (!p.url || p.url.startsWith('/api/drive/photo/') || p.url.startsWith('http')) {
       processed.push(p);
@@ -106,6 +118,7 @@ export async function processMultiplePhotosForStorage<T extends { url: string; i
     }
 
     const res = await processPhotoForStorage(p.url, module, p.id || `photo-${i}`, recordId);
+    if (auth.currentUser?.uid !== ownerUid) throw new Error('Sesi akun telah berubah. Foto berikutnya belum dikirim.');
     processed.push({
       ...p,
       url: res.photoUrl,

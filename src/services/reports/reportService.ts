@@ -77,29 +77,50 @@ export class ReportService {
     const operationalTeachers = teachers.filter(isOperationalRecord);
     const operationalAttendance = attendance.filter(isOperationalRecord);
 
-    const filteredAttendance = operationalAttendance.filter(
-      (a) => a.tanggal >= startDate && a.tanggal <= endDate
-    );
-
-    const operationalSchedules = schedules.filter(isOperationalRecord);
-    const filteredSchedules = operationalSchedules.filter(
-      (s) => s.tanggal >= startDate && s.tanggal <= endDate
-    );
+    // Resolve a person once; shared titles/first names must never join accounts.
+    const byId = new Map<string, TeacherRecord | null>();
+    const byName = new Map<string, TeacherRecord | null>();
+    const key = (value: unknown) => typeof value === 'string' ? value.trim() : '';
+    const nameKey = (value: unknown) => key(value).normalize('NFKC').toLocaleLowerCase('id-ID').replace(/\s+/g, ' ');
+    const add = (map: Map<string, TeacherRecord | null>, value: string, teacher: TeacherRecord) => {
+      if (!value) return;
+      if (!map.has(value)) map.set(value, teacher);
+      else if (map.get(value) !== teacher) map.set(value, null); // Ambiguous master data: do not guess.
+    };
+    for (const teacher of operationalTeachers) {
+      add(byId, key(teacher.id), teacher);
+      add(byId, key(teacher.userId), teacher);
+      add(byName, nameKey(teacher.fullName), teacher);
+    }
+    const resolveTeacher = (id: unknown, name: unknown): TeacherRecord | undefined => {
+      const stableId = key(id);
+      if (stableId && byId.has(stableId)) return byId.get(stableId) || undefined;
+      const legacy = byName.get(nameKey(name));
+      // Exact unique names support old records/unlinked masters. A supplied UID
+      // cannot override a master that is explicitly linked to another account.
+      if (!legacy || (stableId && key(legacy.userId))) return undefined;
+      return legacy;
+    };
+    const counts = new Map(operationalTeachers.map(teacher => [teacher, { shifts: 0, hadir: 0, outside: 0 }]));
+    for (const schedule of schedules) {
+      if (!isOperationalRecord(schedule) || !(schedule.tanggal >= startDate && schedule.tanggal <= endDate)) continue;
+      const teacher = resolveTeacher(schedule.petugasId, schedule.petugasName);
+      if (teacher) counts.get(teacher)!.shifts++;
+    }
+    for (const attendance of operationalAttendance) {
+      if (!(attendance.tanggal >= startDate && attendance.tanggal <= endDate)) continue;
+      const teacher = resolveTeacher(attendance.userId, attendance.userName);
+      if (!teacher) continue;
+      if (attendance.status === 'DALAM_LOKASI') counts.get(teacher)!.hadir++;
+      else if (attendance.status === 'DI_LUAR_LOKASI' || attendance.status === 'AKURASI_RENDAH') counts.get(teacher)!.outside++;
+    }
 
     return operationalTeachers.map((teacher) => {
-      // Find all schedules and attendances for this teacher within the period
-      const teacherSchedules = filteredSchedules.filter(
-        (s) => s.petugasId === teacher.id || (s.petugasName && s.petugasName.includes(teacher.fullName.split(' ')[0]))
-      );
-
-      const teacherAtts = filteredAttendance.filter(
-        (a) => a.userId === teacher.id || (a.userName && a.userName.includes(teacher.fullName.split(' ')[0]))
-      );
-
-      const hadirCount = teacherAtts.filter((a) => a.status === 'DALAM_LOKASI').length;
-      const outsideCount = teacherAtts.filter((a) => a.status === 'DI_LUAR_LOKASI' || a.status === 'AKURASI_RENDAH').length;
+      const count = counts.get(teacher)!;
+      const hadirCount = count.hadir;
+      const outsideCount = count.outside;
       const totalRecorded = hadirCount + outsideCount;
-      const totalShift = teacherSchedules.length > 0 ? teacherSchedules.length : Math.max(totalRecorded, 1);
+      const totalShift = count.shifts > 0 ? count.shifts : Math.max(totalRecorded, 1);
       const tidakHadir = Math.max(0, totalShift - totalRecorded);
 
       const percentage = totalShift > 0 ? Math.min(100, Math.round((hadirCount / totalShift) * 100)) : 100;

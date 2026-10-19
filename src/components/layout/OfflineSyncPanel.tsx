@@ -206,10 +206,14 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
             <button
               type="button"
               onClick={async () => {
-                if (isTrustedDevice && (await OfflineStorage.getPendingCount(currentUser.id)).total > 0) {
-                  setFeedback('Selesaikan antrean dan draf sebelum beralih ke perangkat publik.'); return;
+                try {
+                  if (isTrustedDevice && (await OfflineStorage.getPendingCount(currentUser.id)).total > 0) {
+                    setFeedback('Selesaikan antrean dan draf sebelum beralih ke perangkat publik.'); return;
+                  }
+                  setTrustedDevice(!isTrustedDevice);
+                } catch {
+                  setFeedback('Data tersimpan belum dapat diperiksa. Mode perangkat belum diubah; coba lagi setelah penyimpanan pulih.'); return;
                 }
-                setTrustedDevice(!isTrustedDevice);
                 if (!isTrustedDevice) {
                   try { await OfflineStorage.persistMemoryWork(); setFeedback('Perangkat pribadi aktif. Antrean tersimpan di HP ini.'); }
                   catch { setFeedback('Penyimpanan perangkat belum tersedia. Jangan tutup tab sebelum data terkirim.'); }

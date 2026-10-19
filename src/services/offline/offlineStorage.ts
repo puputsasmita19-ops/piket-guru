@@ -338,7 +338,7 @@ export class OfflineStorage {
     }
   }
 
-  public static async listDraftsByUser(userId: string, formType?: string): Promise<DraftRecord[]> {
+  public static async listDraftsByUser(userId: string, formType?: string, options: { strict?: boolean } = {}): Promise<DraftRecord[]> {
     if (!userId) return [];
 
     let results: DraftRecord[] = [];
@@ -358,17 +358,20 @@ export class OfflineStorage {
         const store = tx.objectStore('drafts');
         const index = store.index('userId');
         const req = index.getAll(userId);
+        let received: DraftRecord[] = [];
         req.onsuccess = () => {
           const items = (req.result || []) as DraftRecord[];
           if (formType) {
-            resolve(items.filter((d) => d.formType === formType));
+            received = items.filter((d) => d.formType === formType);
           } else {
-            resolve(items);
+            received = items;
           }
         };
-        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => resolve(received);
+        tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Pembacaan draf dibatalkan.'));
       });
-    } catch {
+    } catch (error) {
+      if (options.strict) throw error;
       memoryStore.drafts.forEach((draft) => {
         if (draft.userId === userId && (!formType || draft.formType === formType)) {
           results.push(draft);
@@ -424,6 +427,40 @@ export class OfflineStorage {
     await this.enqueueSyncItem(item);
   }
 
+  /** Retry controls must atomically inspect the latest queue state, not a stale UI snapshot. */
+  public static async resetSyncItemForRetry(operationId: string, userId: string, networkOnly = false): Promise<boolean> {
+    const reset = (item?: QueueItem): QueueItem | null => {
+      if (!item || item.userId !== userId || item.projectId !== CURRENT_PROJECT_ID) return null;
+      if (item.status === 'SENDING') {
+        if (networkOnly) return null;
+        throw new Error('Data sedang dikirim ke server. Harap tunggu hingga pengiriman selesai.');
+      }
+      if (item.status !== 'PENDING_NETWORK' && item.status !== 'NEEDS_ACTION') return null;
+      if (networkOnly && (item.status !== 'PENDING_NETWORK' || !/unavailable|deadline-exceeded|network|Failed to fetch|offline|koneksi|terhubung|timeout/i.test(item.lastError || ''))) return null;
+      return { ...item, status: 'PENDING_NETWORK', retryCount: networkOnly ? item.retryCount : 0,
+        nextRetryAt: 0, lastError: networkOnly ? item.lastError : undefined, updatedAt: new Date().toISOString() };
+    };
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const next = reset(memoryStore.syncQueue.get(operationId));
+      if (next) memoryStore.syncQueue.set(operationId, next);
+      return !!next;
+    }
+    const db = await this.getDb();
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite'), store = tx.objectStore('syncQueue');
+      let changed = false, cause: unknown;
+      const request = store.get(operationId);
+      request.onsuccess = () => {
+        try {
+          const next = reset(request.result);
+          if (next) { store.put(next); changed = true; }
+        } catch (error) { cause = error; tx.abort(); }
+      };
+      tx.oncomplete = () => resolve(changed);
+      tx.onabort = tx.onerror = () => reject(cause || tx.error || new Error('Percobaan ulang antrean belum tersimpan.'));
+    });
+  }
+
   /** Atomic cross-tab lease, also used when Web Locks is unavailable. */
   public static async syncLease(userId: string, owner: string, release = false): Promise<boolean> {
     if (!this.isTrustedDevice() || !this.isIndexedDBSupported) return true;
@@ -466,7 +503,7 @@ export class OfflineStorage {
     memoryStore.syncQueue.delete(operationId);
   }
 
-  public static async getSyncItemsByUser(userId: string): Promise<QueueItem[]> {
+  public static async getSyncItemsByUser(userId: string, options: { strict?: boolean } = {}): Promise<QueueItem[]> {
     if (!userId) return [];
 
     let results: QueueItem[] = [];
@@ -486,8 +523,10 @@ export class OfflineStorage {
         const store = tx.objectStore('syncQueue');
         const index = store.index('userId');
         const req = index.getAll(userId);
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject(req.error);
+        let received: QueueItem[] = [];
+        req.onsuccess = () => { received = req.result || []; };
+        tx.oncomplete = () => resolve(received);
+        tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Pembacaan antrean dibatalkan.'));
       });
       // Merge memory items in case any are pending flush
       memoryStore.syncQueue.forEach((item) => {
@@ -495,7 +534,8 @@ export class OfflineStorage {
           results.push(item);
         }
       });
-    } catch {
+    } catch (error) {
+      if (options.strict) throw error;
       memoryStore.syncQueue.forEach((item) => {
         if (item.userId === userId) {
           results.push(item);
@@ -687,20 +727,11 @@ export class OfflineStorage {
    */
   public static async getPendingCount(userId: string): Promise<{ syncQueueCount: number; draftsCount: number; total: number }> {
     if (!userId) return { syncQueueCount: 0, draftsCount: 0, total: 0 };
-    try {
-      const queueItems = await this.getSyncItemsByUser(userId);
-      const pendingQueue = queueItems.filter(
-        (i) => i.status === 'PENDING_NETWORK' || i.status === 'SENDING' || i.status === 'NEEDS_ACTION'
-      );
-      const drafts = await this.listDraftsByUser(userId);
-      return {
-        syncQueueCount: pendingQueue.length,
-        draftsCount: drafts.length,
-        total: pendingQueue.length + drafts.length,
-      };
-    } catch {
-      return { syncQueueCount: 0, draftsCount: 0, total: 0 };
-    }
+    // An unreadable persistent store is unknown, never a verified empty queue.
+    const queueItems = await this.getSyncItemsByUser(userId, { strict: true });
+    const pendingQueue = queueItems.filter(i => i.status === 'PENDING_NETWORK' || i.status === 'SENDING' || i.status === 'NEEDS_ACTION');
+    const drafts = await this.listDraftsByUser(userId, undefined, { strict: true });
+    return { syncQueueCount: pendingQueue.length, draftsCount: drafts.length, total: pendingQueue.length + drafts.length };
   }
 
   /**
