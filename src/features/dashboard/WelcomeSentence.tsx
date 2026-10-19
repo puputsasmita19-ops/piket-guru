@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pause, Play } from '../../components/icons';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getDashboardWelcome, getWelcomeMessagePool, sanitizeDashboardWelcomeConfig, type DashboardWelcomeConfig } from '../../types/dashboardWelcome.types';
 
 function useReducedMotion() {
@@ -43,6 +42,23 @@ function TransitionText({ message, animate, duration }: { message: string; anima
   const reduced = useReducedMotion();
   const [display, setDisplay] = useState({ text: message, phase: 'idle' });
   const current = useRef(display); current.current = display;
+  const textRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const text = textRef.current, sentence = text?.closest<HTMLElement>('.welcome-sentence');
+    if (!text || !sentence) return;
+    const alignControl = () => {
+      const style = getComputedStyle(text);
+      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.6;
+      // Use the visible text, not the hidden space reserved for longer templates.
+      const lineOffset = text.clientHeight > lineHeight * 1.5 ? lineHeight : 0;
+      sentence.style.setProperty('--welcome-control-top', `${lineOffset + (lineHeight - 20) / 2}px`);
+    };
+    alignControl();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(alignControl) : null;
+    observer?.observe(text);
+    window.addEventListener('resize', alignControl);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', alignControl); };
+  }, [display.text]);
   useEffect(() => {
     let enterTimer: ReturnType<typeof setTimeout>, idleTimer: ReturnType<typeof setTimeout>;
     if (!animate || reduced || document.hidden || current.current.text === message) {
@@ -56,7 +72,7 @@ function TransitionText({ message, animate, duration }: { message: string; anima
     }
     return () => { clearTimeout(enterTimer); clearTimeout(idleTimer); };
   }, [message, animate, duration, reduced]);
-  return <span key={display.text} className="welcome-message-text" data-phase={display.phase} data-motion={animate && !reduced ? 'on' : 'off'}>{display.text}</span>;
+  return <span key={display.text} ref={textRef} className="welcome-message-text" data-phase={display.phase} data-motion={animate && !reduced ? 'on' : 'off'}>{display.text}</span>;
 }
 
 export const WelcomeSentence = React.memo(function WelcomeSentence({ config: value, className = '' }: {
@@ -83,7 +99,9 @@ export const WelcomeSentence = React.memo(function WelcomeSentence({ config: val
       aria-label={pausedAt === null ? 'Jeda rotasi kalimat' : 'Lanjutkan rotasi kalimat'}
       title={pausedAt === null ? 'Jeda kalimat' : 'Lanjutkan kalimat'}
       onClick={() => setPausedAt(previous => previous === null ? now : null)}>
-      {pausedAt === null ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+      <svg className="welcome-control-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        {pausedAt === null ? <path d="M7 4v12M13 4v12" /> : <path d="m7 4 9 6-9 6Z" />}
+      </svg>
     </button>}
   </p>;
 });

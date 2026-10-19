@@ -1213,10 +1213,10 @@ button.bg-\[var\(--theme-primary\)\],
 .welcome-message-text { display: block; }
 .welcome-message-text[data-motion="on"][data-phase="exit"] { animation: welcome-rise-out var(--welcome-exit-ms, 240ms) cubic-bezier(.4, 0, .7, .3) both; }
 .welcome-message-text[data-motion="on"][data-phase="enter"] { animation: welcome-down-in var(--welcome-enter-ms, 360ms) cubic-bezier(.16, 1, .3, 1) both; }
-.welcome-message-pause { align-self: start; margin-top: -4px; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; min-height: 28px; border: 0; border-radius: 8px; color: inherit; background: transparent; cursor: pointer; opacity: .75; }
-.welcome-message-pause::before { content: ''; position: absolute; inset: -8px; }
-.welcome-message-pause svg { width: 13px; height: 13px; }
-.welcome-message-pause:hover { opacity: 1; background: var(--theme-surface-subtle); }
+.welcome-message-pause { align-self: start; margin-top: var(--welcome-control-top, 0px); position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; min-height: 20px; height: 20px; border: 0; border-radius: 8px; color: inherit; background: transparent; cursor: pointer; opacity: .75; }
+.welcome-message-pause::before { content: ''; position: absolute; inset: -12px -8px; }
+.welcome-message-pause .welcome-control-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; }
+.welcome-message-pause:hover { opacity: 1; }
 .welcome-message-pause:focus-visible { opacity: 1; outline: 2px solid var(--theme-primary); outline-offset: 3px; }
 @keyframes welcome-rise-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-8px); opacity: 0; } }
 @keyframes welcome-down-in { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
