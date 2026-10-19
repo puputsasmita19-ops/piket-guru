@@ -3,6 +3,7 @@ import { sanitizeDashboardWelcomeConfig, type DashboardWelcomeConfig } from './d
 export const DASHBOARD_INFO_PANELS = {
   announcements: 'Papan Pengumuman & Instruksi Piket',
   dutyRoster: 'Daftar Guru Bertugas Hari Ini',
+  dutyRosterTomorrow: 'Daftar Guru Bertugas Besok',
   incidents: 'Laporan Insiden & Kejadian Terbaru',
   operations: 'Ringkasan Kegiatan Hari Ini',
 } as const;
@@ -21,7 +22,11 @@ export function sanitizeDashboardInfoConfig(value?: Partial<DashboardInfoConfig>
     enabled: v.enabled !== false,
     autoPlay: v.autoPlay !== false,
     intervalMs: DASHBOARD_INFO_INTERVALS.includes(v.intervalMs!) ? v.intervalMs! : 3000,
-    panels: Object.fromEntries(Object.keys(DASHBOARD_INFO_PANELS).map(key => [key, v.panels?.[key as DashboardInfoPanel] !== false])) as Record<DashboardInfoPanel, boolean>,
+    panels: Object.fromEntries(Object.keys(DASHBOARD_INFO_PANELS).map(key => [key,
+      key === 'dutyRosterTomorrow' && v.panels?.dutyRosterTomorrow === undefined
+        ? v.panels?.dutyRoster !== false
+        : v.panels?.[key as DashboardInfoPanel] !== false,
+    ])) as Record<DashboardInfoPanel, boolean>,
     welcome: sanitizeDashboardWelcomeConfig(v.welcome),
   };
 }

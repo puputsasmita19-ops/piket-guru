@@ -10,6 +10,7 @@ export interface DashboardFlashSlide {
   items: { id: string; title: string; detail?: string }[];
   emptyText: string;
   description?: string;
+  caption?: string;
   illustration?: React.ReactNode;
   actionLabel: string;
   onAction: () => void;
@@ -131,6 +132,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
           return <div key={key} data-slide-id={item.id} data-loop-clone={clone || undefined} className={`flash-slide ${item.id === 'activity' ? 'flash-activity-slide' : ''} ${item.id === 'operations' ? 'flash-operations-slide' : ''} ${item.id === 'announcements' ? 'flash-announcement-slide' : ''}`} role="group" aria-roledescription="slide" aria-label={`${logicalIndex + 1} dari ${slides.length}: ${item.title}`} aria-hidden={!active} inert={!active}>
             {item.id === 'activity' ? <div className="flash-activity">{item.illustration}<div className="min-w-0"><h2>{item.title}</h2><p className="flash-activity-description">{item.description}</p></div></div> : <>
               <h2><Icon className="w-4 h-4 shrink-0" /><span>{item.title}</span></h2>
+              {item.caption && <p className="flash-slide-caption">{item.caption}</p>}
               <div className="flash-content">{item.items.length ? <>
                 <ul>{item.items.slice(0, item.id === 'announcements' ? 1 : 3).map(row => <li key={row.id}><p className="flash-item-title">{item.id === 'announcements' ? announcementPreview(row.title, 120) : row.title}</p>{row.detail && <p className="flash-item-detail">{item.id === 'announcements' ? announcementPreview(row.detail) : row.detail}</p>}</li>)}</ul>
                 {item.id === 'announcements' && item.items.length > 1 && <p className="flash-announcement-more">+{item.items.length - 1} pengumuman lainnya</p>}

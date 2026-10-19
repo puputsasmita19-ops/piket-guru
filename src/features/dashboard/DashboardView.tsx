@@ -62,6 +62,7 @@ import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
+import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
@@ -71,7 +72,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const { currentUser, hasRole, hasPermission } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const { subView, setSubView } = useNavigation();
-  const [detailPanel, setDetailPanel] = useState<'announcements' | 'dutyRoster' | 'incidents' | null>(null);
+  const [detailPanel, setDetailPanel] = useState<'announcements' | 'dutyRoster' | 'dutyRosterTomorrow' | 'incidents' | null>(null);
   const [focusedAnnouncementId, setFocusedAnnouncementId] = useState<string | null>(null);
   const focusedOnce = useRef<string | null>(null);
   const openAnnouncements = () => { setFocusedAnnouncementId(null); focusedOnce.current = null; setDetailPanel('announcements'); };
@@ -143,6 +144,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [dutyRevealRequest]);
   const todayISO = useWibToday();
   const todayName = getCurrentDayName(todayISO);
+  const tomorrowISO = nextDutyDate(todayISO);
 
   useEffect(() => {
     AnnouncementService.bootstrapIfEmpty();
@@ -227,7 +229,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [todayISO]);
 
   // Today's schedules & operational items
-  const todaySchedules = schedules.filter((s) => isScheduleOnDate(s, todayISO));
+  const todaySchedules = dutyRosterForDate(schedules, todayISO);
+  const tomorrowSchedules = dutyRosterForDate(schedules, tomorrowISO);
   const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
   const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
   const todayIncidents = incidents.filter((i) => i.tanggal === todayISO);
@@ -301,7 +304,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   ].filter(Boolean) as DashboardFlashSlide['items'];
   const flashSlides: DashboardFlashSlide[] = [
     { id: 'announcements' as const, title: 'Pengumuman & Instruksi Piket', icon: Megaphone, items: visibleAnnouncements.map(a => ({ id: a.id, title: a.title, detail: a.content })), emptyText: isLoadingAnnouncements ? 'Memuat pengumuman…' : 'Belum ada pengumuman aktif untuk Anda.', actionLabel: 'Buka pengumuman', onAction: openAnnouncements },
-    ...(hasPermission(PERMISSIONS.SCHEDULE_VIEW) ? [{ id: 'dutyRoster' as const, title: 'Guru Bertugas Hari Ini', icon: Users, items: todaySchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Tidak ada jadwal piket hari ini.', actionLabel: 'Buka daftar guru', onAction: () => setDetailPanel('dutyRoster') }] : []),
+    ...(hasPermission(PERMISSIONS.SCHEDULE_VIEW) ? [
+      { id: 'dutyRoster' as const, title: 'Guru Bertugas Hari Ini', caption: `${formatIndonesianDate(todayISO)} · ${todaySchedules.length} penugasan`, icon: Users, items: todaySchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Tidak ada jadwal piket hari ini.', actionLabel: 'Buka daftar guru', onAction: () => setDetailPanel('dutyRoster') },
+      { id: 'dutyRosterTomorrow' as const, title: 'Guru Bertugas Besok', caption: `${formatIndonesianDate(tomorrowISO)} · ${tomorrowSchedules.length} penugasan`, icon: Users, items: tomorrowSchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Belum ada jadwal piket untuk besok.', actionLabel: 'Buka petugas besok', onAction: () => setDetailPanel('dutyRosterTomorrow') },
+    ] : []),
     ...(hasPermission(PERMISSIONS.INCIDENT_VIEW) ? [{ id: 'incidents' as const, title: 'Insiden & Kejadian Terbaru', icon: AlertTriangle, items: [...todayIncidents].sort((a, b) => (b.waktu || '').localeCompare(a.waktu || '')).map(item => ({ id: item.id, title: `[${getIncidentCategoryDisplay(item)}] ${item.lokasi}`, detail: `${item.waktu} WIB · ${item.uraian}` })), emptyText: 'Belum ada kejadian yang dilaporkan hari ini.', actionLabel: 'Buka laporan kejadian', onAction: () => setDetailPanel('incidents') }] : []),
     ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body' }] : []),
   ].filter(slide => flashConfig.panels[slide.id]);
@@ -425,11 +431,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </CardContent>
       </Card>
   );
+  const isTomorrowRoster = detailPanel === 'dutyRosterTomorrow';
+  const rosterSchedules = isTomorrowRoster ? tomorrowSchedules : todaySchedules;
+  const rosterTitle = isTomorrowRoster ? 'Daftar Guru Bertugas Besok' : 'Daftar Guru Bertugas Hari Ini';
   const dutyRosterBoard = (
 <Card>
           <CardHeader
-            title="Daftar Guru Bertugas Hari Ini"
-            subtitle={`${formatIndonesianDate(new Date())} • ${todaySchedules.length} Pos Terjadwal`}
+            title={rosterTitle}
+            subtitle={`${formatIndonesianDate(isTomorrowRoster ? tomorrowISO : todayISO)} · ${rosterSchedules.length} penugasan`}
             action={
               <Button
                 variant="ghost"
@@ -442,15 +451,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             }
           />
           <CardContent className="p-0">
-            {todaySchedules.length > 0 ? (
+            {rosterSchedules.length > 0 ? (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {todaySchedules.map((item) => {
-                  const att = todayAttendance.find((a) => a.userId === item.petugasId);
+                {rosterSchedules.map((item) => {
+                  const att = isTomorrowRoster ? undefined : todayAttendance.find((a) => a.userId === item.petugasId);
                   const isPresent = att?.status === 'DALAM_LOKASI';
 
                   return (
-                    <div key={item.id} className="p-4 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                      <div className="flex items-center gap-3">
+                    <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                      <div className="flex items-start gap-3 min-w-0">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                           isPresent
                             ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800'
@@ -458,12 +467,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                         }`}>
                           {item.petugasName.charAt(0)}
                         </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-white">
+                        <div className="min-w-0">
+                          <div className="text-sm break-words [overflow-wrap:anywhere] font-bold text-slate-900 dark:text-white">
                             {item.petugasName}
                           </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                            <span><MapPin className="w-3.5 h-3.5 mr-1" />{item.ruangName}</span>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="inline-flex items-center min-w-0 break-words [overflow-wrap:anywhere]"><MapPin className="w-3.5 h-3.5 mr-1 shrink-0" />{item.ruangName}</span>
                             <span>•</span>
                             <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
                           </div>
@@ -472,7 +481,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
                       <div className="flex items-center gap-2">
                         <Badge variant={isPresent ? 'success' : 'neutral'} size="sm">
-                          {isPresent ? 'Hadir (GPS)' : 'Belum Presensi'}
+                          {isTomorrowRoster ? 'Terjadwal' : isPresent ? 'Hadir (GPS)' : 'Belum Presensi'}
                         </Badge>
 
                         {/* WhatsApp reminder button */}
@@ -491,7 +500,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               </div>
             ) : (
               <div className="p-8 text-center text-slate-400 text-xs">
-                Tidak ada jadwal tugas piket untuk hari ini.
+                {isTomorrowRoster ? 'Belum ada jadwal tugas piket untuk besok.' : 'Tidak ada jadwal tugas piket untuk hari ini.'}
               </div>
             )}
           </CardContent>
@@ -703,9 +712,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       <DashboardStatistics items={visibleStatistics} loading={isLoadingMetrics} onNavigate={onNavigateTab} />
 
       <Modal isOpen={detailPanel !== null} onClose={() => { setDetailPanel(null); setFocusedAnnouncementId(null); }} maxWidth="3xl"
-        title={detailPanel === 'announcements' ? 'Papan Pengumuman & Instruksi Piket' : detailPanel === 'dutyRoster' ? 'Daftar Guru Bertugas Hari Ini' : 'Laporan Insiden & Kejadian Terbaru'}>
+        title={detailPanel === 'announcements' ? 'Papan Pengumuman & Instruksi Piket' : (detailPanel === 'dutyRoster' || detailPanel === 'dutyRosterTomorrow') ? rosterTitle : 'Laporan Insiden & Kejadian Terbaru'}>
         {detailPanel === 'announcements' && announcementBoard}
-        {detailPanel === 'dutyRoster' && dutyRosterBoard}
+        {(detailPanel === 'dutyRoster' || detailPanel === 'dutyRosterTomorrow') && dutyRosterBoard}
         {detailPanel === 'incidents' && incidentBoard}
       </Modal>
 
