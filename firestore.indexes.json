@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "announcements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "studentPermits",
       "queryScope": "COLLECTION",
       "fields": [

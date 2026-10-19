@@ -5,6 +5,7 @@ import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
 import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
+import { AnnouncementSettingsCard } from './AnnouncementSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
@@ -847,7 +848,7 @@ export const SettingsView: React.FC = () => {
           </button>
           {isAdmin && <button onClick={() => setActiveTab('notifications')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'notifications' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
-            <Bell className="w-3.5 h-3.5" />Notifikasi
+            <Bell className="w-3.5 h-3.5" />Notifikasi & Pengumuman
           </button>}
           <button
             onClick={() => setActiveTab('snapshots')}
@@ -2155,7 +2156,7 @@ export const SettingsView: React.FC = () => {
       {activeTab === 'operational_reports' && isAdmin && <OperationalReportSettingsCard settings={settings} onSaved={setSettings} />}
       {activeTab === 'dashboard_info' && isAdmin && <DashboardInfoSettingsCard settings={settings} onSaved={setSettings} />}
 
-      {activeTab === 'notifications' && isAdmin && <NotificationSettingsCard settings={settings} onSaved={setSettings} />}
+      {activeTab === 'notifications' && isAdmin && <div className="space-y-5"><AnnouncementSettingsCard settings={settings} onSaved={setSettings} /><NotificationSettingsCard settings={settings} onSaved={setSettings} /></div>}
 
       {activeTab === 'student_tardy' && (
         <StudentTardySettingsCard

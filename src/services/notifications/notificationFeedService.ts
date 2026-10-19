@@ -24,13 +24,21 @@ export function subscribeNotificationFeed(uid: string, config: NotificationConfi
   const emit = () => {
     if (stopped || auth.currentUser?.uid !== uid) return;
     const sources = [...states.values()];
-    onChange({ events: [...(rows.get('session') || []), ...(rows.get('school') || [])] as NotificationEvent[], announcements: (rows.get('announcements') || []) as AnnouncementRecord[], loading: sources.some(s => s.pending), fromCache: sources.some(s => s.cached), error: sources.find(s => s.error)?.error || null });
+    const announcements = new Map<string, AnnouncementRecord>();
+    for (const a of [...(rows.get('announcements') || []), ...(rows.get('announcementUpdates') || [])] as AnnouncementRecord[]) {
+      const previous = announcements.get(a.id);
+      if (!previous || (a.updatedAt || a.createdAt) >= (previous.updatedAt || previous.createdAt)) announcements.set(a.id, a);
+    }
+    onChange({ events: [...(rows.get('session') || []), ...(rows.get('school') || [])] as NotificationEvent[], announcements: [...announcements.values()], loading: sources.some(s => s.pending), fromCache: sources.some(s => s.cached), error: sources.find(s => s.error)?.error || null });
   };
   const since = new Date(Date.now() - config.historyDays * 86400000).toISOString();
   const specs: { key: string; source: string; filters: QueryConstraint[] }[] = [];
   if (config.enabled && config.sessionEvents) specs.push({ key: 'session', source: 'notificationEvents', filters: [where('scope', '==', 'USER'), where('actorId', '==', uid), where('createdAt', '>=', since), orderBy('createdAt', 'desc'), limit(config.maxItems)] });
   if (config.enabled && config.operationalUpdates && Object.values(config.modules).some(Boolean)) specs.push({ key: 'school', source: 'notificationEvents', filters: [where('scope', '==', 'SCHOOL'), where('createdAt', '>=', since), orderBy('createdAt', 'desc'), limit(config.maxItems)] });
   if (config.enabled && config.announcements) specs.push({ key: 'announcements', source: 'announcements', filters: [where('isActive', '==', true), orderBy('createdAt', 'desc'), limit(config.maxItems)] });
+  // An edited old instruction must reappear even outside the newest-publication window.
+  // Keep the createdAt source for legacy documents without updatedAt; both queries stay bounded.
+  if (config.enabled && config.announcements) specs.push({ key: 'announcementUpdates', source: 'announcements', filters: [where('isActive', '==', true), orderBy('updatedAt', 'desc'), limit(config.maxItems)] });
   for (const spec of specs) states.set(spec.key, { pending: true, cached: false, error: null });
   emit();
   for (const spec of specs) {

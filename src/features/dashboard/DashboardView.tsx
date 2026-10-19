@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  Edit3,
   Info,
   Building2,
   Sparkles,
@@ -52,14 +53,14 @@ import {
 } from '../../types';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
-import { AnnouncementRecord } from '../../types/announcement.types';
+import { AnnouncementRecord, AnnouncementSaveInput, sanitizeAnnouncementConfig } from '../../types/announcement.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
 import { VisitorRecord } from '../../types/visitor.types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
+import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 import { isScheduleMatchingUser } from '../../utils/scheduleUtils';
 
 interface DashboardViewProps {
@@ -97,9 +98,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
+  const [announcementError, setAnnouncementError] = useState('');
+  const [announcementFeedback, setAnnouncementFeedback] = useState('');
+  const [deletingAnnouncement, setDeletingAnnouncement] = useState<string | null>(null);
+  const announcementConfig = sanitizeAnnouncementConfig(settings.announcementConfig);
 
   // Modals
   const [isAnnModalOpen, setIsAnnModalOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<AnnouncementRecord | null>(null);
+  const openAnnouncementForm = (record: AnnouncementRecord | null) => {
+    setEditingAnnouncement(record); setAnnouncementFeedback(''); setDetailPanel(null); setIsAnnModalOpen(true);
+  };
+  const closeAnnouncementForm = () => {
+    setIsAnnModalOpen(false); setEditingAnnouncement(null); setDetailPanel('announcements');
+  };
   const [waModalData, setWaModalData] = useState<{
     isOpen: boolean;
     phone: string;
@@ -159,8 +171,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       (data) => {
         setAnnouncements([...data].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()));
         setIsLoadingAnnouncements(false);
+        setAnnouncementError('');
       },
-      undefined,
+      () => { setIsLoadingAnnouncements(false); setAnnouncementError('Papan pengumuman belum tersambung. Periksa koneksi dan izin akun.'); },
       [where('isActive', '==', true)], { cacheKey: 'active' }
     );
     const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
@@ -239,16 +252,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     });
   };
 
-  // Create Announcement
-  const handleSaveAnnouncement = async (data: any) => {
-    if (!currentUser) return;
+  const handleSaveAnnouncement = async (data: AnnouncementSaveInput) => {
+    if (!currentUser) throw new Error('Sesi berakhir. Silakan masuk kembali.');
     await AnnouncementService.saveAnnouncement(data, currentUser);
+    setAnnouncementFeedback(data.id ? 'Perubahan pengumuman berhasil disimpan.' : 'Pengumuman berhasil diterbitkan.');
   };
 
   // Delete Announcement
   const handleDeleteAnnouncement = async (id: string) => {
-    if (!currentUser) return;
-    await AnnouncementService.deleteAnnouncement(id, currentUser);
+    if (!currentUser || deletingAnnouncement || !window.confirm('Hapus pengumuman ini? Informasi akan hilang dari papan pengumuman pengguna.')) return;
+    setDeletingAnnouncement(id); setAnnouncementFeedback('');
+    try {
+      await AnnouncementService.deleteAnnouncement(id, currentUser);
+      setAnnouncementFeedback('Pengumuman berhasil dihapus.');
+    } catch (error) { setAnnouncementFeedback(error instanceof Error ? error.message : 'Pengumuman gagal dihapus. Coba lagi.'); }
+    finally { setDeletingAnnouncement(null); }
   };
 
   const visibleAnnouncements = announcements.filter(a => {
@@ -310,7 +328,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 size="sm"
                 className="text-xs"
                 leftIcon={<Plus className="w-3.5 h-3.5 text-[var(--theme-primary)]" />}
-                onClick={() => { setDetailPanel(null); setIsAnnModalOpen(true); }}
+                onClick={() => openAnnouncementForm(null)}
               >
                 + Buat Pengumuman
               </Button>
@@ -318,6 +336,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           }
         />
         <CardContent className="p-4 sm:p-5">
+          {announcementFeedback && <p role="status" className="mb-3 text-sm text-[var(--theme-primary-text)]">{announcementFeedback}</p>}
+          {announcementError && <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-200">{announcementError}</p>}
+          {isAdmin && !announcementConfig.allowPublishedEditing && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Edit pengumuman dinonaktifkan. Admin dapat mengaktifkannya di Pengaturan → Notifikasi & Pengumuman.</p>}
           {focusedAnnouncementId && !isLoadingAnnouncements && !visibleAnnouncements.some(a => a.id === focusedAnnouncementId) && <p role="status" className="mb-3 p-3 rounded-xl bg-[var(--theme-surface-subtle)] text-xs">Pengumuman yang dipilih sudah tidak tersedia atau tidak ditujukan untuk akun ini. Pengumuman aktif lainnya ditampilkan di bawah.</p>}
           {isLoadingAnnouncements ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -347,36 +368,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                       : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex flex-1 min-w-[140px] flex-wrap items-center gap-2">
                       <Badge
                         variant={ann.priority === 'DARURAT' ? 'danger' : ann.priority === 'PENTING' ? 'warning' : 'info'}
                         size="sm"
                       >
                         {ann.priority}
                       </Badge>
-                      <h4 className="font-bold text-xs">{ann.title}</h4>
+                      <h4 className="font-bold text-sm break-words min-w-0 [overflow-wrap:anywhere]">{ann.title}</h4>
                     </div>
 
-                    {isAdmin && (
-                      <button
+                    {isAdmin && <div className="flex items-center gap-1 shrink-0">
+                      {announcementConfig.allowPublishedEditing && <button type="button"
+                        onClick={() => openAnnouncementForm(ann)}
+                        aria-label={`Edit pengumuman: ${ann.title}`}
+                        className="inline-flex items-center justify-center gap-1.5 min-h-[44px] min-w-[44px] px-2 text-xs font-medium text-current rounded-lg hover:bg-black/5 dark:hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]">
+                        <Edit3 className="w-4 h-4" /><span>Edit</span>
+                      </button>}
+                      <button type="button"
                         onClick={() => handleDeleteAnnouncement(ann.id)}
-                        className="text-slate-400 hover:text-rose-600 cursor-pointer p-1"
+                        disabled={!!deletingAnnouncement}
+                        aria-label={`Hapus pengumuman: ${ann.title}`}
+                        className="inline-flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-rose-600 cursor-pointer w-11 h-11 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
                         title="Hapus Pengumuman"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>}
                   </div>
 
-                  <p className="text-xs mt-2 leading-relaxed text-justify opacity-90">
+                  <p className="text-sm mt-2 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] opacity-90">
                     {ann.content}
                   </p>
 
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5 font-mono">
-                    <span>Oleh: <strong>{ann.authorName.split(' ')[0]}</strong> ({ann.authorRole})</span>
-                    <span>{formatIndonesianDate(ann.date)}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/5">
+                    <span>Oleh: <strong>{ann.authorName}</strong></span>
+                    <span>{formatShortIndonesianDate(ann.date)}</span>
                   </div>
+                  {announcementConfig.showUpdateInfo && ann.updatedBy && ann.updatedAt && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 break-words">Diperbarui {formatShortIndonesianDate(ann.updatedAt)}, {formatTime(ann.updatedAt)}{ann.updatedByName ? ` oleh ${ann.updatedByName}` : ''}</p>}
                 </div>
               ))}
             </div>
@@ -674,8 +704,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
       {/* ANNOUNCEMENT FORM MODAL */}
       <AnnouncementFormModal
+        key={editingAnnouncement?.id || 'new'}
         isOpen={isAnnModalOpen}
-        onClose={() => setIsAnnModalOpen(false)}
+        initialData={editingAnnouncement}
+        onClose={closeAnnouncementForm}
         onSave={handleSaveAnnouncement}
       />
 

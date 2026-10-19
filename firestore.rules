@@ -484,7 +484,12 @@ service cloud.firestore {
 
     match /announcements/{annId} {
       allow read: if isValidActiveUser();
-      allow write: if isAdmin() || isKepalaSekolah();
+      allow create, delete: if isAdmin() || isKepalaSekolah();
+      // Enforce the admin's edit switch for older clients as well as the current UI.
+      allow update: if (isAdmin() || isKepalaSekolah()) &&
+        (!exists(/databases/$(database)/documents/settings/school_config) ||
+          get(/databases/$(database)/documents/settings/school_config).data.get('announcementConfig', {}).get('allowPublishedEditing', true) == true) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['authorName', 'authorRole', 'createdAt', 'createdBy', 'date']);
     }
 
     // -------------------------------------------------------------

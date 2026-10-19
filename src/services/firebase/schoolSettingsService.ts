@@ -3,6 +3,7 @@ import { normalizeLetterhead, validateBrandLogo } from '../../utils/reportBrandi
 import type { LetterheadConfig } from '../../types';
 import { sanitizeDashboardInfoConfig, type DashboardInfoConfig } from '../../types/dashboardInfo.types';
 import { sanitizeNotificationConfig, type NotificationConfig } from '../../types/notification.types';
+import { sanitizeAnnouncementConfig, type AnnouncementConfig } from '../../types/announcement.types';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import type { SchoolSettings } from '../../types';
@@ -144,7 +145,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -189,6 +190,27 @@ export class SchoolSettingsService {
       transaction.update(ref, { notificationConfig, updatedAt: serverTimestamp() });
     });
     void AuditService.log({ userId: uid, userName: userSnap.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui pengaturan notifikasi realtime sekolah' });
+    return this.receipt(expected);
+  }
+
+  public static async saveAnnouncementSettings(config: AnnouncementConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const announcementConfig = sanitizeAnnouncementConfig(config);
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const [user, school] = await Promise.all([
+        transaction.get(doc(db, 'users', uid)), transaction.get(ref),
+      ]);
+      this.actor(uid);
+      if (!user.exists() || user.data().role !== 'ADMIN' || user.data().isActive !== true) {
+        throw new Error('Hanya administrator aktif yang dapat mengubah pengaturan pengumuman.');
+      }
+      if (!school.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      expected = { ...school.data(), announcementConfig } as SchoolSettings;
+      transaction.update(ref, { announcementConfig, updatedAt: serverTimestamp() });
+    });
+    void AuditService.log({ userId: uid, action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui pengaturan edit dan keterangan pembaruan papan pengumuman' });
     return this.receipt(expected);
   }
 
