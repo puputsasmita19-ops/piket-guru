@@ -22,7 +22,7 @@ const writes=[];const server=http.createServer(async(req,res)=>{
  if(req.url==='/probe.js'){res.setHeader('Content-Type','text/javascript');return res.end(output.outputFiles[0].text)}
  if(req.url==='/write'){let body='';for await(const c of req)body+=c;writes.push(JSON.parse(body));return setTimeout(()=>res.end('ok'),200)}
  if(req.url.startsWith('/manifest.json'))return res.end('{}');
- res.end(`<!doctype html><div id="root"></div><script>window.fixture={user:{id:new URLSearchParams(location.search).get('uid')||'a',fullName:'Uji',role:'GURU_PIKET',isActive:true},fail:false}</script><script src="/probe.js"></script>`);
+ res.end(`<!doctype html><div id="root"></div><script>window.fixture={user:{id:new URLSearchParams(location.search).get('uid')||'a',fullName:'Uji',role:'GURU',permissions:['student_tardy.view'],isActive:true},fail:false}</script><script src="/probe.js"></script>`);
 });await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}`;
 let browser,count=0;const check=(name,ok)=>{assert.ok(ok,name);count++;console.log('PASS',name)};
 try{

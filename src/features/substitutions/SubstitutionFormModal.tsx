@@ -20,6 +20,7 @@ import {
   formatSelectedPeriodsDisplay,
 } from '../../types/period.types';
 import { useAuth } from '../../contexts/AuthContext';
+import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { SubstitutionService } from '../../services/firebase/substitutionService';
 import {
@@ -183,12 +184,21 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Ambil data penugasan yang sudah ada pada tanggal yang dipilih
+  const [daySubsError, setDaySubsError] = useState<string | null>(null);
+
+  // Read only the selected date and stop the previous date's listener.
   useEffect(() => {
+    setExistingDaySubs([]);
+    setDaySubsError(null);
     if (!isOpen || !tanggal) return;
-    FirestoreService.getAll<TeacherSubstitutionRecord>('substitutions').then((all) => {
-      setExistingDaySubs(all.filter((s) => s.tanggal === tanggal));
-    });
+    let active = true;
+    const stop = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      records => { if (active) { setExistingDaySubs(records); setDaySubsError(null); } },
+      () => { if (active) setDaySubsError('Data penugasan belum dapat diperbarui. Pemeriksaan ulang dilakukan saat penyimpanan atau sinkronisasi.'); },
+      [where('tanggal', '==', tanggal)],
+    );
+    return () => { active = false; stop(); };
   }, [isOpen, tanggal]);
 
   // Hitung hari dalam seminggu dan JP yang tersedia pada hari tersebut
@@ -806,6 +816,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
               </Button>
             </div>
           </div>}>
+          {daySubsError && <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{daySubsError}</p>}
           {/* TOP ERROR MESSAGE */}
           {errorMessage && (
             <div role="alert" tabIndex={-1} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-2.5">

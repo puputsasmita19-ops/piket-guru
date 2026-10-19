@@ -77,7 +77,7 @@ driveRouter.post('/auth/url', requireAuth, requireAdmin, async (req: Request, re
     const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
     const effectiveRedirectUri = redirectUri || creds.redirectUri || `${protocol}://${host}/api/drive/auth/callback`;
 
-    const { url, state } = DriveStore.getAuthUrl(user.uid, effectiveRedirectUri);
+    const { url, state } = await DriveStore.getAuthUrl(user.uid, effectiveRedirectUri);
 
     res.json({
       success: true,

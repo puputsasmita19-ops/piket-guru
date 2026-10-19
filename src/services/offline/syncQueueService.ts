@@ -16,6 +16,7 @@ import { OfflineStorage, QueueItem, QueueItemStatus } from './offlineStorage';
 import { DraftService } from './draftService';
 import { UserProfile } from '../../types';
 import { auth } from '../firebase/firebaseAuth';
+import { PERMISSIONS, checkUserPermission, type PermissionKey } from '../../config/permissions';
 
 export interface SyncQueueStatus {
   pendingCount: number;
@@ -421,34 +422,26 @@ export class SyncQueueService {
       return 'Akun dinonaktifkan oleh Administrator. Sinkronisasi dihentikan.';
     }
 
-    switch (item.operationType) {
-      case 'INCIDENT_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Akun Anda tidak memiliki wewenang melaporkan kejadian.';
-      }
-      case 'TARDY_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat mencatat siswa terlambat.';
-      }
-      case 'PERMIT_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat menerbitkan surat izin siswa.';
-      }
-      case 'VISITOR_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat mencatat buku tamu.';
-      }
-      case 'SUBSTITUTION_REPORT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Hanya Guru Piket atau Admin yang dapat mengatur guru inval.';
-      }
-      case 'DUTYBOOK_SUBMIT': {
-        const allowed = ['ADMIN', 'KEPALA_SEKOLAH', 'GURU_PIKET', 'GURU'].includes(user.role);
-        return allowed ? null : 'Hak akses dicabut: Akun Anda tidak memiliki wewenang mengisi jurnal piket.';
-      }
-      default:
-        return null;
+    if (!['ADMIN', 'KEPALA_SEKOLAH', 'GURU', 'TENAGA_KEPENDIDIKAN', 'SATPAM'].includes(user.role)) {
+      return 'Role akun tidak dikenali. Hubungi administrator.';
     }
+    const can = (permission: PermissionKey) => user.role === 'ADMIN' || checkUserPermission(user.permissions, permission);
+    // The four additional menu flags are the application's existing grants for
+    // these operational forms. Do not invent a GURU_PIKET role or restore revoked grants.
+    const allowed = (() => {
+      switch (item.operationType) {
+        case 'ATTENDANCE_CHECKIN': return can(PERMISSIONS.ATTENDANCE_CREATE) && item.payload?.userId === user.id;
+        case 'INCIDENT_REPORT': return can(PERMISSIONS.INCIDENT_CREATE);
+        case 'TARDY_REPORT': return can(PERMISSIONS.STUDENT_TARDY_CREATE) || can(PERMISSIONS.STUDENT_TARDY_VIEW);
+        case 'PERMIT_REPORT': return can(item.payload?.isUpdate ? PERMISSIONS.STUDENT_PERMITS_RETURN : PERMISSIONS.STUDENT_PERMITS_CREATE) || can(PERMISSIONS.STUDENT_PERMITS_VIEW);
+        case 'VISITOR_REPORT': return can(item.payload?.isUpdate ? PERMISSIONS.VISITORS_CHECKOUT : PERMISSIONS.VISITORS_CREATE) || can(PERMISSIONS.VISITORS_VIEW);
+        case 'SUBSTITUTION_REPORT': return can(item.payload?.isUpdate ? PERMISSIONS.SUBSTITUTIONS_UPDATE : PERMISSIONS.SUBSTITUTIONS_CREATE) || can(PERMISSIONS.SUBSTITUTIONS_VIEW);
+        case 'DUTYBOOK_SUBMIT': return can(PERMISSIONS.DUTYBOOK_CREATE) || can(PERMISSIONS.DUTYBOOK_UPDATE);
+        // No production form queues unrestricted collection writes.
+        default: return false;
+      }
+    })();
+    return allowed ? null : 'Hak akses operasi tidak tersedia atau telah dicabut. Data tetap tersimpan; hubungi administrator.';
   }
 
   /**

@@ -61,7 +61,7 @@ const context = vm.createContext({ f, module: { exports: {} }, crypto: webcrypto
 });
 vm.runInContext(output.outputFiles[0].text, context);
 const { AttendanceService: attendance, IncidentService: incidents, VisitorService: visitors, SyncQueueService: sync, DriveClientService: drive } = context.module.exports;
-const user = { id: 'test-officer', fullName: 'Test Officer', role: 'GURU', isActive: true };
+const user = { id: 'test-officer', fullName: 'Test Officer', role: 'GURU', permissions: ['attendance.create', 'incident.create', 'visitors.view'], isActive: true };
 const a = 'data:image/jpeg;base64,TEST_A'; const b = 'data:image/jpeg;base64,TEST_B';
 const incident = (photos = [a, b]) => ({ id: 'inc-test', tanggal: '2026-10-16', waktu: '07:00', kategori: 'SISWA', kategoriName: 'Siswa', tingkatKeparahan: 'SEDANG', lokasi: 'Test', pihakTerlibat: 'Test', uraian: 'Test report', tindakanAwal: 'Test action', status: 'BARU', photos: photos.map((url, i) => ({ id: `p-${i}`, url, uploadedAt: '2026-10-16T00:00:00Z', caption: `Caption ${i}` })) });
 const visitor = (photo = a) => ({ id: 'vis-test', tanggal: '2026-10-16', jamMasuk: '07:00', namaTamu: 'Test Visitor', kategori: 'UMUM', instansiAsal: 'Test', nomorBadge: 'TEST', tujuanBertemu: 'Test Host', keperluan: 'Test', fotoUrl: photo, status: 'SEDANG_BERKUNJUNG' });

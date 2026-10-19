@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { randomBytes, createHash } from 'crypto';
 import { Readable } from 'stream';
 import { adminDb } from '../firebaseAdmin.js';
 import { encryptToken, decryptToken } from '../crypto/tokenEncryption.js';
@@ -41,8 +42,8 @@ const CONFIG_COLLECTION = 'system_config';
 const CONFIG_DOC_ID = 'google_drive';
 const DEFAULT_ROOT_FOLDER = 'PiketGuru_Photos';
 
-// In-memory state cache for CSRF state validation (10 min TTL)
-const activeOAuthStates = new Map<string, { adminUid: string; timestamp: number }>();
+const OAUTH_STATE_COLLECTION = 'drive_oauth_states';
+const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
 
 export class DriveStore {
   /**
@@ -68,51 +69,47 @@ export class DriveStore {
   /**
    * Generates a secure, time-bound OAuth state token for the Admin session.
    */
-  public static createAuthState(adminUid: string): string {
-    const randomHex = Math.random().toString(36).substring(2, 12);
-    const timestamp = Date.now();
-    const stateToken = `${adminUid}_${randomHex}_${timestamp}`;
-
-    activeOAuthStates.set(stateToken, { adminUid, timestamp });
-
-    // Clean up expired states older than 15 minutes
-    for (const [key, val] of activeOAuthStates.entries()) {
-      if (Date.now() - val.timestamp > 15 * 60 * 1000) {
-        activeOAuthStates.delete(key);
-      }
-    }
-
+  public static async createAuthState(adminUid: string): Promise<string> {
+    if (!adminDb) throw new Error('Database sesi Google Drive tidak tersedia.');
+    const stateToken = randomBytes(32).toString('base64url');
+    const stateId = createHash('sha256').update(stateToken).digest('hex');
+    await adminDb.collection(OAUTH_STATE_COLLECTION).doc(stateId).set({
+      adminUid, createdAt: Date.now(), expiresAt: Date.now() + OAUTH_STATE_TTL_MS,
+    });
     return stateToken;
   }
 
-  /**
-   * Validates an OAuth state token.
-   */
-  public static validateAuthState(stateToken: string): { valid: boolean; adminUid?: string; error?: string } {
-    if (!stateToken) return { valid: false, error: 'State OAuth parameter tidak ditemukan.' };
-    const record = activeOAuthStates.get(stateToken);
-    if (!record) return { valid: false, error: 'State OAuth tidak valid atau telah kadaluwarsa.' };
-
-    activeOAuthStates.delete(stateToken); // Single-use token
-
-    if (Date.now() - record.timestamp > 15 * 60 * 1000) {
-      return { valid: false, error: 'Sesi permintaan OAuth telah kadaluwarsa. Silakan coba lagi.' };
+  /** Consume the opaque nonce once, across serverless replicas and cold starts. */
+  public static async validateAuthState(stateToken: string): Promise<{ valid: boolean; adminUid?: string; error?: string }> {
+    if (typeof stateToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(stateToken)) {
+      return { valid: false, error: 'State OAuth tidak valid. Silakan hubungkan kembali.' };
     }
-
-    return { valid: true, adminUid: record.adminUid };
+    if (!adminDb) throw new Error('Database sesi Google Drive tidak tersedia.');
+    const stateId = createHash('sha256').update(stateToken).digest('hex');
+    const ref = adminDb.collection(OAUTH_STATE_COLLECTION).doc(stateId);
+    return adminDb.runTransaction(async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return { valid: false, error: 'Sesi OAuth tidak ditemukan atau sudah digunakan. Silakan coba lagi.' };
+      const state = snapshot.data()!;
+      transaction.delete(ref);
+      if (!Number.isFinite(state.expiresAt) || !Number.isFinite(state.createdAt) || state.expiresAt <= Date.now() || state.createdAt > Date.now() + 60000 || typeof state.adminUid !== 'string' || !state.adminUid) {
+        return { valid: false, error: 'Sesi permintaan OAuth telah kadaluwarsa. Silakan coba lagi.' };
+      }
+      return { valid: true, adminUid: state.adminUid };
+    });
   }
 
   /**
    * Generates OAuth authorization URL for connecting Google Drive.
    */
-  public static getAuthUrl(adminUid: string, redirectUri?: string): { url: string; state: string } {
+  public static async getAuthUrl(adminUid: string, redirectUri?: string): Promise<{ url: string; state: string }> {
     const creds = this.getCredentials();
     if (!creds.clientId || !creds.clientSecret) {
       throw new Error('GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET belum dikonfigurasi di variabel lingkungan backend.');
     }
 
     const oauth2Client = this.createOAuth2Client(redirectUri);
-    const state = this.createAuthState(adminUid);
+    const state = await this.createAuthState(adminUid);
 
     const url = oauth2Client.generateAuthUrl({
       access_type: 'offline', // Mandatory to receive refresh_token
@@ -178,11 +175,16 @@ export class DriveStore {
    * Separates failures explicitly into token exchange, encryption, folder setup, and Firestore persistence.
    */
   public static async handleOAuthCallback(code: string, state: string, redirectUri?: string): Promise<{ success: boolean; email?: string; error?: string }> {
-    const stateVal = this.validateAuthState(state);
+    const stateVal = await this.validateAuthState(state);
     if (!stateVal.valid) {
       return { success: false, error: stateVal.error || 'Autentikasi state OAuth tidak valid.' };
     }
 
+    // Permission may have changed while Google consent was open.
+    const actor = await adminDb!.collection('users').doc(stateVal.adminUid!).get();
+    if (!actor.exists || actor.data()?.role !== 'ADMIN' || actor.data()?.isActive !== true) {
+      return { success: false, error: 'Hak administrator telah berubah. Hubungkan kembali melalui administrator aktif.' };
+    }
     const oauth2Client = this.createOAuth2Client(redirectUri);
 
     // 1. Exchange authorization code for OAuth tokens
@@ -476,8 +478,9 @@ export class DriveStore {
           };
         }
       } catch (err: any) {
-        if (options.module === 'profilePhotos') throw err;
-        console.warn('[DRIVE_STORE] Idempotency lookup warning:', err?.message || err);
+        // An unavailable search is not proof that no file exists. Never create
+        // a second private photo when a previous upload may have succeeded.
+        throw err;
       }
     }
 

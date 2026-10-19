@@ -4,36 +4,34 @@ import { UserRole } from '../../types';
 import { operationalEventFromAudit } from '../../types/notification.types';
 import { normalizeAuditStatus } from './auditEventRegistry';
 
-const AUDIT_QUEUE_STORAGE_KEY = 'piket_guru_audit_offline_queue';
+import { enqueueAudit, pendingAudits, acknowledgeAudit } from './auditOutbox';
 const SENSITIVE_KEY_REGEX = /(pin|password|token|secret|hash|salt|credential)/i;
 
 async function writeAuditRecord(id: string, record: AuditLogRecord): Promise<void> {
+  const uid = auth?.currentUser?.uid;
+  if (!uid || record.userId !== uid) throw new Error('AUDIT_SESSION_CHANGED');
   const [{ doc, setDoc }, { db }] = await Promise.all([
     import('firebase/firestore'), import('../firebase/firebase'),
   ]);
+  if (auth?.currentUser?.uid !== uid) throw new Error('AUDIT_SESSION_CHANGED');
   await setDoc(doc(db, 'auditLogs', id), record);
   const event = operationalEventFromAudit(record);
-  if (event) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
+  if (event && auth?.currentUser?.uid === uid) void import('../notifications/notificationPublisher').then(m => m.publishNotificationEvent(event)).catch(() => {});
 }
 
 /**
  * Strips sensitive fields (PINs, passwords, secrets, tokens, salts) from any metadata object recursively.
  */
 export function sanitizeAuditMetadata(val: any, depth = 0): any {
-  if (depth > 6 || val === undefined || val === null) return val;
-  if (typeof val !== 'object') return val;
-  if (Array.isArray(val)) {
-    return val.map((item) => sanitizeAuditMetadata(item, depth + 1));
-  }
+  if (val === undefined) return undefined;
+  if (val === null) return null;
+  if (depth > 6) return '[TRUNCATED]';
+  if (typeof val !== 'object') return typeof val === 'number' && !Number.isFinite(val) ? null : val;
+  if (Array.isArray(val)) return val.map(item => sanitizeAuditMetadata(item, depth + 1) ?? null);
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(val)) {
-    if (SENSITIVE_KEY_REGEX.test(key)) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = sanitizeAuditMetadata(value, depth + 1);
-    } else {
-      result[key] = value;
-    }
+    if (value === undefined) continue;
+    result[key] = SENSITIVE_KEY_REGEX.test(key) ? '[REDACTED]' : sanitizeAuditMetadata(value, depth + 1);
   }
   return result;
 }
@@ -54,7 +52,7 @@ export interface AuditLogInput {
 }
 
 export class AuditService {
-  private static isFlushingQueue = false;
+  private static flushingUsers = new Set<string>();
   private static queueListenerAttached = false;
 
   public static init(): void {
@@ -82,7 +80,7 @@ export class AuditService {
       this.init();
 
       const currentUser = auth?.currentUser;
-      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const id = `audit-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
       const normalizedStatus = normalizeAuditStatus(entry.status);
 
       const record: AuditLogRecord = {
@@ -111,7 +109,7 @@ export class AuditService {
 
       // If offline or db is not ready, enqueue locally
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        this.enqueueOffline(record);
+        this.enqueueOffline(record, currentUser?.uid);
         return;
       }
 
@@ -120,67 +118,44 @@ export class AuditService {
         await writeAuditRecord(id, record);
       } catch (writeErr) {
         console.warn('[AUDIT_SERVICE] Firestore write failed, enqueuing locally:', writeErr);
-        this.enqueueOffline(record);
+        this.enqueueOffline(record, currentUser?.uid);
       }
     } catch (err) {
       console.warn('[AUDIT_SERVICE] Unhandled error in logAudit:', err);
     }
   }
 
-  /**
-   * Store record in offline localStorage queue
-   */
-  private static enqueueOffline(record: AuditLogRecord): void {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(AUDIT_QUEUE_STORAGE_KEY);
-      const queue: AuditLogRecord[] = raw ? JSON.parse(raw) : [];
-      // Keep maximum 500 items in queue to avoid quota overflow
-      if (queue.length > 500) {
-        queue.shift();
-      }
-      queue.push(record);
-      localStorage.setItem(AUDIT_QUEUE_STORAGE_KEY, JSON.stringify(queue));
-    } catch {
-      // Storage quota or parse error ignored
-    }
+  private static enqueueOffline(record: AuditLogRecord, ownerUid?: string): void {
+    // Never attach anonymous/other-account events to the next person's session.
+    if (!ownerUid || record.userId !== ownerUid) return;
+    enqueueAudit(record);
   }
 
-  /**
-   * Drain offline queue when internet connection is restored
-   */
   public static async flushOfflineQueue(): Promise<void> {
-    if (this.isFlushingQueue || typeof localStorage === 'undefined' || !navigator.onLine) return;
-    this.isFlushingQueue = true;
-
+    const uid = auth?.currentUser?.uid;
+    if (!uid || this.flushingUsers.has(uid) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+    this.flushingUsers.add(uid);
+    let completed = 0;
     try {
-      const raw = localStorage.getItem(AUDIT_QUEUE_STORAGE_KEY);
-      if (!raw) return;
-
-      const queue: AuditLogRecord[] = JSON.parse(raw);
-      if (!Array.isArray(queue) || queue.length === 0) return;
-
-      const remaining: AuditLogRecord[] = [];
-
-      for (const item of queue) {
+      const batch = pendingAudits(uid).slice(0, 50);
+      for (const record of batch) {
+        if (auth?.currentUser?.uid !== uid || (typeof navigator !== 'undefined' && !navigator.onLine)) break;
         try {
-          await writeAuditRecord(item.id, item);
-        } catch {
-          // Keep in queue if write still fails
-          remaining.push(item);
+          await writeAuditRecord(record.id, record);
+          acknowledgeAudit(record);
+          completed++;
+        } catch (error: any) {
+          // Preserve a rejected/malformed event without blocking healthy events.
+          // A connection/server failure stops this drain until the next recovery.
+          if (!['permission-denied', 'already-exists', 'invalid-argument'].some(code => String(error?.code || '').endsWith(code))) break;
         }
       }
-
-      if (remaining.length > 0) {
-        localStorage.setItem(AUDIT_QUEUE_STORAGE_KEY, JSON.stringify(remaining));
-      } else {
-        localStorage.removeItem(AUDIT_QUEUE_STORAGE_KEY);
+      if (completed > 0 && batch.length === 50 && auth?.currentUser?.uid === uid && pendingAudits(uid).length) {
+        setTimeout(() => { if (auth?.currentUser?.uid === uid) void this.flushOfflineQueue().catch(() => {}); }, 1000);
       }
     } catch (err) {
       console.warn('[AUDIT_SERVICE] Error flushing offline queue:', err);
-    } finally {
-      this.isFlushingQueue = false;
-    }
+    } finally { this.flushingUsers.delete(uid); }
   }
 
   /**
@@ -188,10 +163,11 @@ export class AuditService {
    * Ensures Firebase ID token is strictly verified before audit log creation.
    */
   public static async recordLogin(method: 'PIN' | 'GOOGLE'): Promise<void> {
-    if (!auth?.currentUser) return;
+    const user = auth?.currentUser;
+    if (!user) return;
     try {
-      const idToken = await auth.currentUser.getIdToken();
-      if (!idToken) return;
+      const idToken = await user.getIdToken();
+      if (!idToken || auth?.currentUser?.uid !== user.uid) return;
 
       const res = await fetch('/api/auth/record-login', {
         method: 'POST',
@@ -202,7 +178,7 @@ export class AuditService {
         body: JSON.stringify({ method }),
       });
 
-      if (!res.ok) {
+      if (!res.ok && auth?.currentUser?.uid === user.uid) {
         // Fallback to client-side logging if endpoint is unreachable
         this.log({
           action: 'LOGIN',
@@ -213,14 +189,16 @@ export class AuditService {
         });
       }
     } catch {
-      // Fallback
-      this.log({
+      // Do not attribute an earlier account's failed request to the new session.
+      if (auth?.currentUser?.uid === user.uid) this.log({
         action: 'LOGIN',
         module: 'USERS',
         status: 'SUCCESS',
         details: `Login berhasil melalui ${method === 'GOOGLE' ? 'Google Authentication' : 'PIN Kredensial'}`,
         metadata: { authMethod: method, fallback: true },
       });
+    } finally {
+      void this.flushOfflineQueue().catch(() => {});
     }
   }
 
