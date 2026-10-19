@@ -1,4 +1,5 @@
 import { auth } from '../firebase/firebaseAuth';
+import { createAuthenticatedSession } from '../firebase/sessionGuard';
 
 export interface DriveStatusResponse {
   success: boolean;
@@ -28,31 +29,73 @@ export interface DriveUploadResult {
   error?: string;
 }
 
-async function getDriveSession() {
+type DriveRequestSession = { headers: { Authorization: string }; signal: AbortSignal; assertCurrent: () => void };
+
+/** A stalled token, connection or response body must not hold the sync worker forever. */
+async function withDriveSession<T, R = T>(
+  work: (session: DriveRequestSession) => Promise<T>,
+  timeoutMs = 15000,
+  signal?: AbortSignal,
+  finish: (value: T) => R = value => value as unknown as R,
+): Promise<R> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sesi berakhir. Silakan masuk kembali.');
-  const assertCurrent = () => {
-    if (auth.currentUser?.uid !== user.uid) throw new Error('Sesi akun telah berubah. Permintaan foto dibatalkan.');
+  const controller = new AbortController();
+  let rejectAbort!: (error: Error) => void;
+  const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
+  let abortReason: Error | null = null;
+  const abort = (error: Error) => {
+    if (abortReason) return;
+    abortReason = error;
+    controller.abort();
+    rejectAbort(error);
   };
-  const token = await user.getIdToken();
-  assertCurrent();
-  return { headers: { Authorization: `Bearer ${token}` }, assertCurrent };
+  const session = createAuthenticatedSession(user.uid, () => abort(Object.assign(
+    new Error('Sesi akun telah berubah. Permintaan foto dibatalkan.'), { code: 'SESSION_CHANGED' },
+  )));
+  const assertCurrent = () => {
+    if (abortReason) throw abortReason;
+    session.assertActive();
+  };
+  const cancelExternal = () => abort(Object.assign(new Error('Permintaan foto dibatalkan.'), { name: 'AbortError' }));
+  signal?.addEventListener('abort', cancelExternal, { once: true });
+  const timer = setTimeout(() => abort(Object.assign(
+    new Error('Koneksi penyimpanan foto melewati batas waktu. Hasil belum terkonfirmasi; periksa koneksi lalu coba kembali.'),
+    { code: 'deadline-exceeded' },
+  )), timeoutMs);
+  try {
+    if (signal?.aborted) cancelExternal();
+    const operation = (async () => {
+      assertCurrent();
+      const token = await user.getIdToken();
+      assertCurrent();
+      return work({ headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, assertCurrent });
+    })();
+    const value = await Promise.race([operation, aborted]);
+    assertCurrent();
+    // Allocate photo URLs only after the final session/cancellation check.
+    return finish(value);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', cancelExternal);
+    session.close();
+  }
 }
 
-async function requestJson(path: string, options: RequestInit = {}) {
-  const session = await getDriveSession();
-  session.assertCurrent();
-  const res = await fetch(path, {
-    ...options, cache: 'no-store',
-    headers: { 'Content-Type': 'application/json', ...session.headers },
-  });
-  session.assertCurrent();
-  const data = await res.json().catch(() => {
-    if (!res.ok) return {};
-    throw new Error('Respons Google Drive tidak valid. Silakan coba lagi.');
-  });
-  session.assertCurrent();
-  return { res, data };
+async function requestJson(path: string, options: RequestInit = {}, timeoutMs = 15000) {
+  return withDriveSession(async session => {
+    const res = await fetch(path, {
+      ...options, cache: 'no-store', signal: session.signal,
+      headers: { 'Content-Type': 'application/json', ...session.headers },
+    });
+    session.assertCurrent();
+    const data = await res.json().catch(() => {
+      if (!res.ok) return {};
+      throw new Error('Respons Google Drive tidak valid. Silakan coba lagi.');
+    });
+    session.assertCurrent();
+    return { res, data };
+  }, timeoutMs, options.signal || undefined);
 }
 
 // Share only requests currently in flight, per UID. No stale policy TTL cache.
@@ -110,7 +153,7 @@ export class DriveClientService {
     clientPhotoId?: string;
     recordId?: string;
   }): Promise<DriveUploadResult> {
-    const { res, data } = await requestJson('/api/drive/upload', { method: 'POST', body: JSON.stringify(options) });
+    const { res, data } = await requestJson('/api/drive/upload', { method: 'POST', body: JSON.stringify(options) }, 45000);
     if (!res.ok || !data.success) {
       return { success: false, fileId: '', provider: 'google_drive', mimeType: options.mimeType || 'image/jpeg', size: 0,
         folderPath: '', photoUrl: '', createdAt: new Date().toISOString(), error: data.error || 'Gagal mengunggah foto ke Google Drive.' };
@@ -123,14 +166,14 @@ export class DriveClientService {
     if (!fileIdOrPath) return '';
     if (fileIdOrPath.startsWith('data:image/')) return fileIdOrPath;
     const fileId = fileIdOrPath.startsWith('/api/drive/photo/') ? fileIdOrPath.slice('/api/drive/photo/'.length) : fileIdOrPath;
-    const session = await getDriveSession();
-    session.assertCurrent();
-    const res = await fetch(`/api/drive/photo/${encodeURIComponent(fileId)}`, { headers: session.headers, cache: 'no-store', signal });
-    session.assertCurrent();
-    if (!res.ok) throw new Error('Foto Drive belum dapat dimuat. Periksa koneksi atau hak akses.');
-    const blob = await res.blob();
-    session.assertCurrent();
-    if (!blob.type.startsWith('image/')) throw new Error('Respons dokumentasi bukan gambar.');
-    return URL.createObjectURL(blob);
+    return withDriveSession(async session => {
+      const res = await fetch(`/api/drive/photo/${encodeURIComponent(fileId)}`, { headers: session.headers, cache: 'no-store', signal: session.signal });
+      session.assertCurrent();
+      if (!res.ok) throw new Error('Foto Drive belum dapat dimuat. Periksa koneksi atau hak akses.');
+      const blob = await res.blob();
+      session.assertCurrent();
+      if (!blob.type.startsWith('image/')) throw new Error('Respons dokumentasi bukan gambar.');
+      return blob;
+    }, 30000, signal, blob => URL.createObjectURL(blob));
   }
 }

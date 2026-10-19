@@ -32,6 +32,11 @@ const listeners = new Set<SyncListener>();
 let isSyncInProgress = false;
 let isSyncCancelled = false;
 let lastSuccessfulSyncAt: string | null = null;
+let syncEpoch = 0;
+type SyncResult = { processed: number; succeeded: number; failed: number };
+let syncRequest: { epoch: number; uid: string; promise: Promise<SyncResult> } | null = null;
+const noSyncWork = (): SyncResult => ({ processed: 0, succeeded: 0, failed: 0 });
+const sameSyncSession = (uid: string, epoch: number) => syncEpoch === epoch && auth.currentUser?.uid === uid;
 
 function canonicalSubmission(value: any): any {
   if (Array.isArray(value)) return value.map(canonicalSubmission);
@@ -98,13 +103,16 @@ export class SyncQueueService {
    */
   public static cancelSync(): void {
     isSyncCancelled = true;
+    syncEpoch++;
+    syncRequest = null;
   }
 
   /** A real reconnect may retry transient network work immediately. */
   public static async resumeNetwork(user: UserProfile): Promise<void> {
+    const epoch = syncEpoch;
     if (auth.currentUser?.uid !== user.id || isSyncInProgress) return;
     for (const item of await OfflineStorage.getSyncItemsByUser(user.id)) {
-      if (auth.currentUser?.uid !== user.id) return;
+      if (!sameSyncSession(user.id, epoch)) return;
       await OfflineStorage.resetSyncItemForRetry(item.operationId, user.id, true);
     }
   }
@@ -120,6 +128,7 @@ export class SyncQueueService {
     payload: any,
     attachments?: { [key: string]: Blob }
   ): Promise<string> {
+    const epoch = syncEpoch;
     // Enforce idempotency: composite deterministic operation ID based on user, collection, and recordId
     const operationId = `op:${user.id}:${collectionName}:${recordId}`;
     const projectId = OfflineStorage.getProjectId();
@@ -156,9 +165,9 @@ export class SyncQueueService {
 
     // If reachable, schedule background sync
     this.isNetworkReachable().then((reachable) => {
-      if (reachable) {
+      if (reachable && sameSyncSession(user.id, epoch)) {
         setTimeout(() => {
-          this.triggerSync(user).catch(() => {});
+          if (sameSyncSession(user.id, epoch)) this.triggerSync(user).catch(() => {});
         }, 500);
       }
     });
@@ -170,6 +179,7 @@ export class SyncQueueService {
    * Refresh current status for active user and notify subscribers
    */
   public static async refreshStatus(userId: string): Promise<SyncQueueStatus> {
+    const epoch = syncEpoch;
     if (!userId) {
       const empty: SyncQueueStatus = {
         pendingCount: 0,
@@ -194,7 +204,7 @@ export class SyncQueueService {
       items,
     };
 
-    if (auth.currentUser?.uid === userId) this.notifyListeners(summary);
+    if (sameSyncSession(userId, epoch)) this.notifyListeners(summary);
     else return { ...summary, items: [], pendingCount: 0, needsActionCount: 0, isSyncing: false };
     return summary;
   }
@@ -233,13 +243,22 @@ export class SyncQueueService {
     succeeded: number;
     failed: number;
   }> {
-    if (isSyncInProgress) {
-      return { processed: 0, succeeded: 0, failed: 0 };
-    }
+    const epoch = syncEpoch;
+    if (auth.currentUser?.uid !== currentUser.id) return noSyncWork();
+    if (syncRequest?.uid === currentUser.id && syncRequest.epoch === epoch) return syncRequest.promise;
+    if (isSyncInProgress) return noSyncWork();
+    // Cover the asynchronous probe/lock phase too, before the delivery flag is set.
+    const request = { uid: currentUser.id, epoch, promise: this.startSync(currentUser, epoch) };
+    syncRequest = request;
+    try { return await request.promise; }
+    finally { if (syncRequest === request) syncRequest = null; }
+  }
+
+  private static async startSync(currentUser: UserProfile, epoch: number): Promise<SyncResult> {
 
     // 1. Pre-flight reachability check
     const reachable = await this.isNetworkReachable();
-    if (!reachable) {
+    if (!reachable || !sameSyncSession(currentUser.id, epoch)) {
       return { processed: 0, succeeded: 0, failed: 0 };
     }
 
@@ -252,11 +271,11 @@ export class SyncQueueService {
           { ifAvailable: true },
           async (lock: any) => {
             callbackStarted = true;
-            if (!lock) {
+            if (!lock || !sameSyncSession(currentUser.id, epoch)) {
               console.log('[SYNC_QUEUE] Another browser tab is currently syncing for this user.');
               return { processed: 0, succeeded: 0, failed: 0 };
             }
-            return this.runSyncProcessWithLease(currentUser);
+            return this.runSyncProcessWithLease(currentUser, epoch);
           }
         );
       } catch (lockErr) {
@@ -266,27 +285,31 @@ export class SyncQueueService {
     }
 
     // Fallback: timestamped lease lock
-    return this.runSyncProcessWithLease(currentUser);
+    if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
+    return this.runSyncProcessWithLease(currentUser, epoch);
   }
 
-  private static async runSyncProcessWithLease(currentUser: UserProfile): Promise<{
+  private static async runSyncProcessWithLease(currentUser: UserProfile, epoch: number): Promise<{
     processed: number;
     succeeded: number;
     failed: number;
   }> {
     const owner = `${Date.now()}:${Math.random()}`;
     if (!await OfflineStorage.syncLease(currentUser.id, owner)) return { processed: 0, succeeded: 0, failed: 0 };
-    const heartbeat = setInterval(() => { void OfflineStorage.syncLease(currentUser.id, owner).then(owned => { if (!owned) isSyncCancelled = true; }).catch(() => { isSyncCancelled = true; }); }, 10000);
-    try { return await this.runSyncProcess(currentUser); }
+    const heartbeat = setInterval(() => { void OfflineStorage.syncLease(currentUser.id, owner).then(owned => { if (!owned && syncEpoch === epoch) isSyncCancelled = true; }).catch(() => { if (syncEpoch === epoch) isSyncCancelled = true; }); }, 10000);
+    try {
+      if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
+      return await this.runSyncProcess(currentUser, epoch);
+    }
     finally { clearInterval(heartbeat); await OfflineStorage.syncLease(currentUser.id, owner, true).catch(() => {}); }
   }
 
-  private static async runSyncProcess(currentUser: UserProfile): Promise<{
+  private static async runSyncProcess(currentUser: UserProfile, epoch: number): Promise<{
     processed: number;
     succeeded: number;
     failed: number;
   }> {
-    if (isSyncInProgress) {
+    if (isSyncInProgress || !sameSyncSession(currentUser.id, epoch)) {
       return { processed: 0, succeeded: 0, failed: 0 };
     }
 
@@ -311,12 +334,15 @@ export class SyncQueueService {
 
     try {
       await this.refreshStatus(currentUser.id);
+      if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
       const items = await OfflineStorage.getSyncItemsByUser(currentUser.id, { strict: true });
+      if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
       const currentTime = Date.now();
 
       // Recover a browser/process interruption only after the stale send window.
       // Web Locks/lease protection has already been acquired for this account.
       for (const item of items) {
+        if (!sameSyncSession(currentUser.id, epoch) || isSyncCancelled) break;
         if (item.status === 'SENDING' && currentTime - new Date(item.updatedAt || item.createdAt).getTime() > 120000) {
           item.status = 'PENDING_NETWORK'; item.nextRetryAt = undefined;
           await OfflineStorage.updateSyncItem(item);
@@ -328,7 +354,7 @@ export class SyncQueueService {
       );
 
       for (const item of eligibleItems) {
-        if (isSyncCancelled || !auth.currentUser || auth.currentUser.uid !== currentUser.id) {
+        if (isSyncCancelled || !sameSyncSession(currentUser.id, epoch)) {
           console.log('[SYNC_QUEUE] Sync process cancelled due to user logout or session switch.');
           break;
         }
@@ -361,6 +387,14 @@ export class SyncQueueService {
           succeeded++;
           lastSuccessfulSyncAt = new Date().toISOString();
         } catch (err: any) {
+          if (isSyncCancelled || !sameSyncSession(currentUser.id, epoch)) {
+            // Logout is not a failed delivery attempt. Keep the original work
+            // for its owner without consuming retries or requiring manual repair.
+            item.status = 'PENDING_NETWORK';
+            item.updatedAt = new Date().toISOString();
+            await OfflineStorage.updateSyncItem(item);
+            break;
+          }
           failed++;
           console.error(`[SYNC_QUEUE] Error syncing item ${item.operationId}:`, err);
 
@@ -399,7 +433,7 @@ export class SyncQueueService {
       }
     } finally {
       isSyncInProgress = false;
-      await this.refreshStatus(currentUser.id).catch(error => console.warn('[SYNC_QUEUE] Status akan diperbarui setelah penyimpanan pulih:', error));
+      if (sameSyncSession(currentUser.id, epoch)) await this.refreshStatus(currentUser.id).catch(error => console.warn('[SYNC_QUEUE] Status akan diperbarui setelah penyimpanan pulih:', error));
     }
 
     return { processed, succeeded, failed };

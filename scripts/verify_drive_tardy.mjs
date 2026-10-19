@@ -48,7 +48,7 @@ const result = await build({
 });
 const response = (code, data) => ({ ok: code >= 200 && code < 300, json: async () => data });
 const context = vm.createContext({
-  fixture, module: { exports: {} }, crypto: webcrypto, TextEncoder, structuredClone,
+  fixture, module: { exports: {} }, crypto: webcrypto, TextEncoder, structuredClone, AbortController, setTimeout, clearTimeout,
   // Keep synthetic errors quiet. No credentials or actual photos are logged.
   console: { log() {}, warn() {}, error() {} },
   fetch: async (url, options) => {

@@ -1,6 +1,7 @@
 import {
   doc,
   getDoc,
+  getDocFromServer,
   runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -14,6 +15,7 @@ import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { AttendancePolicy, AttendanceError } from '../attendance/attendancePolicy';
 import { checkSelfieDataUrlSize } from '../attendance/selfieWatermark';
 import { processPhotoForStorage } from '../drive/photoUploadHelper';
+import { createAuthenticatedSession } from './sessionGuard';
 
 export interface CheckInParams {
   userId: string;
@@ -52,6 +54,12 @@ export class AttendanceService {
    * supports scheduleId: null in BEBAS mode, and strictly enforces single daily record.
    */
   public static async checkIn(params: CheckInParams): Promise<AttendanceRecord> {
+    const session = createAuthenticatedSession(params.userId);
+    try { return await this.performCheckIn(params, session.assertActive); }
+    finally { session.close(); }
+  }
+
+  private static async performCheckIn(params: CheckInParams, assertSession: () => void): Promise<AttendanceRecord> {
     const {
       userId,
       userName,
@@ -83,6 +91,7 @@ export class AttendanceService {
         throw new AttendanceError('Izin membaca konfigurasi sekolah ditolak Firebase.', 'read-settings', sErr);
       }
     }
+    assertSession();
 
     const effectiveMode: 'TERJADWAL' | 'BEBAS' =
       authoritativeSettings?.attendanceMode === 'BEBAS' ? 'BEBAS' : 'TERJADWAL';
@@ -114,6 +123,7 @@ export class AttendanceService {
         throw new AttendanceError('Izin membaca catatan presensi ditolak Firebase.', 'read-record', rErr);
       }
     }
+    assertSession();
 
     const nowIso = new Date().toISOString();
 
@@ -145,6 +155,7 @@ export class AttendanceService {
         }
       }
       const processed = await processPhotoForStorage(photoUrl, 'attendance', attendanceId, attendanceId);
+      assertSession();
       finalPhotoUrl = processed.photoUrl;
     }
 
@@ -172,7 +183,9 @@ export class AttendanceService {
       // Re-check after photo upload inside the transaction: another tab may
       // have checked in meanwhile, including an admin allowed to update records.
       await runTransaction(db, async transaction => {
+        assertSession();
         const latest = await transaction.get(docRef);
+        assertSession();
         if (latest.exists()) {
           throw new Error(`Presensi masuk hari ini (${tanggal}) sudah pernah tercatat pada pukul ${formatTime(latest.data().jamMasuk)}.`);
         }
@@ -188,6 +201,7 @@ export class AttendanceService {
       }
       throw wErr;
     }
+    assertSession();
 
     // Non-blocking audit log
     FirestoreService.logAudit({
@@ -220,6 +234,12 @@ export class AttendanceService {
    * prevents duplicate check-outs, and stages errors with exact stage diagnostics.
    */
   public static async checkOut(params: CheckOutParams): Promise<CheckOutResult> {
+    const session = createAuthenticatedSession(params.isAdmin ? undefined : params.userId);
+    try { return await this.performCheckOut(params, session.assertActive); }
+    finally { session.close(); }
+  }
+
+  private static async performCheckOut(params: CheckOutParams, assertSession: () => void): Promise<CheckOutResult> {
     const { attendanceId, userId, userName, userRole = 'GURU', isAdmin = false, tanggal } = params;
 
     if (!userId) {
@@ -240,6 +260,7 @@ export class AttendanceService {
       let userSnap;
       try {
         userSnap = await getDoc(doc(db, 'users', userId));
+        assertSession();
       } catch (pErr: any) {
         if (pErr?.code === 'permission-denied') {
           throw new AttendanceError('Izin membaca profil akun ditolak Firebase.', 'read-profile', pErr);
@@ -257,6 +278,7 @@ export class AttendanceService {
         }
         if (auth.currentUser) {
           const tokenRes = await auth.currentUser.getIdTokenResult();
+          assertSession();
           const authTimeSec = tokenRes?.claims?.auth_time;
           if (
             typeof authTimeSec === 'number' &&
@@ -277,6 +299,7 @@ export class AttendanceService {
       }
       console.warn('[AttendanceService] Profile pre-check warning:', checkErr);
     }
+    assertSession();
 
     // Execute atomic transaction
     let capturedStage: 'read-settings' | 'read-record' | 'write-check-out' = 'read-settings';
@@ -284,6 +307,7 @@ export class AttendanceService {
 
     try {
       await runTransaction(db, async (transaction) => {
+        assertSession();
         // Stage read-settings: Read authoritative school settings within transaction
         capturedStage = 'read-settings';
         const schoolConfigRef = doc(db, 'settings', 'school_config');
@@ -293,6 +317,7 @@ export class AttendanceService {
         } catch (sErr: any) {
           throw new AttendanceError(sErr.message, 'read-settings', sErr);
         }
+        assertSession();
 
         const authoritativeSettings: SchoolSettings = settingsSnap.exists()
           ? (settingsSnap.data() as SchoolSettings)
@@ -306,6 +331,7 @@ export class AttendanceService {
         } catch (rErr: any) {
           throw new AttendanceError(rErr.message, 'read-record', rErr);
         }
+        assertSession();
 
         if (!snap.exists()) {
           throw new Error(
@@ -395,23 +421,27 @@ export class AttendanceService {
       }
       throw txErr;
     }
+    assertSession();
 
     // Re-read document to obtain server-confirmed timestamp (capped at max 4 seconds)
     let freshRecord: AttendanceRecord | null = null;
     let readConfirmed = false;
+    let readbackTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const readPromise = getDoc(docRef);
+      const readPromise = getDocFromServer(docRef);
       const timeoutPromise = new Promise<null>((_, reject) =>
-        setTimeout(() => reject(new Error('READBACK_TIMEOUT')), 4000)
+        { readbackTimer = setTimeout(() => reject(new Error('READBACK_TIMEOUT')), 4000); }
       );
       const freshSnap = (await Promise.race([readPromise, timeoutPromise])) as any;
+      assertSession();
       if (freshSnap?.exists()) {
         freshRecord = { id: freshSnap.id, ...freshSnap.data() } as AttendanceRecord;
         readConfirmed = true;
       }
     } catch (readErr) {
       console.warn('[AttendanceService] Confirmation readback delayed or timed out (non-fatal):', readErr);
-    }
+    } finally { if (readbackTimer !== undefined) clearTimeout(readbackTimer); }
+    assertSession();
 
     const confirmedTimeDisplay = freshRecord?.jamPulang
       ? formatTime(freshRecord.jamPulang)

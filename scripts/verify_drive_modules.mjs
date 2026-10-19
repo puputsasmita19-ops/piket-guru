@@ -22,9 +22,9 @@ const io = {
   firestore: `export const where=(...values)=>values;export const doc=(_db,c,id)=>({c,id});export const getDoc=async(ref)=>{
     const value=ref.c==='settings'?globalThis.f.settings:globalThis.f.records.get(ref.c+'/'+ref.id);
     return {exists:()=>!!value,data:()=>value};};
-    export const setDoc=async(ref,data)=>{const f=globalThis.f;if(f.failWrite){f.failWrite=false;throw Error('TEST_WRITE_FAILED');}f.records.set(ref.c+'/'+ref.id,data);f.writes.push({c:ref.c,id:ref.id,data});};
+    export const getDocFromServer=getDoc;export const setDoc=async(ref,data)=>{const f=globalThis.f;if(f.failWrite){f.failWrite=false;throw Error('TEST_WRITE_FAILED');}f.records.set(ref.c+'/'+ref.id,data);f.writes.push({c:ref.c,id:ref.id,data});};
     export const serverTimestamp=()=> 'TEST_TIME';export const runTransaction=async(_,fn)=>{const ops=[];await fn({get:getDoc,set:(ref,data)=>ops.push([ref,data])});for(const[ref,data]of ops)await setDoc(ref,data)};`,
-  offline: `export class OfflineStorage{static getProjectId(){return "demo-test";}static async updateSyncItem(){globalThis.f.conversions++;}}`,
+  offline: `export class OfflineStorage{static registerListener(fn){return fn;}static getProjectId(){return "demo-test";}static async updateSyncItem(){globalThis.f.conversions++;}}`,
   drafts: `export class DraftService{static async blobToDataUrl(blob){return blob.dataUrl;}}`,
   duty: 'export class DutyBookService{}', permits: 'export class StudentPermitService{}', substitutions: 'export class SubstitutionService{}',
 };
@@ -42,7 +42,7 @@ const output = await build({
     b.onLoad({ filter: /.*/, namespace: 'mock' }, (a) => ({ contents: io[a.path], loader: 'js' }));
   } }],
 });
-const context = vm.createContext({ f, module: { exports: {} }, crypto: webcrypto, TextEncoder, URL, Blob,
+const context = vm.createContext({ f, module: { exports: {} }, crypto: webcrypto, TextEncoder, URL, Blob, AbortController, setTimeout, clearTimeout,
   console: { log() {}, warn() {}, error() {} },
   fetch: async (url, options) => {
     assert.equal(options.headers.Authorization, 'Bearer TEST_TOKEN');
