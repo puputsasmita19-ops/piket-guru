@@ -11,6 +11,14 @@ const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingSaves = new Map<string, { userId: string; save: () => Promise<void> }>();
 const writes = new Map<string, Promise<void>>();
 
+// Saves and cleanup share one FIFO per draft. A later edit must survive an
+// earlier submission's cleanup, even when IndexedDB is slow on a mobile device.
+async function enqueueDraftWrite(key: string, action: () => Promise<void>): Promise<void> {
+  const write = (writes.get(key) || Promise.resolve()).catch(() => {}).then(action);
+  writes.set(key, write);
+  try { await write; } finally { if (writes.get(key) === write) writes.delete(key); }
+}
+
 export class DraftService {
   /**
    * Save a form draft immediately
@@ -25,9 +33,7 @@ export class DraftService {
     if (!userId) return;
     const key = `${userId}:${formType}:${recordId}`;
     clearTimeout(debounceTimers.get(key)); debounceTimers.delete(key); pendingSaves.delete(key);
-    const write = (writes.get(key) || Promise.resolve()).catch(() => {}).then(() => OfflineStorage.saveDraft(userId, formType, recordId, data, attachments));
-    writes.set(key, write);
-    try { await write; } finally { if (writes.get(key) === write) writes.delete(key); }
+    await enqueueDraftWrite(key, () => OfflineStorage.saveDraft(userId, formType, recordId, data, attachments));
   }
 
   /**
@@ -89,8 +95,7 @@ export class DraftService {
       debounceTimers.delete(timerKey);
     }
     pendingSaves.delete(timerKey);
-    await writes.get(timerKey)?.catch(() => {});
-    await OfflineStorage.deleteDraft(userId, formType, recordId);
+    await enqueueDraftWrite(timerKey, () => OfflineStorage.deleteDraft(userId, formType, recordId));
   }
 
   /**

@@ -1,3 +1,4 @@
+import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { UserProfile } from '../../types';
@@ -84,43 +85,50 @@ export class StudentPermitService {
     data: Omit<StudentPermitRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<StudentPermitRecord> {
-    const id = data.id || `pmt-${data.tanggal}-${crypto.randomUUID()}`;
-    // Idempotency check: jika dokumen telah tercatat di server (misal kegagalan respons jaringan), kembalikan tanpa duplikasi audit log
-    const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', id);
-    if (existingDoc) {
-      return existingDoc;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const id = data.id || `pmt-${data.tanggal}-${crypto.randomUUID()}`;
+      // Idempotency check: jika dokumen telah tercatat di server (misal kegagalan respons jaringan), kembalikan tanpa duplikasi audit log
+      session.assertActive();
+      const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', id);
+      if (existingDoc) {
+        return existingDoc;
+      }
+
+      const now = new Date().toISOString();
+
+      const cleanData = { ...data };
+      if (cleanData.jenisIzin !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      }
+
+      const payload: StudentPermitRecord = {
+        ...cleanData,
+        id,
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: now,
+        createdBy: user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      session.assertActive();
+      await FirestoreService.setDocument('studentPermits', id, payload, { expectedState: null });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'CREATE',
+        module: 'PERMITS',
+        recordId: id,
+        details: `Menerbitkan surat izin keluar gerbang untuk siswa: ${payload.namaSiswa} (${payload.kelas}) - Alasan: ${payload.jenisIzin}`,
+      });
+
+      return payload;
+    } finally {
+      session.close();
     }
-
-    const now = new Date().toISOString();
-
-    const cleanData = { ...data };
-    if (cleanData.jenisIzin !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    }
-
-    const payload: StudentPermitRecord = {
-      ...cleanData,
-      id,
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      createdAt: now,
-      createdBy: user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocument('studentPermits', id, payload, { expectedState: null });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'CREATE',
-      module: 'PERMITS',
-      recordId: id,
-      details: `Menerbitkan surat izin keluar gerbang untuk siswa: ${payload.namaSiswa} (${payload.kelas}) - Alasan: ${payload.jenisIzin}`,
-    });
-
-    return payload;
   }
 
   /**
@@ -131,54 +139,61 @@ export class StudentPermitService {
     data: Partial<StudentPermitRecord> & { id: string },
     user: UserProfile
   ): Promise<StudentPermitRecord> {
-    const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
-    if (!existing) {
-      throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
+      if (!existing) {
+        throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
+      }
+
+      if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
+        throw new Error(`Konflik pembaruan: Surat izin telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+      }
+
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const cleanData = { ...data };
+
+      // If jenisIzin is not LAINNYA, delete keteranganLainnya
+      if (cleanData.jenisIzin && cleanData.jenisIzin !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      } else if (!cleanData.jenisIzin && existing.jenisIzin !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      }
+
+      const updated: StudentPermitRecord = {
+        ...existing,
+        ...cleanData,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        createdBy: existing.createdBy,
+        dataSource: existing.dataSource,
+        isDemo: existing.isDemo,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      // If jenisIzin changed from LAINNYA to another, remove field if controlledReplace
+      if (updated.jenisIzin !== 'LAINNYA') {
+        delete updated.keteranganLainnya;
+      }
+
+      session.assertActive();
+      await FirestoreService.setDocument('studentPermits', existing.id, updated, { controlledReplace: true, expectedState: existing });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'UPDATE',
+        module: 'PERMITS',
+        recordId: existing.id,
+        details: `Memperbarui data izin keluar siswa: ${updated.namaSiswa} (${updated.kelas}) - ${updated.jenisIzin}`,
+      });
+
+      return updated;
+    } finally {
+      session.close();
     }
-
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
-      throw new Error(`Konflik pembaruan: Surat izin telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
-    }
-
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const cleanData = { ...data };
-
-    // If jenisIzin is not LAINNYA, delete keteranganLainnya
-    if (cleanData.jenisIzin && cleanData.jenisIzin !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    } else if (!cleanData.jenisIzin && existing.jenisIzin !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    }
-
-    const updated: StudentPermitRecord = {
-      ...existing,
-      ...cleanData,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      createdBy: existing.createdBy,
-      dataSource: existing.dataSource,
-      isDemo: existing.isDemo,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    // If jenisIzin changed from LAINNYA to another, remove field if controlledReplace
-    if (updated.jenisIzin !== 'LAINNYA') {
-      delete updated.keteranganLainnya;
-    }
-
-    await FirestoreService.setDocument('studentPermits', existing.id, updated, { controlledReplace: true, expectedState: existing });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'UPDATE',
-      module: 'PERMITS',
-      recordId: existing.id,
-      details: `Memperbarui data izin keluar siswa: ${updated.namaSiswa} (${updated.kelas}) - ${updated.jenisIzin}`,
-    });
-
-    return updated;
   }
 
   /**
@@ -212,53 +227,126 @@ export class StudentPermitService {
     payload: import('../../types/studentPermit.types').BatchStudentPermitPayload,
     user: UserProfile
   ): Promise<import('../../types/studentPermit.types').BatchPermitResult> {
-    const {
-      groupId,
-      tanggal,
-      jamKeluarUmum,
-      targetReturnTimeUmum,
-      jenisIzinUmum,
-      keteranganLainnyaUmum,
-      alasanUmum,
-      penjemputUmum,
-      namaPenjemputUmum,
-      guruPengajarName,
-      catatanPetugas,
-      students,
-    } = payload;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const {
+        groupId,
+        tanggal,
+        jamKeluarUmum,
+        targetReturnTimeUmum,
+        jenisIzinUmum,
+        keteranganLainnyaUmum,
+        alasanUmum,
+        penjemputUmum,
+        namaPenjemputUmum,
+        guruPengajarName,
+        catatanPetugas,
+        students,
+      } = payload;
 
-    const studentIds = students.map((s) => s.studentId).filter(Boolean);
-    const activeConflicts = await this.getActivePermitsForStudents(studentIds, tanggal);
+      const studentIds = students.map((s) => s.studentId).filter(Boolean);
+      session.assertActive();
+      const activeConflicts = await this.getActivePermitsForStudents(studentIds, tanggal);
 
-    const now = new Date().toISOString();
-    const resultItems: import('../../types/studentPermit.types').BatchPermitResultItem[] = [];
+      const now = new Date().toISOString();
+      const resultItems: import('../../types/studentPermit.types').BatchPermitResultItem[] = [];
 
-    // Tentukan status awal berdasarkan jenis izin
-    const initialStatus: import('../../types/studentPermit.types').StudentPermitStatus =
-      jenisIzinUmum === 'KELUAR_SEBENTAR' || jenisIzinUmum === 'DISPENSASI_LOMBA'
-        ? 'SEDANG_KELUAR'
-        : 'SELESAI_PULANG';
+      // Tentukan status awal berdasarkan jenis izin
+      const initialStatus: import('../../types/studentPermit.types').StudentPermitStatus =
+        jenisIzinUmum === 'KELUAR_SEBENTAR' || jenisIzinUmum === 'DISPENSASI_LOMBA'
+          ? 'SEDANG_KELUAR'
+          : 'SELESAI_PULANG';
 
-    for (const std of students) {
-      const permitId = std.requestId || `pmt-${tanggal}-${groupId}-${std.studentId.replace(/[^a-zA-Z0-9]/g, '')}`;
+      for (const std of students) {
+        const permitId = std.requestId || `pmt-${tanggal}-${groupId}-${std.studentId.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-      // Check conflict: Siswa masih berstatus SEDANG_KELUAR
-      const activeConflict = activeConflicts[std.studentId];
-      if (activeConflict && activeConflict.id !== permitId) {
-        resultItems.push({
-          studentId: std.studentId,
-          namaSiswa: std.namaSiswa,
-          kelas: std.kelas,
-          success: false,
-          error: `Siswa masih memiliki izin aktif (${activeConflict.jamKeluar} WIB) dengan status belum kembali.`,
-        });
-        continue;
-      }
+        // Check conflict: Siswa masih berstatus SEDANG_KELUAR
+        const activeConflict = activeConflicts[std.studentId];
+        if (activeConflict && activeConflict.id !== permitId) {
+          resultItems.push({
+            studentId: std.studentId,
+            namaSiswa: std.namaSiswa,
+            kelas: std.kelas,
+            success: false,
+            error: `Siswa masih memiliki izin aktif (${activeConflict.jamKeluar} WIB) dengan status belum kembali.`,
+          });
+          continue;
+        }
 
-      try {
-        // Idempotency: Jika dokumen dengan ID ini sudah tercatat di Firestore, kembalikan tanpa duplikasi
-        const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
-        if (existingDoc) {
+        try {
+          // Idempotency: Jika dokumen dengan ID ini sudah tercatat di Firestore, kembalikan tanpa duplikasi
+          session.assertActive();
+          const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
+          if (existingDoc) {
+            resultItems.push({
+              studentId: std.studentId,
+              namaSiswa: std.namaSiswa,
+              kelas: std.kelas,
+              success: true,
+              permitId,
+            });
+            continue;
+          }
+
+          // Resolusi nilai individual vs umum
+          const jamKeluar = std.isCustomized && std.jamKeluar ? std.jamKeluar : jamKeluarUmum;
+          const targetReturn = std.isCustomized && std.targetReturnTime ? std.targetReturnTime : targetReturnTimeUmum;
+          const alasan = std.isCustomized && std.alasan ? std.alasan : alasanUmum;
+          const penjemput = std.isCustomized && std.penjemput ? std.penjemput : penjemputUmum;
+          const rawNamaPenjemput = std.isCustomized && std.namaPenjemput !== undefined ? std.namaPenjemput : namaPenjemputUmum;
+          const resolvedNamaPenjemput =
+            rawNamaPenjemput?.trim() ||
+            (penjemput === 'SENDIRI'
+              ? 'Pulang Mandiri'
+              : penjemput === 'GURU_PEMBINA'
+              ? 'Guru Pembina'
+              : 'Orang Tua / Wali');
+
+          // Nomor kontak tidak boleh disalin dari siswa lain; gunakan data siswa sendiri
+          const noHpOrangTua = (std.noHpKhusus || std.noHpOrangTua || '').trim();
+
+          const record: StudentPermitRecord = {
+            id: permitId,
+            groupId,
+            isGroupSubmission: students.length > 1,
+            studentId: std.studentId,
+            tanggal,
+            jamKeluar,
+            targetReturnTime: targetReturn || undefined,
+            namaSiswa: std.namaSiswa,
+            nisn: std.nisn?.trim() || '-',
+            kelas: std.kelas,
+            jenisIzin: jenisIzinUmum,
+            keteranganLainnya: jenisIzinUmum === 'LAINNYA' ? keteranganLainnyaUmum : undefined,
+            alasan,
+            penjemput,
+            namaPenjemput: resolvedNamaPenjemput,
+            noHpOrangTua,
+            guruPengajarName: guruPengajarName?.trim() || undefined,
+            petugasPiketName: user.fullName || 'Petugas Piket',
+            petugasPiketId: user.id || 'usr-piket',
+            status: initialStatus,
+            catatanPetugas: catatanPetugas?.trim() || undefined,
+            dataSource: 'PRODUCTION',
+            isDemo: false,
+            createdAt: now,
+            createdBy: user.fullName,
+            updatedAt: now,
+            updatedBy: user.fullName,
+          };
+
+          session.assertActive();
+          await FirestoreService.setDocument('studentPermits', permitId, record, { expectedState: null });
+          await FirestoreService.logAudit({
+            userId: user.id,
+            userName: user.fullName,
+            role: user.role,
+            action: 'CREATE',
+            module: 'PERMITS',
+            recordId: permitId,
+            details: `Penerbitan surat izin (Grup ${groupId}): ${record.namaSiswa} (${record.kelas}) - ${record.jenisIzin}`,
+          });
+
           resultItems.push({
             studentId: std.studentId,
             namaSiswa: std.namaSiswa,
@@ -266,96 +354,31 @@ export class StudentPermitService {
             success: true,
             permitId,
           });
-          continue;
+        } catch (err: any) {
+          console.warn(`[StudentPermitService] Error creating permit for ${std.namaSiswa}:`, err);
+          resultItems.push({
+            studentId: std.studentId,
+            namaSiswa: std.namaSiswa,
+            kelas: std.kelas,
+            success: false,
+            error: err.message || 'Gagal menyimpan ke basis data.',
+          });
         }
-
-        // Resolusi nilai individual vs umum
-        const jamKeluar = std.isCustomized && std.jamKeluar ? std.jamKeluar : jamKeluarUmum;
-        const targetReturn = std.isCustomized && std.targetReturnTime ? std.targetReturnTime : targetReturnTimeUmum;
-        const alasan = std.isCustomized && std.alasan ? std.alasan : alasanUmum;
-        const penjemput = std.isCustomized && std.penjemput ? std.penjemput : penjemputUmum;
-        const rawNamaPenjemput = std.isCustomized && std.namaPenjemput !== undefined ? std.namaPenjemput : namaPenjemputUmum;
-        const resolvedNamaPenjemput =
-          rawNamaPenjemput?.trim() ||
-          (penjemput === 'SENDIRI'
-            ? 'Pulang Mandiri'
-            : penjemput === 'GURU_PEMBINA'
-            ? 'Guru Pembina'
-            : 'Orang Tua / Wali');
-
-        // Nomor kontak tidak boleh disalin dari siswa lain; gunakan data siswa sendiri
-        const noHpOrangTua = (std.noHpKhusus || std.noHpOrangTua || '').trim();
-
-        const record: StudentPermitRecord = {
-          id: permitId,
-          groupId,
-          isGroupSubmission: students.length > 1,
-          studentId: std.studentId,
-          tanggal,
-          jamKeluar,
-          targetReturnTime: targetReturn || undefined,
-          namaSiswa: std.namaSiswa,
-          nisn: std.nisn?.trim() || '-',
-          kelas: std.kelas,
-          jenisIzin: jenisIzinUmum,
-          keteranganLainnya: jenisIzinUmum === 'LAINNYA' ? keteranganLainnyaUmum : undefined,
-          alasan,
-          penjemput,
-          namaPenjemput: resolvedNamaPenjemput,
-          noHpOrangTua,
-          guruPengajarName: guruPengajarName?.trim() || undefined,
-          petugasPiketName: user.fullName || 'Petugas Piket',
-          petugasPiketId: user.id || 'usr-piket',
-          status: initialStatus,
-          catatanPetugas: catatanPetugas?.trim() || undefined,
-          dataSource: 'PRODUCTION',
-          isDemo: false,
-          createdAt: now,
-          createdBy: user.fullName,
-          updatedAt: now,
-          updatedBy: user.fullName,
-        };
-
-        await FirestoreService.setDocument('studentPermits', permitId, record, { expectedState: null });
-        await FirestoreService.logAudit({
-          userId: user.id,
-          userName: user.fullName,
-          role: user.role,
-          action: 'CREATE',
-          module: 'PERMITS',
-          recordId: permitId,
-          details: `Penerbitan surat izin (Grup ${groupId}): ${record.namaSiswa} (${record.kelas}) - ${record.jenisIzin}`,
-        });
-
-        resultItems.push({
-          studentId: std.studentId,
-          namaSiswa: std.namaSiswa,
-          kelas: std.kelas,
-          success: true,
-          permitId,
-        });
-      } catch (err: any) {
-        console.warn(`[StudentPermitService] Error creating permit for ${std.namaSiswa}:`, err);
-        resultItems.push({
-          studentId: std.studentId,
-          namaSiswa: std.namaSiswa,
-          kelas: std.kelas,
-          success: false,
-          error: err.message || 'Gagal menyimpan ke basis data.',
-        });
       }
+
+      const successCount = resultItems.filter((i) => i.success).length;
+      const failureCount = resultItems.length - successCount;
+
+      return {
+        groupId,
+        total: students.length,
+        successCount,
+        failureCount,
+        items: resultItems,
+      };
+    } finally {
+      session.close();
     }
-
-    const successCount = resultItems.filter((i) => i.success).length;
-    const failureCount = resultItems.length - successCount;
-
-    return {
-      groupId,
-      total: students.length,
-      successCount,
-      failureCount,
-      items: resultItems,
-    };
   }
 
   /**
@@ -366,36 +389,43 @@ export class StudentPermitService {
     user: UserProfile,
     customReturnTime?: string
   ): Promise<void> {
-    const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
-    if (!existing) return;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
+      if (!existing) return;
 
-    const returnTime = customReturnTime || formatTime(new Date());
+      const returnTime = customReturnTime || formatTime(new Date());
 
-    // Validasi urutan waktu: jam kembali tidak boleh sebelum jam keluar
-    if (existing.jamKeluar && returnTime < existing.jamKeluar) {
-      throw new Error(
-        `Jam kembali (${returnTime} WIB) tidak boleh lebih awal dari jam keluar (${existing.jamKeluar} WIB).`
-      );
+      // Validasi urutan waktu: jam kembali tidak boleh sebelum jam keluar
+      if (existing.jamKeluar && returnTime < existing.jamKeluar) {
+        throw new Error(
+          `Jam kembali (${returnTime} WIB) tidak boleh lebih awal dari jam keluar (${existing.jamKeluar} WIB).`
+        );
+      }
+
+      const updated: StudentPermitRecord = {
+        ...existing,
+        jamKembali: returnTime,
+        status: 'SUDAH_KEMBALI',
+        updatedAt: FirestoreService.nextUpdatedAt(existing),
+        updatedBy: user.fullName,
+      };
+
+      session.assertActive();
+      await FirestoreService.setDocument('studentPermits', permitId, updated, { expectedState: existing });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'STATUS_CHANGE',
+        module: 'PERMITS',
+        recordId: permitId,
+        details: `Siswa ${existing.namaSiswa} (${existing.kelas}) telah kembali masuk sekolah pukul ${returnTime} WIB`,
+      });
+    } finally {
+      session.close();
     }
-
-    const updated: StudentPermitRecord = {
-      ...existing,
-      jamKembali: returnTime,
-      status: 'SUDAH_KEMBALI',
-      updatedAt: FirestoreService.nextUpdatedAt(existing),
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocument('studentPermits', permitId, updated, { expectedState: existing });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'STATUS_CHANGE',
-      module: 'PERMITS',
-      recordId: permitId,
-      details: `Siswa ${existing.namaSiswa} (${existing.kelas}) telah kembali masuk sekolah pukul ${returnTime} WIB`,
-    });
   }
 
   /**
@@ -407,34 +437,46 @@ export class StudentPermitService {
     returnTime: string,
     user: UserProfile
   ): Promise<{ successCount: number; errors: string[] }> {
-    let successCount = 0;
-    const errors: string[] = [];
+    const session = createAuthenticatedSession(user.id);
+    try {
+      let successCount = 0;
+      const errors: string[] = [];
 
-    for (const id of permitIds) {
-      try {
-        await this.markReturned(id, user, returnTime);
-        successCount++;
-      } catch (err: any) {
-        errors.push(`ID ${id}: ${err.message || 'Gagal memperbarui'}`);
+      for (const id of permitIds) {
+        try {
+          session.assertActive();
+          await this.markReturned(id, user, returnTime);
+          successCount++;
+        } catch (err: any) {
+          errors.push(`ID ${id}: ${err.message || 'Gagal memperbarui'}`);
+        }
       }
-    }
 
-    return { successCount, errors };
+      return { successCount, errors };
+    } finally {
+      session.close();
+    }
   }
 
   /**
    * Delete student permit record
    */
   public static async deletePermit(permitId: string, user: UserProfile): Promise<void> {
-    await FirestoreService.deleteDocument('studentPermits', permitId);
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'DELETE',
-      module: 'PERMITS',
-      recordId: permitId,
-      details: `Menghapus surat izin siswa ID: ${permitId}`,
-    });
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      await FirestoreService.deleteDocument('studentPermits', permitId);
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'DELETE',
+        module: 'PERMITS',
+        recordId: permitId,
+        details: `Menghapus surat izin siswa ID: ${permitId}`,
+      });
+    } finally {
+      session.close();
+    }
   }
 }

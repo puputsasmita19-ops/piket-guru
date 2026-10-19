@@ -1,3 +1,4 @@
+import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
 import { TeacherSubstitutionRecord, SubstitutionStatus } from '../../types/substitution.types';
 import { UserProfile } from '../../types';
@@ -59,38 +60,45 @@ export class SubstitutionService {
     data: Omit<TeacherSubstitutionRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<TeacherSubstitutionRecord> {
-    const id = data.id || `inv-${data.tanggal}-${crypto.randomUUID()}`;
-    // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
-    const existingDoc = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', id);
-    if (existingDoc) {
-      return existingDoc;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const id = data.id || `inv-${data.tanggal}-${crypto.randomUUID()}`;
+      // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
+      session.assertActive();
+      const existingDoc = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', id);
+      if (existingDoc) {
+        return existingDoc;
+      }
+
+      const now = new Date().toISOString();
+
+      const payload: TeacherSubstitutionRecord = {
+        ...data,
+        id,
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: now,
+        createdBy: user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      session.assertActive();
+      await FirestoreService.setDocument('substitutions', id, payload, { expectedState: null });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'CREATE',
+        module: 'SUBSTITUTIONS',
+        recordId: id,
+        details: `Mencatat guru berhalangan: ${payload.guruBerhalanganName} (${payload.kelas} - ${payload.mataPelajaran}), Inval: ${payload.guruPenggantiName || 'Belum Ditugaskan'}`,
+      });
+
+      return payload;
+    } finally {
+      session.close();
     }
-
-    const now = new Date().toISOString();
-
-    const payload: TeacherSubstitutionRecord = {
-      ...data,
-      id,
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      createdAt: now,
-      createdBy: user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocument('substitutions', id, payload, { expectedState: null });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'CREATE',
-      module: 'SUBSTITUTIONS',
-      recordId: id,
-      details: `Mencatat guru berhalangan: ${payload.guruBerhalanganName} (${payload.kelas} - ${payload.mataPelajaran}), Inval: ${payload.guruPenggantiName || 'Belum Ditugaskan'}`,
-    });
-
-    return payload;
   }
 
   /**
@@ -101,38 +109,45 @@ export class SubstitutionService {
     data: Partial<TeacherSubstitutionRecord> & { id: string },
     user: UserProfile
   ): Promise<TeacherSubstitutionRecord> {
-    const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
-    if (!existing) {
-      throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
+      if (!existing) {
+        throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
+      }
+
+      if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
+        throw new Error(`Konflik pembaruan: Catatan guru inval telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+      }
+
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const updated: TeacherSubstitutionRecord = {
+        ...existing,
+        ...data,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        createdBy: existing.createdBy,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      session.assertActive();
+      await FirestoreService.setDocument('substitutions', existing.id, updated, { expectedState: existing });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'UPDATE',
+        module: 'SUBSTITUTIONS',
+        recordId: existing.id,
+        details: `Memperbarui data guru berhalangan: ${updated.guruBerhalanganName} (${updated.kelas} - ${updated.mataPelajaran}), Inval: ${updated.guruPenggantiName || 'Belum Ditugaskan'}`,
+      });
+
+      return updated;
+    } finally {
+      session.close();
     }
-
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
-      throw new Error(`Konflik pembaruan: Catatan guru inval telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
-    }
-
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const updated: TeacherSubstitutionRecord = {
-      ...existing,
-      ...data,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      createdBy: existing.createdBy,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocument('substitutions', existing.id, updated, { expectedState: existing });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'UPDATE',
-      module: 'SUBSTITUTIONS',
-      recordId: existing.id,
-      details: `Memperbarui data guru berhalangan: ${updated.guruBerhalanganName} (${updated.kelas} - ${updated.mataPelajaran}), Inval: ${updated.guruPenggantiName || 'Belum Ditugaskan'}`,
-    });
-
-    return updated;
   }
 
   /**
@@ -145,29 +160,36 @@ export class SubstitutionService {
     guruPenggantiName?: string,
     user?: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', substitutionId);
-    if (!existing) return;
+    const session = createAuthenticatedSession(user?.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', substitutionId);
+      if (!existing) return;
 
-    const updated: TeacherSubstitutionRecord = {
-      ...existing,
-      status,
-      ...(guruPenggantiId && { guruPenggantiId }),
-      ...(guruPenggantiName && { guruPenggantiName }),
-      updatedAt: FirestoreService.nextUpdatedAt(existing),
-      updatedBy: user?.fullName || 'Petugas Piket',
-    };
+      const updated: TeacherSubstitutionRecord = {
+        ...existing,
+        status,
+        ...(guruPenggantiId && { guruPenggantiId }),
+        ...(guruPenggantiName && { guruPenggantiName }),
+        updatedAt: FirestoreService.nextUpdatedAt(existing),
+        updatedBy: user?.fullName || 'Petugas Piket',
+      };
 
-    await FirestoreService.setDocument('substitutions', substitutionId, updated, { expectedState: existing });
-    if (user) {
-      await FirestoreService.logAudit({
-        userId: user.id,
-        userName: user.fullName,
-        role: user.role,
-        action: 'UPDATE',
-        module: 'SUBSTITUTIONS',
-        recordId: substitutionId,
-        details: `Mengubah status jadwal inval kelas ${existing.kelas} menjadi ${status}`,
-      });
+      session.assertActive();
+      await FirestoreService.setDocument('substitutions', substitutionId, updated, { expectedState: existing });
+      if (user) {
+        await FirestoreService.logAudit({
+          userId: user.id,
+          userName: user.fullName,
+          role: user.role,
+          action: 'UPDATE',
+          module: 'SUBSTITUTIONS',
+          recordId: substitutionId,
+          details: `Mengubah status jadwal inval kelas ${existing.kelas} menjadi ${status}`,
+        });
+      }
+    } finally {
+      session.close();
     }
   }
 
@@ -230,92 +252,24 @@ export class SubstitutionService {
     batchRequestId: string;
     groupId?: string;
   }): Promise<import('../../types/substitution.types').BatchSubstitutionResponse> {
-    const { items, user, batchRequestId } = params;
-    const groupId = params.groupId || `grp-${new Date().toISOString().split('T')[0]}-${batchRequestId.slice(0, 8)}`;
+    const session = createAuthenticatedSession(params.user.id);
+    try {
+      const { items, user, batchRequestId } = params;
+      const groupId = params.groupId || `grp-${new Date().toISOString().split('T')[0]}-${batchRequestId.slice(0, 8)}`;
 
-    const existingRecords = await FirestoreService.getForDates<TeacherSubstitutionRecord>(
-      'substitutions', items.map(item => item.tanggal)
-    );
-    const results: import('../../types/substitution.types').BatchSubstitutionItemResult[] = [];
+      session.assertActive();
+      const existingRecords = await FirestoreService.getForDates<TeacherSubstitutionRecord>(
+        'substitutions', items.map(item => item.tanggal)
+      );
+      const results: import('../../types/substitution.types').BatchSubstitutionItemResult[] = [];
 
-    // Lacak penugasan yang baru saja berhasil disimpan dalam batch ini untuk mendeteksi konflik internal antar rincian
-    const savedInBatch: TeacherSubstitutionRecord[] = [];
+      // Lacak penugasan yang baru saja berhasil disimpan dalam batch ini untuk mendeteksi konflik internal antar rincian
+      const savedInBatch: TeacherSubstitutionRecord[] = [];
 
-    for (const item of items) {
-      try {
-        // 1. Validasi: Guru pengganti tidak boleh sama dengan guru yang berhalangan
-        if (item.guruPenggantiId && item.guruPenggantiId === item.guruBerhalanganId) {
-          results.push({
-            substitutionId: item.id,
-            guruBerhalanganId: item.guruBerhalanganId,
-            guruBerhalanganName: item.guruBerhalanganName,
-            kelas: item.kelas,
-            jamPelajaran: item.jamPelajaran,
-            guruPenggantiName: item.guruPenggantiName,
-            success: false,
-            error: `Guru pengganti tidak boleh sama dengan guru yang berhalangan (${item.guruBerhalanganName}).`,
-          });
-          continue;
-        }
-
-        // 2. Deteksi duplikasi: Guru yang sama sudah tercatat berhalangan di tanggal, kelas, dan JP yang sama
-        const duplicate = existingRecords.find((r) => {
-          if (r.tanggal !== item.tanggal) return false;
-          if (r.guruBerhalanganId !== item.guruBerhalanganId) return false;
-          if (r.kelas !== item.kelas) return false;
-
-          const rPeriods = r.selectedPeriodNumbers || [];
-          const itemPeriods = item.selectedPeriodNumbers || [];
-          if (itemPeriods.length > 0 && rPeriods.length > 0) {
-            return itemPeriods.some((p) => rPeriods.includes(p));
-          }
-          return r.jamPelajaran === item.jamPelajaran;
-        });
-
-        // Jika duplikat memiliki batchRequestId yang sama persis, ini adalah retry sukses sebelumnya (idempotent)
-        if (duplicate && duplicate.batchRequestId === batchRequestId) {
-          results.push({
-            substitutionId: duplicate.id,
-            guruBerhalanganId: item.guruBerhalanganId,
-            guruBerhalanganName: item.guruBerhalanganName,
-            kelas: item.kelas,
-            jamPelajaran: item.jamPelajaran,
-            guruPenggantiName: item.guruPenggantiName,
-            success: true,
-            record: duplicate,
-          });
-          savedInBatch.push(duplicate);
-          continue;
-        }
-
-        // Jika duplikat ada pada catatan ID lain yang sudah tersimpan sebelumnya
-        if (duplicate && (!item.id || duplicate.id !== item.id)) {
-          results.push({
-            substitutionId: item.id,
-            guruBerhalanganId: item.guruBerhalanganId,
-            guruBerhalanganName: item.guruBerhalanganName,
-            kelas: item.kelas,
-            jamPelajaran: item.jamPelajaran,
-            guruPenggantiName: item.guruPenggantiName,
-            success: false,
-            error: `Penugasan untuk guru ${item.guruBerhalanganName} di Kelas ${item.kelas} pada ${item.jamPelajaran} sudah tercatat sebelumnya.`,
-          });
-          continue;
-        }
-
-        // 3. Deteksi bentrok jadwal guru pengganti (baik terhadap catatan server maupun antar item dalam batch)
-        if (item.guruPenggantiId) {
-          const allToCheck = [...existingRecords, ...savedInBatch];
-          const conflict = this.checkSubstituteConflict({
-            tanggal: item.tanggal,
-            substituteId: item.guruPenggantiId,
-            periodNumbers: item.selectedPeriodNumbers,
-            jamPelajaran: item.jamPelajaran,
-            excludeSubstitutionId: item.id,
-            existingSubstitutions: allToCheck,
-          });
-
-          if (conflict.hasConflict) {
+      for (const item of items) {
+        try {
+          // 1. Validasi: Guru pengganti tidak boleh sama dengan guru yang berhalangan
+          if (item.guruPenggantiId && item.guruPenggantiId === item.guruBerhalanganId) {
             results.push({
               substitutionId: item.id,
               guruBerhalanganId: item.guruBerhalanganId,
@@ -324,80 +278,161 @@ export class SubstitutionService {
               jamPelajaran: item.jamPelajaran,
               guruPenggantiName: item.guruPenggantiName,
               success: false,
-              error: `Bentrok penugasan: Guru pengganti ${item.guruPenggantiName} sudah memiliki tugas lain pada waktu yang sama (${conflict.reason || 'jadwal bertabrakan'}).`,
+              error: `Guru pengganti tidak boleh sama dengan guru yang berhalangan (${item.guruBerhalanganName}).`,
             });
             continue;
           }
+
+          // 2. Deteksi duplikasi: Guru yang sama sudah tercatat berhalangan di tanggal, kelas, dan JP yang sama
+          const duplicate = existingRecords.find((r) => {
+            if (r.tanggal !== item.tanggal) return false;
+            if (r.guruBerhalanganId !== item.guruBerhalanganId) return false;
+            if (r.kelas !== item.kelas) return false;
+
+            const rPeriods = r.selectedPeriodNumbers || [];
+            const itemPeriods = item.selectedPeriodNumbers || [];
+            if (itemPeriods.length > 0 && rPeriods.length > 0) {
+              return itemPeriods.some((p) => rPeriods.includes(p));
+            }
+            return r.jamPelajaran === item.jamPelajaran;
+          });
+
+          // Jika duplikat memiliki batchRequestId yang sama persis, ini adalah retry sukses sebelumnya (idempotent)
+          if (duplicate && duplicate.batchRequestId === batchRequestId) {
+            results.push({
+              substitutionId: duplicate.id,
+              guruBerhalanganId: item.guruBerhalanganId,
+              guruBerhalanganName: item.guruBerhalanganName,
+              kelas: item.kelas,
+              jamPelajaran: item.jamPelajaran,
+              guruPenggantiName: item.guruPenggantiName,
+              success: true,
+              record: duplicate,
+            });
+            savedInBatch.push(duplicate);
+            continue;
+          }
+
+          // Jika duplikat ada pada catatan ID lain yang sudah tersimpan sebelumnya
+          if (duplicate && (!item.id || duplicate.id !== item.id)) {
+            results.push({
+              substitutionId: item.id,
+              guruBerhalanganId: item.guruBerhalanganId,
+              guruBerhalanganName: item.guruBerhalanganName,
+              kelas: item.kelas,
+              jamPelajaran: item.jamPelajaran,
+              guruPenggantiName: item.guruPenggantiName,
+              success: false,
+              error: `Penugasan untuk guru ${item.guruBerhalanganName} di Kelas ${item.kelas} pada ${item.jamPelajaran} sudah tercatat sebelumnya.`,
+            });
+            continue;
+          }
+
+          // 3. Deteksi bentrok jadwal guru pengganti (baik terhadap catatan server maupun antar item dalam batch)
+          if (item.guruPenggantiId) {
+            const allToCheck = [...existingRecords, ...savedInBatch];
+            const conflict = this.checkSubstituteConflict({
+              tanggal: item.tanggal,
+              substituteId: item.guruPenggantiId,
+              periodNumbers: item.selectedPeriodNumbers,
+              jamPelajaran: item.jamPelajaran,
+              excludeSubstitutionId: item.id,
+              existingSubstitutions: allToCheck,
+            });
+
+            if (conflict.hasConflict) {
+              results.push({
+                substitutionId: item.id,
+                guruBerhalanganId: item.guruBerhalanganId,
+                guruBerhalanganName: item.guruBerhalanganName,
+                kelas: item.kelas,
+                jamPelajaran: item.jamPelajaran,
+                guruPenggantiName: item.guruPenggantiName,
+                success: false,
+                error: `Bentrok penugasan: Guru pengganti ${item.guruPenggantiName} sudah memiliki tugas lain pada waktu yang sama (${conflict.reason || 'jadwal bertabrakan'}).`,
+              });
+              continue;
+            }
+          }
+
+          // 4. Generate deterministic ID berdasarkan kombinasi stabil untuk idempotent retry
+          const cleanClass = item.kelas.replace(/[^a-zA-Z0-9]/g, '');
+          const periodKey = (item.selectedPeriodNumbers || []).join('-') || 'all';
+          const deterministicId =
+            item.id || `inv-${item.tanggal}-${item.guruBerhalanganId}-${cleanClass}-${periodKey}-${batchRequestId.slice(0, 8)}`;
+
+          const status: SubstitutionStatus = item.guruPenggantiId
+            ? (item.status || 'TERTUGASKAN')
+            : 'MENUNGGU_GURU_INVAL';
+
+          session.assertActive();
+          const savedRecord = await this.createSubstitution(
+            {
+              ...item,
+              id: deterministicId,
+              groupId,
+              batchRequestId,
+              status,
+            },
+            user
+          );
+
+          savedInBatch.push(savedRecord);
+          results.push({
+            substitutionId: savedRecord.id,
+            guruBerhalanganId: item.guruBerhalanganId,
+            guruBerhalanganName: item.guruBerhalanganName,
+            kelas: item.kelas,
+            jamPelajaran: item.jamPelajaran,
+            guruPenggantiName: item.guruPenggantiName,
+            success: true,
+            record: savedRecord,
+          });
+        } catch (err: any) {
+          results.push({
+            substitutionId: item.id,
+            guruBerhalanganId: item.guruBerhalanganId,
+            guruBerhalanganName: item.guruBerhalanganName,
+            kelas: item.kelas,
+            jamPelajaran: item.jamPelajaran,
+            guruPenggantiName: item.guruPenggantiName,
+            success: false,
+            error: err?.message || 'Gagal menyimpan penugasan rincian ini.',
+          });
         }
-
-        // 4. Generate deterministic ID berdasarkan kombinasi stabil untuk idempotent retry
-        const cleanClass = item.kelas.replace(/[^a-zA-Z0-9]/g, '');
-        const periodKey = (item.selectedPeriodNumbers || []).join('-') || 'all';
-        const deterministicId =
-          item.id || `inv-${item.tanggal}-${item.guruBerhalanganId}-${cleanClass}-${periodKey}-${batchRequestId.slice(0, 8)}`;
-
-        const status: SubstitutionStatus = item.guruPenggantiId
-          ? (item.status || 'TERTUGASKAN')
-          : 'MENUNGGU_GURU_INVAL';
-
-        const savedRecord = await this.createSubstitution(
-          {
-            ...item,
-            id: deterministicId,
-            groupId,
-            batchRequestId,
-            status,
-          },
-          user
-        );
-
-        savedInBatch.push(savedRecord);
-        results.push({
-          substitutionId: savedRecord.id,
-          guruBerhalanganId: item.guruBerhalanganId,
-          guruBerhalanganName: item.guruBerhalanganName,
-          kelas: item.kelas,
-          jamPelajaran: item.jamPelajaran,
-          guruPenggantiName: item.guruPenggantiName,
-          success: true,
-          record: savedRecord,
-        });
-      } catch (err: any) {
-        results.push({
-          substitutionId: item.id,
-          guruBerhalanganId: item.guruBerhalanganId,
-          guruBerhalanganName: item.guruBerhalanganName,
-          kelas: item.kelas,
-          jamPelajaran: item.jamPelajaran,
-          guruPenggantiName: item.guruPenggantiName,
-          success: false,
-          error: err?.message || 'Gagal menyimpan penugasan rincian ini.',
-        });
       }
-    }
 
-    const allSuccessful = results.length > 0 && results.every((r) => r.success);
-    return {
-      results,
-      allSuccessful,
-      groupId,
-    };
+      const allSuccessful = results.length > 0 && results.every((r) => r.success);
+      return {
+        results,
+        allSuccessful,
+        groupId,
+      };
+    } finally {
+      session.close();
+    }
   }
 
   /**
    * Delete substitution record
    */
   public static async deleteSubstitution(substitutionId: string, user: UserProfile): Promise<void> {
-    await FirestoreService.deleteDocument('substitutions', substitutionId);
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'DELETE',
-      module: 'SUBSTITUTIONS',
-      recordId: substitutionId,
-      details: `Menghapus catatan guru inval ID: ${substitutionId}`,
-    });
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      await FirestoreService.deleteDocument('substitutions', substitutionId);
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'DELETE',
+        module: 'SUBSTITUTIONS',
+        recordId: substitutionId,
+        details: `Menghapus catatan guru inval ID: ${substitutionId}`,
+      });
+    } finally {
+      session.close();
+    }
   }
 }
 

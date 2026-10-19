@@ -1,3 +1,4 @@
+import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
 import { VisitorRecord, VisitorStatus } from '../../types/visitor.types';
 import { UserProfile } from '../../types';
@@ -84,48 +85,56 @@ export class VisitorService {
     data: Omit<VisitorRecord, 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string },
     user: UserProfile
   ): Promise<VisitorRecord> {
-    const id = data.id || `vis-${data.tanggal}-${crypto.randomUUID()}`;
-    data.id = id;
-    // Idempotency check: jika tamu telah tercatat di server (misal respons jaringan terputus), kembalikan tanpa membuat log audit ganda
-    const existingDoc = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', id);
-    if (existingDoc) {
-      return existingDoc;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const id = data.id || `vis-${data.tanggal}-${crypto.randomUUID()}`;
+      data.id = id;
+      // Idempotency check: jika tamu telah tercatat di server (misal respons jaringan terputus), kembalikan tanpa membuat log audit ganda
+      session.assertActive();
+      const existingDoc = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', id);
+      if (existingDoc) {
+        return existingDoc;
+      }
+
+      const now = new Date().toISOString();
+
+      const cleanData = { ...data };
+      if (cleanData.kategori !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      }
+      if (cleanData.fotoUrl) {
+        session.assertActive();
+        const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', id, id);
+        cleanData.fotoUrl = photo.photoUrl;
+      }
+
+      const payload: VisitorRecord = {
+        ...cleanData,
+        id,
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: now,
+        createdBy: user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      session.assertActive();
+      await FirestoreService.setDocument('visitors', id, payload, { expectedState: null });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'CREATE',
+        module: 'VISITORS',
+        recordId: id,
+        details: `Mencatat tamu baru: ${payload.namaTamu} (${payload.instansiAsal}) bertemu dengan ${payload.tujuanBertemu}`,
+      });
+
+      return payload;
+    } finally {
+      session.close();
     }
-
-    const now = new Date().toISOString();
-
-    const cleanData = { ...data };
-    if (cleanData.kategori !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    }
-    if (cleanData.fotoUrl) {
-      const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', id, id);
-      cleanData.fotoUrl = photo.photoUrl;
-    }
-
-    const payload: VisitorRecord = {
-      ...cleanData,
-      id,
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      createdAt: now,
-      createdBy: user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocument('visitors', id, payload, { expectedState: null });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'CREATE',
-      module: 'VISITORS',
-      recordId: id,
-      details: `Mencatat tamu baru: ${payload.namaTamu} (${payload.instansiAsal}) bertemu dengan ${payload.tujuanBertemu}`,
-    });
-
-    return payload;
   }
 
   /**
@@ -136,59 +145,67 @@ export class VisitorService {
     data: Partial<VisitorRecord> & { id: string },
     user: UserProfile
   ): Promise<VisitorRecord> {
-    const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', data.id);
-    if (!existing) {
-      throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', data.id);
+      if (!existing) {
+        throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
+      }
+
+      if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
+        throw new Error(`Konflik pembaruan: Data buku tamu telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+      }
+
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const cleanData = { ...data };
+      // Only process an explicitly provided photo; partial edits preserve the old one.
+      if (cleanData.fotoUrl) {
+        session.assertActive();
+        const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', data.id, data.id);
+        cleanData.fotoUrl = photo.photoUrl;
+      }
+
+      // If kategori is not LAINNYA, delete keteranganLainnya
+      if (cleanData.kategori && cleanData.kategori !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      } else if (!cleanData.kategori && existing.kategori !== 'LAINNYA') {
+        delete cleanData.keteranganLainnya;
+      }
+
+      const updated: VisitorRecord = {
+        ...existing,
+        ...cleanData,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        createdBy: existing.createdBy,
+        dataSource: existing.dataSource,
+        isDemo: existing.isDemo,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
+
+      // If kategori is changed from LAINNYA to another, ensure keteranganLainnya is completely removed
+      if (updated.kategori !== 'LAINNYA') {
+        delete updated.keteranganLainnya;
+      }
+
+      session.assertActive();
+      await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true, expectedState: existing });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'UPDATE',
+        module: 'VISITORS',
+        recordId: existing.id,
+        details: `Memperbarui data buku tamu: ${updated.namaTamu} (${updated.instansiAsal}) - Kategori: ${updated.kategori}`,
+      });
+
+      return updated;
+    } finally {
+      session.close();
     }
-
-    if (data.updatedAt && existing.updatedAt && existing.updatedAt !== data.updatedAt) {
-      throw new Error(`Konflik pembaruan: Data buku tamu telah diperbarui di server oleh ${existing.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
-    }
-
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const cleanData = { ...data };
-    // Only process an explicitly provided photo; partial edits preserve the old one.
-    if (cleanData.fotoUrl) {
-      const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', data.id, data.id);
-      cleanData.fotoUrl = photo.photoUrl;
-    }
-
-    // If kategori is not LAINNYA, delete keteranganLainnya
-    if (cleanData.kategori && cleanData.kategori !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    } else if (!cleanData.kategori && existing.kategori !== 'LAINNYA') {
-      delete cleanData.keteranganLainnya;
-    }
-
-    const updated: VisitorRecord = {
-      ...existing,
-      ...cleanData,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      createdBy: existing.createdBy,
-      dataSource: existing.dataSource,
-      isDemo: existing.isDemo,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    // If kategori is changed from LAINNYA to another, ensure keteranganLainnya is completely removed
-    if (updated.kategori !== 'LAINNYA') {
-      delete updated.keteranganLainnya;
-    }
-
-    await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true, expectedState: existing });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'UPDATE',
-      module: 'VISITORS',
-      recordId: existing.id,
-      details: `Memperbarui data buku tamu: ${updated.namaTamu} (${updated.instansiAsal}) - Kategori: ${updated.kategori}`,
-    });
-
-    return updated;
   }
 
   /**
@@ -198,43 +215,56 @@ export class VisitorService {
     visitorId: string,
     user: UserProfile
   ): Promise<void> {
-    const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', visitorId);
-    if (!existing) return;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', visitorId);
+      if (!existing) return;
 
-    const exitTime = formatTime(new Date());
-    const updated: VisitorRecord = {
-      ...existing,
-      jamKeluar: exitTime,
-      status: 'SELESAI',
-      updatedAt: FirestoreService.nextUpdatedAt(existing),
-      updatedBy: user.fullName,
-    };
+      const exitTime = formatTime(new Date());
+      const updated: VisitorRecord = {
+        ...existing,
+        jamKeluar: exitTime,
+        status: 'SELESAI',
+        updatedAt: FirestoreService.nextUpdatedAt(existing),
+        updatedBy: user.fullName,
+      };
 
-    await FirestoreService.setDocument('visitors', visitorId, updated, { expectedState: existing });
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'STATUS_CHANGE',
-      module: 'VISITORS',
-      recordId: visitorId,
-      details: `Check-out tamu: ${existing.namaTamu} (Keluar pukul ${exitTime} WIB)`,
-    });
+      session.assertActive();
+      await FirestoreService.setDocument('visitors', visitorId, updated, { expectedState: existing });
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'STATUS_CHANGE',
+        module: 'VISITORS',
+        recordId: visitorId,
+        details: `Check-out tamu: ${existing.namaTamu} (Keluar pukul ${exitTime} WIB)`,
+      });
+    } finally {
+      session.close();
+    }
   }
 
   /**
    * Delete visitor record
    */
   public static async deleteVisitor(visitorId: string, user: UserProfile): Promise<void> {
-    await FirestoreService.deleteDocument('visitors', visitorId);
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'DELETE',
-      module: 'VISITORS',
-      recordId: visitorId,
-      details: `Menghapus catatan buku tamu ID: ${visitorId}`,
-    });
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      await FirestoreService.deleteDocument('visitors', visitorId);
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'DELETE',
+        module: 'VISITORS',
+        recordId: visitorId,
+        details: `Menghapus catatan buku tamu ID: ${visitorId}`,
+      });
+    } finally {
+      session.close();
+    }
   }
 }

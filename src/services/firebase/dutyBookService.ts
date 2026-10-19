@@ -1,3 +1,4 @@
+import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { DutyBookStatus, UserProfile } from '../../types';
@@ -62,64 +63,71 @@ export class DutyBookService {
     user: UserProfile,
     originalUpdatedAt?: string
   ): Promise<DutyBookRecord> {
-    const isNew = !record.id || record.id.startsWith('temp-');
-    const id = this.getDeterministicId(record, user.id);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const isNew = !record.id || record.id.startsWith('temp-');
+      const id = this.getDeterministicId(record, user.id);
 
-    this.checkWriteAuthority(user, isNew);
+      this.checkWriteAuthority(user, isNew);
 
-    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
-    const now = FirestoreService.nextUpdatedAt(existing);
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+      const now = FirestoreService.nextUpdatedAt(existing);
 
-    if (existing) {
-      if (user.role === 'GURU' && existing.petugasId !== user.id) {
-        throw new Error('Akses ditolak: Anda hanya dapat mengubah buku piket yang menjadi tanggung jawab Anda.');
+      if (existing) {
+        if (user.role === 'GURU' && existing.petugasId !== user.id) {
+          throw new Error('Akses ditolak: Anda hanya dapat mengubah buku piket yang menjadi tanggung jawab Anda.');
+        }
+        if (existing.status === 'DIKUNCI' || existing.status === 'DISETUJUI') {
+          throw new Error('Akses ditolak: Buku piket telah disahkan & selesai (terkunci), tidak dapat diubah.');
+        }
+        if (user.role === 'GURU' && (existing.status === 'DIAJUKAN' || existing.status === 'DIVERIFIKASI')) {
+          throw new Error('Akses ditolak: Buku piket telah terkirim dan sedang menunggu pengesahan.');
+        }
+        if (originalUpdatedAt && existing.updatedAt && existing.updatedAt !== originalUpdatedAt) {
+          throw new Error(
+            `Konflik revisi: Jurnal telah diperbarui dari sesi/tab lain oleh ${existing.updatedBy || 'pengguna lain'}. Muat ulang data terbaru sebelum menyimpan.`
+          );
+        }
       }
-      if (existing.status === 'DIKUNCI' || existing.status === 'DISETUJUI') {
-        throw new Error('Akses ditolak: Buku piket telah disahkan & selesai (terkunci), tidak dapat diubah.');
-      }
-      if (user.role === 'GURU' && (existing.status === 'DIAJUKAN' || existing.status === 'DIVERIFIKASI')) {
-        throw new Error('Akses ditolak: Buku piket telah terkirim dan sedang menunggu pengesahan.');
-      }
-      if (originalUpdatedAt && existing.updatedAt && existing.updatedAt !== originalUpdatedAt) {
-        throw new Error(
-          `Konflik revisi: Jurnal telah diperbarui dari sesi/tab lain oleh ${existing.updatedBy || 'pengguna lain'}. Muat ulang data terbaru sebelum menyimpan.`
-        );
-      }
-    }
 
-    const payload: DutyBookRecord = {
-      ...record,
-      id,
-      petugasId: record.petugasId || user.id,
-      petugasName: record.petugasName || user.fullName,
-      status: 'DRAFT',
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      createdAt: existing?.createdAt || record.createdAt || now,
-      createdBy: existing?.createdBy || record.createdBy || user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocumentWithAudit('dutyBooks', id, payload, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: isNew ? 'CREATE' : 'UPDATE',
-      module: 'DUTY_BOOK',
-      recordId: id,
-      details: `${isNew ? 'Membuat draft baru' : 'Menyimpan draft'} buku piket tanggal ${payload.tanggal}`,
-      metadata: {
-        tanggal: payload.tanggal,
-        stage: 'DRAFT',
+      const payload: DutyBookRecord = {
+        ...record,
+        id,
+        petugasId: record.petugasId || user.id,
+        petugasName: record.petugasName || user.fullName,
         status: 'DRAFT',
-        petugasId: payload.petugasId,
-        petugasName: payload.petugasName,
-        isNew,
-      },
-    }, { expectedState: existing });
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: existing?.createdAt || record.createdAt || now,
+        createdBy: existing?.createdBy || record.createdBy || user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    return payload;
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('dutyBooks', id, payload, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: isNew ? 'CREATE' : 'UPDATE',
+        module: 'DUTY_BOOK',
+        recordId: id,
+        details: `${isNew ? 'Membuat draft baru' : 'Menyimpan draft'} buku piket tanggal ${payload.tanggal}`,
+        metadata: {
+          tanggal: payload.tanggal,
+          stage: 'DRAFT',
+          status: 'DRAFT',
+          petugasId: payload.petugasId,
+          petugasName: payload.petugasName,
+          isNew,
+        },
+      }, { expectedState: existing });
+
+      return payload;
+    } finally {
+      session.close();
+    }
   }
 
   /**
@@ -132,72 +140,79 @@ export class DutyBookService {
     user: UserProfile,
     originalUpdatedAt?: string
   ): Promise<DutyBookRecord> {
-    const isNew = !record.id || record.id.startsWith('temp-');
-    const id = this.getDeterministicId(record, user.id);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const isNew = !record.id || record.id.startsWith('temp-');
+      const id = this.getDeterministicId(record, user.id);
 
-    this.checkWriteAuthority(user, isNew);
-    this.validateMandatorySections(record);
+      this.checkWriteAuthority(user, isNew);
+      this.validateMandatorySections(record);
 
-    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
-    const now = FirestoreService.nextUpdatedAt(existing);
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+      const now = FirestoreService.nextUpdatedAt(existing);
 
-    if (existing) {
-      if (user.role === 'GURU' && existing.petugasId !== user.id) {
-        throw new Error('Akses ditolak: Anda hanya dapat mengirim buku piket milik Anda sendiri.');
-      }
-      if (existing.status === 'DIKUNCI' || existing.status === 'DISETUJUI') {
-        throw new Error('Akses ditolak: Buku piket telah disahkan & selesai (terkunci).');
-      }
-      if (user.role === 'GURU' && (existing.status === 'DIAJUKAN' || existing.status === 'DIVERIFIKASI')) {
-        if (existing.petugasId === user.id) {
-          // Idempotent retry: Jurnal sudah berhasil diterima oleh server sebelumnya
-          return existing;
+      if (existing) {
+        if (user.role === 'GURU' && existing.petugasId !== user.id) {
+          throw new Error('Akses ditolak: Anda hanya dapat mengirim buku piket milik Anda sendiri.');
         }
-        throw new Error('Akses ditolak: Buku piket ini sudah terkirim sebelumnya.');
+        if (existing.status === 'DIKUNCI' || existing.status === 'DISETUJUI') {
+          throw new Error('Akses ditolak: Buku piket telah disahkan & selesai (terkunci).');
+        }
+        if (user.role === 'GURU' && (existing.status === 'DIAJUKAN' || existing.status === 'DIVERIFIKASI')) {
+          if (existing.petugasId === user.id) {
+            // Idempotent retry: Jurnal sudah berhasil diterima oleh server sebelumnya
+            return existing;
+          }
+          throw new Error('Akses ditolak: Buku piket ini sudah terkirim sebelumnya.');
+        }
+        if (originalUpdatedAt && existing.updatedAt && existing.updatedAt !== originalUpdatedAt) {
+          throw new Error(
+            `Konflik revisi: Jurnal telah diperbarui dari sesi/tab lain oleh ${existing.updatedBy || 'pengguna lain'}. Muat ulang data terbaru sebelum mengirim.`
+          );
+        }
       }
-      if (originalUpdatedAt && existing.updatedAt && existing.updatedAt !== originalUpdatedAt) {
-        throw new Error(
-          `Konflik revisi: Jurnal telah diperbarui dari sesi/tab lain oleh ${existing.updatedBy || 'pengguna lain'}. Muat ulang data terbaru sebelum mengirim.`
-        );
-      }
-    }
 
-    const payload: DutyBookRecord = {
-      ...record,
-      id,
-      petugasId: record.petugasId || user.id,
-      petugasName: record.petugasName || user.fullName,
-      status: 'DIAJUKAN',
-      submittedAt: now,
-      submittedBy: user.fullName,
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      createdAt: existing?.createdAt || record.createdAt || now,
-      createdBy: existing?.createdBy || record.createdBy || user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocumentWithAudit('dutyBooks', id, payload, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: isNew ? 'CREATE' : 'STATUS_CHANGE',
-      module: 'DUTY_BOOK',
-      recordId: id,
-      details: `Mengirim jurnal buku piket resmi tanggal ${payload.tanggal} (Status: Terkirim)`,
-      metadata: {
-        tanggal: payload.tanggal,
-        stage: 'TERKIRIM',
+      const payload: DutyBookRecord = {
+        ...record,
+        id,
+        petugasId: record.petugasId || user.id,
+        petugasName: record.petugasName || user.fullName,
         status: 'DIAJUKAN',
-        petugasId: payload.petugasId,
-        petugasName: payload.petugasName,
         submittedAt: now,
-        isNew,
-      },
-    }, { expectedState: existing });
+        submittedBy: user.fullName,
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        createdAt: existing?.createdAt || record.createdAt || now,
+        createdBy: existing?.createdBy || record.createdBy || user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    return payload;
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('dutyBooks', id, payload, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: isNew ? 'CREATE' : 'STATUS_CHANGE',
+        module: 'DUTY_BOOK',
+        recordId: id,
+        details: `Mengirim jurnal buku piket resmi tanggal ${payload.tanggal} (Status: Terkirim)`,
+        metadata: {
+          tanggal: payload.tanggal,
+          stage: 'TERKIRIM',
+          status: 'DIAJUKAN',
+          petugasId: payload.petugasId,
+          petugasName: payload.petugasName,
+          submittedAt: now,
+          isNew,
+        },
+      }, { expectedState: existing });
+
+      return payload;
+    } finally {
+      session.close();
+    }
   }
 
   /**
@@ -208,58 +223,65 @@ export class DutyBookService {
     dutyBook: DutyBookRecord,
     user: UserProfile
   ): Promise<DutyBookRecord> {
-    const isAuthorized =
-      user.role === 'ADMIN' ||
-      user.role === 'KEPALA_SEKOLAH' ||
-      checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_UNLOCK) ||
-      checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_VERIFY);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const isAuthorized =
+        user.role === 'ADMIN' ||
+        user.role === 'KEPALA_SEKOLAH' ||
+        checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_UNLOCK) ||
+        checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_VERIFY);
 
-    if (!isAuthorized) {
-      throw new Error('Akses ditolak: Anda tidak memiliki wewenang untuk mengesahkan dan menyelesaikan buku piket.');
-    }
+      if (!isAuthorized) {
+        throw new Error('Akses ditolak: Anda tidak memiliki wewenang untuk mengesahkan dan menyelesaikan buku piket.');
+      }
 
-    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
-    if (!existing) {
-      throw new Error('Dokumen buku piket tidak ditemukan.');
-    }
-    if (existing.status === 'DIKUNCI') {
-      throw new Error('Buku piket sudah berstatus Selesai dan terkunci.');
-    }
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
+      if (!existing) {
+        throw new Error('Dokumen buku piket tidak ditemukan.');
+      }
+      if (existing.status === 'DIKUNCI') {
+        throw new Error('Buku piket sudah berstatus Selesai dan terkunci.');
+      }
 
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const updated: DutyBookRecord = {
-      ...existing,
-      status: 'DIKUNCI',
-      lockedAt: now,
-      lockedBy: user.fullName,
-      approvedAt: now,
-      approvedBy: user.fullName,
-      verifiedAt: now,
-      verifiedBy: user.fullName,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'STATUS_CHANGE',
-      module: 'DUTY_BOOK',
-      recordId: dutyBook.id,
-      details: `Mengesahkan dan menyelesaikan buku piket tanggal ${dutyBook.tanggal} dalam satu tahap (Status: Selesai / Terkunci)`,
-      metadata: {
-        tanggal: dutyBook.tanggal,
-        stage: 'SELESAI',
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const updated: DutyBookRecord = {
+        ...existing,
         status: 'DIKUNCI',
-        petugasId: dutyBook.petugasId,
-        petugasName: dutyBook.petugasName,
-        approvedBy: user.fullName,
+        lockedAt: now,
         lockedBy: user.fullName,
-      },
-    }, { expectedState: existing });
+        approvedAt: now,
+        approvedBy: user.fullName,
+        verifiedAt: now,
+        verifiedBy: user.fullName,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    return updated;
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'STATUS_CHANGE',
+        module: 'DUTY_BOOK',
+        recordId: dutyBook.id,
+        details: `Mengesahkan dan menyelesaikan buku piket tanggal ${dutyBook.tanggal} dalam satu tahap (Status: Selesai / Terkunci)`,
+        metadata: {
+          tanggal: dutyBook.tanggal,
+          stage: 'SELESAI',
+          status: 'DIKUNCI',
+          petugasId: dutyBook.petugasId,
+          petugasName: dutyBook.petugasName,
+          approvedBy: user.fullName,
+          lockedBy: user.fullName,
+        },
+      }, { expectedState: existing });
+
+      return updated;
+    } finally {
+      session.close();
+    }
   }
 
   /**
@@ -270,54 +292,61 @@ export class DutyBookService {
     user: UserProfile,
     reason: string
   ): Promise<DutyBookRecord> {
-    const isAuthorized =
-      user.role === 'ADMIN' ||
-      user.role === 'KEPALA_SEKOLAH' ||
-      checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_VERIFY);
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const isAuthorized =
+        user.role === 'ADMIN' ||
+        user.role === 'KEPALA_SEKOLAH' ||
+        checkUserPermission(user.permissions, PERMISSIONS.DUTYBOOK_VERIFY);
 
-    if (!isAuthorized) {
-      throw new Error('Akses ditolak: Hanya Administrator atau Kepala Sekolah yang dapat meminta revisi buku piket.');
-    }
+      if (!isAuthorized) {
+        throw new Error('Akses ditolak: Hanya Administrator atau Kepala Sekolah yang dapat meminta revisi buku piket.');
+      }
 
-    if (!reason || reason.trim().length === 0) {
-      throw new Error('Alasan pengembalian jurnal ke draft wajib diisi.');
-    }
+      if (!reason || reason.trim().length === 0) {
+        throw new Error('Alasan pengembalian jurnal ke draft wajib diisi.');
+      }
 
-    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
-    if (!existing) {
-      throw new Error('Dokumen buku piket tidak ditemukan.');
-    }
-    if (existing.status === 'DIKUNCI' && user.role !== 'ADMIN') {
-      throw new Error('Akses ditolak: Buku piket berstatus Selesai hanya dapat dibuka kunci oleh Administrator.');
-    }
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
+      if (!existing) {
+        throw new Error('Dokumen buku piket tidak ditemukan.');
+      }
+      if (existing.status === 'DIKUNCI' && user.role !== 'ADMIN') {
+        throw new Error('Akses ditolak: Buku piket berstatus Selesai hanya dapat dibuka kunci oleh Administrator.');
+      }
 
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const updated: DutyBookRecord = {
-      ...existing,
-      status: 'DRAFT',
-      revisionReason: reason.trim(),
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'STATUS_CHANGE',
-      module: 'DUTY_BOOK',
-      recordId: dutyBook.id,
-      details: `Mengembalikan jurnal buku piket (${dutyBook.tanggal}) ke status Draft untuk revisi. Alasan: ${reason.trim()}`,
-      metadata: {
-        tanggal: dutyBook.tanggal,
-        targetStatus: 'DRAFT',
-        petugasId: dutyBook.petugasId,
-        petugasName: dutyBook.petugasName,
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const updated: DutyBookRecord = {
+        ...existing,
+        status: 'DRAFT',
         revisionReason: reason.trim(),
-      },
-    }, { expectedState: existing });
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    return updated;
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'STATUS_CHANGE',
+        module: 'DUTY_BOOK',
+        recordId: dutyBook.id,
+        details: `Mengembalikan jurnal buku piket (${dutyBook.tanggal}) ke status Draft untuk revisi. Alasan: ${reason.trim()}`,
+        metadata: {
+          tanggal: dutyBook.tanggal,
+          targetStatus: 'DRAFT',
+          petugasId: dutyBook.petugasId,
+          petugasName: dutyBook.petugasName,
+          revisionReason: reason.trim(),
+        },
+      }, { expectedState: existing });
+
+      return updated;
+    } finally {
+      session.close();
+    }
   }
 
   /**
@@ -328,47 +357,54 @@ export class DutyBookService {
     user: UserProfile,
     reason: string
   ): Promise<DutyBookRecord> {
-    if (user.role !== 'ADMIN') {
-      throw new Error('Akses ditolak: Hanya Administrator yang berwenang membuka kunci buku piket berstatus Selesai.');
-    }
+    const session = createAuthenticatedSession(user.id);
+    try {
+      if (user.role !== 'ADMIN') {
+        throw new Error('Akses ditolak: Hanya Administrator yang berwenang membuka kunci buku piket berstatus Selesai.');
+      }
 
-    if (!reason || reason.trim().length === 0) {
-      throw new Error('Alasan pembukaan kunci untuk koreksi wajib diisi.');
-    }
+      if (!reason || reason.trim().length === 0) {
+        throw new Error('Alasan pembukaan kunci untuk koreksi wajib diisi.');
+      }
 
-    const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
-    if (!existing) {
-      throw new Error('Dokumen buku piket tidak ditemukan.');
-    }
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', dutyBook.id);
+      if (!existing) {
+        throw new Error('Dokumen buku piket tidak ditemukan.');
+      }
 
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const { lockedAt, lockedBy, ...rest } = existing;
-    const updated: DutyBookRecord = {
-      ...rest,
-      status: 'DRAFT',
-      unlockReason: reason.trim(),
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
-
-    await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'UPDATE',
-      module: 'DUTY_BOOK',
-      recordId: dutyBook.id,
-      details: `Admin membuka kunci buku piket (${dutyBook.tanggal}) untuk koreksi. Alasan: ${reason.trim()}`,
-      metadata: {
-        tanggal: dutyBook.tanggal,
-        targetStatus: 'DRAFT',
-        petugasId: dutyBook.petugasId,
-        petugasName: dutyBook.petugasName,
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const { lockedAt, lockedBy, ...rest } = existing;
+      const updated: DutyBookRecord = {
+        ...rest,
+        status: 'DRAFT',
         unlockReason: reason.trim(),
-      },
-    }, { expectedState: existing });
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    return updated;
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('dutyBooks', dutyBook.id, updated, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'UPDATE',
+        module: 'DUTY_BOOK',
+        recordId: dutyBook.id,
+        details: `Admin membuka kunci buku piket (${dutyBook.tanggal}) untuk koreksi. Alasan: ${reason.trim()}`,
+        metadata: {
+          tanggal: dutyBook.tanggal,
+          targetStatus: 'DRAFT',
+          petugasId: dutyBook.petugasId,
+          petugasName: dutyBook.petugasName,
+          unlockReason: reason.trim(),
+        },
+      }, { expectedState: existing });
+
+      return updated;
+    } finally {
+      session.close();
+    }
   }
 
   // --- BACKWARD COMPATIBLE WRAPPERS ---

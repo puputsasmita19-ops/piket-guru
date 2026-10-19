@@ -81,17 +81,22 @@ export function useAuditLogHistory(filters: AuditHistoryFilters, pageSize: numbe
       more: () => { if (pages.get(index)?.result?.incomplete) void load(index, true); },
     };
     setState(empty(key));
-    stop = subscribeAuditHistoryHead(filtered ? 1 : pageSize, valid, page => {
-      if (!active || fatal) return;
-      const nextSignature = signature(page);
-      if (headSignature !== null && nextSignature !== headSignature) newer = true;
-      headSignature = nextSignature; latest = page;
-      if (!filtered && index === 0 && !busy) {
-        if (pages.get(0)?.result && signature(pages.get(0)!.result!) !== nextSignature) { pages.clear(); visited = 1; }
-        pages.set(0, { start: null, result: page }); newer = false; publish(page);
-      } else if (pages.get(index)?.result) publish(pages.get(index)!.result!);
-    }, fail);
-    const timer = setTimeout(() => { if (filtered) void load(0); }, filters.search.trim() ? 350 : 0);
+    // Debounce the listener as well as the archive read. Reconnecting the head
+    // for every keystroke otherwise spends reads even when the search is cancelled.
+    const timer = setTimeout(() => {
+      if (!active) return;
+      stop = subscribeAuditHistoryHead(filtered ? 1 : pageSize, valid, page => {
+        if (!active || fatal) return;
+        const nextSignature = signature(page);
+        if (headSignature !== null && nextSignature !== headSignature) newer = true;
+        headSignature = nextSignature; latest = page;
+        if (!filtered && index === 0 && !busy) {
+          if (pages.get(0)?.result && signature(pages.get(0)!.result!) !== nextSignature) { pages.clear(); visited = 1; }
+          pages.set(0, { start: null, result: page }); newer = false; publish(page);
+        } else if (pages.get(index)?.result) publish(pages.get(index)!.result!);
+      }, fail);
+      if (filtered) void load(0);
+    }, filters.search.trim() ? 350 : 0);
     return () => { active = false; clearTimeout(timer); stop(); session.close(); pages.clear(); };
   }, [key, attempt, authorized, uid]);
   const data = authorized && state.key === key ? state : empty(key);

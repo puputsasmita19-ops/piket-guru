@@ -1,3 +1,4 @@
+import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
 import { IncidentRecord, IncidentStatus } from '../../types/incident.types';
 import { UserProfile } from '../../types';
@@ -102,62 +103,70 @@ export class IncidentService {
     record: IncidentRecord,
     user: UserProfile
   ): Promise<IncidentRecord> {
-    const needsGeneratedId = !record.id || record.id.startsWith('temp-');
-    const id = needsGeneratedId ? `inc-${record.tanggal}-${crypto.randomUUID()}` : record.id;
-    // Keep generated identity on the pending payload for retry after a lost response.
-    record.id = id;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      const needsGeneratedId = !record.id || record.id.startsWith('temp-');
+      const id = needsGeneratedId ? `inc-${record.tanggal}-${crypto.randomUUID()}` : record.id;
+      // Keep generated identity on the pending payload for retry after a lost response.
+      record.id = id;
 
-    // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
-    const existingDoc = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', id);
-    if (needsGeneratedId && existingDoc) {
-      return existingDoc;
+      // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
+      session.assertActive();
+      const existingDoc = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', id);
+      if (needsGeneratedId && existingDoc) {
+        return existingDoc;
+      }
+      // Forms reserve IDs before saving so retries keep the same photo identity.
+      // A reserved ID is still a creation until its document exists on the server.
+      const isNew = !existingDoc;
+      if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== record.updatedAt) {
+        throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
+      }
+
+      const now = FirestoreService.nextUpdatedAt(existingDoc);
+      session.assertActive();
+      const photos = await processMultiplePhotosForStorage(record.photos || [], 'incidents', id);
+
+      const rawPayload: IncidentRecord = {
+        ...record,
+        photos,
+        id,
+        pelaporId: record.pelaporId || user.id,
+        pelaporName: record.pelaporName || user.fullName,
+        penanggungJawab: record.penanggungJawab || user.fullName,
+        status: record.status || 'BARU',
+        dataSource: 'PRODUCTION',
+        isDemo: false,
+        updatedAt: now,
+        updatedBy: user.fullName,
+        createdAt: record.createdAt || now,
+        createdBy: record.createdBy || user.fullName,
+      };
+
+      const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
+
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('incidents', id, payload, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: isNew ? 'CREATE' : 'UPDATE',
+        module: 'INCIDENTS',
+        recordId: id,
+        details: `${isNew ? 'Melaporkan' : 'Memperbarui'} kejadian: [${payload.kategori}] ${payload.uraian.substring(0, 40)}... (${payload.tingkatKeparahan})`,
+        metadata: {
+          kategori: payload.kategori,
+          tingkatKeparahan: payload.tingkatKeparahan,
+          status: payload.status,
+          tanggal: payload.tanggal,
+          pelaporId: payload.pelaporId,
+        },
+      }, { expectedState: existingDoc });
+
+      return payload;
+    } finally {
+      session.close();
     }
-    // Forms reserve IDs before saving so retries keep the same photo identity.
-    // A reserved ID is still a creation until its document exists on the server.
-    const isNew = !existingDoc;
-    if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== record.updatedAt) {
-      throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
-    }
-
-    const now = FirestoreService.nextUpdatedAt(existingDoc);
-    const photos = await processMultiplePhotosForStorage(record.photos || [], 'incidents', id);
-
-    const rawPayload: IncidentRecord = {
-      ...record,
-      photos,
-      id,
-      pelaporId: record.pelaporId || user.id,
-      pelaporName: record.pelaporName || user.fullName,
-      penanggungJawab: record.penanggungJawab || user.fullName,
-      status: record.status || 'BARU',
-      dataSource: 'PRODUCTION',
-      isDemo: false,
-      updatedAt: now,
-      updatedBy: user.fullName,
-      createdAt: record.createdAt || now,
-      createdBy: record.createdBy || user.fullName,
-    };
-
-    const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
-
-    await FirestoreService.setDocumentWithAudit('incidents', id, payload, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: isNew ? 'CREATE' : 'UPDATE',
-      module: 'INCIDENTS',
-      recordId: id,
-      details: `${isNew ? 'Melaporkan' : 'Memperbarui'} kejadian: [${payload.kategori}] ${payload.uraian.substring(0, 40)}... (${payload.tingkatKeparahan})`,
-      metadata: {
-        kategori: payload.kategori,
-        tingkatKeparahan: payload.tingkatKeparahan,
-        status: payload.status,
-        tanggal: payload.tanggal,
-        pelaporId: payload.pelaporId,
-      },
-    }, { expectedState: existingDoc });
-
-    return payload;
   }
 
   /**
@@ -169,56 +178,69 @@ export class IncidentService {
     user: UserProfile,
     resolutionNote?: string
   ): Promise<void> {
-    const existing = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', incidentId);
-    if (!existing) return;
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', incidentId);
+      if (!existing) return;
 
-    const now = FirestoreService.nextUpdatedAt(existing);
-    const updated: IncidentRecord = {
-      ...existing,
-      status: newStatus,
-      updatedAt: now,
-      updatedBy: user.fullName,
-    };
+      const now = FirestoreService.nextUpdatedAt(existing);
+      const updated: IncidentRecord = {
+        ...existing,
+        status: newStatus,
+        updatedAt: now,
+        updatedBy: user.fullName,
+      };
 
-    if (newStatus === 'SELESAI') {
-      updated.resolvedAt = now;
-      updated.resolvedBy = user.fullName;
-      if (resolutionNote && resolutionNote.trim()) {
-        updated.resolutionNote = resolutionNote.trim();
+      if (newStatus === 'SELESAI') {
+        updated.resolvedAt = now;
+        updated.resolvedBy = user.fullName;
+        if (resolutionNote && resolutionNote.trim()) {
+          updated.resolutionNote = resolutionNote.trim();
+        }
       }
+
+      const payload = FirestoreService.sanitizeFirestorePayload(updated);
+
+      session.assertActive();
+      await FirestoreService.setDocumentWithAudit('incidents', incidentId, payload, {
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'STATUS_CHANGE',
+        module: 'INCIDENTS',
+        recordId: incidentId,
+        details: `Mengubah status kejadian ID ${incidentId} menjadi ${newStatus}${resolutionNote ? ` (Catatan: ${resolutionNote})` : ''}`,
+        metadata: {
+          oldStatus: existing.status,
+          newStatus,
+          incidentId,
+        },
+      }, { expectedState: existing });
+    } finally {
+      session.close();
     }
-
-    const payload = FirestoreService.sanitizeFirestorePayload(updated);
-
-    await FirestoreService.setDocumentWithAudit('incidents', incidentId, payload, {
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'STATUS_CHANGE',
-      module: 'INCIDENTS',
-      recordId: incidentId,
-      details: `Mengubah status kejadian ID ${incidentId} menjadi ${newStatus}${resolutionNote ? ` (Catatan: ${resolutionNote})` : ''}`,
-      metadata: {
-        oldStatus: existing.status,
-        newStatus,
-        incidentId,
-      },
-    }, { expectedState: existing });
   }
 
   /**
    * Delete an incident
    */
   public static async deleteIncident(incidentId: string, user: UserProfile): Promise<void> {
-    await FirestoreService.deleteDocument('incidents', incidentId);
-    await FirestoreService.logAudit({
-      userId: user.id,
-      userName: user.fullName,
-      role: user.role,
-      action: 'DELETE',
-      module: 'INCIDENTS',
-      recordId: incidentId,
-      details: `Menghapus laporan kejadian ID: ${incidentId}`,
-    });
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      await FirestoreService.deleteDocument('incidents', incidentId);
+      await FirestoreService.logAudit({
+        userId: user.id,
+        userName: user.fullName,
+        role: user.role,
+        action: 'DELETE',
+        module: 'INCIDENTS',
+        recordId: incidentId,
+        details: `Menghapus laporan kejadian ID: ${incidentId}`,
+      });
+    } finally {
+      session.close();
+    }
   }
 }
