@@ -41,3 +41,22 @@ check('admin templates participate in automatic category rotation', () => { cons
 check('custom template validation removes invalid IDs, unknown categories, blank and duplicate text', () => { const v = sanitize({ templates: [added, added, { ...added, id: 'general-smooth' }, { ...added, id: 'custom-other', text: '  ' }, { ...added, id: 'custom-unknown', category: 'unknown' }, { ...added, id: 'custom-duplicate', text: templates[0].text }] }); assert.equal(v.templates.length, 1); });
 check('custom template count is bounded and removed active IDs fall back safely', () => { assert.equal(sanitize({ templates: Array.from({ length: 60 }, (_, i) => ({ ...added, id: 'custom-' + i, text: 'Kalimat ' + i })) }).templates.length, 50); assert.equal(welcome({ templateId: added.id, templates: [] }).message, templates[0].text); });
 console.log(`${count} dashboard welcome logic checks passed.`);
+for (const seconds of [5, 8, 10, 15, 20, 30, 45, 60, 120, 300, 900, 1800, 3600]) check(`seconds ${seconds}: changes once per boundary and stays stable inside the slot`, () => {
+ const config = { mode: 'interval', category: 'general', intervalSeconds: seconds };
+ const start = Date.parse('2026-10-18T00:00:00Z');
+ assert.equal(welcome(config, start).message, welcome(config, start + seconds * 1000 - 1).message);
+ assert.notEqual(welcome(config, start).message, welcome(config, start + seconds * 1000).message);
+});
+check('legacy interval minutes migrate without changing their cadence', () => {
+ for (const minutes of [5,15,30,60]) assert.equal(sanitize({ intervalMinutes: minutes }).intervalSeconds, minutes * 60);
+});
+check('motion settings normalize invalid values and retain explicit OFF', () => {
+ const v=sanitize({intervalSeconds:1,transitionDurationMs:0,animationEnabled:false});
+ assert.equal(v.intervalSeconds,900);assert.equal(v.transitionDurationMs,600);assert.equal(v.animationEnabled,false);
+ for(const ms of [400,600,800,1000]) assert.equal(sanitize({transitionDurationMs:ms}).transitionDurationMs,ms);
+});
+check('second cadence rotates across WIB midnight without repetition',()=>{
+ const config={mode:'interval',category:'humor',intervalSeconds:10};
+ assert.notEqual(welcome(config,Date.parse('2026-10-18T16:59:59Z')).message,welcome(config,Date.parse('2026-10-18T17:00:00Z')).message);
+});
+console.log(`${count} total dashboard welcome logic checks passed.`);

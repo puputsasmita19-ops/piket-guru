@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import { server } from './fixtures/modern_workspace_fixture.mjs';
+import { server } from './fixtures/welcome_motion_fixture.mjs';
 const dep = createRequire((process.env.PIKET_BROWSER_TEST_TOOLS || process.cwd()) + '/package.json');
 const { chromium: pw } = dep('playwright-core'), chromium = dep('@sparticuz/chromium').default;
 if (!server.listening) await new Promise(r => server.once('listening', r));
@@ -33,14 +33,15 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(origin + '/#settings'); await page.getByLabel('Cara menampilkan kalimat').waitFor();
   await page.getByLabel('Template kalimat', { exact: true }).selectOption('islamic-ease');
+  await page.waitForTimeout(650);
   check('admin preview immediately shows a selected Islamic template', (await page.getByLabel('Pratinjau sapaan dashboard').innerText()).includes('Bismillah'));
   await page.getByLabel('Cara menampilkan kalimat').selectOption('interval');
   await page.getByLabel('Kategori kalimat otomatis').selectOption('humor');
-  await page.getByLabel('Jeda pergantian kalimat').selectOption('30');
+  await page.getByLabel('Jeda pergantian kalimat').selectOption('1800');
   await page.getByRole('switch', { name: /Tampilkan flash info/ }).uncheck();
   await page.evaluate(() => { window.fixture.failSettingsSave = true; });
   await page.getByRole('button', { name: 'Simpan info dashboard' }).click(); await page.getByRole('alert').waitFor();
-  check('failed save preserves welcome choices', await page.getByLabel('Kategori kalimat otomatis').inputValue() === 'humor' && await page.getByLabel('Jeda pergantian kalimat').inputValue() === '30');
+  check('failed save preserves welcome choices', await page.getByLabel('Kategori kalimat otomatis').inputValue() === 'humor' && await page.getByLabel('Jeda pergantian kalimat').inputValue() === '1800');
   await page.evaluate(() => { window.fixture.failSettingsSave = false; });
   await page.getByRole('button', { name: 'Simpan info dashboard' }).click(); await page.getByRole('status').filter({ hasText: 'tersimpan' }).waitFor();
   check('admin saves welcome and existing flash settings together', await page.evaluate(() => { const c = window.fixture.settingsSaves.at(-1).config; return c.welcome.mode === 'interval' && c.welcome.category === 'humor' && c.welcome.intervalMinutes === 30 && c.enabled === false; }));

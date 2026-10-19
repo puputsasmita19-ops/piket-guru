@@ -6,6 +6,8 @@ export type WelcomeCategory = keyof typeof WELCOME_CATEGORIES;
 export interface WelcomeTemplate { id: string; category: Exclude<WelcomeCategory, 'all'>; text: string; }
 export const MAX_CUSTOM_WELCOME_TEMPLATES = 50;
 export const WELCOME_INTERVALS = [5, 15, 30, 60] as const;
+export const WELCOME_INTERVAL_SECONDS = [5, 8, 10, 15, 20, 30, 45, 60, 120, 300, 900, 1800, 3600] as const;
+export const WELCOME_TRANSITION_DURATIONS = [400, 600, 800, 1000] as const;
 export const WELCOME_TEMPLATES = [
   { id: 'general-smooth', category: 'general', text: 'Semoga kegiatan sekolah hari ini berjalan lancar.' },
   { id: 'general-team', category: 'general', text: 'Selamat bertugas. Mari jaga sekolah tetap aman, tertib, dan nyaman.' },
@@ -30,6 +32,10 @@ export interface DashboardWelcomeConfig {
   templateId: string;
   customMessage: string;
   intervalMinutes: number;
+  /** Optional for compatibility with existing settings saved in minutes. */
+  intervalSeconds?: number;
+  animationEnabled?: boolean;
+  transitionDurationMs?: number;
   templates?: WelcomeTemplate[];
 }
 function normalizeCustomTemplates(value: unknown): WelcomeTemplate[] {
@@ -49,7 +55,7 @@ function normalizeCustomTemplates(value: unknown): WelcomeTemplate[] {
 export function getWelcomeTemplates(value?: Partial<DashboardWelcomeConfig> | null): WelcomeTemplate[] {
   return [...WELCOME_TEMPLATES, ...normalizeCustomTemplates(value?.templates)];
 }
-export function sanitizeDashboardWelcomeConfig(value?: Partial<DashboardWelcomeConfig> | null): DashboardWelcomeConfig & { templates: WelcomeTemplate[] } {
+export function sanitizeDashboardWelcomeConfig(value?: Partial<DashboardWelcomeConfig> | null): DashboardWelcomeConfig & { templates: WelcomeTemplate[]; intervalSeconds: number; animationEnabled: boolean; transitionDurationMs: number } {
   const v = value && typeof value === 'object' ? value : {};
   const templates = normalizeCustomTemplates(v.templates);
   return {
@@ -59,11 +65,15 @@ export function sanitizeDashboardWelcomeConfig(value?: Partial<DashboardWelcomeC
     templateId: [...WELCOME_TEMPLATES, ...templates].some(t => t.id === v.templateId) ? v.templateId! : WELCOME_TEMPLATES[0].id,
     customMessage: typeof v.customMessage === 'string' ? v.customMessage.replace(/\s+/g, ' ').trim().slice(0, 180) : '',
     intervalMinutes: WELCOME_INTERVALS.includes(v.intervalMinutes as typeof WELCOME_INTERVALS[number]) ? v.intervalMinutes! : 15,
+    intervalSeconds: WELCOME_INTERVAL_SECONDS.includes(v.intervalSeconds as typeof WELCOME_INTERVAL_SECONDS[number])
+      ? v.intervalSeconds! : (WELCOME_INTERVALS.includes(v.intervalMinutes as typeof WELCOME_INTERVALS[number]) ? v.intervalMinutes! : 15) * 60,
+    animationEnabled: v.animationEnabled !== false,
+    transitionDurationMs: WELCOME_TRANSITION_DURATIONS.includes(v.transitionDurationMs as typeof WELCOME_TRANSITION_DURATIONS[number]) ? v.transitionDurationMs! : 600,
     templates,
   };
 }
 const wibParts = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 });
 /** Local calculation only: rotation never writes to Firestore or starts a listener. */
 export function getDashboardWelcome(value?: Partial<DashboardWelcomeConfig> | null, now: Date | number = Date.now()) {
@@ -77,8 +87,17 @@ export function getDashboardWelcome(value?: Partial<DashboardWelcomeConfig> | nu
   if (config.mode === 'daily' || config.mode === 'interval') {
     const pool = templates.filter(t => config.category === 'all' || t.category === config.category);
     const day = Math.floor(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000);
-    const slot = config.mode === 'daily' ? day : day * (1440 / config.intervalMinutes) + Math.floor((hour * 60 + Number(parts.minute)) / config.intervalMinutes);
+    const slot = config.mode === 'daily' ? day : day * (86400 / config.intervalSeconds) + Math.floor((hour * 3600 + Number(parts.minute) * 60 + Number(parts.second)) / config.intervalSeconds);
     message = pool[slot % pool.length].text;
   }
   return { greeting, message: config.enabled ? message : '' };
+}
+
+/** All possible lines in this mode, used only to reserve stable wrapping space. */
+export function getWelcomeMessagePool(value?: Partial<DashboardWelcomeConfig> | null): string[] {
+  const config = sanitizeDashboardWelcomeConfig(value);
+  if (!config.enabled) return [];
+  if (config.mode === 'daily' || config.mode === 'interval') return getWelcomeTemplates(config)
+    .filter(t => config.category === 'all' || t.category === config.category).map(t => t.text);
+  return [getDashboardWelcome(config).message];
 }

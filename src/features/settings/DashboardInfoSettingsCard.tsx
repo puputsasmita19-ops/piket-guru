@@ -6,15 +6,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { SchoolSettings } from '../../types';
 import { DASHBOARD_INFO_INTERVALS, DASHBOARD_INFO_PANELS, sanitizeDashboardInfoConfig, type DashboardInfoConfig, type DashboardInfoPanel } from '../../types/dashboardInfo.types';
 import { SchoolSettingsService } from '../../services/firebase/schoolSettingsService';
-import { getDashboardWelcome, WELCOME_CATEGORIES, WELCOME_INTERVALS, WELCOME_TEMPLATES, getWelcomeTemplates, MAX_CUSTOM_WELCOME_TEMPLATES, type WelcomeTemplate, type DashboardWelcomeConfig } from '../../types/dashboardWelcome.types';
+import { getDashboardWelcome, WELCOME_CATEGORIES, WELCOME_INTERVAL_SECONDS, WELCOME_TRANSITION_DURATIONS, WELCOME_TEMPLATES, getWelcomeTemplates, MAX_CUSTOM_WELCOME_TEMPLATES, type WelcomeTemplate, type DashboardWelcomeConfig } from '../../types/dashboardWelcome.types';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
+import { WelcomeSentence } from '../dashboard/WelcomeSentence';
 
 function WelcomePreview({ config }: { config: DashboardWelcomeConfig }) {
-  const { greeting, message } = getDashboardWelcome(config, useMinuteClock());
+  const { greeting } = getDashboardWelcome(config, useMinuteClock());
   return <div aria-label="Pratinjau sapaan dashboard" className="rounded-2xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] p-4 space-y-1">
     <p className="text-xs text-slate-500 dark:text-slate-400">{greeting}</p>
     <p className="text-lg font-semibold">Halo, Admin</p>
-    {message && <p className="text-xs leading-relaxed break-words text-slate-600 dark:text-slate-300">{message}</p>}
+    <WelcomeSentence config={config} className="text-xs leading-relaxed break-words text-slate-600 dark:text-slate-300" />
   </div>;
 }
 
@@ -66,13 +67,16 @@ export function DashboardInfoSettingsCard({ settings, onSaved }: { settings: Sch
         <div><h3 id="dashboard-welcome-settings" className="text-sm font-semibold">Sapaan dashboard</h3><p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sapaan otomatis mengikuti WIB: pagi 04.00–10.59, siang 11.00–14.59, sore 15.00–17.59, dan malam 18.00–03.59.</p></div>
         <label className="flex items-center justify-between gap-4 min-h-[44px] cursor-pointer"><span className="text-sm font-medium">Tampilkan kalimat penyemangat</span><input type="checkbox" role="switch" checked={draft.welcome.enabled} disabled={saving} onChange={e => changeWelcome({ enabled: e.target.checked })} className="w-5 h-5 shrink-0 accent-[var(--theme-primary)]" /></label>
         <fieldset disabled={saving || !draft.welcome.enabled} className="grid gap-4 sm:grid-cols-2 min-w-0 disabled:opacity-60">
-          <label className="history-field min-w-0"><span>Cara menampilkan kalimat</span><select aria-label="Cara menampilkan kalimat" value={draft.welcome.mode} onChange={e => changeWelcome({ mode: e.target.value as DashboardWelcomeConfig['mode'] })}>
+          <label className="history-field min-w-0"><span>Cara menampilkan kalimat</span><select aria-label="Cara menampilkan kalimat" value={draft.welcome.mode} onChange={e => changeWelcome({ mode: e.target.value as DashboardWelcomeConfig['mode'], ...(e.target.value === 'interval' && draft.welcome.mode !== 'interval' ? { intervalSeconds: 10 } : {}) })}>
             <option value="fixed">Tetap — pilih template</option><option value="daily">Otomatis setiap hari</option><option value="interval">Otomatis berkala</option><option value="custom">Kalimat sendiri</option>
           </select></label>
           {draft.welcome.mode === 'fixed' && <label className="history-field min-w-0 sm:col-span-2"><span>Template kalimat</span><select aria-label="Template kalimat" value={draft.welcome.templateId} onChange={e => changeWelcome({ templateId: e.target.value })}>{Object.entries(WELCOME_CATEGORIES).filter(([key]) => key !== 'all').map(([key, label]) => <optgroup key={key} label={label}>{templates.filter(t => t.category === key).map(t => <option key={t.id} value={t.id}>{t.text}</option>)}</optgroup>)}</select></label>}
           {(draft.welcome.mode === 'daily' || draft.welcome.mode === 'interval') && <label className="history-field min-w-0"><span>Kategori kalimat otomatis</span><select aria-label="Kategori kalimat otomatis" value={draft.welcome.category} onChange={e => changeWelcome({ category: e.target.value as DashboardWelcomeConfig['category'] })}>{Object.entries(WELCOME_CATEGORIES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
-          {draft.welcome.mode === 'interval' && <label className="history-field min-w-0"><span>Jeda pergantian kalimat</span><select aria-label="Jeda pergantian kalimat" value={draft.welcome.intervalMinutes} onChange={e => changeWelcome({ intervalMinutes: Number(e.target.value) })}>{WELCOME_INTERVALS.map(minutes => <option key={minutes} value={minutes}>{minutes} menit</option>)}</select></label>}
+          {draft.welcome.mode === 'interval' && <label className="history-field min-w-0"><span>Jeda pergantian kalimat</span><select aria-label="Jeda pergantian kalimat" value={draft.welcome.intervalSeconds} onChange={e => { const seconds = Number(e.target.value); changeWelcome({ intervalSeconds: seconds, ...(seconds >= 300 ? { intervalMinutes: seconds / 60 } : {}) }); }}>{WELCOME_INTERVAL_SECONDS.map(seconds => <option key={seconds} value={seconds}>{seconds < 60 ? `${seconds} detik` : `${seconds / 60} menit`}</option>)}</select></label>}
           {draft.welcome.mode === 'custom' && <label className="history-field min-w-0 sm:col-span-2"><span>Kalimat sendiri</span><textarea aria-label="Kalimat sendiri" value={draft.welcome.customMessage} maxLength={180} rows={3} required={draft.welcome.enabled} placeholder="Tulis kalimat singkat yang ramah untuk warga sekolah…" onChange={e => changeWelcome({ customMessage: e.target.value })} /><span className="font-normal text-slate-500">{draft.welcome.customMessage.length}/180 karakter</span></label>}
+          <label className="flex items-center justify-between gap-4 min-h-[44px] cursor-pointer sm:col-span-2"><span className="text-sm">Animasi kalimat</span><input type="checkbox" role="switch" aria-label="Animasi kalimat" checked={draft.welcome.animationEnabled} onChange={e => changeWelcome({ animationEnabled: e.target.checked })} className="w-5 h-5 shrink-0 accent-[var(--theme-primary)]" /></label>
+          {draft.welcome.animationEnabled && <label className="history-field min-w-0"><span>Kecepatan transisi kalimat</span><select aria-label="Kecepatan transisi kalimat" value={draft.welcome.transitionDurationMs} onChange={e => changeWelcome({ transitionDurationMs: Number(e.target.value) })}>{WELCOME_TRANSITION_DURATIONS.map(ms => <option key={ms} value={ms}>{({400:'Cepat — 0,4 detik',600:'Lembut — 0,6 detik',800:'Santai — 0,8 detik',1000:'Lambat — 1 detik'} as Record<number, string>)[ms]}</option>)}</select></label>}
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400 sm:col-span-2">Kalimat lama naik dan memudar, kalimat baru masuk turun secara halus. Gunakan jeda 15–30 detik untuk kalimat panjang. Pengguna dapat menjeda pergantian lewat ikon di samping kalimat. Preferensi kurangi gerakan pada perangkat akan menonaktifkan animasi.</p>
         </fieldset>
         <details className="rounded-2xl border border-[var(--theme-card-border)] p-3 min-w-0">
           <summary className="min-h-11 flex items-center cursor-pointer text-sm font-semibold">Tambah & kelola template ({customTemplates.length})</summary>

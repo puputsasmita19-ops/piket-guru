@@ -46,3 +46,8 @@ f.role = 'ADMIN'; f.active = true; f.uid = 'another-user';
 await assert.rejects(() => service.saveDashboardInfoSettings(config, 'admin'), /Sesi administrator/);
 console.log('PASS mismatched authenticated user cannot save'); n++;
 console.log(`${n} dashboard settings checks passed. No production IO.`);
+
+f.uid='admin';f.role='ADMIN';f.active=true;
+await service.saveDashboardInfoSettings(sanitize({welcome:{mode:'interval',intervalSeconds:10,animationEnabled:false,transitionDurationMs:800}}),'admin');
+check('second cadence and motion preferences persist through the actual admin service',()=>{const w=f.state.dashboardInfoConfig.welcome;assert.equal(w.intervalSeconds,10);assert.equal(w.animationEnabled,false);assert.equal(w.transitionDurationMs,800)});
+console.log(`${n} total admin configuration checks passed.`);
