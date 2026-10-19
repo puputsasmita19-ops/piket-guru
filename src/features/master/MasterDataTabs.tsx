@@ -1,4 +1,3 @@
-import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
 import { normalizeAuditModule } from '../../services/audit/auditEventRegistry';
 import { Phone } from '../../components/icons';
 import { BookOpen } from '../../components/icons';
@@ -58,7 +57,6 @@ export const MasterDataTabs: React.FC = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
-  const { logs: auditLogs, status: auditFeedStatus } = useAuditLogFeed();
 
   // Bulk Import state
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -567,7 +565,7 @@ export const MasterDataTabs: React.FC = () => {
           { id: 'students', label: 'Data Siswa', icon: Users, count: students.length },
           { id: 'rooms', label: 'Ruangan & Pos Piket', icon: Building2, count: rooms.length },
           { id: 'categories', label: 'Kategori Kejadian', icon: Tag, count: categories.length },
-          { id: 'audit', label: 'Audit Log Sistem', icon: History, count: auditLogs.length },
+          { id: 'audit', label: 'Audit Log Sistem', icon: History },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -926,7 +924,7 @@ export const MasterDataTabs: React.FC = () => {
 
       {/* TAB 5: AUDIT LOGS (CR-005: Scroll model) */}
       {activeTab === 'audit' && (
-        <AuditForensicViewer logs={auditLogs} settings={DEFAULT_SCHOOL_SETTINGS} feedStatus={auditFeedStatus} />
+        <AuditForensicViewer settings={DEFAULT_SCHOOL_SETTINGS} />
       )}
 
       {/* TEACHER MODAL (ADD / EDIT) */}

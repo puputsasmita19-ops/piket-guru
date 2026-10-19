@@ -3,7 +3,6 @@ import { BrandingSettingsCard } from './BrandingSettingsCard';
 import { appLogo } from '../../utils/reportBranding';
 import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
 import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
-import { useAuditLogFeed } from '../../hooks/useAuditLogFeed';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import { AnnouncementSettingsCard } from './AnnouncementSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
@@ -94,7 +93,6 @@ export const SettingsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('school');
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
-  const { logs: auditLogs, status: auditFeedStatus } = useAuditLogFeed();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [substitutions, setSubstitutions] = useState<TeacherSubstitutionRecord[]>([]);
@@ -892,7 +890,7 @@ export const SettingsView: React.FC = () => {
             }`}
           >
             <History className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-            Audit Forensik ({auditLogs.length})
+            Audit Forensik
           </button>
         </div>
       </div>
@@ -2316,7 +2314,7 @@ export const SettingsView: React.FC = () => {
 
       {/* TAB 7: FORENSIC AUDIT TRAIL */}
       {activeTab === 'audit' && (
-        <AuditForensicViewer logs={auditLogs} settings={settings} feedStatus={auditFeedStatus} />
+        <AuditForensicViewer settings={settings} />
       )}
 
       {/* RESTORE CONFIRMATION MODAL */}

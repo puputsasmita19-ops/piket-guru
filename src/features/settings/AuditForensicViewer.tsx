@@ -1,5 +1,7 @@
 import type { AuditFeedStatus } from '../../hooks/useAuditLogFeed';
-import React, { useState, useMemo } from 'react';
+import { useAuditLogHistory } from '../../hooks/useAuditLogHistory';
+import { AUDIT_PAGE_SIZES, matchesAuditHistory } from '../../services/audit/auditHistoryService';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Download,
@@ -49,12 +51,13 @@ import {
 } from '../../services/audit/auditEventRegistry';
 
 interface AuditForensicViewerProps {
-  logs: AuditLogRecord[];
+  /** Optional externally supplied snapshot for embedded consumers. Main audit screens use history pagination. */
+  logs?: AuditLogRecord[];
   settings: SchoolSettings;
   feedStatus?: AuditFeedStatus;
 }
 
-export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, settings, feedStatus }) => {
+export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs: suppliedLogs, settings, feedStatus: suppliedFeedStatus }) => {
   const { currentUser, hasRole } = useAuth();
   const isAuthorized = hasRole('ADMIN', 'KEPALA_SEKOLAH');
 
@@ -65,12 +68,18 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
   const [moduleFilter, setModuleFilter] = useState('SEMUA');
   const [actionFilter, setActionFilter] = useState('SEMUA');
   const [statusFilter, setStatusFilter] = useState<'SEMUA' | 'SUCCESS' | 'FAILED' | 'BLOCKED'>('SEMUA');
+  const [pageSize, setPageSize] = useState(20);
+  const paginated = suppliedLogs === undefined;
+  const history = useAuditLogHistory({ search, startDate, endDate, module: moduleFilter, action: actionFilter, status: statusFilter }, pageSize, paginated);
+  const logs = suppliedLogs ?? history.logs;
+  const feedStatus = suppliedFeedStatus ?? (paginated ? { loading: history.loading, fromCache: history.fromCache, online: history.online, error: history.error, receivedAt: history.receivedAt, reload: history.reload } : undefined);
 
   // Modals & Inspection State
   const [inspectingLog, setInspectingLog] = useState<AuditLogRecord | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [activeInspectTab, setActiveInspectTab] = useState<'details' | 'metadata' | 'raw'>('details');
+  useEffect(() => { setInspectingLog(null); setIsPrintModalOpen(false); setCopiedRaw(false); }, [currentUser?.id, currentUser?.role]);
 
   // Reset all filters in one click
   const handleResetFilters = () => {
@@ -92,61 +101,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
 
   // Multi-criteria Filtered Logs
   const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      // 1. Module Filter
-      if (moduleFilter !== 'SEMUA' && normalizeAuditModule(log.module) !== moduleFilter) {
-        return false;
-      }
-
-      // 2. Action Filter
-      if (actionFilter !== 'SEMUA' && log.action !== actionFilter) {
-        return false;
-      }
-
-      // 3. Status Filter (normalizing legacy/alias statuses)
-      const normalizedStatus = normalizeAuditStatus(log.status);
-      if (statusFilter !== 'SEMUA' && normalizedStatus !== statusFilter) {
-        return false;
-      }
-
-      // 4. Date Range Filter
-      if (startDate || endDate) {
-        if (!log.timestamp) return false;
-        const logDateStr = getTodayISODate(log.timestamp);
-        if (startDate && logDateStr < startDate) return false;
-        if (endDate && logDateStr > endDate) return false;
-      }
-
-      // 5. Text Search (matches actor name, loginId, role, details, target, module, action, status)
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const userName = (log.userName || '').toLowerCase();
-        const loginId = (log.loginId || '').toLowerCase();
-        const role = (log.role || '').toLowerCase();
-        const details = (log.details || '').toLowerCase();
-        const target = (log.target || '').toLowerCase();
-        const recordId = (log.recordId || '').toLowerCase();
-        const modName = getAuditModuleLabel(log.module).toLowerCase();
-        const actName = getAuditActionLabel(log.action).toLowerCase();
-        const statusMeta = getAuditStatusMeta(log.status);
-        const statusLabel = statusMeta.label.toLowerCase();
-
-        const match =
-          userName.includes(q) ||
-          loginId.includes(q) ||
-          role.includes(q) ||
-          details.includes(q) ||
-          target.includes(q) ||
-          recordId.includes(q) ||
-          modName.includes(q) ||
-          actName.includes(q) ||
-          statusLabel.includes(q);
-
-        if (!match) return false;
-      }
-
-      return true;
-    });
+    return logs.filter((log) => matchesAuditHistory(log, { search, startDate, endDate, module: moduleFilter, action: actionFilter, status: statusFilter }));
   }, [logs, moduleFilter, actionFilter, statusFilter, startDate, endDate, search]);
 
   // Forensic Summary Metrics derived from filtered logs
@@ -344,13 +299,15 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
   }
 
   return (
-    <div className="space-y-5">
+    <div className="audit-history-view space-y-5 min-w-0">
       {feedStatus && <div className="p-3 sm:p-4 rounded-2xl border border-[var(--theme-card-border)] bg-[var(--theme-card-bg)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p role="status" className="text-xs font-bold text-[var(--theme-primary-text)] flex items-center gap-2"><Activity className="w-4 h-4 shrink-0" />
-            {feedStatus.error ? 'Pembacaan log perlu diperiksa' : !feedStatus.online ? 'Offline • log belum diperbarui' : feedStatus.loading ? 'Memuat log terbaru…' : feedStatus.fromCache ? 'Data cache • menunggu server' : 'Terhubung realtime'}
+            {feedStatus.error ? 'Pembacaan log perlu diperiksa' : !feedStatus.online ? 'Offline • log belum diperbarui' : feedStatus.loading ? 'Memuat log…' : feedStatus.fromCache ? 'Data cache • menunggu server' : paginated && (history.index > 0 || isFilterActive) ? 'Riwayat dimuat • aktivitas baru dipantau' : 'Terhubung realtime'}
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">50 log terbaru dari semua modul. Filter, statistik, cetak, dan CSV berlaku pada daftar ini.</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{paginated ? 'Seluruh riwayat dapat ditelusuri per halaman. Statistik, cetak, dan CSV berlaku untuk halaman yang tampil.' : 'Filter, statistik, cetak, dan CSV berlaku pada daftar yang dimuat.'}</p>
+          {paginated && history.newer && <button type="button" onClick={history.reload} className="text-xs underline underline-offset-2 min-h-[44px]">Ada log baru. Buka halaman pertama terbaru</button>}
+          {paginated && history.index > 0 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Halaman riwayat tetap stabil saat log baru masuk.</p>}
           {feedStatus.receivedAt && <p className="text-[11px] text-slate-500 dark:text-slate-400">Diterima dari server: {formatTime(feedStatus.receivedAt, true)}</p>}
           {feedStatus.error && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">{feedStatus.error}</p>}
         </div>
@@ -360,14 +317,14 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-            <span>Total Log Sesuai Filter</span>
+            <span>{paginated ? 'Log di Halaman Ini' : 'Total Log Sesuai Filter'}</span>
             <Activity className="w-4 h-4 text-blue-500" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">
               {metrics.total}
             </span>
-            <span className="text-[11px] text-slate-400">dari {logs.length} (50 Log Terbaru)</span>
+            <span className="text-[11px] text-slate-400">{paginated ? `halaman ${history.index + 1}` : `dari ${logs.length} log dimuat`}</span>
           </div>
           <div className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
             {metrics.timeRangeText}
@@ -444,6 +401,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
+                aria-label="Cari riwayat audit"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari aktor, ID Login, target, rincian aktivitas, modul, status..."
@@ -461,15 +419,16 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
             </div>
 
             {/* Action buttons: Print & CSV Export */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 className="text-xs"
                 leftIcon={<Printer className="w-3.5 h-3.5" />}
                 onClick={() => setIsPrintModalOpen(true)}
+                disabled={paginated && (history.loading || history.incomplete || !filteredLogs.length || !!history.error)}
               >
-                Cetak Dokumen
+                {paginated ? 'Cetak Halaman Ini' : 'Cetak Dokumen'}
               </Button>
 
               <Button
@@ -478,8 +437,9 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                 className="text-xs"
                 leftIcon={<Download className="w-3.5 h-3.5" />}
                 onClick={handleExportCsv}
+                disabled={paginated && (history.loading || history.incomplete || !filteredLogs.length || !!history.error)}
               >
-                Ekspor CSV ({filteredLogs.length})
+                {paginated ? `CSV Halaman Ini (${filteredLogs.length})` : `Ekspor CSV (${filteredLogs.length})`}
               </Button>
             </div>
           </div>
@@ -494,6 +454,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               </label>
               <input
                 type="date"
+                aria-label="Dari tanggal audit"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-mono"
@@ -508,6 +469,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               </label>
               <input
                 type="date"
+                aria-label="Sampai tanggal audit"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-mono"
@@ -521,11 +483,12 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                 <span>Modul / Fitur</span>
               </label>
               <select
+                aria-label="Modul audit"
                 value={moduleFilter}
                 onChange={(e) => setModuleFilter(e.target.value)}
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
               >
-                <option value="SEMUA">Semua Modul ({logs.length})</option>
+                <option value="SEMUA">Semua Modul</option>
                 {Object.values(AUDIT_MODULE_REGISTRY).map((mod) => (
                   <option key={mod.id} value={mod.id}>{mod.label} ({mod.id})
                   </option>
@@ -540,6 +503,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                 <span>Jenis Aksi</span>
               </label>
               <select
+                aria-label="Jenis aksi audit"
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -559,6 +523,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                 <span>Status Hasil</span>
               </label>
               <select
+                aria-label="Status hasil audit"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
                 className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
@@ -596,11 +561,16 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
       {/* 3. MAIN FORENSIC AUDIT TABLE */}
       <Card>
         <CardHeader
-          title={`Jejak Audit Forensik — 50 Log Terbaru (${filteredLogs.length} tampil)`}
-          subtitle="Aktivitas yang tercatat dari seluruh modul, diurutkan dari yang terbaru. Log lama tetap tersimpan."
+          title={paginated ? `Jejak Audit Forensik — Halaman ${history.index + 1}` : `Jejak Audit Forensik (${filteredLogs.length} tampil)`}
+          subtitle="Aktivitas dari seluruh modul, diurutkan dari yang terbaru. Telusuri halaman berikutnya untuk melihat log lama."
         />
         <CardContent className="p-0">
-          <div className="max-h-[640px] overflow-y-auto overflow-x-auto scrollbar-thin">
+          {paginated && <div className="audit-history-nav">
+            <label className="flex items-center gap-2 text-xs"><span>Tampilkan</span><select aria-label="Jumlah log per halaman" className="min-h-[44px] rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-card-bg)] px-3" value={pageSize} onChange={e => setPageSize(Number(e.target.value))}>{AUDIT_PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}</select><span>log / halaman</span></label>
+            <span role="status" className="text-xs text-slate-500 dark:text-slate-400">{history.loading ? 'Memuat halaman…' : `${filteredLogs.length ? history.index * pageSize + 1 : 0}–${filteredLogs.length ? history.index * pageSize + filteredLogs.length : 0} log${isFilterActive ? ' sesuai filter' : ''}`}</span>
+          </div>}
+          {paginated && history.incomplete && <div className="m-3 p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-xs leading-relaxed" role="status">{history.scanned} log sudah ditelusuri untuk halaman ini. Pencarian belum selesai; arsip dibaca bertahap agar hemat kuota.<Button type="button" size="sm" variant="outline" disabled={history.loading || !history.online} onClick={history.continueSearch} className="mt-2 w-full sm:w-auto block">Lanjutkan Pencarian</Button></div>}
+          <div className="hidden md:block overflow-x-auto scrollbar-thin">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
                 <tr>
@@ -622,10 +592,10 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                         <FileText className="w-5 h-5" />
                       </div>
                       <div className="font-bold text-sm text-slate-600 dark:text-slate-300">
-                        Tidak ada log audit yang sesuai
+                        {paginated && history.loading ? 'Memuat log…' : paginated && history.incomplete ? 'Pencarian arsip belum selesai' : 'Tidak ada log audit yang sesuai'}
                       </div>
                       <p className="text-xs max-w-sm mx-auto text-slate-400">
-                        Tidak ditemukan aktivitas log yang cocok dengan kriteria filter saat ini. Coba bersihkan filter pencarian.
+                        {paginated && history.incomplete ? 'Lanjutkan pencarian untuk memeriksa bagian arsip berikutnya.' : 'Tidak ditemukan aktivitas log yang cocok dengan kriteria filter saat ini. Coba bersihkan filter pencarian.'}
                       </p>
                       {isFilterActive && (
                         <div className="pt-2">
@@ -637,9 +607,10 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
                     </td>
                   </tr>
                 ) : (
-                  filteredLogs.slice(0, 150).map((log) => (
+                  filteredLogs.map((log) => (
                     <tr
                       key={log.id}
+                      data-audit-id={log.id}
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       {/* Waktu */}
@@ -716,12 +687,19 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
               </tbody>
             </table>
           </div>
-
-          {filteredLogs.length > 150 && (
-            <div className="p-3 text-center text-slate-400 text-[11px] bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
-              Menampilkan 150 rekaman pertama dari <strong>{filteredLogs.length}</strong> log. Gunakan filter untuk mempersempit hasil atau lakukan Ekspor CSV untuk mengunduh seluruh rekaman.
-            </div>
-          )}
+          <div className="md:hidden divide-y divide-[var(--theme-card-border)]" aria-label="Daftar log audit mobile">{!filteredLogs.length ? <p className="p-5 text-sm text-slate-500">{history.loading && paginated ? 'Memuat log…' : history.incomplete && paginated ? 'Belum ditemukan pada bagian arsip yang diperiksa. Lanjutkan pencarian.' : 'Tidak ada log audit yang sesuai.'}</p> : filteredLogs.map(log => <article key={log.id} data-audit-id={log.id} className="p-4 space-y-3 min-w-0">
+            <div className="flex items-start justify-between gap-2"><div className="text-xs min-w-0"><p>{log.timestamp ? formatIndonesianDate(log.timestamp) : 'Waktu tidak tersedia'}</p><p className="mt-1 text-slate-500">{log.timestamp ? formatTime(log.timestamp, true) : '-'}</p></div>{renderStatusBadge(log.status)}</div>
+            <div className="flex flex-wrap items-center gap-2 text-xs"><span>{getAuditModuleLabel(log.module)}</span>{renderActionBadge(log.action)}</div>
+            <p className="text-sm font-semibold break-words [overflow-wrap:anywhere]">{log.userName || 'Tidak diketahui'} <span className="text-xs font-normal text-slate-500">[{log.role}]</span></p>
+            <p className="text-xs text-slate-500 break-words [overflow-wrap:anywhere]">{log.target || log.recordId || '-'}</p><p className="text-sm leading-relaxed break-words [overflow-wrap:anywhere] line-clamp-3">{log.details}</p>
+            <Button type="button" variant="outline" size="sm" className="w-full min-h-[44px]" onClick={() => { setInspectingLog(log); setActiveInspectTab('details'); }}>Detail Log</Button>
+          </article>)}</div>
+          {paginated && <nav className="audit-history-nav" aria-label="Halaman log audit">
+            <span className="text-xs">Halaman <strong>{history.index + 1}</strong></span>
+            <div className="flex items-center flex-wrap gap-1.5"><Button type="button" size="sm" variant="outline" disabled={history.index === 0 || history.loading || !!history.error} onClick={() => history.goTo(history.index)}>Sebelumnya</Button>
+              {Array.from(new Set([1, history.visited, history.index - 1, history.index, history.index + 1, history.index + 2, history.index + 3])).filter(n => n > 0 && n <= history.visited).sort((a, b) => a - b).map((n, i, list) => <React.Fragment key={n}>{i > 0 && n - list[i - 1] > 1 && <span aria-hidden="true">…</span>}<button type="button" aria-label={`Halaman ${n}`} aria-current={n === history.index + 1 ? 'page' : undefined} className="audit-page-number" disabled={history.loading || !!history.error} onClick={() => history.goTo(n)}>{n}</button></React.Fragment>)}
+              <Button type="button" size="sm" variant="outline" disabled={!history.hasNext || history.incomplete || history.loading || !history.online || !!history.error} onClick={() => history.goTo(history.index + 2)}>Berikutnya</Button></div>
+          </nav>}
         </CardContent>
       </Card>
 
@@ -929,8 +907,8 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
             )}
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
-              <span className="text-[11px] font-mono text-slate-400">ID: {inspectingLog.id}</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <span className="text-[11px] font-mono text-slate-400 break-all">ID: {inspectingLog.id}</span>
               <Button variant="outline" size="sm" onClick={() => setInspectingLog(null)}>
                 Tutup
               </Button>
@@ -945,6 +923,7 @@ export const AuditForensicViewer: React.FC<AuditForensicViewerProps> = ({ logs, 
         onClose={() => setIsPrintModalOpen(false)}
         logs={filteredLogs}
         settings={settings}
+        scopeLabel={paginated ? `Lampiran halaman ${history.index + 1} (${filteredLogs.length} log). Bukan ekspor seluruh riwayat audit.` : undefined}
       />
     </div>
   );

@@ -1300,3 +1300,13 @@ button.bg-\[var\(--theme-primary\)\],
   .flash-slide-caption { font-size: 12px; line-height: 1.6; color: #64748b; overflow-wrap: anywhere; margin: 0 0 4px; }
   .dark .flash-slide-caption { color: #b4bac6; }
 }
+@layer components {
+  .audit-history-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-block:1px solid var(--theme-card-border); }
+  .audit-history-view input, .audit-history-view select { min-width:0; min-height:44px; }
+  .audit-history-view button { min-height:44px; }
+  .audit-page-number { min-width:44px; min-height:44px; padding:8px; border-radius:12px; border:1px solid var(--theme-card-border); color:inherit; background:var(--theme-card-bg); cursor:pointer; }
+  .audit-page-number[aria-current="page"] { background:var(--theme-primary); color:var(--theme-primary-contrast, #20241e); font-weight:700; }
+  .audit-page-number:disabled { opacity:.5; cursor:default; }
+  .audit-page-number:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+  @media(max-width:639px) { .audit-history-nav { align-items:flex-start; flex-direction:column; } }
+}

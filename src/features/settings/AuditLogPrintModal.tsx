@@ -18,6 +18,7 @@ interface AuditLogPrintModalProps {
   onClose: () => void;
   logs: AuditLogRecord[];
   settings: SchoolSettings;
+  scopeLabel?: string;
 }
 
 export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
@@ -25,6 +26,7 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
   onClose,
   logs,
   settings,
+  scopeLabel,
 }) => {
   const currentDate = new Date();
 
@@ -102,6 +104,7 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
               <p className="text-[10px] font-mono text-slate-600">
                 Nomor Registrasi: AUD-{Date.now().toString().slice(-8)} / KEPATUHAN / {currentDate.getFullYear()}
               </p>
+              {scopeLabel && <p className="mt-2 text-[11px] font-semibold">{scopeLabel}</p>}
             </div>
           </div>
 
@@ -115,7 +118,7 @@ export const AuditLogPrintModal: React.FC<AuditLogPrintModalProps> = ({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[10px]">
               <div className="p-2 border border-slate-300 rounded bg-white">
-                <div className="text-slate-500">Total Log Filter</div>
+                <div className="text-slate-500">{scopeLabel ? 'Log dalam Lampiran Ini' : 'Total Log Filter'}</div>
                 <div className="font-black text-sm font-mono">{totalEvents}</div>
               </div>
               <div className="p-2 border border-slate-300 rounded bg-white">
