@@ -1065,8 +1065,9 @@ button.bg-\[var\(--theme-primary\)\],
     .dashboard-flash { padding: 9px 14px; border-radius: 21px; }
     .flash-slide { min-height: 124px; }
     .flash-slide h2 { font-size: 13px; }
-    .flash-content li:nth-child(n+3) { display: none; }
-    .flash-operations-slide .flash-content li:nth-child(n+3) { display: list-item; }
+    /* Only roster/preview lists are shortened. Operational summaries always
+       keep their third (visitor) row, independent of the slide wrapper class. */
+    .flash-preview-list li:nth-child(n+3) { display: none; }
     .flash-activity { gap: 12px; }
     .flash-activity .banner-illustration { width: 48px; height: 48px; }
     .flash-activity h2 { font-size: 18px; }

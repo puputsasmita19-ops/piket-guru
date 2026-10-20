@@ -257,6 +257,7 @@ export interface SchoolSettings {
   notificationConfig?: import('./notification.types').NotificationConfig;
   announcementConfig?: import('./announcement.types').AnnouncementConfig;
   dashboardInfoConfig?: import('./dashboardInfo.types').DashboardInfoConfig;
+  sessionPolicy?: import('./sessionPolicy.types').SessionPolicy;
   documentationWatermark?: import('./watermark.types').DocumentationWatermarkConfig;
   workHours: {
     start: string;

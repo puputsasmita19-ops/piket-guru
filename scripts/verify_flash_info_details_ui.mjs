@@ -30,6 +30,7 @@ try{
  const prev=async()=>{await flash.getByRole('button',{name:'Info sebelumnya'}).tap();await settled()};
  await next();await flash.getByRole('heading',{name:'Kegiatan Sekolah Hari Ini'}).waitFor();
  check('operations includes all three summaries on mobile, including zero ongoing visits',await flash.locator('.flash-slide:not([inert]) li:visible').count()===3&&await flash.locator('.flash-slide:not([inert])').getByText('0 kunjungan berlangsung hari ini',{exact:true}).isVisible());
+ const operation=flash.locator('.flash-slide:not([inert])');await operation.evaluate(e=>e.classList.remove('flash-operations-slide'));check('visitor row no longer relies on a slide-class exception to the mobile row limit',await operation.locator('[data-info-id=visitors]').isVisible());await operation.evaluate(e=>e.classList.add('flash-operations-slide'));
  const heights={};
  for(const mode of ['light','dark'])for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:900});await page.evaluate(mode=>document.documentElement.classList.toggle('dark',mode==='dark'),mode);

@@ -1971,11 +1971,11 @@ authRouter.post('/record-login', requireAuth, async (req: Request, res: Response
 authRouter.post('/record-logout', requireAuth, async (req: Request, res: Response) => {
   const caller = (req as any).user;
   const profile = (req as any).callerData || {};
-  const reason = req.body?.reason === 'INACTIVITY_TIMEOUT' ? 'INACTIVITY_TIMEOUT' : 'MANUAL';
+  const reason = req.body?.reason === 'APP_BACKGROUND' ? 'APP_BACKGROUND' : req.body?.reason === 'INACTIVITY_TIMEOUT' ? 'INACTIVITY_TIMEOUT' : 'MANUAL';
   await recordServerAuditLog({
     userId: caller.uid, userName: profile.fullName || 'Pengguna', role: profile.role || 'GURU',
     action: 'LOGOUT', module: 'USERS', status: 'SUCCESS',
-    details: reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason },
+    details: reason === 'APP_BACKGROUND' ? 'Sesi berakhir karena aplikasi ditinggalkan' : reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason },
   });
   res.json({ success: true });
 });

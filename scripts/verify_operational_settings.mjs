@@ -8,7 +8,7 @@ const mocks = {
   location: 'export const LocationService={};', audit: 'export const AuditService={log:async event=>{globalThis.f.logs.push(event)}};', drive: 'export const DriveClientService={};',
 };
 const built = await build({ stdin: { contents: "export{SchoolSettingsService}from'./src/services/firebase/schoolSettingsService';", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, platform: 'node', format: 'cjs', plugins: [{ name: 'synthetic-settings', setup(b) {
-  for (const [filter,path] of [[/\/firebase$/,'firebase'],[/^firebase\/firestore$/,'sdk'],[/locationService$/,'location'],[/auditService$/,'audit'],[/driveClientService$/,'drive']]) b.onResolve({filter},()=>({path,namespace:'mock'}));
+  for (const [filter,path] of [[/\/(?:firebase|firebaseAuth)$/,'firebase'],[/^firebase\/firestore$/,'sdk'],[/locationService$/,'location'],[/auditService$/,'audit'],[/driveClientService$/,'drive']]) b.onResolve({filter},()=>({path,namespace:'mock'}));
   b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}));
 }}] });
 const context = vm.createContext({ f: fixture, module: { exports: {} }, console, localStorage: { setItem() {} }, TextEncoder, Uint8Array, DataView, URL }); vm.runInContext(built.outputFiles[0].text,context);

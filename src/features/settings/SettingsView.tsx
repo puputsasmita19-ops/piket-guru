@@ -2,6 +2,7 @@ import { LoginAppearanceSettingsCard } from './LoginAppearanceSettingsCard';
 import { BrandingSettingsCard } from './BrandingSettingsCard';
 import { appLogo } from '../../utils/reportBranding';
 import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
+import { SessionPolicySettingsCard } from './SessionPolicySettingsCard';
 import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import { AnnouncementSettingsCard } from './AnnouncementSettingsCard';
@@ -2172,7 +2173,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB 2: SECURITY & SYSTEM DIAGNOSTICS */}
-      {activeTab === 'security' && <SecurityCenterCard settings={settings} users={users} />}
+      {activeTab === 'security' && <div className="space-y-6"><SessionPolicySettingsCard settings={settings} onSaved={setSettings} /><SecurityCenterCard settings={settings} users={users} /></div>}
 
       {/* TAB 3: BELL AUTOMATION & PANIC EMERGENCY */}
       {activeTab === 'bell' && (

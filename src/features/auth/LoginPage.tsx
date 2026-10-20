@@ -41,7 +41,7 @@ import { preloadAuthenticatedShell } from '../../appBootstrap';
 import { useSlowOperation } from '../../hooks/useSlowOperation';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithPin, loginWithGoogle, isLoading, isTrustedDevice, setTrustedDevice } = useAuth();
+  const { loginWithPin, loginWithGoogle, isLoading, isTrustedDevice, setTrustedDevice, sessionNotice } = useAuth();
   const {
     theme,
     setTheme,
@@ -958,6 +958,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Error Message DIRECTLY BELOW INPUT */}
+            {sessionNotice && <p role="status" className="mb-3 rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] p-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{sessionNotice}</p>}
             {errorMessage && (
               <div
                 id="pin-error-message"

@@ -203,7 +203,7 @@ export class AuditService {
   }
 
   /** Record the verified logout before Firebase signOut; never hold logout indefinitely. */
-  public static async recordLogout(reason: 'MANUAL' | 'INACTIVITY_TIMEOUT'): Promise<void> {
+  public static async recordLogout(reason: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'APP_BACKGROUND'): Promise<void> {
     const user = auth?.currentUser;
     if (!user) return;
     const controller = new AbortController();
@@ -223,7 +223,7 @@ export class AuditService {
       ]);
     } catch {
       void this.log({ action: 'LOGOUT', module: 'USERS', status: 'SUCCESS', userId: user.uid,
-        details: reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason, fallback: true } });
+        details: reason === 'APP_BACKGROUND' ? 'Sesi berakhir karena aplikasi ditinggalkan' : reason === 'MANUAL' ? 'Logout manual dari aplikasi' : 'Sesi berakhir karena inaktivitas', metadata: { reason, fallback: true } });
     } finally { if (timer) clearTimeout(timer); }
   }
 

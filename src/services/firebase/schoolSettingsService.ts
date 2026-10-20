@@ -13,6 +13,8 @@ import { AuditService } from '../audit/auditService';
 import { normalizeReportPrint } from '../../utils/operationalReport';
 import { normalizeVisitorConfig, type VisitorConfig } from '../../types/visitorConfig.types';
 import type { PrintLayoutConfig } from '../../types';
+import { createAuthenticatedSession } from './sessionGuard';
+import { sanitizeSessionPolicy, type SessionPolicy } from '../../types/sessionPolicy.types';
 
 export interface SchoolSettingsSaveResult {
   settings: SchoolSettings;
@@ -145,7 +147,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'sessionPolicy', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -258,6 +260,31 @@ export class SchoolSettingsService {
     });
     void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: 'Memperbarui motion background dan teks pengembang halaman login' });
     return this.receipt(expected);
+  }
+
+  public static async saveSessionPolicy(config: SessionPolicy, userId: string): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const session = createAuthenticatedSession(uid);
+    try {
+      const user = await getDocFromServer(doc(db, 'users', uid));
+      session.assertActive();
+      if (!user.exists() || user.data().role !== 'ADMIN' || user.data().isActive !== true) throw new Error('Hanya administrator aktif yang dapat mengubah kebijakan sesi.');
+      const sessionPolicy = sanitizeSessionPolicy(config);
+      const ref = doc(db, 'settings', 'school_config');
+      let expected!: SchoolSettings;
+      await runTransaction(db, async transaction => {
+        const snap = await transaction.get(ref);
+        session.assertActive();
+        if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+        expected = { ...snap.data(), sessionPolicy } as SchoolSettings;
+        transaction.update(ref, { sessionPolicy, updatedAt: serverTimestamp() });
+      });
+      session.assertActive();
+      void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: `Memperbarui keluar otomatis saat aplikasi ditinggalkan: ${sessionPolicy.backgroundLogoutEnabled ? `ON, jeda ${sessionPolicy.backgroundDelaySeconds} detik` : 'OFF'}` });
+      const result = await this.receipt(expected);
+      session.assertActive();
+      return result;
+    } finally { session.close(); }
   }
 
   public static async saveDashboardInfoSettings(config: DashboardInfoConfig, userId: string): Promise<SchoolSettingsSaveResult> {

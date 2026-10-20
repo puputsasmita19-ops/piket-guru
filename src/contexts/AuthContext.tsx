@@ -7,6 +7,8 @@ import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut 
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
 import { checkUserPermission, PermissionKey } from '../config/permissions';
 import { preloadAuthenticatedShell } from '../appBootstrap';
+import { BACKGROUND_SESSION_NOTICE, completeBackgroundLogin, hasBackgroundLoginRequirement, markBackgroundLoginRequired, monitorBackgroundSession, requiresBackgroundLogin } from '../services/auth/backgroundSession';
+import { sanitizeSessionPolicy } from '../types/sessionPolicy.types';
 
 import { OfflineStorage } from '../services/offline/offlineStorage';
 import { SyncQueueService } from '../services/offline/syncQueueService';
@@ -17,6 +19,7 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionNotice: string | null;
   isOffline: boolean;
   isOfflineSession: boolean;
   isTrustedDevice: boolean;
@@ -33,7 +36,7 @@ interface AuthContextType {
     remainingSeconds?: number;
   }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  logout: (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => Promise<void>;
+  logout: (options?: LogoutOptions) => Promise<void>;
   refreshProfile: () => Promise<void>;
   changePin: (
     oldPin: string,
@@ -50,6 +53,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes auto logout
+type LogoutOptions = { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' | 'APP_BACKGROUND' };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // R21-02: Initial state starts as null; never restore authenticated state from localStorage when fbUser is null
@@ -57,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentUserRef = React.useRef(currentUser);
   currentUserRef.current = currentUser;
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(() => hasBackgroundLoginRequirement() ? BACKGROUND_SESSION_NOTICE : null);
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
   const [isOfflineSession, setIsOfflineSession] = useState(false);
   const [isTrustedDeviceState, setIsTrustedDeviceState] = useState(() => OfflineStorage.isTrustedDevice());
@@ -85,21 +90,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // State for pending unsynced offline data modal confirmation on logout
   const [pendingLogoutPrompt, setPendingLogoutPrompt] = useState<{
     counts: { syncQueueCount: number; draftsCount: number; total: number };
-    options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' };
+    options?: LogoutOptions;
   } | null>(null);
 
   const [logoutCheckError, setLogoutCheckError] = useState<{ uid: string; message: string } | null>(null);
   useEffect(() => { setLogoutCheckError(error => error?.uid === currentUser?.id ? error : null); }, [currentUser?.id]);
 
-  const execLogout = useCallback(async (options?: { purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
+  const execLogout = useCallback(async (options?: LogoutOptions) => {
     if (logoutInProgressRef.current) return;
     logoutInProgressRef.current = true;
     const logoutEpoch = ++sessionEpochRef.current;
     const currentUser = currentUserRef.current;
+    const targetUid = currentUser?.id || auth.currentUser?.uid;
+    const background = options?.reason === 'APP_BACKGROUND';
+    if (background && targetUid) {
+      markBackgroundLoginRequired(targetUid);
+      setSessionNotice(BACKGROUND_SESSION_NOTICE);
+      setIsLoading(true);
+      setPendingLogoutPrompt(null);
+      // Cancel in-flight work before awaiting storage or audit. The UI returns
+      // to login even if pending transactions require the same owner's return.
+      OfflineStorage.teardownActiveListeners();
+    }
     SyncQueueService.cancelSync();
-    if (currentUser) await import('../services/offline/draftService').then(m => m.DraftService.flushPending(currentUser.id)).catch(() => {});
+    if (targetUid) {
+      const flushing = import('../services/offline/draftService').then(m => m.DraftService.flushPending(targetUid));
+      let flushTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        if (background) await Promise.race([flushing, new Promise<void>((_, reject) => {
+          flushTimeout = setTimeout(() => reject(new Error('DRAFT_FLUSH_TIMEOUT')), 2000);
+        })]);
+        else await flushing;
+      } catch {
+        if (background) setSessionNotice('Sesi berakhir. Masuk kembali dengan akun yang sama dan periksa draf; penyimpanan perangkat terakhir belum dapat dipastikan.');
+      } finally { clearTimeout(flushTimeout); }
+    }
 
-    if (currentUser) {
+    if (background && targetUid) {
+      await AuditService.recordLogout('APP_BACKGROUND').catch(() => {});
+    } else if (currentUser) {
       if (options?.reason === 'INACTIVITY_TIMEOUT') {
         await AuditService.recordLogout('INACTIVITY_TIMEOUT').catch(() => {});
       } else if (options?.reason === 'SESSION_INVALID') {
@@ -127,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      await authService.clearSession({ purgeUserData: options?.purgeUserData, userId: currentUser?.id });
+      await authService.clearSession({ purgeUserData: background ? false : options?.purgeUserData, userId: targetUid });
     } finally {
       logoutInProgressRef.current = false;
       if (logoutEpoch === sessionEpochRef.current) {
@@ -139,10 +168,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const logout = useCallback(async (options?: { force?: boolean; purgeUserData?: boolean; reason?: 'MANUAL' | 'INACTIVITY_TIMEOUT' | 'ACCOUNT_DEACTIVATED' | 'SESSION_INVALID' }) => {
+  const logout = useCallback(async (options?: LogoutOptions & { force?: boolean }) => {
     setLogoutCheckError(null);
     const currentUser = currentUserRef.current;
-    if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED' && options?.reason !== 'SESSION_INVALID') {
+    if (currentUser?.id && !options?.force && options?.reason !== 'ACCOUNT_DEACTIVATED' && options?.reason !== 'SESSION_INVALID' && options?.reason !== 'APP_BACKGROUND') {
       try {
         await import('../services/offline/draftService').then(m => m.DraftService.flushPending(currentUser.id));
         const counts = await OfflineStorage.getPendingCount(currentUser.id);
@@ -231,6 +260,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      // A frozen/killed page may never execute its timeout. Reject automatic
+      // Firebase restoration before loading any authenticated content.
+      if (requiresBackgroundLogin(fbUser.uid)) {
+        await execLogout({ reason: 'APP_BACKGROUND', purgeUserData: false });
+        return;
+      }
+
       if (currentUserRef.current?.id !== fbUser.uid) {
         const previousUid = currentUserRef.current?.id;
         OfflineStorage.teardownActiveListeners();
@@ -276,6 +312,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [execLogout]);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const uid = currentUser.id;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    const monitor = monitorBackgroundSession(uid, () => { void execLogout({ reason: 'APP_BACKGROUND', purgeUserData: false }); });
+    void import('../services/firebase/firestoreService').then(({ FirestoreService }) => {
+      if (cancelled || auth.currentUser?.uid !== uid || logoutInProgressRef.current) return;
+      // FirestoreService shares settings/school_config with the existing UI.
+      unsubscribe = FirestoreService.subscribeToDocument<import('../types').SchoolSettings>('settings', 'school_config', settings => {
+        if (!cancelled && settings && auth.currentUser?.uid === uid) monitor.update(sanitizeSessionPolicy(settings.sessionPolicy));
+      });
+    }).catch(error => console.warn('[AUTH_CONTEXT] Kebijakan sesi belum diperbarui:', error));
+    return () => { cancelled = true; unsubscribe?.(); monitor.stop(); };
+  }, [currentUser?.id, execLogout]);
+
   // Realtime subscription to database-authoritative profile (REV-07, R21-04)
   // Ensures permissions or role changes by Admin apply immediately to the active session.
   useEffect(() => {
@@ -283,9 +335,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void import('../services/firebase/firestoreService').then(({ FirestoreService }) => {
-      if (cancelled || auth.currentUser?.uid !== currentUser.id) return;
+      if (cancelled || auth.currentUser?.uid !== currentUser.id || logoutInProgressRef.current) return;
       unsub = FirestoreService.subscribeToDocument<UserProfile>('users', currentUser.id, (profile) => {
-        if (auth.currentUser?.uid !== currentUser.id) return;
+        if (auth.currentUser?.uid !== currentUser.id || logoutInProgressRef.current) return;
         if (!profile || profile.isActive !== true || profile.requiresActivation === true) {
           void logout({ reason: 'ACCOUNT_DEACTIVATED' });
           return;
@@ -359,6 +411,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (res.success && res.user) {
+        completeBackgroundLogin(res.user.id);
+        setSessionNotice(null);
         LastLoginPreference.remember(res.user, OfflineStorage.isTrustedDevice());
         setCurrentUser(res.user);
         setIsOfflineSession(false);
@@ -418,6 +472,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       LastLoginPreference.remember(valRes.profile, OfflineStorage.isTrustedDevice());
+      completeBackgroundLogin(valRes.profile.id);
+      setSessionNotice(null);
       setCurrentUser(valRes.profile);
       setIsOfflineSession(!!valRes.isOfflineSession);
       setIsLoading(false);
@@ -541,6 +597,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         isAuthenticated: !!currentUser,
         isLoading,
+        sessionNotice,
         isOffline,
         isOfflineSession,
         isTrustedDevice: isTrustedDeviceState,

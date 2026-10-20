@@ -18,6 +18,7 @@ import {
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { DriveClientService, DriveStatusResponse } from '../../services/drive/driveClientService';
+import { beginSessionActivity } from '../../services/auth/backgroundSession';
 
 export const GoogleDriveSettingsCard: React.FC = () => {
   const [status, setStatus] = useState<DriveStatusResponse | null>(null);
@@ -75,6 +76,7 @@ export const GoogleDriveSettingsCard: React.FC = () => {
     try {
       const authData = await DriveClientService.getAuthUrl();
       // Redirect to Google OAuth Consent screen
+      beginSessionActivity(300_000);
       window.location.href = authData.url;
     } catch (err: any) {
       setFeedback({
