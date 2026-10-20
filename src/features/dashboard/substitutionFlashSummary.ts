@@ -1,4 +1,4 @@
-import type { TeacherSubstitutionRecord, SubstitutionStatus } from '../../types/substitution.types';
+import { getSubstitutionReasonDisplay, type TeacherSubstitutionRecord, type SubstitutionStatus } from '../../types/substitution.types';
 
 const STATUSES: Record<SubstitutionStatus, { label: string; priority: number }> = {
   MENUNGGU_GURU_INVAL: { label: 'Menunggu pengganti', priority: 0 },
@@ -26,6 +26,7 @@ export function buildSubstitutionFlashSummary(records: TeacherSubstitutionRecord
       id: row.id,
       title: `${text(row.guruBerhalanganName) || 'Guru belum tercatat'} · ${text(row.kelas) || 'Kelas belum diisi'}`,
       detail: [text(row.mataPelajaran), text(row.jamPelajaran)].filter(Boolean).join(' · ') || 'Mapel / JP belum diisi',
+      reason: `Alasan: ${text(getSubstitutionReasonDisplay(row)) === '-' ? 'Belum dicatat' : text(getSubstitutionReasonDisplay(row))}`,
       assignment: `${STATUSES[row.status]?.label || 'Status belum dikenali'} · Pengganti: ${text(row.guruPenggantiName) || (row.guruPenggantiId ? 'Nama belum tercatat' : 'Belum ditentukan')}`,
       task: `Tugas: ${text(row.materiDanTugasSiswa) || 'Belum ada instruksi tugas siswa.'}`,
     })),

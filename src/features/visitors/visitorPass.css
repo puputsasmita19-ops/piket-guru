@@ -1,0 +1,34 @@
+#visitor-pass-print-root { display:none; }
+.visitor-pass { width:100%; min-width:0; box-sizing:border-box; padding:20px; border:1px solid #64748b; border-radius:12px; background:#fff; color:#111827; font:14px/1.5 Arial,sans-serif; }
+.visitor-pass * { box-sizing:border-box; overflow-wrap:anywhere; }
+.visitor-pass :is(h3,h4,p,dl,dd) { margin:0; }
+.visitor-pass-heading { text-align:center; border-bottom:2px solid #111827; padding-bottom:12px; }
+.visitor-pass-heading h3 { font-size:18px; font-weight:700; text-transform:uppercase; }
+.visitor-pass-heading p { font-size:11px; margin:3px 0; color:#475569; }
+.visitor-pass-heading h4 { font-size:13px; margin-top:8px; letter-spacing:.06em; font-weight:700; }
+.visitor-pass-badge { text-align:center; margin:14px 0; padding:8px; border:1px solid #cbd5e1; border-radius:6px; }
+.visitor-pass-badge span { display:block; font-size:11px; color:#475569; }
+.visitor-pass-badge strong { display:block; font-size:24px; line-height:1.3; }
+.visitor-pass-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 20px; }
+.visitor-pass-fields>div { min-width:0; break-inside:avoid; }
+.visitor-pass dt,.visitor-pass-purpose h4 { font-size:11px; color:#475569; font-weight:400; }
+.visitor-pass dd { font-weight:600; white-space:pre-wrap; }
+.visitor-pass-wide { grid-column:1/-1; }
+.visitor-pass-purpose { margin-top:12px; padding:10px; border:1px solid #cbd5e1; border-radius:6px; }
+.visitor-pass-purpose p { white-space:pre-wrap; }
+.visitor-pass-signatures { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin-top:16px; border-top:1px solid #cbd5e1; padding-top:12px; break-inside:avoid; }
+.visitor-pass-signatures>div { min-width:0; text-align:center; display:flex; flex-direction:column; }
+.visitor-pass-signatures p { font-size:11px; }
+.visitor-pass-signatures strong { display:block; margin-top:44px; font-size:12px; text-decoration:underline; text-underline-offset:3px; }
+.visitor-pass .visitor-pass-note { font-size:10px; color:#475569; text-align:center; margin-top:14px; break-inside:avoid; }
+@media screen and (max-width:400px) { .visitor-pass { padding:12px; font-size:13px; } .visitor-pass-fields { grid-template-columns:1fr; } }
+@media print {
+  #visitor-pass-print-root .visitor-pass { width:100%; border:1px solid #333; border-radius:0; padding:5mm; font-size:10pt; color:#000; }
+  #visitor-pass-print-root .visitor-pass-heading h3 { font-size:14pt; }
+  #visitor-pass-print-root .visitor-pass-heading h4 { font-size:11pt; }
+  #visitor-pass-print-root .visitor-pass-badge strong { font-size:20pt; }
+  #visitor-pass-print-root .visitor-pass-fields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:3mm 5mm; }
+  #visitor-pass-print-root :is(dt,.visitor-pass-purpose h4,.visitor-pass-heading p,.visitor-pass-badge span,.visitor-pass-signatures p) { font-size:8.5pt; color:#333; }
+  #visitor-pass-print-root .visitor-pass-signatures strong { font-size:9pt; margin-top:14mm; }
+  #visitor-pass-print-root .visitor-pass-note { font-size:8pt; }
+}

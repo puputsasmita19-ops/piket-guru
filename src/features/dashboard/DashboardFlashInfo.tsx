@@ -7,7 +7,7 @@ export interface DashboardFlashSlide {
   id: DashboardInfoPanel | 'activity';
   title: string;
   icon: React.ComponentType<{ className?: string }>;
-  items: { id: string; title: string; detail?: string; assignment?: string; task?: string }[];
+  items: { id: string; title: string; detail?: string; reason?: string; assignment?: string; task?: string }[];
   emptyText: string;
   description?: string;
   caption?: string;
@@ -134,7 +134,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
               <h2><Icon className="w-4 h-4 shrink-0" /><span>{item.title}</span></h2>
               {item.caption && <p className="flash-slide-caption">{item.caption}</p>}
               <div className="flash-content">{item.items.length ? <>
-                <ul className={item.id === 'operations' ? 'flash-operations-list' : 'flash-preview-list'}>{item.items.slice(0, item.id === 'announcements' || item.id === 'substitutions' ? 1 : 3).map(row => <li key={row.id} data-info-id={row.id}><p className="flash-item-title">{item.id === 'announcements' ? announcementPreview(row.title, 120) : row.title}</p>{row.detail && <p className="flash-item-detail">{item.id === 'announcements' ? announcementPreview(row.detail) : row.detail}</p>}{row.assignment && <p className="flash-inval-assignment">{row.assignment}</p>}{row.task && <p className="flash-inval-task">{announcementPreview(row.task, 160)}</p>}</li>)}</ul>
+                <ul className={item.id === 'operations' ? 'flash-operations-list' : 'flash-preview-list'}>{item.items.slice(0, item.id === 'announcements' || item.id === 'substitutions' ? 1 : 3).map(row => <li key={row.id} data-info-id={row.id}><p className="flash-item-title">{item.id === 'announcements' ? announcementPreview(row.title, 120) : row.title}</p>{row.detail && <p className="flash-item-detail">{item.id === 'announcements' ? announcementPreview(row.detail) : row.detail}</p>}{row.reason && <p className="flash-inval-reason" title={row.reason}>{announcementPreview(row.reason, 130)}</p>}{row.assignment && <p className="flash-inval-assignment">{row.assignment}</p>}{row.task && <p className="flash-inval-task">{announcementPreview(row.task, 160)}</p>}</li>)}</ul>
                 {item.id === 'announcements' && item.items.length > 1 && <p className="flash-announcement-more">+{item.items.length - 1} pengumuman lainnya</p>}
                 {item.id === 'substitutions' && item.items.length > 1 && <p className="flash-inval-more">+{item.items.length - 1} penugasan lain · Buka rincian untuk semua tugas</p>}
               </> : <p className="flash-empty">{item.emptyText}</p>}</div>

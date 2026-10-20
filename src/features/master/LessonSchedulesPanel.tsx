@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/common/SearchableSelect';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
@@ -31,7 +32,6 @@ export const LessonSchedulesPanel: React.FC<{ teachers: TeacherRecord[]; student
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [editor, setEditor] = useState<{ input: LessonScheduleInput; revision: string | null } | null>(null);
-  const [teacherSearch, setTeacherSearch] = useState('');
   const [removing, setRemoving] = useState<LessonScheduleEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -64,11 +64,10 @@ export const LessonSchedulesPanel: React.FC<{ teachers: TeacherRecord[]; student
   const periods = getTeachingPeriods(settings.lessonPeriodConfig, day, editor?.input.validFrom || getTodayISODate());
   const classes = [...new Set(students.filter(s => s.isActive !== false && s.kelas?.trim()).map(s => s.kelas.trim()))].sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
   const selectedTeacher = teachers.find(t => t.id === editor?.input.teacherId);
-  const teacherOptions = teachers.filter(t => t.id === editor?.input.teacherId || `${t.fullName} ${t.mataPelajaran || ''} ${t.idGuru || ''}`.toLocaleLowerCase('id-ID').includes(teacherSearch.trim().toLocaleLowerCase('id-ID'))).sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'));
   const subjects = [...new Set([...getTeacherSubjects(selectedTeacher), ...rows.filter(e => e.teacherId === selectedTeacher?.id).map(e => e.subject)])];
   const update = (changes: Partial<LessonScheduleInput>) => setEditor(prev => prev ? { ...prev, input: { ...prev.input, ...changes } } : null);
   const openEditor = (entry?: LessonScheduleEntry) => {
-    setError(''); setTeacherSearch(''); setEditor({ input: entry ? { ...entry, periodNumbers: [...entry.periodNumbers] } : blank(), revision: entry?.updatedAt || null });
+    setError(''); setEditor({ input: entry ? { ...entry, periodNumbers: [...entry.periodNumbers] } : blank(), revision: entry?.updatedAt || null });
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -118,8 +117,7 @@ export const LessonSchedulesPanel: React.FC<{ teachers: TeacherRecord[]; student
       {editor && <DialogForm onSubmit={save} className="space-y-4" actions={<div className="flex gap-2 justify-end"><Button type="button" variant="outline" disabled={saving} onClick={() => setEditor(null)}>Batal</Button><Button type="submit" isLoading={saving}>Simpan Jadwal</Button></div>}>
         {error && <p role="alert" tabIndex={-1} className="text-sm text-rose-700 dark:text-rose-300">{error}</p>}
         <p className="text-sm">Hari: <strong>{ALL_DAYS_OF_WEEK.find(d => d.code === day)?.label}</strong>. Untuk hari lain, pilih hari tersebut lalu tambah jadwal baru.</p>
-        <label className="block text-sm space-y-1"><span>Cari guru</span><input aria-label="Cari guru pengajar" className={field} value={teacherSearch} onChange={e => setTeacherSearch(e.target.value)} placeholder="Cari nama atau mata pelajaran" /></label>
-        <label className="block text-sm space-y-1"><span>Guru pengajar *</span><select aria-label="Guru pengajar" required className={field} value={editor.input.teacherId} onChange={e => { const t = teachers.find(t => t.id === e.target.value); update({ teacherId: e.target.value, subject: getTeacherSubjects(t)[0] || '' }); }}><option value="">Pilih guru dari master guru</option>{teacherOptions.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></label>
+        <div className="block text-sm space-y-1"><span>Guru pengajar *</span><SearchableSelect label="Guru pengajar" required value={editor.input.teacherId} placeholder="Pilih guru dari master guru" options={teachers.map(t => ({ value: t.id, label: t.fullName, description: t.mataPelajaran, keywords: `${t.idGuru || ''} ${t.nip || ''} ${t.nuptk || ''}` }))} onChange={teacherId => { const t = teachers.find(t => t.id === teacherId); update({ teacherId, subject: getTeacherSubjects(t)[0] || '' }); }} /></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block text-sm space-y-1"><span>Mata pelajaran *</span><SubjectPicker label="Mata pelajaran" required value={editor.input.subject} onChange={value => update({ subject: value })} suggestions={subjects} /></label>
           <label className="block text-sm space-y-1"><span>Kelas *</span><input aria-label="Kelas jadwal" required maxLength={80} list="lesson-classes" className={field} value={editor.input.className} onChange={e => update({ className: e.target.value })} placeholder="Pilih saran atau ketik kelas" /><datalist id="lesson-classes">{classes.map(s => <option key={s} value={s} />)}</datalist></label>

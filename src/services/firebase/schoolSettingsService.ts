@@ -280,7 +280,7 @@ export class SchoolSettingsService {
         transaction.update(ref, { sessionPolicy, updatedAt: serverTimestamp() });
       });
       session.assertActive();
-      void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: `Memperbarui keluar otomatis saat aplikasi ditinggalkan: ${sessionPolicy.backgroundLogoutEnabled ? `ON, jeda ${sessionPolicy.backgroundDelaySeconds} detik` : 'OFF'}` });
+      void AuditService.log({ userId: uid, userName: user.data().fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', details: `Memperbarui keluar otomatis: ${(['mobile', 'desktop'] as const).map(device => `${device}: ${sessionPolicy[device].backgroundLogoutEnabled ? `ON, jeda ${sessionPolicy[device].backgroundDelaySeconds} detik` : 'OFF'}`).join('; ')}` });
       const result = await this.receipt(expected);
       session.assertActive();
       return result;

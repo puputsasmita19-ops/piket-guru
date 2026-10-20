@@ -1,119 +1,49 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { VisitorRecord, getVisitorCategoryDisplay } from '../../types/visitor.types';
 import { SchoolSettings } from '../../types';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { Printer, UserCheck, ShieldCheck } from '../../components/icons';
+import { Printer } from '../../components/icons';
+import './visitorPass.css';
 
 interface VisitorPassPrintModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  visitor: VisitorRecord | null;
-  settings: SchoolSettings;
+  isOpen: boolean; onClose: () => void; visitor: VisitorRecord | null; settings: SchoolSettings;
+}
+function VisitorPass({ visitor, settings }: { visitor: VisitorRecord; settings: SchoolSettings }) {
+  const fields = [
+    ['Nama tamu', visitor.namaTamu], ['Instansi asal', visitor.instansiAsal || '—'],
+    ['Kategori tamu', getVisitorCategoryDisplay(visitor)], ['Waktu masuk', `${formatIndonesianDate(visitor.tanggal)} · ${visitor.jamMasuk} WIB`],
+  ];
+  return <article className="visitor-pass">
+    <header className="visitor-pass-heading"><h3>{settings.schoolName}</h3><p>{settings.npsn ? `NPSN: ${settings.npsn} · ` : ''}Pos Keamanan & Ruang Piket</p><h4>SLIP IZIN MASUK TAMU</h4></header>
+    <div className="visitor-pass-badge"><span>Nomor badge tamu</span><strong>{visitor.nomorBadge || '—'}</strong></div>
+    <dl className="visitor-pass-fields">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}<div className="visitor-pass-wide"><dt>Pihak yang dituju</dt><dd>{visitor.tujuanBertemu || '—'}</dd></div></dl>
+    <section className="visitor-pass-purpose"><h4>Keperluan kunjungan</h4><p>{visitor.keperluan || '—'}</p></section>
+    <div className="visitor-pass-signatures"><div><p>Petugas Piket / Satpam</p><strong>{visitor.petugasPiketName || '—'}</strong></div><div><p>Tanda tangan tamu</p><strong>{visitor.namaTamu}</strong></div></div>
+    <p className="visitor-pass-note">Harap serahkan kembali slip ini ke pos keamanan saat meninggalkan area sekolah.</p>
+  </article>;
 }
 
-export const VisitorPassPrintModal: React.FC<VisitorPassPrintModalProps> = ({
-  isOpen,
-  onClose,
-  visitor,
-  settings,
-}) => {
-  if (!visitor) return null;
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Cetak Kartu Izin Tamu (Visitor Pass)" maxWidth="md">
+/** Only this isolated portal is printed; the table and other dialogs stay off paper. */
+export const VisitorPassPrintModal: React.FC<VisitorPassPrintModalProps> = ({ isOpen, onClose, visitor, settings }) => {
+  if (!isOpen || !visitor) return null;
+  return <>
+    <Modal isOpen={isOpen} onClose={onClose} title="Cetak Slip Izin Tamu" maxWidth="xl">
       <div className="space-y-4">
-        <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 text-xs no-print">
-          <span className="font-semibold text-blue-900 dark:text-blue-200">
-            Slip Izin Masuk Tamu Sekolah (Format Standar ID Card)
-          </span>
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Printer className="w-4 h-4" />}
-            onClick={handlePrint}
-          >
-            Cetak Slip Tamu
-          </Button>
-        </div>
-
-        {/* PRINT CANVAS */}
-        <div className="bg-white text-black p-6 rounded-2xl border-2 border-dashed border-slate-400 font-sans text-xs space-y-3 print:border-solid print:p-4">
-          {/* HEADER KOP */}
-          <div className="text-center border-b-2 border-black pb-2 space-y-0.5">
-            <h3 className="font-extrabold text-sm uppercase tracking-wide">
-              {settings.schoolName}
-            </h3>
-            <p className="text-[10px] text-slate-600">
-              NPSN: {settings.npsn} • Pos Keamanan & Ruang Piket Utama
-            </p>
-            <div className="inline-block bg-black text-white px-3 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase mt-1">
-              SLIP IZIN MASUK TAMU
-            </div>
-          </div>
-
-          {/* BADGE NUMBER BIG DISPLAY */}
-          <div className="text-center py-2 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
-              Nomor Badge Tamu:
-            </span>
-            <div className="text-2xl font-extrabold font-mono text-blue-900 tracking-wider">
-              {visitor.nomorBadge}
-            </div>
-          </div>
-
-          {/* TAMU META TABLE */}
-          <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-            <div>
-              <span className="text-slate-500 block">Nama Tamu:</span>
-              <span className="font-bold text-black">{visitor.namaTamu}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Instansi Asal:</span>
-              <span className="font-bold text-black">{visitor.instansiAsal}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Kategori Tamu:</span>
-              <span className="font-bold text-blue-900">{getVisitorCategoryDisplay(visitor)}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Waktu Masuk:</span>
-              <span className="font-mono font-bold">{visitor.tanggal}, {visitor.jamMasuk} WIB</span>
-            </div>
-            <div className="col-span-2">
-              <span className="text-slate-500 block">Pihak Dituju:</span>
-              <span className="font-bold text-black">{visitor.tujuanBertemu}</span>
-            </div>
-          </div>
-
-          <div className="text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-200">
-            <span className="text-slate-500 block">Keperluan Kunjungan:</span>
-            <span className="font-semibold text-black italic">"{visitor.keperluan}"</span>
-          </div>
-
-          {/* SIGNATURE / PETUGAS */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-200 text-[10px]">
-            <div>
-              <p className="text-slate-500">Petugas Piket / Satpam:</p>
-              <p className="font-bold underline mt-6">{visitor.petugasPiketName}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-slate-500">Tanda Tangan Tamu:</p>
-              <div className="h-6" />
-              <p className="font-bold underline">({visitor.namaTamu})</p>
-            </div>
-          </div>
-
-          <p className="text-[9px] text-slate-400 text-center italic pt-1">
-            *Harap serahkan kembali slip ini ke pos satpam saat meninggalkan area sekolah.
-          </p>
-        </div>
+        <div className="flex flex-wrap justify-between items-center gap-3 text-sm"><p className="text-slate-600 dark:text-slate-300">Hanya slip tamu yang dicetak. Format A5, tegak.</p><Button type="button" size="sm" leftIcon={<Printer className="w-4 h-4" />} onClick={() => window.print()}>Cetak Slip Tamu</Button></div>
+        <VisitorPass visitor={visitor} settings={settings} />
       </div>
     </Modal>
-  );
+    {createPortal(<div id="visitor-pass-print-root" aria-hidden="true">
+      <style>{`@media print {
+        @page { size: A5 portrait; margin: 10mm; }
+        html, body { height:auto !important; min-height:0 !important; overflow:visible !important; padding:0 !important; margin:0 !important; background:#fff !important; }
+        body > :not(#visitor-pass-print-root) { display:none !important; }
+        body > #visitor-pass-print-root { display:block !important; position:static !important; width:100% !important; color:#000 !important; }
+      }`}</style>
+      <VisitorPass visitor={visitor} settings={settings} />
+    </div>, document.body)}
+  </>;
 };

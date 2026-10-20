@@ -1,4 +1,4 @@
-import { sanitizeSessionPolicy, type SessionPolicy } from '../../types/sessionPolicy.types';
+import { sanitizeSessionPolicy, sessionPolicyForDevice, type SessionPolicy } from '../../types/sessionPolicy.types';
 
 const STORAGE_KEY = 'piket_background_session_v1';
 const ACTIVITY_EVENT = 'piket-session-activity';
@@ -37,9 +37,10 @@ export function requiresBackgroundLogin(uid: string, now = Date.now()): boolean 
   const state = read();
   if (!state || state.uid !== uid) return false;
   if (state.required) return true;
-  if (!state.policy.backgroundLogoutEnabled || state.hiddenAt === undefined) return false;
+  const policy = sessionPolicyForDevice(state.policy);
+  if (!policy.backgroundLogoutEnabled || state.hiddenAt === undefined) return false;
   if (state.exemptUntil && now < state.exemptUntil && now >= state.hiddenAt) return false;
-  return now < state.hiddenAt || now - state.hiddenAt >= state.policy.backgroundDelaySeconds * 1000;
+  return now < state.hiddenAt || now - state.hiddenAt >= policy.backgroundDelaySeconds * 1000;
 }
 export function markBackgroundLoginRequired(uid: string) {
   const state = read();
@@ -89,14 +90,15 @@ export function monitorBackgroundSession(uid: string, onExpire: () => void) {
     const state = read();
     if (stopped || expired || state?.uid !== uid) return;
     if (requiresBackgroundLogin(uid)) { expire(); return; }
-    if (state.policy.backgroundLogoutEnabled && state.hiddenAt !== undefined) {
-      const remaining = Math.max(state.hiddenAt + state.policy.backgroundDelaySeconds * 1000, state.exemptUntil || 0) - Date.now();
+    const policy = sessionPolicyForDevice(state.policy);
+    if (policy.backgroundLogoutEnabled && state.hiddenAt !== undefined) {
+      const remaining = Math.max(state.hiddenAt + policy.backgroundDelaySeconds * 1000, state.exemptUntil || 0) - Date.now();
       timer = setTimeout(check, Math.max(1, remaining));
     }
   };
   const hide = () => {
     const state = read();
-    if (stopped || expired || state?.uid !== uid || !state.policy.backgroundLogoutEnabled) return;
+    if (stopped || expired || state?.uid !== uid || !sessionPolicyForDevice(state.policy).backgroundLogoutEnabled) return;
     // Do not extend the deadline when visibilitychange is followed by pagehide.
     if (state.hiddenAt === undefined) write({ ...state, hiddenAt: Date.now() });
     check();

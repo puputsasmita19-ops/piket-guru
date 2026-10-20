@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { SubjectPicker } from '../../components/common/SubjectPicker';
 import { getTeacherSubjects } from '../../types/master.types';
 import { DialogForm } from '../../components/common/DialogForm';
@@ -1376,31 +1377,12 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                 </span>
                               </div>
 
-                              <select
-                                value={assignment.guruPenggantiId}
-                                onChange={(e) => {
-                                  const subId = e.target.value;
-                                  const subTeacher = teachers.find((t) => t.id === subId);
-                                  handleUpdateAssignment(st.teacher.id, assignment.assignmentId, {
-                                    guruPenggantiId: subId,
-                                    guruPenggantiName: subTeacher ? subTeacher.fullName : '',
-                                  });
-                                }}
-                                className={`w-full p-2 rounded-xl border bg-white dark:bg-slate-900 text-xs font-semibold ${
-                                  assignment.guruPenggantiId
-                                    ? 'border-emerald-400 text-emerald-900 dark:text-emerald-200'
-                                    : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}
-                              >
-                                <option value="">-- Belum Ditugaskan (Menunggu Inval) --</option>
-                                {teachers
-                                  .filter((t) => t.id !== st.teacher.id) // Guru pengganti tidak boleh sama dengan guru berhalangan
-                                  .map((t) => (
-                                    <option key={t.id} value={t.id}>
-                                      <GraduationCap className="w-3.5 h-3.5 mr-1" /> {t.fullName} ({t.mataPelajaran || 'Guru'})
-                                    </option>
-                                  ))}
-                              </select>
+                              <SearchableSelect label="Guru Pengganti / Inval" value={assignment.guruPenggantiId}
+                                options={[{ value: '', label: 'Belum Ditugaskan (Menunggu Inval)' }, ...teachers.filter(t => t.id !== st.teacher.id).map(t => ({ value: t.id, label: t.fullName, description: t.mataPelajaran || 'Guru', keywords: `${t.idGuru || ''} ${t.nip || ''} ${t.nuptk || ''}` }))]}
+                                onChange={subId => {
+                                  const subTeacher = teachers.find(t => t.id === subId);
+                                  handleUpdateAssignment(st.teacher.id, assignment.assignmentId, { guruPenggantiId: subId, guruPenggantiName: subTeacher?.fullName || '' });
+                                }} />
 
                               {/* PERINGATAN BENTROK JADWAL GURU PENGGANTI */}
                               {conflictWarning && (

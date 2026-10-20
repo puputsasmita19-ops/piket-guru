@@ -51,11 +51,11 @@ try {
       }
     }
     if (['attendance', 'duty-book'].includes(tab)) {
-      await page.getByRole('combobox', { name: 'Pengguna riwayat' }).selectOption('me');
+      await page.getByRole('button', { name: 'Pengguna riwayat', exact: true }).click(); const userPicker = page.getByRole('dialog', { name: 'Pengguna riwayat', exact: true }); await userPicker.getByRole('option', { name: 'Saya sendiri', exact: true }).click();
       check(`${tab}: own-user filter isolates records`, (await page.locator('.history-pagination').innerText()).includes('dari 9 data'));
-      await page.getByRole('combobox', { name: 'Pengguna riwayat' }).selectOption('teacher-other');
+      await page.getByRole('button', { name: 'Pengguna riwayat', exact: true }).click(); await userPicker.locator('[role=option]').filter({hasText:'Guru Lain'}).click();
       check(`${tab}: another visible user can be selected`, (await page.locator('.history-pagination').innerText()).includes('dari 9 data'));
-      await page.getByRole('combobox', { name: 'Pengguna riwayat' }).selectOption('all');
+      await page.getByRole('button', { name: 'Pengguna riwayat', exact: true }).click(); await userPicker.getByRole('option', { name: 'Semua pengguna', exact: true }).click();
       if (tab === 'attendance') check('attendance: elapsed duration and pending checkout are distinct', await page.getByText('7 jam 30 menit', { exact: true }).first().isVisible() && await page.getByText('Belum pulang', { exact: true }).isVisible());
     } else {
       check(`${tab}: the former Excel action is removed`, await page.getByRole('button', { name: /Ekspor Excel/ }).count() === 0);
