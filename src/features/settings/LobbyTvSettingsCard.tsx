@@ -775,7 +775,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 <option value="large">Besar / Jauh (TV 65"+ & Jarak &gt; 5 meter)</option>
               </select>
               <p className="text-[10px] text-slate-400">
-                Menyesuaikan ukuran kartu dan huruf agar nyaman dibaca.
+                Huruf mengikuti resolusi layar. Pilih Besar / Jauh untuk teks lebih besar dan lebih sedikit kartu per halaman; semua data tetap bergantian.
               </p>
             </div>
 

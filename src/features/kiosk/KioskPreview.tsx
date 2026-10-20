@@ -1,3 +1,7 @@
+import { useMinuteClock } from '../../hooks/useMinuteClock';
+import { appLogo } from '../../utils/reportBranding';
+import { useWibToday } from '../../hooks/useWibToday';
+import { isScheduleOnDate } from '../../utils/scheduleUtils';
 import { Megaphone } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
@@ -39,6 +43,9 @@ export const KioskPreview: React.FC = () => {
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
 
+  const todayISO = useWibToday();
+  const previewTime = useMinuteClock();
+
   useEffect(() => {
     // Realtime subscription to authoritative school configuration
     // Ensures any active TV display immediately receives updates saved by admins without manual refresh
@@ -50,7 +57,6 @@ export const KioskPreview: React.FC = () => {
       }
     );
 
-    const todayISO = getTodayISODate();
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
     const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
       'substitutions',
@@ -92,7 +98,7 @@ export const KioskPreview: React.FC = () => {
       unsubVis();
       unsubAnnounce();
     };
-  }, []);
+  }, [todayISO]);
 
   return (
     <div className="space-y-6">
@@ -146,7 +152,7 @@ export const KioskPreview: React.FC = () => {
               Rotasi Carousel Otomatis
             </h4>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Berganti slide otomatis setiap 8 detik mencakup guru piket, guru inval, buku tamu, dan statistik kedisiplinan.
+              Informasi berganti sesuai jeda admin. Daftar panjang dibagi ke beberapa halaman agar tulisan tetap besar dan terbaca.
             </p>
           </CardContent>
         </Card>
@@ -169,8 +175,8 @@ export const KioskPreview: React.FC = () => {
       {/* MINI LIVE PREVIEW CONTAINER */}
       <Card>
         <CardHeader
-          title="Pratinjau Langsung Tampilan TV Lobi (Interactive Preview)"
-          subtitle="Tekan tombol 'Buka Layar Penuh' di bilah atas atau sudut monitor untuk proyektor / TV"
+          title="Ringkasan TV Lobi"
+          subtitle="Buka layar penuh untuk informasi berhuruf besar dan halaman bergilir sesuai pengaturan admin."
           action={
             <Button
               variant="primary"
@@ -186,7 +192,7 @@ export const KioskPreview: React.FC = () => {
         <CardContent className="p-6">
           <div
             onClick={() => setIsKioskOpen(true)}
-            className="relative w-full aspect-[16/9] max-h-[400px] rounded-3xl overflow-hidden bg-slate-950 border-4 border-slate-800 shadow-2xl p-6 flex flex-col justify-between cursor-pointer group hover:border-blue-600/50 transition-colors"
+            className="relative w-full min-h-[330px] sm:aspect-[16/9] sm:max-h-[440px] rounded-3xl overflow-hidden bg-slate-950 border-4 border-slate-800 shadow-2xl p-6 flex flex-col justify-between cursor-pointer group hover:border-blue-600/50 transition-colors"
           >
             {/* Ergonomic Fullscreen Launch Pill (Positioned in Corner, not blocking center) */}
             <div className="absolute bottom-4 right-4 z-20">
@@ -198,32 +204,30 @@ export const KioskPreview: React.FC = () => {
             {/* PREVIEW TOP BAR */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
-                  P
-                </div>
+                <img src={appLogo(settings)} alt="Logo aplikasi" className="w-11 h-11 rounded-xl bg-white p-1 object-contain"/>
                 <div>
-                  <h5 className="font-bold text-xs text-white uppercase">{settings.schoolName}</h5>
+                  <h5 className="font-bold text-base text-white uppercase">{settings.schoolName}</h5>
                   <span className="text-[10px] text-emerald-400">● LIVE KIOSK DISPLAY</span>
                 </div>
               </div>
-              <div className="text-right font-mono text-xs text-blue-400 font-bold">
-                {formatTime(new Date())}
+              <div className="text-right font-mono text-lg text-amber-200 font-bold">
+                {formatTime(new Date(previewTime))}
               </div>
             </div>
 
             {/* PREVIEW BODY */}
-            <div className="grid grid-cols-3 gap-3 my-auto">
+            <div className="grid grid-cols-3 gap-2 my-5">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-[10px] text-slate-400">Guru Piket</span>
-                <div className="text-lg font-bold text-white mt-0.5">{schedules.length} Pos</div>
+                <span className="text-xs text-slate-300">Guru Piket</span>
+                <div className="text-3xl font-bold text-white mt-1">{schedules.filter(row => isScheduleOnDate(row, todayISO)).length}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-[10px] text-slate-400">Guru Inval</span>
-                <div className="text-lg font-bold text-purple-400 mt-0.5">{substitutions.length} Kelas</div>
+                <span className="text-xs text-slate-300">Guru Inval</span>
+                <div className="text-3xl font-bold text-purple-200 mt-1">{substitutions.length}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-[10px] text-slate-400">Tamu Kampus</span>
-                <div className="text-lg font-bold text-blue-400 mt-0.5">{visitors.length} Tamu</div>
+                <span className="text-xs text-slate-300">Tamu Aktif</span>
+                <div className="text-3xl font-bold text-blue-200 mt-1">{visitors.filter(row => row.status === 'SEDANG_BERKUNJUNG').length}</div>
               </div>
             </div>
 
