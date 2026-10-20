@@ -449,6 +449,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // One bounded subject catalog; existing record names remain historical snapshots.
+    match /subjects/{catalogId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isAdmin() && catalogId == 'catalog' &&
+        request.resource.data.id == 'catalog' && request.resource.data.entries is list &&
+        request.resource.data.entries.size() <= 500;
+      allow delete: if isAdmin();
+    }
+
     // Weekly lesson master: only seven day documents; no public or staff writes.
     match /lessonSchedules/{dayId} {
       allow read: if isValidActiveUser();

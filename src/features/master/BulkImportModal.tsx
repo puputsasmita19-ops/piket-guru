@@ -1,3 +1,4 @@
+import { getTeacherSubjects } from '../../types/master.types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload,
@@ -885,6 +886,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 idGuru: assignedLoginId,
                 fullName: row.fullName.trim(),
                 mataPelajaran: row.mataPelajaran || 'Umum',
+                subjectNames: getTeacherSubjects({ mataPelajaran: row.mataPelajaran || 'Umum' }),
                 pangkatGolongan: row.pangkatGolongan || 'Penata Muda / IIIa',
                 statusKepegawaian: row.statusKepegawaian || 'PNS',
                 phone: (row.phone || '').trim(),

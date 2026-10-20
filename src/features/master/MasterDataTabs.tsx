@@ -43,9 +43,12 @@ import { ROLE_LABELS, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 import { AuditForensicViewer } from '../settings/AuditForensicViewer';
 import { LessonSchedulesPanel } from './LessonSchedulesPanel';
+import { SubjectsPanel } from './SubjectsPanel';
+import { TeacherSubjectPicker } from '../../components/common/SubjectPicker';
+import { getTeacherSubjects } from '../../types/master.types';
 import { Calendar } from '../../components/icons';
 
-type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'lessonSchedules' | 'audit';
+type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'lessonSchedules' | 'subjects' | 'audit';
 
 export const MasterDataTabs: React.FC = () => {
   const { currentUser } = useAuth();
@@ -188,6 +191,12 @@ export const MasterDataTabs: React.FC = () => {
     let idGuru = String(formData.get('idGuru') || '').trim();
     const fullName = String(formData.get('fullName') || '').trim();
     const mataPelajaran = String(formData.get('mataPelajaran') || '').trim();
+    let subjectNames: string[];
+    try {
+      const values: unknown = JSON.parse(String(formData.get('subjectNames') || '[]'));
+      if (!Array.isArray(values) || !values.length || values.some(value => typeof value !== 'string' || !value.trim() || value.length > 120)) throw new Error();
+      subjectNames = values;
+    } catch { setTeacherFormError('Pilih atau isi minimal satu mata pelajaran guru (maksimal 120 karakter per nama).'); return; }
     const pangkatGolongan = String(formData.get('pangkatGolongan') || '').trim();
     const phone = String(formData.get('phone') || '').trim();
     const email = String(formData.get('email') || '').trim();
@@ -252,6 +261,7 @@ export const MasterDataTabs: React.FC = () => {
       idGuru: idGuru || undefined,
       fullName,
       mataPelajaran,
+      subjectNames,
       pangkatGolongan: pangkatGolongan || '-',
       statusKepegawaian: finalStatus,
       phone,
@@ -563,6 +573,7 @@ export const MasterDataTabs: React.FC = () => {
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin border-b border-slate-200 dark:border-slate-800 w-full">
         {[
           { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
+          { id: 'subjects', label: 'Mata Pelajaran', icon: BookOpen },
           { id: 'lessonSchedules', label: 'Jadwal Pelajaran', icon: Calendar },
           { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: staffList.length },
           { id: 'students', label: 'Data Siswa', icon: Users, count: students.length },
@@ -598,7 +609,7 @@ export const MasterDataTabs: React.FC = () => {
       </div>
 
       {/* The timetable owns its own day and search filters. */}
-      {activeTab !== 'lessonSchedules' && <Card>
+      {activeTab !== 'lessonSchedules' && activeTab !== 'subjects' && <Card>
         <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="relative w-full max-w-md">
@@ -616,6 +627,7 @@ export const MasterDataTabs: React.FC = () => {
       </Card>}
 
       {activeTab === 'lessonSchedules' && <LessonSchedulesPanel teachers={teachers} students={students} />}
+      {activeTab === 'subjects' && <SubjectsPanel />}
 
       {/* TAB 1: TEACHERS */}
       {activeTab === 'teachers' && (
@@ -1018,13 +1030,7 @@ export const MasterDataTabs: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Mata Pelajaran *</label>
-              <input
-                required
-                name="mataPelajaran"
-                defaultValue={editingTeacher?.mataPelajaran}
-                placeholder="Contoh: Matematika, Fisika"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
+              <TeacherSubjectPicker key={editingTeacher?.id || 'new-teacher'} initial={getTeacherSubjects(editingTeacher)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Pangkat / Golongan</label>

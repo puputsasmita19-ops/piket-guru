@@ -1,3 +1,5 @@
+import { SubjectPicker } from '../../components/common/SubjectPicker';
+import { getTeacherSubjects } from '../../types/master.types';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -90,14 +92,6 @@ interface SubstitutionFormModalProps {
 /**
  * Parsing mata pelajaran dari string master guru menjadi daftar saran
  */
-function parseTeacherSubjectSuggestions(rawSubject?: string): string[] {
-  if (!rawSubject || !rawSubject.trim()) return [];
-  const parts = rawSubject
-    .split(/[,;&/]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && s !== '-');
-  return parts.length > 0 ? parts : [rawSubject.trim()];
-}
 
 export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   isOpen,
@@ -240,7 +234,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
     const matches = teacherLessonsForDate(lessonDay, teacher.id, tanggal, settings?.lessonPeriodConfig);
     const make = (row?: (typeof matches)[number]): TeacherAssignmentEntry => {
       const old = previous.find(a => a.sourceLessonScheduleId === row?.id) || previous[0];
-      return { assignmentId: `asg-${crypto.randomUUID()}`, mataPelajaran: row?.subject || parseTeacherSubjectSuggestions(teacher.mataPelajaran)[0] || '', kelas: row?.className || '', selectedPeriodNumbers: row ? [...row.periodNumbers] : [],
+      return { assignmentId: `asg-${crypto.randomUUID()}`, mataPelajaran: row?.subject || getTeacherSubjects(teacher)[0] || '', kelas: row?.className || '', selectedPeriodNumbers: row ? [...row.periodNumbers] : [],
         sourceLessonScheduleId: row?.id, sourceLessonScheduleRevision: row?.updatedAt,
         alasan: old?.alasan || sharedAlasan, keteranganAlasan: old?.keteranganAlasan || sharedKeteranganAlasan, isCustomReason: old?.isCustomReason || false,
         guruPenggantiId: old?.guruPenggantiId || '', guruPenggantiName: old?.guruPenggantiName || '', materiDanTugasSiswa: old?.materiDanTugasSiswa || sharedMateriTugas, catatanPiket: old?.catatanPiket || sharedCatatanPiket };
@@ -410,7 +404,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
       prev.map((entry) => {
         if (entry.teacher.id !== teacherId) return entry;
 
-        const suggestions = parseTeacherSubjectSuggestions(entry.teacher.mataPelajaran);
+        const suggestions = getTeacherSubjects(entry.teacher);
         const defaultMapel =
           entry.assignments.length > 0
             ? entry.assignments[entry.assignments.length - 1].mataPelajaran
@@ -1117,7 +1111,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
             {selectedTeachers.length > 0 ? (
               selectedTeachers.map((st, teacherIdx) => {
                 const teacherIdInfo = getTeacherDisplayIdentifier(st.teacher);
-                const subjectSuggestions = parseTeacherSubjectSuggestions(st.teacher.mataPelajaran);
+                const subjectSuggestions = getTeacherSubjects(st.teacher);
 
                 return (
                   <div
@@ -1230,38 +1224,8 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                 <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
                                   Mata Pelajaran yang Ditinggalkan *
                                 </label>
-                                <input
-                                  type="text"
-                                  aria-label={`Mata pelajaran ${st.teacher.fullName} ${asgIdx + 1}`}
-                                  required
-                                  value={assignment.mataPelajaran}
-                                  onChange={(e) =>
-                                    handleUpdateAssignment(st.teacher.id, assignment.assignmentId, {
-                                      mataPelajaran: e.target.value,
-                                    })
-                                  }
-                                  placeholder="Contoh: Matematika Peminatan..."
-                                  className="w-full p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
-                                />
-                                {subjectSuggestions.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    <span className="text-[10px] text-slate-400">Saran Mapel:</span>
-                                    {subjectSuggestions.map((sug) => (
-                                      <button
-                                        key={sug}
-                                        type="button"
-                                        onClick={() =>
-                                          handleUpdateAssignment(st.teacher.id, assignment.assignmentId, {
-                                            mataPelajaran: sug,
-                                          })
-                                        }
-                                        className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                                      >
-                                        {sug}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
+                                <SubjectPicker label={`Mata pelajaran ${st.teacher.fullName} ${asgIdx + 1}`} required value={assignment.mataPelajaran} suggestions={subjectSuggestions} onChange={value => handleUpdateAssignment(st.teacher.id, assignment.assignmentId, { mataPelajaran: value })} />
+
                               </div>
 
                               {/* Pilihan Kelas (Dari Data Siswa Aktif) */}

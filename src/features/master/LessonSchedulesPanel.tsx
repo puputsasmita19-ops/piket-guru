@@ -12,6 +12,8 @@ import { Button } from '../../components/common/Button';
 import { Card, CardContent } from '../../components/common/Card';
 import { Modal } from '../../components/common/Modal';
 import { DialogForm } from '../../components/common/DialogForm';
+import { SubjectPicker } from '../../components/common/SubjectPicker';
+import { getTeacherSubjects } from '../../types/master.types';
 import { Plus, Edit2, Trash2, Calendar, Search } from '../../components/icons';
 
 const field = 'w-full min-h-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100';
@@ -63,7 +65,7 @@ export const LessonSchedulesPanel: React.FC<{ teachers: TeacherRecord[]; student
   const classes = [...new Set(students.filter(s => s.isActive !== false && s.kelas?.trim()).map(s => s.kelas.trim()))].sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
   const selectedTeacher = teachers.find(t => t.id === editor?.input.teacherId);
   const teacherOptions = teachers.filter(t => t.id === editor?.input.teacherId || `${t.fullName} ${t.mataPelajaran || ''} ${t.idGuru || ''}`.toLocaleLowerCase('id-ID').includes(teacherSearch.trim().toLocaleLowerCase('id-ID'))).sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'));
-  const subjects = [...new Set([...(selectedTeacher?.mataPelajaran || '').split(/[,;]+/).map(s => s.trim()).filter(s => s && s !== '-'), ...rows.filter(e => e.teacherId === selectedTeacher?.id).map(e => e.subject)])];
+  const subjects = [...new Set([...getTeacherSubjects(selectedTeacher), ...rows.filter(e => e.teacherId === selectedTeacher?.id).map(e => e.subject)])];
   const update = (changes: Partial<LessonScheduleInput>) => setEditor(prev => prev ? { ...prev, input: { ...prev.input, ...changes } } : null);
   const openEditor = (entry?: LessonScheduleEntry) => {
     setError(''); setTeacherSearch(''); setEditor({ input: entry ? { ...entry, periodNumbers: [...entry.periodNumbers] } : blank(), revision: entry?.updatedAt || null });
@@ -117,9 +119,9 @@ export const LessonSchedulesPanel: React.FC<{ teachers: TeacherRecord[]; student
         {error && <p role="alert" tabIndex={-1} className="text-sm text-rose-700 dark:text-rose-300">{error}</p>}
         <p className="text-sm">Hari: <strong>{ALL_DAYS_OF_WEEK.find(d => d.code === day)?.label}</strong>. Untuk hari lain, pilih hari tersebut lalu tambah jadwal baru.</p>
         <label className="block text-sm space-y-1"><span>Cari guru</span><input aria-label="Cari guru pengajar" className={field} value={teacherSearch} onChange={e => setTeacherSearch(e.target.value)} placeholder="Cari nama atau mata pelajaran" /></label>
-        <label className="block text-sm space-y-1"><span>Guru pengajar *</span><select aria-label="Guru pengajar" required className={field} value={editor.input.teacherId} onChange={e => { const t = teachers.find(t => t.id === e.target.value); update({ teacherId: e.target.value, subject: (t?.mataPelajaran || '').split(/[,;]+/)[0]?.trim().replace(/^-$/, '') || '' }); }}><option value="">Pilih guru dari master guru</option>{teacherOptions.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></label>
+        <label className="block text-sm space-y-1"><span>Guru pengajar *</span><select aria-label="Guru pengajar" required className={field} value={editor.input.teacherId} onChange={e => { const t = teachers.find(t => t.id === e.target.value); update({ teacherId: e.target.value, subject: getTeacherSubjects(t)[0] || '' }); }}><option value="">Pilih guru dari master guru</option>{teacherOptions.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block text-sm space-y-1"><span>Mata pelajaran *</span><input aria-label="Mata pelajaran" required maxLength={120} list="lesson-subjects" className={field} value={editor.input.subject} onChange={e => update({ subject: e.target.value })} /><datalist id="lesson-subjects">{subjects.map(s => <option key={s} value={s} />)}</datalist></label>
+          <label className="block text-sm space-y-1"><span>Mata pelajaran *</span><SubjectPicker label="Mata pelajaran" required value={editor.input.subject} onChange={value => update({ subject: value })} suggestions={subjects} /></label>
           <label className="block text-sm space-y-1"><span>Kelas *</span><input aria-label="Kelas jadwal" required maxLength={80} list="lesson-classes" className={field} value={editor.input.className} onChange={e => update({ className: e.target.value })} placeholder="Pilih saran atau ketik kelas" /><datalist id="lesson-classes">{classes.map(s => <option key={s} value={s} />)}</datalist></label>
           <label className="block text-sm space-y-1"><span>Mulai berlaku *</span><input aria-label="Mulai berlaku jadwal" required type="date" className={field} value={editor.input.validFrom} onChange={e => update({ validFrom: e.target.value })} /></label>
           <label className="block text-sm space-y-1"><span>Akhir berlaku (opsional)</span><input aria-label="Akhir berlaku jadwal" type="date" min={editor.input.validFrom} className={field} value={editor.input.validUntil} onChange={e => update({ validUntil: e.target.value })} /></label>

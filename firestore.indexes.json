@@ -203,6 +203,11 @@
       "collectionGroup": "lessonSchedules",
       "fieldPath": "entries",
       "indexes": []
+    },
+    {
+      "collectionGroup": "subjects",
+      "fieldPath": "entries",
+      "indexes": []
     }
   ]
 }

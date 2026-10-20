@@ -24,6 +24,7 @@ export interface AuditStatusMeta {
 }
 
 export const AUDIT_MODULE_REGISTRY: Record<AuditLogModule, AuditModuleMeta> = {
+  SUBJECTS: { id: 'SUBJECTS', label: 'Master Mata Pelajaran', category: 'MASTER', description: 'Nama, kode, dan aktivasi mata pelajaran untuk formulir sekolah.' },
   LESSON_SCHEDULES: {
     id: 'LESSON_SCHEDULES', label: 'Master Jadwal Pelajaran', category: 'MASTER',
     description: 'Jadwal mengajar mingguan guru, kelas, mata pelajaran, dan JP untuk pengisian inval.',

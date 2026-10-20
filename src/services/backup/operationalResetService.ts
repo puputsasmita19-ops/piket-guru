@@ -392,6 +392,7 @@ export class OperationalResetService {
         'incidentCategories',
         'schedules',
         'lessonSchedules',
+        'subjects',
         'settings',
         'user_credentials',
         'login_ids',

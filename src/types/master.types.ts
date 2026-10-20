@@ -16,10 +16,22 @@ export interface TeacherRecord extends BaseRecord {
   idGuru?: string; // ID Guru unik & stabil (string)
   fullName: string;
   mataPelajaran: string;
+  subjectNames?: string[]; // Structured names, including official names containing commas.
   pangkatGolongan: string;
   statusKepegawaian: 'PNS' | 'PPPK' | 'GTT' | 'HONORER' | 'LAINNYA' | string;
   phone: string;
   email: string;
+}
+
+export function getTeacherSubjects(teacher?: Partial<TeacherRecord> | null): string[] {
+  const structured = Array.isArray(teacher?.subjectNames) ? teacher.subjectNames.filter(name => typeof name === 'string' && name.trim()) : [];
+  const names = structured.length ? structured : (typeof teacher?.mataPelajaran === 'string' ? teacher.mataPelajaran : '').split(/[,;&/]+/);
+  const seen = new Set<string>();
+  return names.filter((name): name is string => typeof name === 'string').map(name => name.trim()).filter(name => {
+    const key = name.toLocaleLowerCase('id-ID');
+    if (!name || name === '-' || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 }
 
 /**
@@ -136,6 +148,7 @@ export type AuditLogModule =
   | 'CATEGORIES'
   | 'SCHEDULES'
   | 'LESSON_SCHEDULES'
+  | 'SUBJECTS'
   | 'ATTENDANCE'
   | 'DUTY_BOOK'
   | 'INCIDENTS'
