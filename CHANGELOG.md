@@ -1,3 +1,15 @@
+## 2026-10-21 — Perbaikan Banner Pembaruan Aplikasi (GitHub → Vercel)
+
+- Identifikasi penyebab notifikasi update tidak muncul: nilai CACHE_VERSION Service Worker tidak otomatis berganti pada deployment baru.
+- Perkenalkan *build stamp* otomatis di `dist/sw.js` via `scripts/stamp_pwa_release.mjs` setelah `vite build`.
+- AppUpdateManager mengecek deployment baru saat fokus, online, tab visible, dan per 15 menit, tetap menunggu persetujuan sebelum reload.
+- Pertahankan tampilan responsif banner dan mekanisme `SKIP_WAITING`.
+- Tambahkan aturan `no-store` untuk `/sw.js` dan `/app-version.json` di Vercel.
+- 15 pemeriksaan simulasi PWA dan type-check terisolasi lulus; lint/build penuh tertahan oleh dependensi npm yang tidak tersedia pada lingkungan pengujian.
+- Tidak ada perubahan pada Firebase, data, aturan akses, atau fitur dashboard lainnya.
+
+---
+
 # CHANGELOG — PIKET GURU
 
 ## [Flash Info Guru Inval] - 2026-10-20

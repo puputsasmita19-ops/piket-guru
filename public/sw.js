@@ -1,5 +1,5 @@
 /**
- * Piket Guru Service Worker v1.4.53 - Offline Resilience, Asset Cache & Controlled Updates
+ * Piket Guru Service Worker - Offline Resilience, Asset Cache & Controlled Updates
  *
  * Key guarantees:
  * 1. Cache assets only from same-origin GET requests; never HTML fallback for scripts, CSS, or APIs.
@@ -8,7 +8,8 @@
  * 4. Automatic cleanup of previous build asset caches on activate without touching user drafts or sync queue.
  */
 
-const CACHE_VERSION = 'v1.4.53';
+// This value is replaced in dist/sw.js by scripts/stamp_pwa_release.mjs on every build.
+const CACHE_VERSION = 'dev-source';
 const STATIC_CACHE_NAME = `piketguru-shell-${CACHE_VERSION}`;
 const ASSET_CACHE_NAME = `piketguru-assets-${CACHE_VERSION}`;
 

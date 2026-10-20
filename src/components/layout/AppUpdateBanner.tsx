@@ -12,6 +12,7 @@ export const AppUpdateBanner: React.FC = () => {
     const unsub = AppUpdateManager.subscribe((updateAvailable, apply) => {
       setHasUpdate(updateAvailable);
       setApplyFn(() => apply);
+      if (updateAvailable) setDismissed(false);
     });
     return () => unsub();
   }, []);
@@ -23,7 +24,7 @@ export const AppUpdateBanner: React.FC = () => {
       <div className="flex items-center gap-2.5 min-w-0">
         <Sparkles className="w-4 h-4 shrink-0 text-amber-300 animate-pulse" />
         <span className="font-semibold truncate">
-          Pembaruan versi aplikasi Piket Guru tersedia.
+          Tersedia update Piket Guru.
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">

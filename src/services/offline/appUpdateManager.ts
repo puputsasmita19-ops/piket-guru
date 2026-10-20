@@ -1,11 +1,9 @@
 /**
- * Piket Guru - App Update Manager (PWA & Service Worker)
+ * Piket Guru - non-interruptive PWA update notification.
  *
- * Coordinates non-intrusive application updates:
- * - Detects new SW waiting in background
- * - Prevents auto-reload while user has unsaved draft inputs or active syncing
- * - Prompts user via clean top toast banner: "Pembaruan aplikasi tersedia"
- * - Dispatches SKIP_WAITING and reloads gracefully once user confirms
+ * The app banner appears only when a NEW service worker has finished installing
+ * and is waiting behind the currently active controller. A new Vercel build
+ * stamps dist/sw.js with a unique release ID (scripts/stamp_pwa_release.mjs).
  */
 
 export interface UpdateManagerListener {
@@ -17,38 +15,43 @@ let isUpdateAvailable = false;
 let waitingWorker: ServiceWorker | null = null;
 let updateApproved = false;
 
+const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+
 export class AppUpdateManager {
-  private static registered = false;
+  private static initialized = false;
+  private static watchedRegistration: ServiceWorkerRegistration | null = null;
+  private static watchedInstallingWorkers = new WeakSet<ServiceWorker>();
 
   public static init(): void {
-    if (this.registered) return;
+    if (this.initialized) return;
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
-    this.registered = true;
+    this.initialized = true;
 
-    navigator.serviceWorker.ready.then((registration) => {
-      // Check if there is already a waiting worker
-      if (registration.waiting) {
-        this.setUpdateAvailable(registration.waiting);
-      }
+    // A new worker can already be waiting on refresh, or can finish installing
+    // later while a user keeps the dashboard open. Observe both situations.
+    void navigator.serviceWorker.ready.then((registration) => {
+      this.watchRegistration(registration);
+      void this.checkForUpdates();
+    }).catch(() => {});
 
-      // Listen for new worker installing
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        if (!newWorker) return;
+    // In particular, watch existing registrations before `ready` resolves.
+    void navigator.serviceWorker.getRegistration().then((registration) => {
+      if (registration) this.watchRegistration(registration);
+    }).catch(() => {});
 
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // New version installed and waiting!
-            this.setUpdateAvailable(newWorker);
-          }
-        });
-      });
-    });
+    // PWA updates are not checked just once at startup: users can leave the
+    // dashboard open while a new GitHub -> Vercel deployment finishes.
+    const checkIfVisible = () => {
+      if (document.visibilityState !== 'hidden') void this.checkForUpdates();
+    };
+    window.addEventListener('focus', checkIfVisible);
+    window.addEventListener('online', checkIfVisible);
+    document.addEventListener('visibilitychange', checkIfVisible);
+    window.setInterval(checkIfVisible, UPDATE_CHECK_INTERVAL_MS);
 
-    // Handle controller change (reloads after skipWaiting)
+    // Only reload after the user explicitly chooses "Perbarui Sekarang".
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // First installation also claims the page; do not reload a live login/form.
       if (updateApproved && !refreshing) {
         refreshing = true;
         window.location.reload();
@@ -56,7 +59,52 @@ export class AppUpdateManager {
     });
   }
 
+  private static watchInstalling(worker: ServiceWorker | null): void {
+    if (!worker || this.watchedInstallingWorkers.has(worker)) return;
+    this.watchedInstallingWorkers.add(worker);
+
+    const onStateChange = () => {
+      // `installed` on first ever PWA visit is NOT an app update.
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+        this.setUpdateAvailable(worker);
+      }
+    };
+    worker.addEventListener('statechange', onStateChange);
+    onStateChange();
+  }
+
+  private static watchRegistration(registration: ServiceWorkerRegistration): void {
+    if (this.watchedRegistration !== registration) {
+      this.watchedRegistration = registration;
+      registration.addEventListener('updatefound', () => {
+        this.watchInstalling(registration.installing);
+      });
+    }
+
+    this.watchInstalling(registration.installing);
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      this.setUpdateAvailable(registration.waiting);
+    }
+  }
+
+  private static async checkForUpdates(): Promise<void> {
+    if (!navigator.onLine) return;
+    try {
+      const registration = this.watchedRegistration ?? await navigator.serviceWorker.getRegistration();
+      if (!registration) return;
+      this.watchRegistration(registration);
+      await registration.update();
+      // Recheck waiting if another tab/update installed the worker just now.
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        this.setUpdateAvailable(registration.waiting);
+      }
+    } catch {
+      // Offline / transient Vercel network errors should not block using Piket Guru.
+    }
+  }
+
   private static setUpdateAvailable(worker: ServiceWorker): void {
+    if (waitingWorker === worker && isUpdateAvailable) return;
     waitingWorker = worker;
     isUpdateAvailable = true;
     this.notify();
@@ -64,31 +112,26 @@ export class AppUpdateManager {
 
   public static subscribe(listener: UpdateManagerListener): () => void {
     listeners.add(listener);
-    if (isUpdateAvailable) {
-      listener(true, () => this.applyUpdate());
-    }
+    if (isUpdateAvailable) listener(true, () => this.applyUpdate());
     return () => listeners.delete(listener);
   }
 
   private static notify(): void {
-    listeners.forEach((cb) => {
+    listeners.forEach((listener) => {
       try {
-        cb(isUpdateAvailable, () => this.applyUpdate());
-      } catch (e) {
-        console.warn('[UPDATE_MGR] Listener error:', e);
+        listener(isUpdateAvailable, () => this.applyUpdate());
+      } catch (error) {
+        console.warn('[UPDATE_MGR] Listener error:', error);
       }
     });
   }
 
-  /**
-   * Apply update safely:
-   * Dispatches SKIP_WAITING to waiting worker.
-   */
   public static applyUpdate(): void {
     if (waitingWorker) {
       updateApproved = true;
       waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     } else {
+      // No waiting worker: a normal refresh should pick up the current build.
       window.location.reload();
     }
   }
