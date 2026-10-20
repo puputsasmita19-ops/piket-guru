@@ -210,7 +210,14 @@ export class OfflineStorage {
           };
 
           request.onsuccess = () => {
-            resolve(request.result);
+            const database = request.result;
+            // A second tab (or a newer app release) can upgrade the schema.
+            // Keep no stale connection: future operations must reopen the DB.
+            database.onversionchange = () => {
+              database.close();
+              this.dbPromise = null;
+            };
+            resolve(database);
           };
 
           request.onerror = () => {
@@ -481,26 +488,42 @@ export class OfflineStorage {
     });
   }
 
-  public static async removeSyncItem(operationId: string, options: { allowSending?: boolean } = {}): Promise<void> {
+  public static async removeSyncItem(operationId: string, options: { allowSending?: boolean; userId?: string } = {}): Promise<void> {
     const busyError = () => new Error('Data sedang dikirim ke server. Harap tunggu hingga pengiriman selesai.');
-    if (!options.allowSending && memoryStore.syncQueue.get(operationId)?.status === 'SENDING') throw busyError();
-    if (this.isIndexedDBSupported) {
-        const db = await this.getDb();
-        await new Promise<void>((resolve, reject) => {
-          const tx = db.transaction('syncQueue', 'readwrite');
-          const store = tx.objectStore('syncQueue');
-          let busy = false;
-          const req = store.get(operationId);
-          req.onsuccess = () => {
-            if (!options.allowSending && req.result?.status === 'SENDING') { busy = true; tx.abort(); }
-            else store.delete(operationId);
-          };
-          tx.oncomplete = () => resolve();
-          tx.onabort = () => reject(busy ? busyError() : tx.error || new Error('Penghapusan antrean lokal dibatalkan.'));
-          tx.onerror = () => reject(tx.error || req.error);
-        });
+    const ownerError = () => new Error('Antrean bukan milik sesi akun atau proyek ini. Penghapusan ditolak.');
+    const allowed = (item?: QueueItem) => {
+      if (!item) return;
+      if (options.userId && (item.userId !== options.userId || item.projectId !== CURRENT_PROJECT_ID)) throw ownerError();
+      if (!options.allowSending && item.status === 'SENDING') throw busyError();
+    };
+    // A public/shared device stores its queue only in memory. Never open a
+    // private persistent DB just to remove an ephemeral item.
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      allowed(memoryStore.syncQueue.get(operationId));
+      memoryStore.syncQueue.delete(operationId);
+      return;
     }
-    memoryStore.syncQueue.delete(operationId);
+    const db = await this.getDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let refusal: unknown;
+      const req = store.get(operationId);
+      req.onsuccess = () => {
+        try {
+          allowed(req.result);
+          if (req.result) store.delete(operationId);
+        } catch (error) { refusal = error; tx.abort(); }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onabort = tx.onerror = () => reject(refusal || tx.error || req.error || new Error('Penghapusan antrean lokal dibatalkan.'));
+    });
+    // A transient memory fallback may contain a different account's entry.
+    // Never remove it just because the persistent copy was removed.
+    const fallback = memoryStore.syncQueue.get(operationId);
+    if (!fallback || !options.userId || (fallback.userId === options.userId && fallback.projectId === CURRENT_PROJECT_ID)) {
+      memoryStore.syncQueue.delete(operationId);
+    }
   }
 
   public static async getSyncItemsByUser(userId: string, options: { strict?: boolean } = {}): Promise<QueueItem[]> {

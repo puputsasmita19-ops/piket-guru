@@ -216,23 +216,22 @@ export class SyncQueueService {
     if (auth.currentUser?.uid !== user.id) throw new Error('Sesi akun telah berubah. Masuk kembali dengan akun pemilik data.');
     const changed = await OfflineStorage.resetSyncItemForRetry(operationId, user.id);
     if (!changed) return;
+    if (auth.currentUser?.uid !== user.id) return;
     await this.refreshStatus(user.id);
-    this.triggerSync(user).catch(() => {});
+    if (auth.currentUser?.uid === user.id) this.triggerSync(user).catch(() => {});
   }
 
   /**
    * Discard an item from the queue
    */
   public static async removeItem(operationId: string, userId: string): Promise<void> {
-    // Prevent removing items currently in flight
-    const items = await OfflineStorage.getSyncItemsByUser(userId);
-    const target = items.find((i) => i.operationId === operationId);
-    if (target && target.status === 'SENDING') {
-      throw new Error('Data sedang dikirim ke server. Harap tunggu hingga pengiriman selesai.');
+    if (!userId || auth.currentUser?.uid !== userId) {
+      throw new Error('Sesi akun telah berubah. Antrean tidak dapat dihapus dari akun lain.');
     }
-
-    await OfflineStorage.removeSyncItem(operationId);
-    await this.refreshStatus(userId);
+    // Ownership and SENDING status must be checked in the same IndexedDB
+    // transaction as deletion, never in a separate (racy) UI read.
+    await OfflineStorage.removeSyncItem(operationId, { userId });
+    if (auth.currentUser?.uid === userId) await this.refreshStatus(userId);
   }
 
   /**
@@ -296,12 +295,31 @@ export class SyncQueueService {
   }> {
     const owner = `${Date.now()}:${Math.random()}`;
     if (!await OfflineStorage.syncLease(currentUser.id, owner)) return { processed: 0, succeeded: 0, failed: 0 };
-    const heartbeat = setInterval(() => { void OfflineStorage.syncLease(currentUser.id, owner).then(owned => { if (!owned && syncEpoch === epoch) isSyncCancelled = true; }).catch(() => { if (syncEpoch === epoch) isSyncCancelled = true; }); }, 10000);
+    let stopping = false;
+    let heartbeatInFlight: Promise<void> = Promise.resolve();
+    const heartbeat = setInterval(() => {
+      // Serialise renewals, and wait for an in-flight renewal before releasing.
+      // Otherwise a delayed renewal could resurrect a released 90-second lock.
+      heartbeatInFlight = heartbeatInFlight.then(async () => {
+        if (stopping) return;
+        try {
+          const owned = await OfflineStorage.syncLease(currentUser.id, owner);
+          if (!owned && syncEpoch === epoch) isSyncCancelled = true;
+        } catch {
+          if (syncEpoch === epoch) isSyncCancelled = true;
+        }
+      });
+    }, 10000);
     try {
       if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
       return await this.runSyncProcess(currentUser, epoch);
     }
-    finally { clearInterval(heartbeat); await OfflineStorage.syncLease(currentUser.id, owner, true).catch(() => {}); }
+    finally {
+      stopping = true;
+      clearInterval(heartbeat);
+      await heartbeatInFlight;
+      await OfflineStorage.syncLease(currentUser.id, owner, true).catch(() => {});
+    }
   }
 
   private static async runSyncProcess(currentUser: UserProfile, epoch: number): Promise<{
@@ -383,7 +401,7 @@ export class SyncQueueService {
           // 5. Execute operation idempotently
           await this.executeOperation(item, currentUser);
 
-          await OfflineStorage.removeSyncItem(item.operationId, { allowSending: true });
+          await OfflineStorage.removeSyncItem(item.operationId, { allowSending: true, userId: currentUser.id });
           succeeded++;
           lastSuccessfulSyncAt = new Date().toISOString();
         } catch (err: any) {
