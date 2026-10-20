@@ -16,7 +16,6 @@ import { SchoolSettings, DayOfWeek } from '../../types';
 import {
   LessonPeriodItem,
   getDayOfWeekFromDate,
-  getPeriodsForDay,
   formatSelectedPeriodsDisplay,
 } from '../../types/period.types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -49,8 +48,11 @@ import {
   Check,
 } from '../../components/icons';
 import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
+import { getTeachingPeriods, isLessonScheduleDay, lessonAppliesOn, teacherLessonsForDate, type LessonScheduleDay } from '../../types/lessonSchedule.types';
 
 interface TeacherAssignmentEntry {
+  sourceLessonScheduleId?: string;
+  sourceLessonScheduleRevision?: string;
   assignmentId: string;
   mataPelajaran: string;
   kelas: string;
@@ -119,6 +121,10 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [classesError, setClassesError] = useState<string | null>(null);
+  const [lessonSource, setLessonSource] = useState<{ key: string; data: LessonScheduleDay | null }>({ key: '', data: null });
+  const [lessonError, setLessonError] = useState('');
+  const [lessonReloadTeacher, setLessonReloadTeacher] = useState<TeacherRecord | null>(null);
+  const [lessonNotice, setLessonNotice] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -145,7 +151,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   }, [isOpen]);
 
   // Daftar kelas unik dari siswa aktif
-  const activeClasses = useMemo(() => {
+  const studentClasses = useMemo(() => {
     const activeStudents = students.filter(
       (s) => s.isActive !== false && s.kelas && s.kelas.trim() !== ''
     );
@@ -207,8 +213,40 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
   }, [tanggal]);
 
   const availablePeriodsForDay: LessonPeriodItem[] = useMemo(() => {
-    return getPeriodsForDay(settings?.lessonPeriodConfig, dayOfWeek);
-  }, [settings?.lessonPeriodConfig, dayOfWeek]);
+    if (editingSubstitution?.tanggal === tanggal && editingSubstitution.periodSnapshot?.length) {
+      return editingSubstitution.periodSnapshot.map(p => ({ id: `history-${p.periodNumber}`, periodNumber: p.periodNumber, startTime: p.startTime, endTime: p.endTime, days: [dayOfWeek], isActive: true }));
+    }
+    return getTeachingPeriods(settings?.lessonPeriodConfig, dayOfWeek, tanggal);
+  }, [settings?.lessonPeriodConfig, dayOfWeek, tanggal, editingSubstitution]);
+
+  const lessonKey = `${currentUser?.id || ''}:${dayOfWeek}`;
+  const lessonDay = lessonSource.key === lessonKey ? lessonSource.data : null;
+  const isLoadingLessons = lessonSource.key !== lessonKey && !lessonError;
+  useEffect(() => {
+    if (!isOpen || !currentUser?.id) return;
+    let active = true;
+    setLessonSource({ key: '', data: null }); setLessonError('');
+    const stop = FirestoreService.subscribeToDocument<LessonScheduleDay>('lessonSchedules', dayOfWeek, data => {
+      if (active) {
+        if (data && (!isLessonScheduleDay(data) || data.id !== dayOfWeek)) { setLessonSource({ key: '', data: null }); setLessonError('Format master jadwal perlu diperiksa admin. Gunakan isian manual untuk sementara.'); return; }
+        setLessonSource({ key: lessonKey, data: data || null }); setLessonError('');
+      }
+    }, () => { if (active) { setLessonSource({ key: '', data: null }); setLessonError('Master jadwal belum dapat dimuat. Anda tetap dapat mengisi kelas, mapel, dan JP secara manual.'); } });
+    return () => { active = false; stop(); };
+  }, [isOpen, lessonKey]);
+  const activeClasses = useMemo(() => [...new Set([...studentClasses, ...(lessonDay?.entries || []).filter(e => lessonAppliesOn(e, tanggal)).map(e => e.className)])].sort((a, b) => a.localeCompare(b, 'id', { numeric: true })), [studentClasses, lessonDay, tanggal]);
+
+  const assignmentsFromMaster = (teacher: TeacherRecord, previous: TeacherAssignmentEntry[] = []): TeacherAssignmentEntry[] => {
+    const matches = teacherLessonsForDate(lessonDay, teacher.id, tanggal, settings?.lessonPeriodConfig);
+    const make = (row?: (typeof matches)[number]): TeacherAssignmentEntry => {
+      const old = previous.find(a => a.sourceLessonScheduleId === row?.id) || previous[0];
+      return { assignmentId: `asg-${crypto.randomUUID()}`, mataPelajaran: row?.subject || parseTeacherSubjectSuggestions(teacher.mataPelajaran)[0] || '', kelas: row?.className || '', selectedPeriodNumbers: row ? [...row.periodNumbers] : [],
+        sourceLessonScheduleId: row?.id, sourceLessonScheduleRevision: row?.updatedAt,
+        alasan: old?.alasan || sharedAlasan, keteranganAlasan: old?.keteranganAlasan || sharedKeteranganAlasan, isCustomReason: old?.isCustomReason || false,
+        guruPenggantiId: old?.guruPenggantiId || '', guruPenggantiName: old?.guruPenggantiName || '', materiDanTugasSiswa: old?.materiDanTugasSiswa || sharedMateriTugas, catatanPiket: old?.catatanPiket || sharedCatatanPiket };
+    };
+    return matches.length ? matches.map(make) : [make()];
+  };
 
   const isPeriodConfigured = Boolean(
     settings?.lessonPeriodConfig &&
@@ -242,6 +280,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
     setIsSummaryModalOpen(false);
     setIsResultModalOpen(false);
     setBatchResults([]);
+    setLessonReloadTeacher(null); setLessonNotice('');
 
     if (editingSubstitution) {
       // MODE EDIT TUNGGAL: Isi dengan data yang sedang diedit
@@ -282,6 +321,8 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
           assignments: [
             {
               assignmentId: `asg-${editingSubstitution.id}`,
+              sourceLessonScheduleId: editingSubstitution.sourceLessonScheduleId,
+              sourceLessonScheduleRevision: editingSubstitution.sourceLessonScheduleRevision,
               mataPelajaran: editingSubstitution.mataPelajaran || '',
               kelas: editingSubstitution.kelas || '',
               selectedPeriodNumbers: initialPeriods,
@@ -337,28 +378,10 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
       return;
     }
 
-    // Ambil saran mapel pertama dari master guru jika tersedia
-    const suggestions = parseTeacherSubjectSuggestions(teacher.mataPelajaran);
-    const initialMapel = suggestions.length > 0 ? suggestions[0] : '';
-
     const newEntry: SelectedTeacherEntry = {
       teacher,
       isExpanded: true,
-      assignments: [
-        {
-          assignmentId: `asg-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-          mataPelajaran: initialMapel,
-          kelas: activeClasses.length > 0 ? activeClasses[0] : '',
-          selectedPeriodNumbers: availablePeriodsForDay.length > 0 ? [availablePeriodsForDay[0].periodNumber] : [],
-          alasan: sharedAlasan,
-          keteranganAlasan: sharedKeteranganAlasan,
-          isCustomReason: false,
-          guruPenggantiId: '',
-          guruPenggantiName: '',
-          materiDanTugasSiswa: sharedMateriTugas,
-          catatanPiket: sharedCatatanPiket,
-        },
-      ],
+      assignments: assignmentsFromMaster(teacher),
     };
 
     setSelectedTeachers((prev) => [...prev, newEntry]);
@@ -396,7 +419,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
         const newAssignment: TeacherAssignmentEntry = {
           assignmentId: `asg-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
           mataPelajaran: defaultMapel,
-          kelas: activeClasses.length > 0 ? activeClasses[0] : '',
+          kelas: '',
           selectedPeriodNumbers: [],
           alasan: sharedAlasan,
           keteranganAlasan: sharedKeteranganAlasan,
@@ -442,7 +465,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
         return {
           ...entry,
           assignments: entry.assignments.map((a) =>
-            a.assignmentId === assignmentId ? { ...a, ...updates } : a
+            a.assignmentId === assignmentId ? { ...a, ...updates, ...(('kelas' in updates || 'mataPelajaran' in updates || 'selectedPeriodNumbers' in updates) ? { sourceLessonScheduleId: undefined, sourceLessonScheduleRevision: undefined } : {}) } : a
           ),
         };
       })
@@ -469,6 +492,8 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
             return {
               ...a,
               selectedPeriodNumbers: updated,
+              sourceLessonScheduleId: undefined,
+              sourceLessonScheduleRevision: undefined,
             };
           }),
         };
@@ -539,6 +564,15 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
     for (const entry of selectedTeachers) {
       for (let i = 0; i < entry.assignments.length; i++) {
         const a = entry.assignments[i];
+        if (!editingSubstitution && a.sourceLessonScheduleId) {
+          const source = teacherLessonsForDate(lessonDay, entry.teacher.id, tanggal, settings?.lessonPeriodConfig).find(e => e.id === a.sourceLessonScheduleId);
+          if (isLoadingLessons || lessonError || !source || source.updatedAt !== a.sourceLessonScheduleRevision) {
+            setErrorMessage(`Jadwal ${entry.teacher.fullName} sudah berubah atau belum terverifikasi. Muat jadwal terbaru atau pilih Ubah Manual pada rincian ini.`);
+            return false;
+          }
+        }
+        if (!a.mataPelajaran.trim() || !a.kelas.trim()) { setErrorMessage(`Lengkapi mata pelajaran dan kelas untuk ${entry.teacher.fullName}.`); return false; }
+        if (a.selectedPeriodNumbers.some(n => !availablePeriodsForDay.some(p => p.periodNumber === n))) { setErrorMessage('Ada JP yang tidak tersedia pada tanggal terpilih. Pilih ulang JP yang berlaku.'); return false; }
 
         if (!a.mataPelajaran || !a.mataPelajaran.trim()) {
           setErrorMessage(
@@ -592,7 +626,8 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
 
   // Eksekusi penyimpanan ke Firestore
   const handleConfirmSave = async () => {
-    if (!currentUser) return;
+    if (!currentUser || isSubmitting) return;
+    if (!validateFormBeforeSubmit()) { setIsSummaryModalOpen(false); return; }
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -621,7 +656,9 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
           jamPelajaran: periodsDisplay.combinedDisplay,
           selectedPeriodNumbers: singleAssignment.selectedPeriodNumbers,
           periodSnapshot: periodsDisplay.snapshots,
-          sourceClassOrigin: 'Data Siswa Aktif',
+          sourceClassOrigin: singleAssignment.sourceLessonScheduleId ? 'Master Jadwal Pelajaran' : 'Isian Manual',
+          sourceLessonScheduleId: singleAssignment.sourceLessonScheduleId,
+          sourceLessonScheduleRevision: singleAssignment.sourceLessonScheduleRevision,
           guruPenggantiId: singleAssignment.guruPenggantiId || undefined,
           guruPenggantiName: singleAssignment.guruPenggantiName || undefined,
           materiDanTugasSiswa: singleAssignment.materiDanTugasSiswa.trim(),
@@ -660,7 +697,9 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
             jamPelajaran: periodsDisplay.combinedDisplay,
             selectedPeriodNumbers: a.selectedPeriodNumbers,
             periodSnapshot: periodsDisplay.snapshots,
-            sourceClassOrigin: 'Data Siswa Aktif',
+            sourceClassOrigin: a.sourceLessonScheduleId ? 'Master Jadwal Pelajaran' : 'Isian Manual',
+            sourceLessonScheduleId: a.sourceLessonScheduleId,
+            sourceLessonScheduleRevision: a.sourceLessonScheduleRevision,
             guruPenggantiId: a.guruPenggantiId || undefined,
             guruPenggantiName: a.guruPenggantiName || undefined,
             materiDanTugasSiswa: a.materiDanTugasSiswa.trim(),
@@ -698,6 +737,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
 
   // Retry hanya untuk penugasan yang gagal
   const handleRetryFailedItems = async () => {
+    if (!validateFormBeforeSubmit()) { setIsResultModalOpen(false); return; }
     if (!currentUser) return;
     const failedResults = batchResults.filter((r) => !r.success);
     if (failedResults.length === 0) return;
@@ -737,7 +777,9 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
               jamPelajaran: periodsDisplay.combinedDisplay,
               selectedPeriodNumbers: a.selectedPeriodNumbers,
               periodSnapshot: periodsDisplay.snapshots,
-              sourceClassOrigin: 'Data Siswa Aktif',
+              sourceClassOrigin: a.sourceLessonScheduleId ? 'Master Jadwal Pelajaran' : 'Isian Manual',
+              sourceLessonScheduleId: a.sourceLessonScheduleId,
+              sourceLessonScheduleRevision: a.sourceLessonScheduleRevision,
               guruPenggantiId: a.guruPenggantiId || undefined,
               guruPenggantiName: a.guruPenggantiName || undefined,
               materiDanTugasSiswa: a.materiDanTugasSiswa.trim(),
@@ -817,6 +859,9 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
             </div>
           </div>}>
           {daySubsError && <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{daySubsError}</p>}
+          {lessonError && <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{lessonError}</p>}
+          {isLoadingLessons && <p className="text-xs text-slate-500">Memuat master jadwal mengajar…</p>}
+          {lessonNotice && <p role="status" className="text-xs text-slate-600 dark:text-slate-300">{lessonNotice}</p>}
           {/* TOP ERROR MESSAGE */}
           {errorMessage && (
             <div role="alert" tabIndex={-1} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-2.5">
@@ -877,7 +922,13 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                   type="date"
                   required
                   value={tanggal}
-                  onChange={(e) => setTanggal(e.target.value)}
+                  onChange={(e) => {
+                    setTanggal(e.target.value);
+                    if (selectedTeachers.length) {
+                      setSelectedTeachers(prev => prev.map(entry => ({ ...entry, assignments: entry.assignments.map(a => ({ ...a, kelas: '', mataPelajaran: '', selectedPeriodNumbers: [], sourceLessonScheduleId: undefined, sourceLessonScheduleRevision: undefined })) })));
+                      setLessonNotice('Tanggal berubah. Muat jadwal mengajar untuk tanggal ini atau lengkapi kembali kelas, mapel, dan JP. Tugas serta catatan tetap disimpan.');
+                    }
+                  }}
                   className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
@@ -990,6 +1041,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                             key={t.id}
                             type="button"
                             onClick={() => handleSelectTeacher(t)}
+                            disabled={isLoadingLessons}
                             className="w-full p-3 text-left hover:bg-blue-50/70 dark:hover:bg-blue-950/40 flex items-center justify-between gap-3 transition-colors cursor-pointer"
                           >
                             <div>
@@ -1132,6 +1184,10 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                     {/* DAFTAR PENUGASAN UNTUK GURU INI (HANYA DITAMPILKAN JIKA EXPANDED) */}
                     {st.isExpanded && (
                       <>
+                        {!editingSubstitution && <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-slate-500">{teacherLessonsForDate(lessonDay, st.teacher.id, tanggal, settings?.lessonPeriodConfig).length} jadwal mengajar sesuai tanggal ini.</span>
+                          <Button type="button" variant="outline" size="sm" className="min-h-11" aria-label={`Muat jadwal ${st.teacher.fullName}`} disabled={isLoadingLessons || !!lessonError || !teacherLessonsForDate(lessonDay, st.teacher.id, tanggal, settings?.lessonPeriodConfig).length} onClick={() => setLessonReloadTeacher(st.teacher)}>Muat Jadwal Mengajar</Button>
+                        </div>}
                         <div className="space-y-4 pt-1">
                       {st.assignments.map((assignment, asgIdx) => {
                         const conflictWarning = getSubstituteConflictWarning(
@@ -1167,6 +1223,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                             </div>
 
                             {/* Grid Mapel & Kelas */}
+                            {assignment.sourceLessonScheduleId && <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><span>Dari Master Jadwal Pelajaran</span><button type="button" className="underline min-h-11 px-2" onClick={() => handleUpdateAssignment(st.teacher.id, assignment.assignmentId, { sourceLessonScheduleId: undefined, sourceLessonScheduleRevision: undefined })}>Ubah Manual</button></div>}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {/* Mata Pelajaran */}
                               <div>
@@ -1175,6 +1232,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                 </label>
                                 <input
                                   type="text"
+                                  aria-label={`Mata pelajaran ${st.teacher.fullName} ${asgIdx + 1}`}
                                   required
                                   value={assignment.mataPelajaran}
                                   onChange={(e) =>
@@ -1213,15 +1271,15 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                     Kelas yang Ditinggalkan *
                                   </label>
                                   <span className="text-[10px] text-slate-400 font-mono">
-                                    Sumber: Data Siswa Aktif
+                                    Sumber: Siswa & Jadwal Pelajaran
                                   </span>
                                 </div>
 
-                                {isLoadingClasses ? (
+                                {isLoadingClasses && activeClasses.length === 0 ? (
                                   <div className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-400">
                                     Memuat daftar kelas aktif...
                                   </div>
-                                ) : classesError ? (
+                                ) : classesError && activeClasses.length === 0 ? (
                                   <div className="p-2 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-700">
                                     {classesError}
                                   </div>
@@ -1232,6 +1290,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                 ) : (
                                   <select
                                     required
+                                    aria-label={`Kelas ${st.teacher.fullName} ${asgIdx + 1}`}
                                     value={assignment.kelas}
                                     onChange={(e) =>
                                       handleUpdateAssignment(st.teacher.id, assignment.assignmentId, {
@@ -1288,6 +1347,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                         <button
                                           key={p.id}
                                           type="button"
+                                          aria-pressed={isSelected}
                                           onClick={() =>
                                             handleTogglePeriod(
                                               st.teacher.id,
@@ -1610,6 +1670,14 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
             )}
           </div>
         </div>
+      </Modal>
+      <Modal isOpen={!!lessonReloadTeacher} onClose={() => setLessonReloadTeacher(null)} title="Muat Jadwal Mengajar Terbaru" maxWidth="sm">
+        <div className="space-y-4"><p className="text-sm">Rincian kelas, mata pelajaran, dan JP untuk {lessonReloadTeacher?.fullName} akan diganti sesuai tanggal {tanggal}. Periksa kembali tugas dan guru penggantinya sebelum menyimpan.</p><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setLessonReloadTeacher(null)}>Batal</Button><Button type="button" disabled={isLoadingLessons || !!lessonError} onClick={() => {
+          if (!lessonReloadTeacher || !teacherLessonsForDate(lessonDay, lessonReloadTeacher.id, tanggal, settings?.lessonPeriodConfig).length) { setLessonReloadTeacher(null); return; }
+          const teacher = lessonReloadTeacher;
+          setSelectedTeachers(prev => prev.map(entry => entry.teacher.id === teacher.id ? { ...entry, assignments: assignmentsFromMaster(teacher, entry.assignments), isExpanded: true } : entry));
+          setLessonReloadTeacher(null); setLessonNotice('Jadwal terbaru dimuat. Periksa rincian dan lengkapi tugas siswa.'); setErrorMessage(null);
+        }}>Muat Jadwal Terbaru</Button></div></div>
       </Modal>
     </>
   );

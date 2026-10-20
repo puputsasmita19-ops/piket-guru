@@ -1,4 +1,5 @@
 import { FirestoreService } from '../firebase/firestoreService';
+import { isLessonScheduleDay } from '../../types/lessonSchedule.types';
 import { UserProfile, UserRole } from '../../types';
 
 export interface BackupManifest {
@@ -31,6 +32,7 @@ export interface BackupPayload extends BackupManifest {
     rooms: any[];
     incidentCategories: any[];
     schedules: any[];
+    lessonSchedules?: any[];
     attendance: any[];
     dutyBooks: any[];
     incidents: any[];
@@ -64,6 +66,7 @@ export const ALLOWED_RESTORE_COLLECTIONS = new Set([
   'rooms',
   'incidentCategories',
   'schedules',
+  'lessonSchedules',
   'attendance',
   'dutyBooks',
   'incidents',
@@ -190,12 +193,12 @@ export function stripCredentialsDeep<T extends Record<string, any>>(obj: T): T {
 
 export class BackupService {
   /**
-   * Generates a complete sanitized JSON snapshot of all 20 operational Firestore collections.
+   * Generates a complete sanitized JSON snapshot of all 21 operational Firestore collections.
    * Uses getAllStrict: fails closed if any mandatory operational collection cannot be read.
    * Strips all credential fields (including scryptHash) and verifies absence before setting credentialsIncluded: false.
    */
   public static async createFullBackup(adminUser: UserProfile): Promise<BackupPayload> {
-    // 1. Strictly fetch all 20 operational collections. Throws immediately on error.
+    // 1. Strictly fetch all 21 operational collections. Throws immediately on error.
     const [
       users,
       teachers,
@@ -203,6 +206,7 @@ export class BackupService {
       rooms,
       incidentCategories,
       schedules,
+      lessonSchedules,
       attendance,
       dutyBooks,
       incidents,
@@ -224,6 +228,7 @@ export class BackupService {
       FirestoreService.getAllStrict('rooms'),
       FirestoreService.getAllStrict('incidentCategories'),
       FirestoreService.getAllStrict('schedules'),
+      FirestoreService.getAllStrict('lessonSchedules'),
       FirestoreService.getAllStrict('attendance'),
       FirestoreService.getAllStrict('dutyBooks'),
       FirestoreService.getAllStrict('incidents'),
@@ -269,6 +274,7 @@ export class BackupService {
       rooms: stripCredentialsDeep(rooms),
       incidentCategories: stripCredentialsDeep(incidentCategories),
       schedules: stripCredentialsDeep(schedules),
+      lessonSchedules: stripCredentialsDeep(lessonSchedules),
       attendance: stripCredentialsDeep(attendance),
       dutyBooks: stripCredentialsDeep(dutyBooks),
       incidents: stripCredentialsDeep(incidents),
@@ -403,6 +409,9 @@ export class BackupService {
       const idSet = new Set<string>();
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
+        if (col === 'lessonSchedules' && !isLessonScheduleDay(item)) {
+          return { isValid: false, error: `Format master jadwal pelajaran pada record #${i} tidak valid.` };
+        }
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
           return {
             isValid: false,

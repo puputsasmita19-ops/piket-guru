@@ -42,8 +42,10 @@ import { UserRole, SchoolSettings } from '../../types';
 import { ROLE_LABELS, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 import { AuditForensicViewer } from '../settings/AuditForensicViewer';
+import { LessonSchedulesPanel } from './LessonSchedulesPanel';
+import { Calendar } from '../../components/icons';
 
-type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'audit';
+type MasterTab = 'teachers' | 'staff' | 'students' | 'rooms' | 'categories' | 'lessonSchedules' | 'audit';
 
 export const MasterDataTabs: React.FC = () => {
   const { currentUser } = useAuth();
@@ -561,6 +563,7 @@ export const MasterDataTabs: React.FC = () => {
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin border-b border-slate-200 dark:border-slate-800 w-full">
         {[
           { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
+          { id: 'lessonSchedules', label: 'Jadwal Pelajaran', icon: Calendar },
           { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: staffList.length },
           { id: 'students', label: 'Data Siswa', icon: Users, count: students.length },
           { id: 'rooms', label: 'Ruangan & Pos Piket', icon: Building2, count: rooms.length },
@@ -584,18 +587,18 @@ export const MasterDataTabs: React.FC = () => {
             >
               <Icon className="w-4 h-4 shrink-0" />
               <span>{tab.label}</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              {tab.count !== undefined && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 isActive ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)]' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
               }`}>
                 {tab.count}
-              </span>
+              </span>}
             </button>
           );
         })}
       </div>
 
-      {/* Search Bar */}
-      <Card>
+      {/* The timetable owns its own day and search filters. */}
+      {activeTab !== 'lessonSchedules' && <Card>
         <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="relative w-full max-w-md">
@@ -610,7 +613,9 @@ export const MasterDataTabs: React.FC = () => {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
+
+      {activeTab === 'lessonSchedules' && <LessonSchedulesPanel teachers={teachers} students={students} />}
 
       {/* TAB 1: TEACHERS */}
       {activeTab === 'teachers' && (

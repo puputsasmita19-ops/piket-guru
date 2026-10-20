@@ -4,8 +4,14 @@
       "collectionGroup": "announcements",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "isActive", "order": "ASCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
@@ -191,6 +197,11 @@
     {
       "collectionGroup": "database_snapshots_chunks",
       "fieldPath": "data",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "lessonSchedules",
+      "fieldPath": "entries",
       "indexes": []
     }
   ]

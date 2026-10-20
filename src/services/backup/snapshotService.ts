@@ -97,6 +97,7 @@ export class SnapshotService {
       rooms: fullBackup.data.rooms?.length || 0,
       incidentCategories: fullBackup.data.incidentCategories?.length || 0,
       schedules: fullBackup.data.schedules?.length || 0,
+      lessonSchedules: fullBackup.data.lessonSchedules?.length || 0,
       attendance: fullBackup.data.attendance?.length || 0,
       dutyBooks: fullBackup.data.dutyBooks?.length || 0,
       incidents: fullBackup.data.incidents?.length || 0,

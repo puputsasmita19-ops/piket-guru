@@ -60,6 +60,8 @@ export interface TeacherSubstitutionRecord extends BaseEntityMetadata {
   selectedPeriodNumbers?: number[]; // [1, 2]
   periodSnapshot?: PeriodScheduleSnapshot[]; // Snapshot JP dan waktunya agar riwayat lama tidak berubah otomatis
   sourceClassOrigin?: string; // e.g. "Data Siswa Aktif"
+  sourceLessonScheduleId?: string;
+  sourceLessonScheduleRevision?: string;
   guruPenggantiId?: string;
   guruPenggantiName?: string; // Guru inval yang ditugaskan (opsional)
   materiDanTugasSiswa: string; // Tugas atau instruksi yang ditinggalkan

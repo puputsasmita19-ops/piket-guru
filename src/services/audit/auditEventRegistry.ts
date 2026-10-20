@@ -24,6 +24,10 @@ export interface AuditStatusMeta {
 }
 
 export const AUDIT_MODULE_REGISTRY: Record<AuditLogModule, AuditModuleMeta> = {
+  LESSON_SCHEDULES: {
+    id: 'LESSON_SCHEDULES', label: 'Master Jadwal Pelajaran', category: 'MASTER',
+    description: 'Jadwal mengajar mingguan guru, kelas, mata pelajaran, dan JP untuk pengisian inval.',
+  },
   USERS: {
     id: 'USERS',
     label: 'Master Pengguna & Akun',
@@ -280,7 +284,7 @@ export function normalizeAuditStatus(status?: string | null): 'SUCCESS' | 'FAILE
  */
 export function normalizeAuditModule(module: string): string {
   const key = String(module || '').toUpperCase();
-  const aliases: Record<string, string> = { DUTYBOOKS: 'DUTY_BOOK', DUTYBOOK: 'DUTY_BOOK', STUDENTTARDINESS: 'TARDINESS', STUDENTPERMITS: 'PERMITS', INCIDENTCATEGORIES: 'CATEGORIES' };
+  const aliases: Record<string, string> = { LESSONSCHEDULES: 'LESSON_SCHEDULES', DUTYBOOKS: 'DUTY_BOOK', DUTYBOOK: 'DUTY_BOOK', STUDENTTARDINESS: 'TARDINESS', STUDENTPERMITS: 'PERMITS', INCIDENTCATEGORIES: 'CATEGORIES' };
   return aliases[key] || key;
 }
 

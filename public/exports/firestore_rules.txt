@@ -88,6 +88,29 @@ service cloud.firestore {
       return !data.keys().hasAny(['pin', 'pinHash', 'pinSalt', 'scryptHash', 'hashedPin', 'password', 'token', 'secret', 'credential', 'authSecret', 'privateKey']);
     }
 
+    // Lightweight activity summaries. Private AUTH entries are written only by Admin SDK.
+    match /notificationEvents/{eventId} {
+      allow read: if isValidActiveUser() && (
+        resource.data.scope == 'SCHOOL' ||
+        (resource.data.scope == 'USER' && resource.data.actorId == request.auth.uid)
+      );
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasOnly(['id', 'scope', 'actorId', 'actorName', 'module', 'action', 'createdAt']) &&
+        request.resource.data.keys().hasAll(['id', 'scope', 'actorId', 'actorName', 'module', 'action', 'createdAt']) &&
+        request.resource.data.id == eventId &&
+        request.resource.data.scope == 'SCHOOL' &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.actorName is string && request.resource.data.actorName.size() <= 160 &&
+        request.resource.data.actorName == getUserData(request.auth.uid).get('fullName', 'Petugas') &&
+        request.resource.data.module in ['ATTENDANCE', 'DUTY_BOOK', 'TARDINESS', 'PERMITS', 'SUBSTITUTIONS', 'VISITORS', 'INCIDENTS', 'SCHEDULES'] &&
+        request.resource.data.action in ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'ATTENDANCE', 'IMPORT', 'CHECK_IN', 'CHECK_OUT', 'VERIFY', 'UNLOCK'] &&
+        request.resource.data.createdAt is string && request.resource.data.createdAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z');
+      // A retry cannot edit somebody else's event, message, action, or timestamp.
+      allow update: if isStaff() && resource.data.scope == 'SCHOOL' &&
+        resource.data.actorId == request.auth.uid && request.resource.data == resource.data;
+      allow delete: if false;
+    }
+
     // -------------------------------------------------------------
     // 1. SETTINGS & CONFIGURATION
     // -------------------------------------------------------------
@@ -139,7 +162,9 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /users/{userId} {
       // Unauthenticated reads strictly forbidden
-      allow read: if isValidActiveUser();
+      // Authenticated users can read their own profile (or test presence if unprovisioned)
+      // and valid active users can read other profiles for rosters/directories.
+      allow read: if (isOwner(userId) && (!userExists(userId) || isValidActiveUser())) || isValidActiveUser();
 
       // Creation only by Admin, without credential fields, ID matching
       allow create: if isAdmin() &&
@@ -171,7 +196,7 @@ service cloud.firestore {
         isOwner(userId) &&
         hasNoCredentials(request.resource.data) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'fullName', 'phone', 'email', 'avatarUrl', 'updatedAt'
+          'fullName', 'phone', 'email', 'updatedAt'
         ])
       );
 
@@ -424,6 +449,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Weekly lesson master: only seven day documents; no public or staff writes.
+    match /lessonSchedules/{dayId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isAdmin() &&
+        dayId in ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'] &&
+        request.resource.data.id == dayId &&
+        request.resource.data.entries is list && request.resource.data.entries.size() <= 500;
+      allow delete: if isAdmin();
+    }
+
     match /substitutions/{subId} {
       allow read: if isValidActiveUser();
       allow create, update: if isStaff();
@@ -432,7 +467,16 @@ service cloud.firestore {
 
     match /studentTardiness/{tardyId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      allow create: if isStaff();
+      // Admin can update all fields including correction; non-admin staff can only update standard records without altering admin correction fields
+      allow update: if isValidActiveUser() && (
+        isAdmin() ||
+        (
+          isStaff() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isCorrectedByAdmin', 'adminCorrection', 'menitTerlambatAsli']) &&
+          resource.data.get('isCorrectedByAdmin', false) == false
+        )
+      );
       allow delete: if isAdmin();
     }
 
@@ -450,7 +494,12 @@ service cloud.firestore {
 
     match /announcements/{annId} {
       allow read: if isValidActiveUser();
-      allow write: if isAdmin() || isKepalaSekolah();
+      allow create, delete: if isAdmin() || isKepalaSekolah();
+      // Enforce the admin's edit switch for older clients as well as the current UI.
+      allow update: if (isAdmin() || isKepalaSekolah()) &&
+        (!exists(/databases/$(database)/documents/settings/school_config) ||
+          get(/databases/$(database)/documents/settings/school_config).data.get('announcementConfig', {}).get('allowPublishedEditing', true) == true) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['authorName', 'authorRole', 'createdAt', 'createdBy', 'date']);
     }
 
     // -------------------------------------------------------------

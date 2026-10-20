@@ -135,6 +135,7 @@ export type AuditLogModule =
   | 'ROOMS'
   | 'CATEGORIES'
   | 'SCHEDULES'
+  | 'LESSON_SCHEDULES'
   | 'ATTENDANCE'
   | 'DUTY_BOOK'
   | 'INCIDENTS'

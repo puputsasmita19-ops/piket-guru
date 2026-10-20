@@ -449,6 +449,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Weekly lesson master: only seven day documents; no public or staff writes.
+    match /lessonSchedules/{dayId} {
+      allow read: if isValidActiveUser();
+      allow create, update: if isAdmin() &&
+        dayId in ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'] &&
+        request.resource.data.id == dayId &&
+        request.resource.data.entries is list && request.resource.data.entries.size() <= 500;
+      allow delete: if isAdmin();
+    }
+
     match /substitutions/{subId} {
       allow read: if isValidActiveUser();
       allow create, update: if isStaff();

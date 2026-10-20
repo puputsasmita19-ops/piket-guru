@@ -133,7 +133,9 @@ export class SubstitutionService {
       };
 
       session.assertActive();
-      await FirestoreService.setDocument('substitutions', existing.id, updated, { expectedState: existing });
+      // Full snapshot already includes existing fields. Replace it so an edit
+      // switched to manual input can remove its previous lesson-source metadata.
+      await FirestoreService.setDocument('substitutions', existing.id, updated, { controlledReplace: true, expectedState: existing });
       await FirestoreService.logAudit({
         userId: user.id,
         userName: user.fullName,
