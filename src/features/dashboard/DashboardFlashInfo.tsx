@@ -7,7 +7,18 @@ export interface DashboardFlashSlide {
   id: DashboardInfoPanel | 'activity';
   title: string;
   icon: React.ComponentType<{ className?: string }>;
-  items: { id: string; title: string; detail?: string; reason?: string; assignment?: string; task?: string }[];
+  items: {
+    id: string;
+    title: string;
+    detail?: string;
+    absentTeacher?: string;
+    subjectAndClass?: string;
+    lessonPeriod?: string;
+    reason?: string;
+    replacementTeacher?: string;
+    assignmentStatus?: string;
+    task?: string;
+  }[];
   emptyText: string;
   description?: string;
   caption?: string;
@@ -134,7 +145,38 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
               <h2><Icon className="w-4 h-4 shrink-0" /><span>{item.title}</span></h2>
               {item.caption && <p className="flash-slide-caption">{item.caption}</p>}
               <div className="flash-content">{item.items.length ? <>
-                <ul className={item.id === 'operations' ? 'flash-operations-list' : 'flash-preview-list'}>{item.items.slice(0, item.id === 'announcements' || item.id === 'substitutions' ? 1 : 3).map(row => <li key={row.id} data-info-id={row.id}><p className="flash-item-title">{item.id === 'announcements' ? announcementPreview(row.title, 120) : row.title}</p>{row.detail && <p className="flash-item-detail">{item.id === 'announcements' ? announcementPreview(row.detail) : row.detail}</p>}{row.reason && <p className="flash-inval-reason" title={row.reason}>{announcementPreview(row.reason, 130)}</p>}{row.assignment && <p className="flash-inval-assignment">{row.assignment}</p>}{row.task && <p className="flash-inval-task">{announcementPreview(row.task, 160)}</p>}</li>)}</ul>
+                <ul className={item.id === 'operations' ? 'flash-operations-list' : item.id === 'substitutions' ? 'flash-inval-list' : 'flash-preview-list'}>
+                  {item.items.slice(0, item.id === 'announcements' || item.id === 'substitutions' ? 1 : 3).map(row =>
+                    <li key={row.id} data-info-id={row.id}>
+                      {item.id === 'substitutions' ? (
+                        <div className="flash-inval-panels" tabIndex={0} role="group" aria-label="Informasi guru berhalangan dan guru pengganti; gulir untuk membaca seluruh keterangan dan tugas">
+                          <section className="flash-inval-panel flash-inval-absence" aria-label="Guru berhalangan">
+                            <p className="flash-inval-label">Guru berhalangan</p>
+                            <p className="flash-inval-name">{row.absentTeacher}</p>
+                            <p className="flash-inval-context">{row.subjectAndClass}</p>
+                            <p className="flash-inval-context">{row.lessonPeriod}</p>
+                            <div className="flash-inval-detail">
+                              <p className="flash-inval-label">Keterangan berhalangan hadir</p>
+                              <p className="flash-inval-copy flash-inval-reason">{row.reason}</p>
+                            </div>
+                          </section>
+                          <section className="flash-inval-panel flash-inval-cover" aria-label="Guru pengganti / inval">
+                            <p className="flash-inval-label">Guru pengganti / inval</p>
+                            <p className="flash-inval-name flash-inval-replacement">{row.replacementTeacher}</p>
+                            <p className="flash-inval-status">{row.assignmentStatus}</p>
+                            <div className="flash-inval-detail">
+                              <p className="flash-inval-label">Tindak lanjut / tugas kelas</p>
+                              <p className="flash-inval-copy flash-inval-task">{row.task}</p>
+                            </div>
+                          </section>
+                        </div>
+                      ) : <>
+                        <p className="flash-item-title">{item.id === 'announcements' ? announcementPreview(row.title || '', 120) : row.title}</p>
+                        {row.detail && <p className="flash-item-detail">{item.id === 'announcements' ? announcementPreview(row.detail) : row.detail}</p>}
+                      </>}
+                    </li>
+                  )}
+                </ul>
                 {item.id === 'announcements' && item.items.length > 1 && <p className="flash-announcement-more">+{item.items.length - 1} pengumuman lainnya</p>}
                 {item.id === 'substitutions' && item.items.length > 1 && <p className="flash-inval-more">+{item.items.length - 1} penugasan lain · Buka rincian untuk semua tugas</p>}
               </> : <p className="flash-empty">{item.emptyText}</p>}</div>

@@ -1,5 +1,14 @@
 # CHANGELOG — PIKET GURU
 
+## [Flash Info Guru Inval] - 2026-10-20
+
+- **Tampilan Flash Info Guru Inval mengikuti pemisahan informasi pada TV Lobi:** panel **Guru berhalangan** menampilkan nama, mata pelajaran, kelas, jam pelajaran, dan **Keterangan berhalangan hadir**; panel **Guru pengganti / inval** menampilkan nama pengganti, status penugasan, serta **Tindak lanjut / tugas kelas**.
+- Responsif: kedua panel berdampingan pada desktop/tablet dan bertumpuk pada mobile. Teks panjang tetap tersedia dengan scroll dalam panel, tidak dipotong dengan preview karakter.
+- Tidak mengubah proses simpan, struktur Firestore, query realtime, logika izin `SUBSTITUTIONS_VIEW`, navigasi, carousel, atau pengurutan prioritas tugas inval.
+- Pengujian offline `node scripts/verify_flash_inval_split_local.mjs`: **20 PASS**. Pengujian browser `scripts/verify_substitution_flash_ui.mjs` disesuaikan dengan tampilan baru, tetapi belum dapat dijalankan karena dependensi tidak tersedia.
+- **Catatan QA:** `npm run lint` dan `npm run build` telah dicoba, namun belum berhasil karena `npm ci` gagal mengunduh dependensi (DNS `EAI_AGAIN` ke registry.npmjs.org). Langkah validasi lanjutan tersedia di `docs/QA_FLASH_INFO_INVAL_2026-10-20.md`.
+
+
 ## [1.1.1] - 2026-10-03
 
 ### CHANGE REQUEST: CR-AUTH-REMEDIATION-R21 (R21-01 s.d. R21-06) — Implementasi Koreksi Keamanan Login & Eliminasi Bypass

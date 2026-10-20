@@ -1300,16 +1300,38 @@ button.bg-\[var\(--theme-primary\)\],
 @layer components {
   .flash-slide-caption { font-size: 12px; line-height: 1.6; color: #64748b; overflow-wrap: anywhere; margin: 0 0 4px; }
   .dark .flash-slide-caption { color: #b4bac6; }
-  .flash-substitution-slide :is(.flash-item-title, .flash-item-detail, .flash-inval-assignment, .flash-inval-reason, .flash-inval-task, .flash-inval-more) {
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
-    white-space: normal; overflow: hidden; overflow-wrap: anywhere; max-width: 100%;
+  /* Flash Inval follows the same two information groups as TV Lobi.
+     The panel is only a READ-ONLY view of the existing live dashboard records. */
+  .flash-substitution-slide .flash-content { display: flex; flex-direction: column; }
+  .flash-substitution-slide .flash-inval-list { list-style: none; margin: 0; padding: 0; min-width: 0; }
+  .flash-substitution-slide .flash-inval-list > li { padding: 2px 0; min-width: 0; }
+  .flash-inval-panels {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+    min-width: 0; max-height: min(420px, 52vh); overflow-y: auto;
+    overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px 4px 5px 0;
   }
-  .flash-substitution-slide .flash-item-title { -webkit-line-clamp: 2; font-size: 13px; }
-  .flash-substitution-slide .flash-item-detail { font-size: 12px; }
-  .flash-substitution-slide .flash-inval-assignment { -webkit-line-clamp: 2; font-size: 12px; line-height: 1.5; margin-top: 4px; }
-  .flash-inval-task { font-size: 12px; line-height: 1.6; margin-top: 4px; color: #64748b; }
-  .flash-inval-more { font-size: 11px; line-height: 1.6; margin-top: 2px; color: var(--theme-primary-text); }
-  .dark .flash-inval-task { color: #b4bac6; }
+  .flash-inval-panels:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: -2px; border-radius: 14px; }
+  .flash-inval-panel {
+    min-width: 0; align-self: start; padding: 12px 14px;
+    border: 1px solid var(--theme-card-border); border-radius: 14px;
+    background: var(--theme-card-bg);
+    overflow-wrap: anywhere;
+  }
+  .flash-inval-cover { background: color-mix(in srgb, var(--theme-primary-light) 35%, var(--theme-card-bg)); }
+  .flash-inval-label { font-size: 11px; line-height: 1.5; font-weight: 750; color: var(--theme-primary-text); }
+  .flash-inval-name { margin-top: 3px; font-size: 15px; line-height: 1.4; font-weight: 750; }
+  .flash-inval-replacement { color: var(--theme-primary-text); }
+  .flash-inval-context, .flash-inval-status { font-size: 12px; line-height: 1.55; margin-top: 3px; color: #64748b; }
+  .flash-inval-detail { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--theme-card-border); }
+  .flash-inval-copy { font-size: 13px; line-height: 1.55; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .flash-inval-more { font-size: 11px; line-height: 1.6; margin-top: 8px; color: var(--theme-primary-text); overflow-wrap: anywhere; }
+  .dark .flash-inval-context, .dark .flash-inval-status { color: #b4bac6; }
+  @media (max-width: 639px) {
+    .flash-inval-panels { grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: min(370px, 46vh); }
+    .flash-inval-panel { padding: 10px 12px; }
+    .flash-inval-name { font-size: 14px; }
+    .flash-inval-copy { font-size: 12px; }
+  }
 }
 @layer components {
   .audit-history-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-block:1px solid var(--theme-card-border); }
@@ -1322,6 +1344,3 @@ button.bg-\[var\(--theme-primary\)\],
   @media(max-width:639px) { .audit-history-nav { align-items:flex-start; flex-direction:column; } }
 }
 
-@media screen {
-  .flash-inval-reason { font-size:12px; line-height:1.5; margin-top:4px; color:var(--theme-primary-text); -webkit-line-clamp:2; }
-}

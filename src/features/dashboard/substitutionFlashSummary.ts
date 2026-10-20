@@ -25,10 +25,15 @@ export function buildSubstitutionFlashSummary(records: TeacherSubstitutionRecord
     items: rows.map(row => ({
       id: row.id,
       title: `${text(row.guruBerhalanganName) || 'Guru belum tercatat'} · ${text(row.kelas) || 'Kelas belum diisi'}`,
-      detail: [text(row.mataPelajaran), text(row.jamPelajaran)].filter(Boolean).join(' · ') || 'Mapel / JP belum diisi',
-      reason: `Keterangan berhalangan hadir: ${text(getSubstitutionReasonDisplay(row)) === '-' ? 'Belum dicatat' : text(getSubstitutionReasonDisplay(row))}`,
-      assignment: `${STATUSES[row.status]?.label || 'Status belum dikenali'} · Pengganti: ${text(row.guruPenggantiName) || (row.guruPenggantiId ? 'Nama belum tercatat' : 'Belum ditentukan')}`,
-      task: `Tugas: ${text(row.materiDanTugasSiswa) || 'Belum ada instruksi tugas siswa.'}`,
+      // Struktur yang sama dengan TV Lobi: identitas guru berhalangan + keterangan,
+      // dan identitas guru pengganti + tindak lanjut/tugas kelas.
+      absentTeacher: text(row.guruBerhalanganName) || 'Guru belum tercatat',
+      subjectAndClass: [text(row.mataPelajaran), text(row.kelas)].filter(Boolean).join(' · ') || 'Mapel / kelas belum diisi',
+      lessonPeriod: text(row.jamPelajaran) || 'Jam pelajaran belum diisi',
+      reason: text(getSubstitutionReasonDisplay(row)) === '-' ? 'Belum dicatat' : text(getSubstitutionReasonDisplay(row)),
+      replacementTeacher: text(row.guruPenggantiName) || (row.guruPenggantiId ? 'Nama belum tercatat' : 'Sedang dikoordinasikan'),
+      assignmentStatus: STATUSES[row.status]?.label || 'Status belum dikenali',
+      task: text(row.materiDanTugasSiswa) || 'Belum ada tindak lanjut atau tugas kelas yang dicatat.',
     })),
   };
 }
