@@ -4,6 +4,7 @@ export const DASHBOARD_INFO_PANELS = {
   announcements: 'Papan Pengumuman & Instruksi Piket',
   dutyRoster: 'Daftar Guru Bertugas Hari Ini',
   dutyRosterTomorrow: 'Daftar Guru Bertugas Besok',
+  substitutions: 'Guru Berhalangan & Tugas Inval',
   incidents: 'Laporan Insiden & Kejadian Terbaru',
   operations: 'Ringkasan Kegiatan Hari Ini',
 } as const;

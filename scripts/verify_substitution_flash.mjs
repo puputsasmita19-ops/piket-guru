@@ -1,0 +1,23 @@
+// Pure summary logic against genuine dashboard helper; no network or database IO.
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import vm from 'node:vm';
+const built=await build({stdin:{contents:"export{buildSubstitutionFlashSummary}from'./src/features/dashboard/substitutionFlashSummary';export{sanitizeDashboardInfoConfig}from'./src/types/dashboardInfo.types';",resolveDir:process.cwd()},bundle:true,write:false,format:'iife',globalName:'api'});
+const box={};vm.runInNewContext(built.outputFiles[0].text,box);const {buildSubstitutionFlashSummary:summary,sanitizeDashboardInfoConfig:config}=box.api;
+const row=(changes={})=>({id:'one',tanggal:'2026-10-20',guruBerhalanganId:'teacher-a',guruBerhalanganName:'Guru A',kelas:'X-A',mataPelajaran:'Matematika',jamPelajaran:'JP 1–2',materiDanTugasSiswa:'Latihan',status:'TERTUGASKAN',createdAt:'2026-10-20T00:00:00Z',updatedAt:'2026-10-20T00:00:00Z',...changes});
+let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS',name)};
+check('empty list is represented as zero rather than a sample assignment',()=>{const s=summary([],'2026-10-20');assert.equal(s.teacherCount,0);assert.equal(s.taskCount,0);assert.equal(s.items.length,0)});
+check('yesterday and tomorrow are excluded even if a source returns mixed dates',()=>{const s=summary([row(),row({id:'old',tanggal:'2026-10-19'}),row({id:'future',tanggal:'2026-10-21'})],'2026-10-20');assert.equal(s.taskCount,1)});
+check('multiple classes for the same teacher count one teacher and two tasks',()=>{const s=summary([row(),row({id:'two',kelas:'XI-A'})],'2026-10-20');assert.equal(s.teacherCount,1);assert.equal(s.taskCount,2)});
+check('different teachers with the same name remain separate through IDs',()=>{assert.equal(summary([row(),row({id:'two',guruBerhalanganId:'teacher-b'})],'2026-10-20').teacherCount,2)});
+check('legacy teachers without IDs are deduplicated by normalized name',()=>{assert.equal(summary([row({guruBerhalanganId:'',guruBerhalanganName:' GURU  A '}),row({id:'two',guruBerhalanganId:'',guruBerhalanganName:'guru a'})],'2026-10-20').teacherCount,1)});
+check('repeated document IDs do not inflate assignment totals',()=>{const s=summary([row(),row({materiDanTugasSiswa:'Baru'})],'2026-10-20');assert.equal(s.taskCount,1);assert.equal(s.items[0].task,'Tugas: Baru')});
+check('waiting assignments precede ongoing, assigned and completed tasks',()=>{const s=summary(['SELESAI_INVAL','TERTUGASKAN','MENUNGGU_GURU_INVAL','SEDANG_BERLANGSUNG'].map((status,i)=>row({id:String(i),status})),'2026-10-20');assert.equal(s.items.map(i=>i.id).join(','),'2,3,1,0');assert.equal(s.pendingCount,1)});
+check('equally urgent tasks show most recently updated first',()=>{assert.equal(summary([row(),row({id:'newer',updatedAt:'2026-10-20T01:00:00Z'})],'2026-10-20').items[0].id,'newer')});
+check('sorting and formatting never mutate source records or their order',()=>{const rows=[row({id:'a',status:'SELESAI_INVAL'}),row({id:'b',status:'MENUNGGU_GURU_INVAL'})];const before=JSON.stringify(rows);summary(rows,'2026-10-20');assert.equal(JSON.stringify(rows),before)});
+check('private reasons and piket notes are omitted from flash summaries',()=>{const s=JSON.stringify(summary([row({alasan:'SAKIT',keteranganAlasan:'PRIVATE_MEDICAL',catatanPiket:'PRIVATE_NOTE'})],'2026-10-20'));assert.ok(!s.includes('PRIVATE_MEDICAL')&&!s.includes('PRIVATE_NOTE'))});
+check('missing instructions and substitute names have truthful fallbacks',()=>{const s=summary([row({guruPenggantiId:'b',guruPenggantiName:'',materiDanTugasSiswa:'  '})],'2026-10-20');assert.equal(s.items[0].task,'Tugas: Belum ada instruksi tugas siswa.');assert.ok(s.items[0].assignment.includes('Nama belum tercatat'))});
+check('unknown statuses are not falsely labelled completed or assigned',()=>{assert.ok(summary([row({status:'UNKNOWN'})],'2026-10-20').items[0].assignment.startsWith('Status belum dikenali'))});
+check('old settings enable the new panel without changing established disabled panels',()=>{const c=config({panels:{dutyRoster:false,announcements:false},intervalMs:5000});assert.equal(c.panels.substitutions,true);assert.equal(c.panels.dutyRoster,false);assert.equal(c.panels.announcements,false);assert.equal(c.intervalMs,5000)});
+check('explicit OFF remains OFF after sanitization and round-trip',()=>{const c=config({panels:{substitutions:false},autoPlay:false,enabled:false});assert.equal(config(JSON.parse(JSON.stringify(c))).panels.substitutions,false);assert.equal(c.enabled,false);assert.equal(c.autoPlay,false)});
+console.log(`${count} substitution flash summary/configuration scenarios passed. No network IO.`);

@@ -1299,6 +1299,16 @@ button.bg-\[var\(--theme-primary\)\],
 @layer components {
   .flash-slide-caption { font-size: 12px; line-height: 1.6; color: #64748b; overflow-wrap: anywhere; margin: 0 0 4px; }
   .dark .flash-slide-caption { color: #b4bac6; }
+  .flash-substitution-slide :is(.flash-item-title, .flash-item-detail, .flash-inval-assignment, .flash-inval-task, .flash-inval-more) {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
+    white-space: normal; overflow: hidden; overflow-wrap: anywhere; max-width: 100%;
+  }
+  .flash-substitution-slide .flash-item-title { -webkit-line-clamp: 2; font-size: 13px; }
+  .flash-substitution-slide .flash-item-detail { font-size: 12px; }
+  .flash-substitution-slide .flash-inval-assignment { -webkit-line-clamp: 2; font-size: 12px; line-height: 1.5; margin-top: 4px; }
+  .flash-inval-task { font-size: 12px; line-height: 1.6; margin-top: 4px; color: #64748b; }
+  .flash-inval-more { font-size: 11px; line-height: 1.6; margin-top: 2px; color: var(--theme-primary-text); }
+  .dark .flash-inval-task { color: #b4bac6; }
 }
 @layer components {
   .audit-history-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-block:1px solid var(--theme-card-border); }

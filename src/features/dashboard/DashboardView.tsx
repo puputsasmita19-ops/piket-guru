@@ -63,6 +63,7 @@ import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
 import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
+import { buildSubstitutionFlashSummary } from './substitutionFlashSummary';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
@@ -95,6 +96,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const [studentTardiness, setStudentTardiness] = useState<StudentTardyRecord[]>([]);
   const [studentPermits, setStudentPermits] = useState<StudentPermitRecord[]>([]);
   const [substitutions, setSubstitutions] = useState<TeacherSubstitutionRecord[]>([]);
+  const [substitutionReadState, setSubstitutionReadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
 
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
@@ -145,6 +147,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const todayISO = useWibToday();
   const todayName = getCurrentDayName(todayISO);
   const tomorrowISO = nextDutyDate(todayISO);
+  const canViewSubstitutions = hasPermission(PERMISSIONS.SUBSTITUTIONS_VIEW);
+
+  useEffect(() => {
+    let active = true;
+    setSubstitutions([]);
+    setSubstitutionReadState('loading');
+    if (!canViewSubstitutions) return;
+    const unsubscribe = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+      'substitutions',
+      data => { if (active) { setSubstitutions(data); setSubstitutionReadState('ready'); } },
+      () => { if (active) { setSubstitutions([]); setSubstitutionReadState('error'); } },
+      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
+    );
+    return () => { active = false; unsubscribe(); };
+  }, [todayISO, canViewSubstitutions, currentUser?.id]);
 
   useEffect(() => {
     AnnouncementService.bootstrapIfEmpty();
@@ -199,12 +216,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubSubs = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
-      'substitutions',
-      setSubstitutions,
-      undefined,
-      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
-    );
     const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
       'visitors',
       setVisitors,
@@ -223,7 +234,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       unsubAnn();
       unsubTardy();
       unsubPermits();
-      unsubSubs();
       unsubVisitors();
     };
   }, [todayISO]);
@@ -297,6 +307,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     return () => cancelAnimationFrame(frame);
   }, [detailPanel, focusedAnnouncementId, isLoadingAnnouncements, announcements]);
   const flashConfig = sanitizeDashboardInfoConfig(settings.dashboardInfoConfig);
+  const substitutionSummary = buildSubstitutionFlashSummary(substitutions, todayISO);
   const operationItems = [
     hasPermission(PERMISSIONS.STUDENT_TARDY_VIEW) && { id: 'tardy', title: `${todayTardiness.length} siswa terlambat`, detail: 'Pencatatan hari ini' },
     hasPermission(PERMISSIONS.STUDENT_PERMITS_VIEW) && { id: 'permits', title: `${todayPermits.filter(p => p.status === 'SEDANG_KELUAR').length} izin siswa masih di luar`, detail: `${todayPermits.length} izin tercatat hari ini` },
@@ -308,6 +319,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       { id: 'dutyRoster' as const, title: 'Guru Bertugas Hari Ini', caption: `${formatIndonesianDate(todayISO)} · ${todaySchedules.length} penugasan`, icon: Users, items: todaySchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Tidak ada jadwal piket hari ini.', actionLabel: 'Buka daftar guru', onAction: () => setDetailPanel('dutyRoster') },
       { id: 'dutyRosterTomorrow' as const, title: 'Guru Bertugas Besok', caption: `${formatIndonesianDate(tomorrowISO)} · ${tomorrowSchedules.length} penugasan`, icon: Users, items: tomorrowSchedules.map(item => ({ id: item.id, title: item.petugasName, detail: `${item.ruangName} · ${item.jamMulai}–${item.jamSelesai} WIB` })), emptyText: 'Belum ada jadwal piket untuk besok.', actionLabel: 'Buka petugas besok', onAction: () => setDetailPanel('dutyRosterTomorrow') },
     ] : []),
+    ...(canViewSubstitutions ? [{
+      id: 'substitutions' as const, title: 'Guru Berhalangan & Tugas Inval', icon: GraduationCap,
+      caption: substitutionReadState === 'ready'
+        ? `${substitutionSummary.teacherCount} guru · ${substitutionSummary.taskCount} tugas · ${substitutionSummary.pendingCount} menunggu pengganti`
+        : undefined,
+      items: substitutionSummary.items,
+      emptyText: substitutionReadState === 'loading' ? 'Memuat penugasan inval hari ini…'
+        : substitutionReadState === 'error' ? 'Data inval belum tersambung. Periksa koneksi atau buka menu Guru Pengganti.'
+        : 'Belum ada guru berhalangan atau tugas inval yang tercatat hari ini.',
+      actionLabel: 'Buka rincian inval',
+      onAction: () => { if (hasPermission(PERMISSIONS.SUBSTITUTIONS_VIEW)) onNavigateTab('substitutions'); },
+    }] : []),
     ...(hasPermission(PERMISSIONS.INCIDENT_VIEW) ? [{ id: 'incidents' as const, title: 'Insiden & Kejadian Terbaru', icon: AlertTriangle, items: [...todayIncidents].sort((a, b) => (b.waktu || '').localeCompare(a.waktu || '')).map(item => ({ id: item.id, title: `[${getIncidentCategoryDisplay(item)}] ${item.lokasi}`, detail: `${item.waktu} WIB · ${item.uraian}` })), emptyText: 'Belum ada kejadian yang dilaporkan hari ini.', actionLabel: 'Buka laporan kejadian', onAction: () => setDetailPanel('incidents') }] : []),
     ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body' }] : []),
   ].filter(slide => flashConfig.panels[slide.id]);
