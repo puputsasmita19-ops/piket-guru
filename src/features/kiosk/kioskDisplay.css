@@ -76,3 +76,11 @@
 .tv-announcement h3 { font-size:var(--tv-name); }
 .tv-duty .tv-record-body { flex:1; min-width:0; }
 .tv-record-body > .tv-accent { font-size:var(--tv-detail); line-height:1.35; overflow-wrap:anywhere; }
+
+.tv-sub-detail { display:flex; flex-direction:column; gap:4px; margin-top:calc(var(--tv-gap) * .3); min-width:0; }
+.tv-sub-copy { font-size:var(--tv-detail); line-height:1.4; color:var(--tv-text); overflow-wrap:anywhere; }
+
+.tv-substitution { padding:calc(var(--tv-padding) * .75); }
+.tv-sub-summary { gap:calc(var(--tv-gap) * .25); }
+.tv-sub-absence { display:block; margin-top:0; line-height:1.4; }
+.tv-display[data-panel="substitutions"] .tv-main { padding-block:calc(var(--tv-padding) * .65); }

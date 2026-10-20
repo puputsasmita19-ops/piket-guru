@@ -1,4 +1,5 @@
 import type { TvDensityScale, TvPanelId } from '../../types/lobbyTv.types';
+import { getSubstitutionReasonDisplay, type TeacherSubstitutionRecord } from '../../types/substitution.types';
 
 export function tvTypography(width: number, height: number, density: TvDensityScale) {
   const factor = density === 'large' ? 1.2 : density === 'compact' ? .85 : 1;
@@ -10,14 +11,23 @@ export function tvTypography(width: number, height: number, density: TvDensitySc
 }
 
 export function tvPageCapacity(panel: TvPanelId, width: number, height: number, scale: number, density: TvDensityScale) {
-  const columns = panel === 'substitutions'
-    ? width >= 850 && density !== 'large' ? 2 : 1
-    : width < 700 ? 1 : width < 1500 || density !== 'compact' ? 2 : 3;
-  const cardHeight = (panel === 'substitutions' ? 490 : panel === 'visitors' ? 350 : 250) * scale;
+  // Absence details and classroom instructions need one clear assignment per screen.
+  if (panel === 'substitutions') return { columns: 1, size: 1 };
+  const columns = width < 700 ? 1 : width < 1500 || density !== 'compact' ? 2 : 3;
+  const cardHeight = (panel === 'visitors' ? 350 : 250) * scale;
   const gap = Math.max(12, 22 * scale);
   const available = Math.max(0, height - Math.max(90, 140 * scale));
   const rows = Math.max(1, Math.min(2, Math.floor((available + gap) / (cardHeight + gap))));
   return { columns, size: columns * rows };
+}
+
+/** Keep full recorded instructions; long content rotates without shrinking TV text. */
+export function tvSubstitutionDetails(row: TeacherSubstitutionRecord) {
+  const reason = getSubstitutionReasonDisplay(row);
+  const reasons = tvTextPages(reason === '-' ? 'Belum dicatat' : reason, 80);
+  const tasks = tvTextPages(row.materiDanTugasSiswa?.trim() || 'Belum ada tindak lanjut atau tugas kelas yang dicatat.', 80);
+  const parts = Math.max(reasons.length, tasks.length);
+  return Array.from({ length: parts }, (_, part) => ({ reason: reasons[part % reasons.length], task: tasks[part % tasks.length], part, parts }));
 }
 
 export function tvChunks<T>(rows: T[], size: number): T[][] {

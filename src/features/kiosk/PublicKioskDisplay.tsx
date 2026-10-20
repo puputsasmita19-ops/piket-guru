@@ -1,5 +1,5 @@
 import './kioskDisplay.css';
-import { tvTypography, tvPageCapacity, tvChunks, tvTextPages, tvAnnouncementBudget } from './tvLayout';
+import { tvTypography, tvPageCapacity, tvChunks, tvTextPages, tvAnnouncementBudget, tvSubstitutionDetails } from './tvLayout';
 import { ALL_TV_PANELS } from '../../types/lobbyTv.types';
 import { isScheduleOnDate } from '../../utils/scheduleUtils';
 import { appLogo } from '../../utils/reportBranding';
@@ -38,6 +38,7 @@ interface TvPage {
   rows: (ScheduleItem | TeacherSubstitutionRecord | VisitorRecord)[];
   columns: number;
   tileIndex?: number;
+  substitutionDetails?: ReturnType<typeof tvSubstitutionDetails>[number];
   message: { record: AnnouncementRecord; content: string; part: number; parts: number } | null;
 }
 
@@ -152,6 +153,10 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
     if (panel === 'announcements') {
       const messages = activeAnnouncements.flatMap(record => tvTextPages(record.content, tvAnnouncementBudget(viewport.contentWidth, viewport.contentHeight, type)).map((content, part, segments) => ({ record, content, part, parts: segments.length })));
       return (messages.length ? messages : [null]).map((message, index, all) => ({ panel, index, count: all.length, rows: [], columns: 1, message }));
+    }
+    if (panel === 'substitutions' && todaySubs.length) {
+      return todaySubs.flatMap(row => tvSubstitutionDetails(row).map(substitutionDetails => ({ row, substitutionDetails })))
+        .map(({ row, substitutionDetails }, index, all) => ({ panel, index, count: all.length, rows: [row], columns: 1, substitutionDetails, message: null }));
     }
     return recordPages.map((records, index, all) => ({ panel, index, count: all.length, rows: records, columns: capacity.columns, message: null }));
   }), [activePanels, todaySchedules, todaySubs, activeVisitors, activeAnnouncements, viewport.contentWidth, viewport.contentHeight, type, config.densityScale]);
@@ -370,7 +375,18 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
             }
             if (currentPanelId === 'substitutions') {
               const row = record as TeacherSubstitutionRecord;
-              return <article key={row.id} className={`tv-record tv-substitution ${viewport.width >= 1000 && (page.columns === 1 || viewport.width >= 3000) ? 'tv-sub-wide' : ''}`} data-record-id={row.id}><div className="tv-sub-summary"><p className="tv-label">Guru berhalangan</p><h3>{row.guruBerhalanganName}</h3><p className="tv-secondary">{row.mataPelajaran} · {row.kelas}</p><p className="tv-secondary">{row.jamPelajaran}</p></div><div className="tv-replacement"><p className="tv-label">Guru pengganti / inval</p><h3 className="tv-accent">{row.guruPenggantiName || 'Sedang dikoordinasikan'}</h3><p className="tv-label">{row.alasan?.replace(/_/g, ' ') || 'Berhalangan'}</p></div></article>;
+              return <article key={row.id} className={`tv-record tv-substitution ${viewport.width >= 1000 ? 'tv-sub-wide' : ''}`} data-record-id={row.id}>
+                <div className="tv-sub-summary">
+                  <p className="tv-label">Guru berhalangan</p><h3>{row.guruBerhalanganName}</h3>
+                  <p className="tv-secondary">{row.mataPelajaran} · {row.kelas}</p><p className="tv-secondary">{row.jamPelajaran}</p>
+                  <div className="tv-sub-detail tv-sub-absence"><span className="tv-label">Keterangan berhalangan hadir: </span><span className="tv-sub-copy">{page.substitutionDetails?.reason}</span></div>
+                </div>
+                <div className="tv-replacement">
+                  <p className="tv-label">Guru pengganti / inval</p><h3 className="tv-accent">{row.guruPenggantiName || 'Sedang dikoordinasikan'}</h3>
+                  <div className="tv-sub-detail tv-sub-task"><p className="tv-label">Tindak lanjut / tugas kelas</p><p className="tv-sub-copy">{page.substitutionDetails?.task}</p></div>
+                  {page.substitutionDetails && page.substitutionDetails.parts > 1 && <p className="tv-label">Keterangan dan tugas · Bagian {page.substitutionDetails.part + 1} / {page.substitutionDetails.parts}</p>}
+                </div>
+              </article>;
             }
             const row = record as VisitorRecord;
             return <article key={row.id} className="tv-record" data-record-id={row.id}><div className="tv-row"><span className="tv-label tv-accent">Badge #{row.nomorBadge || '—'}</span><span className="tv-label">{row.jamMasuk} WIB</span></div><h3>{row.namaTamu}</h3><p className="tv-secondary">{row.instansiAsal || 'Keluarga / wali murid'}</p><div className="tv-replacement"><p className="tv-label">Pihak yang dituju</p><p className="tv-secondary tv-strong">{row.tujuanBertemu || '—'}</p></div></article>;
@@ -388,7 +404,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
           {(page.tileIndex === undefined || page.tileIndex === 1) && <article className="tv-record"><p className="tv-label tv-accent">Kepala sekolah</p><h3>{settings.principalName || 'Belum diisi'}</h3><div className="tv-replacement"><p className="tv-label">Koordinator piket</p><h3>{settings.coordinatorName || 'Belum diisi'}</h3></div></article>}
           {(page.tileIndex === undefined || page.tileIndex === 2) && <article className="tv-record"><p className="tv-label tv-accent">Tahun pelajaran & kontak</p><h3>{settings.academicSemester?.academicYear || 'Belum diisi'}</h3><p className="tv-secondary">{settings.phone || 'Telepon belum diisi'}</p><p className="tv-secondary">{settings.email || 'Email belum diisi'}</p></article>}
         </div>}
-        <p className="tv-page-caption">{isPaused ? 'Rotasi dijeda' : `Berganti otomatis setiap ${config.slideIntervalSec} detik`}{page.count > 1 ? ` · Semua data ditampilkan bergiliran dalam ${page.count} halaman` : ''}</p>
+        {currentPanelId !== 'substitutions' && <p className="tv-page-caption">{isPaused ? 'Rotasi dijeda' : `Berganti otomatis setiap ${config.slideIntervalSec} detik`}{page.count > 1 ? ` · Semua data ditampilkan bergiliran dalam ${page.count} halaman` : ''}</p>}
       </section>
     </main>
     {tickerPages.length > 0 && <aside className="tv-ticker" aria-label="Teks informasi sekolah"><span className="tv-ticker-label"><Megaphone />Informasi</span><div className="tv-ticker-window">

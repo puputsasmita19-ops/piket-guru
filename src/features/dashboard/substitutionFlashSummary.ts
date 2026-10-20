@@ -26,7 +26,7 @@ export function buildSubstitutionFlashSummary(records: TeacherSubstitutionRecord
       id: row.id,
       title: `${text(row.guruBerhalanganName) || 'Guru belum tercatat'} · ${text(row.kelas) || 'Kelas belum diisi'}`,
       detail: [text(row.mataPelajaran), text(row.jamPelajaran)].filter(Boolean).join(' · ') || 'Mapel / JP belum diisi',
-      reason: `Alasan: ${text(getSubstitutionReasonDisplay(row)) === '-' ? 'Belum dicatat' : text(getSubstitutionReasonDisplay(row))}`,
+      reason: `Keterangan berhalangan hadir: ${text(getSubstitutionReasonDisplay(row)) === '-' ? 'Belum dicatat' : text(getSubstitutionReasonDisplay(row))}`,
       assignment: `${STATUSES[row.status]?.label || 'Status belum dikenali'} · Pengganti: ${text(row.guruPenggantiName) || (row.guruPenggantiId ? 'Nama belum tercatat' : 'Belum ditentukan')}`,
       task: `Tugas: ${text(row.materiDanTugasSiswa) || 'Belum ada instruksi tugas siswa.'}`,
     })),
