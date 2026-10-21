@@ -24,7 +24,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { DAYS_LIST, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { DayOfWeek, ScheduleItem, ScheduleStatus, SchoolSettings, UserProfile } from '../../types';
+import { AttendanceRecord, DayOfWeek, ScheduleItem, SchoolSettings, UserProfile } from '../../types';
 import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { ScheduleService } from '../../services/firebase/scheduleService';
@@ -32,16 +32,29 @@ import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { RecurringScheduleModal } from './RecurringScheduleModal';
 import { useAuth } from '../../contexts/AuthContext';
-import { dutyCoverageId, getScheduleRecurrence } from '../../utils/scheduleUtils';
+import { dutyCoverageId, dutyCancellationId, getOperationalScheduleStatus, getScheduleRecurrence } from '../../utils/scheduleUtils';
 import { getTodayISODate } from '../../utils/dateUtils';
+import { where } from 'firebase/firestore';
+import { DutyCancellationService, DutyCancellationScope } from '../../services/firebase/dutyCancellationService';
 import { DutyCoverageDialog } from '../attendance/DutyCoverageDialog';
 import { getCurrentDayName } from '../../utils/dateUtils';
+import { useWibToday } from '../../hooks/useWibToday';
+
+function nextWeekdayDate(day: DayOfWeek, todayISO: string): string {
+  const weekdays = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+  const today = new Date(`${todayISO}T12:00:00Z`);
+  const gap = (weekdays.indexOf(day) - today.getUTCDay() + 7) % 7;
+  today.setUTCDate(today.getUTCDate() + gap);
+  return today.toISOString().slice(0, 10);
+}
 
 export const SchedulePreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
+  const todayISO = useWibToday();
 
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [attendanceForDate, setAttendanceForDate] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staff, setStaff] = useState<StaffRecord[]>([]);
@@ -54,6 +67,7 @@ export const SchedulePreview: React.FC = () => {
     return DAYS_LIST.includes(today) ? today : 'SENIN';
   });
 
+  const [selectedDate, setSelectedDate] = useState(() => getTodayISODate());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -66,6 +80,11 @@ export const SchedulePreview: React.FC = () => {
   const [deleteConfirmSchedule, setDeleteConfirmSchedule] = useState<ScheduleItem | null>(null);
   const [coverageSource, setCoverageSource] = useState<ScheduleItem | null>(null);
   const [coverageFeedback, setCoverageFeedback] = useState('');
+  const [cancelSource, setCancelSource] = useState<ScheduleItem | null>(null);
+  const [cancelScope, setCancelScope] = useState<DutyCancellationScope>('DAY');
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [cancellationBusy, setCancellationBusy] = useState(false);
 
   // WhatsApp reminder modal
   const [waModalData, setWaModalData] = useState<{
@@ -115,6 +134,14 @@ export const SchedulePreview: React.FC = () => {
     };
   }, []);
 
+  // Only one dated attendance listener. Status is never persisted on weekly templates.
+  useEffect(() => {
+    setAttendanceForDate([]);
+    return FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendanceForDate,
+      error => console.warn('[SCHEDULES] Presensi tidak dapat dimuat:', error?.message),
+      [where('tanggal', '==', selectedDate)], { cacheKey: `schedule-live-status:${selectedDate}` });
+  }, [selectedDate]);
+
   // Bootstrap seed if empty
   useEffect(() => {
     if (teachers.length > 0 && rooms.length > 0 && schedules.length === 0) {
@@ -146,12 +173,19 @@ export const SchedulePreview: React.FC = () => {
   const handleSaveSchedule = async (schedule: ScheduleItem) => {
     if (!currentUser || !isAdmin) throw new Error('Hanya administrator yang dapat mengubah jadwal.');
     if (!editingSchedule) return handleSaveMultipleSchedules([schedule]);
+    // Editing schedule details must never mutate operational status or revive a cancelled template.
+    if (editingSchedule.status === 'DIBATALKAN') {
+      throw new Error('Aktifkan kembali jadwal melalui tombol Aktifkan Kembali sebelum mengubah rinciannya.');
+    }
+    if (schedule.status !== 'TERJADWAL') {
+      throw new Error('Status BERJALAN/SELESAI berasal dari presensi. Gunakan Berhalangan atau Batalkan untuk pengecualian.');
+    }
     const latest = await FirestoreService.getAllStrict<ScheduleItem>('schedules');
     const conflict = ScheduleService.checkConflict(schedule, latest);
-    if (schedule.status !== 'DIBATALKAN' && conflict.hasConflict) throw new Error(conflict.reason);
+    if (conflict.hasConflict) throw new Error(conflict.reason);
     await FirestoreService.setDocumentWithAudit('schedules', schedule.id, { ...schedule, updatedAt: FirestoreService.nextUpdatedAt(editingSchedule), updatedBy: currentUser.id }, {
       userId: currentUser.id, userName: currentUser.fullName, role: currentUser.role, action: 'UPDATE', module: 'SCHEDULES', recordId: schedule.id,
-      details: `Memperbarui jadwal piket: ${schedule.petugasName} (${schedule.hari} di ${schedule.ruangName})`,
+      details: `Memperbarui rincian jadwal (status operasional tetap otomatis): ${schedule.petugasName} (${schedule.hari} di ${schedule.ruangName})`,
     }, { expectedState: editingSchedule });
   };
   const handleGenerateRecurring = handleSaveMultipleSchedules;
@@ -172,31 +206,37 @@ export const SchedulePreview: React.FC = () => {
     setDeleteConfirmSchedule(null);
   };
 
-  // Update Status Quick Toggle
-  const handleQuickStatusChange = async (schedule: ScheduleItem, newStatus: ScheduleStatus) => {
-    const updated = { ...schedule, status: newStatus };
-    await FirestoreService.setDocument('schedules', schedule.id, updated);
-    await FirestoreService.logAudit({
-      userId: currentUser?.id || 'usr-admin',
-      userName: currentUser?.fullName || 'Petugas',
-      role: currentUser?.role || 'GURU',
-      action: 'STATUS_CHANGE',
-      module: 'SCHEDULES',
-      recordId: schedule.id,
-      details: `Mengubah status jadwal ${schedule.petugasName} menjadi ${newStatus}`,
-    });
+  const statusOf = (item: ScheduleItem) => getOperationalScheduleStatus(item, schedules, attendanceForDate, selectedDate);
+  const cancelFor = (item: ScheduleItem) => schedules.find(s => s.id === dutyCancellationId(selectedDate, item.id));
+  const coverFor = (item: ScheduleItem) => schedules.find(s => s.id === dutyCoverageId(selectedDate, item.id));
+  const requestCancel = (item: ScheduleItem) => { setCancelSource(item); setCancelScope('DAY'); setCancelReason(''); setCancelError(''); };
+  const executeCancel = async () => {
+    if (!cancelSource || !currentUser || !isAdmin || cancellationBusy) return;
+    setCancellationBusy(true); setCancelError('');
+    try {
+      await DutyCancellationService.cancel({ source: cancelSource, dateISO: selectedDate,
+        scope: cancelScope, reason: cancelReason, actorName: currentUser.fullName });
+      setCoverageFeedback(cancelScope === 'DAY' ? `Piket ${selectedDate} dibatalkan tanpa mengubah jadwal mingguan.` : 'Jadwal piket mingguan dinonaktifkan.');
+      setCancelSource(null);
+    } catch (error: any) { setCancelError(error?.message || 'Pembatalan gagal.'); }
+    finally { setCancellationBusy(false); }
+  };
+  const restoreCancel = async (item: ScheduleItem) => {
+    if (!isAdmin || !currentUser || !window.confirm('Aktifkan kembali jadwal piket ini?')) return;
+    try {
+      const dayCancel = cancelFor(item);
+      if (dayCancel) await DutyCancellationService.restoreDay(dayCancel, currentUser.fullName);
+      else await DutyCancellationService.restoreRecurring(item, currentUser.fullName);
+      setCoverageFeedback('Jadwal piket berhasil dipulihkan.');
+    } catch (error: any) { setCoverageFeedback(error?.message || 'Gagal memulihkan jadwal.'); }
   };
 
-  // Filtered list
   const filtered = schedules.filter((s) => {
-    if (s.coverageForScheduleId) return false; // One-day overrides are shown under original roster cards.
-    const matchDay = s.hari === selectedDay;
-    const matchStatus = statusFilter === 'SEMUA' || s.status === statusFilter;
-    const matchSearch =
-      s.petugasName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.ruangName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.keterangan && s.keterangan.toLowerCase().includes(searchQuery.toLowerCase()));
-
+    if (s.coverageForScheduleId || s.cancelForScheduleId) return false;
+    const matchDay = s.hari === selectedDay && (getScheduleRecurrence(s) !== 'ONCE' || s.tanggal === selectedDate);
+    const matchStatus = statusFilter === 'SEMUA' || statusOf(s) === statusFilter;
+    const query = searchQuery.toLocaleLowerCase('id-ID');
+    const matchSearch = [s.petugasName, s.ruangName, s.keterangan || ''].some(v => v.toLocaleLowerCase('id-ID').includes(query));
     return matchDay && matchStatus && matchSearch;
   });
 
@@ -254,13 +294,13 @@ export const SchedulePreview: React.FC = () => {
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {DAYS_LIST.map((day) => {
           const isToday = getCurrentDayName() === day;
-          const count = schedules.filter((s) => s.hari === day).length;
+          const count = schedules.filter((s) => s.hari === day && !s.coverageForScheduleId && !s.cancelForScheduleId).length;
           const isSelected = selectedDay === day;
 
           return (
             <button
               key={day}
-              onClick={() => setSelectedDay(day)}
+              onClick={() => { setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isSelected
                   ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-[1.02]'
@@ -279,6 +319,18 @@ export const SchedulePreview: React.FC = () => {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
+        <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-2">
+          Tanggal pemantauan
+          <input type="date" aria-label="Tanggal pemantauan piket" value={selectedDate} onChange={event => {
+            const value = event.target.value;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+            setSelectedDate(value); setSelectedDay(getCurrentDayName(`${value}T12:00:00+07:00`) as DayOfWeek);
+          }} className="min-h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs" />
+        </label>
+        <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. Guru mendadak izin gunakan Berhalangan; pembatalan gunakan Batalkan.</p>
       </div>
 
       {/* Search & Status Filter Bar */}
@@ -307,6 +359,7 @@ export const SchedulePreview: React.FC = () => {
                 <option value="BERJALAN">BERJALAN</option>
                 <option value="SELESAI">SELESAI</option>
                 <option value="DIGANTIKAN">DIGANTIKAN</option>
+                <option value="MENUNGGU_PENGGANTI">MENUNGGU PENGGANTI</option>
                 <option value="DIBATALKAN">DIBATALKAN</option>
               </select></label>
 
@@ -346,19 +399,19 @@ export const SchedulePreview: React.FC = () => {
                     </div>
                     <Badge
                       variant={
-                        item.status === 'BERJALAN'
+                        statusOf(item) === 'BERJALAN'
                           ? 'success'
-                          : item.status === 'SELESAI'
+                          : statusOf(item) === 'SELESAI'
                           ? 'info'
-                          : item.status === 'DIGANTIKAN'
+                          : statusOf(item) === 'DIGANTIKAN'
                           ? 'warning'
-                          : item.status === 'DIBATALKAN'
+                          : statusOf(item) === 'DIBATALKAN'
                           ? 'danger'
                           : 'neutral'
                       }
                       size="sm"
                     >
-                      {item.status}
+                      {statusOf(item) === 'MENUNGGU_PENGGANTI' ? 'MENUNGGU PENGGANTI' : statusOf(item)}
                     </Badge>
                   </div>
 
@@ -378,13 +431,14 @@ export const SchedulePreview: React.FC = () => {
                       <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{getScheduleRecurrence(item) === 'ONCE' ? `Sekali: ${item.tanggal}` : `Setiap ${item.hari.toLowerCase()}`}</p>
+                    {cancelFor(item) && <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800">Dibatalkan khusus {selectedDate}: {cancelFor(item)?.cancellationReason}</p>}
                     {item.keterangan && (
                       <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/50 p-2 rounded-lg">
                         "{item.keterangan}"
                       </p>
                     )}
-                    {selectedDay === getCurrentDayName() && schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id)) && (() => {
-                      const cover = schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id))!;
+                    {Boolean(coverFor(item)) && (() => {
+                      const cover = coverFor(item)!;
                       return <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 p-2 space-y-1">
                         <p className="text-xs font-bold text-amber-800">Berhalangan hari ini</p>
                         <p className="text-[11px] text-slate-700 dark:text-slate-300">{cover.absenceReason}</p>
@@ -395,20 +449,15 @@ export const SchedulePreview: React.FC = () => {
 
                   {/* Quick Actions */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
-                    <select
-                      value={item.status}
-                      onChange={(e) => handleQuickStatusChange(item, e.target.value as ScheduleStatus)}
-                      className="text-[11px] font-semibold p-1 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)]"
-                    >
-                      <option value="TERJADWAL">TERJADWAL</option>
-                      <option value="BERJALAN">BERJALAN</option>
-                      <option value="SELESAI">SELESAI</option>
-                      <option value="DIGANTIKAN">DIGANTIKAN</option>
-                      <option value="DIBATALKAN">DIBATALKAN</option>
-                    </select>
+                    <span className="text-[11px] font-semibold text-slate-500" title="Status berasal dari presensi masuk/pulang dan pengecualian berhalangan/pembatalan; bukan diubah manual.">Status otomatis</span>
 
                     <div className="flex items-center gap-1">
-                      {isAdmin && selectedDay === getCurrentDayName() && item.status !== 'DIBATALKAN' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-9 px-2 rounded-lg border border-amber-200 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
+                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-9 px-2 rounded-lg border border-amber-200 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
+                      {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
+                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-9 px-2 rounded-lg border border-emerald-200 text-emerald-700 text-[11px] font-bold">Aktifkan Kembali</button>
+                      ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
+                        <button type="button" onClick={() => requestCancel(item)} className="min-h-9 px-2 rounded-lg border border-rose-200 text-rose-700 text-[11px] font-bold">Batalkan</button>
+                      ) : null)}
                       <button
                         type="button"
                         onClick={() => handleTriggerWaReminder(item)}
@@ -476,7 +525,8 @@ export const SchedulePreview: React.FC = () => {
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
                       {item.petugasName}
-                      {selectedDay === getCurrentDayName() && schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id)) && <span className="block text-[11px] text-amber-700">{(() => { const c = schedules.find(s => s.id === dutyCoverageId(getTodayISODate(), item.id))!; return c.status === 'DIBATALKAN' ? 'Berhalangan · Menunggu Pengganti' : `Berhalangan · Digantikan ${c.petugasName}`; })()}</span>}
+                      {cancelFor(item) && <span className="block text-[11px] text-rose-700">Dibatalkan khusus {selectedDate}</span>}
+                      {Boolean(coverFor(item)) && <span className="block text-[11px] text-amber-700">{(() => { const c = coverFor(item)!; return c.status === 'DIBATALKAN' ? 'Berhalangan · Menunggu Pengganti' : `Berhalangan · Digantikan ${c.petugasName}`; })()}</span>}
                     </td>
                     <td className="p-4 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold">
                       {item.ruangName}
@@ -487,10 +537,10 @@ export const SchedulePreview: React.FC = () => {
                     </td>
                     <td className="p-4">
                       <Badge
-                        variant={item.status === 'BERJALAN' ? 'success' : item.status === 'SELESAI' ? 'info' : 'neutral'}
+                        variant={statusOf(item) === 'BERJALAN' ? 'success' : statusOf(item) === 'SELESAI' ? 'info' : 'neutral'}
                         size="sm"
                       >
-                        {item.status}
+                        {statusOf(item) === 'MENUNGGU_PENGGANTI' ? 'MENUNGGU PENGGANTI' : statusOf(item)}
                       </Badge>
                     </td>
                     <td className="p-4 text-slate-500 italic max-w-xs truncate">
@@ -498,6 +548,11 @@ export const SchedulePreview: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
+                          <button type="button" onClick={() => restoreCancel(item)} className="px-2 py-1 rounded text-emerald-700 border border-emerald-200 text-[11px] font-semibold">Aktifkan Kembali</button>
+                        ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
+                          <button type="button" onClick={() => requestCancel(item)} className="px-2 py-1 rounded text-rose-700 border border-rose-200 text-[11px] font-semibold">Batalkan</button>
+                        ) : null)}
                         <button
                           type="button"
                           onClick={() => handleTriggerWaReminder(item)}
@@ -508,7 +563,7 @@ export const SchedulePreview: React.FC = () => {
                         </button>
                         {isAdmin && (
                           <>
-                            {selectedDay === getCurrentDayName() && item.status !== 'DIBATALKAN' && <button type="button" onClick={() => setCoverageSource(item)} className="px-2 py-1 rounded text-amber-700 border border-amber-200 text-[11px] font-semibold">Berhalangan</button>}
+                            {selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="px-2 py-1 rounded text-amber-700 border border-amber-200 text-[11px] font-semibold">Berhalangan</button>}
                             <button
                               onClick={() => {
                                 setEditingSchedule(item);
@@ -535,6 +590,22 @@ export const SchedulePreview: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <Modal isOpen={!!cancelSource} onClose={() => { if (!cancellationBusy) setCancelSource(null); }} title="Pembatalan Jadwal Piket" maxWidth="sm">
+        <div className="space-y-4">
+          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{cancelSource?.petugasName} · {cancelSource?.ruangName}</div>
+          <p className="text-xs text-slate-600 dark:text-slate-300">Tanggal dipilih: <strong>{selectedDate}</strong>. Pilih cakupan pembatalan secara hati-hati.</p>
+          <fieldset className="space-y-2"><legend className="text-xs font-bold">Cakupan pembatalan</legend>
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs cursor-pointer"><input type="radio" name="cancel-scope" checked={cancelScope === 'DAY'} onChange={() => setCancelScope('DAY')} /> <span><strong>Hanya tanggal {selectedDate}</strong><span className="block mt-1 text-slate-500">Jadwal minggu berikutnya tetap berjalan.</span></span></label>
+            {cancelSource && getScheduleRecurrence(cancelSource) === 'WEEKLY' && <label className="flex items-start gap-2 rounded-xl border border-rose-200 p-3 text-xs cursor-pointer"><input type="radio" name="cancel-scope" checked={cancelScope === 'RECURRING'} onChange={() => setCancelScope('RECURRING')} /> <span><strong>Seluruh jadwal berulang</strong><span className="block mt-1 text-rose-700">Jadwal mingguan akan dinonaktifkan sampai admin mengaktifkannya kembali.</span></span></label>}
+          </fieldset>
+          <label className="block space-y-1 text-xs font-semibold">Alasan pembatalan (wajib, minimal 10 karakter)
+            <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} maxLength={500} rows={3} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm" placeholder="Contoh: kegiatan sekolah dibatalkan oleh pimpinan" />
+          </label>
+          {cancelError && <p role="alert" className="text-xs text-rose-700">{cancelError}</p>}
+          <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={cancellationBusy} onClick={() => setCancelSource(null)}>Kembali</Button><Button variant="danger" size="sm" disabled={cancellationBusy || cancelReason.trim().length < 10} onClick={executeCancel}>{cancellationBusy ? 'Menyimpan...' : 'Konfirmasi Pembatalan'}</Button></div>
+        </div>
+      </Modal>
 
       <DutyCoverageDialog source={coverageSource} dateISO={getTodayISODate()} allSchedules={schedules} users={users} actorName={currentUser?.fullName || 'Administrator'} onClose={() => setCoverageSource(null)} onSaved={setCoverageFeedback} />
       {/* SCHEDULE FORM MODAL */}

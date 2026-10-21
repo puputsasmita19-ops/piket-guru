@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DialogForm } from '../../components/common/DialogForm';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
-import { ScheduleItem, DayOfWeek, ScheduleStatus, SchoolSettings, UserProfile } from '../../types';
+import { ScheduleItem, DayOfWeek, SchoolSettings, UserProfile } from '../../types';
 import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types';
 import { ScheduleService } from '../../services/firebase/scheduleService';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -40,7 +40,6 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
   const [isMultiPerson, setIsMultiPerson] = useState(initialMultiPerson);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [ruangId, setRuangId] = useState('');
-  const [status, setStatus] = useState<ScheduleStatus>('TERJADWAL');
   const [keterangan, setKeterangan] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -58,7 +57,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
     setRecurrence(getScheduleRecurrence(editingSchedule || {}));
     setJamMulai(editingSchedule?.jamMulai || shift.start); setJamSelesai(editingSchedule?.jamSelesai || shift.end);
     setSelectedIds(editingSchedule ? [editingSchedule.petugasId] : []);
-    setRuangId(editingSchedule?.ruangId || ''); setStatus(editingSchedule?.status || 'TERJADWAL');
+    setRuangId(editingSchedule?.ruangId || '');
     setKeterangan(editingSchedule?.keterangan || ''); setIsMultiPerson(!editingSchedule && initialMultiPerson);
     setError(''); setInfo('');
   }, [isOpen, editId, defaultDay, settings, editingSchedule, initialMultiPerson]);
@@ -70,10 +69,10 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
     const item: ScheduleItem = { ...(editingSchedule || {}), id: editingSchedule?.id || '', hari,
       recurrence, tanggal: recurrence === 'ONCE' ? tanggal : '', jamMulai, jamSelesai, petugasId,
       petugasName: officer?.fullName || editingSchedule?.petugasName || '', petugasRole: officer?.role || editingSchedule?.petugasRole || 'GURU',
-      ruangId, ruangName: room?.name || '', status, keterangan };
+      ruangId, ruangName: room?.name || '', status: 'TERJADWAL', keterangan };
     if (!editingSchedule) item.id = scheduleSlotId(item);
     return item;
-  })), [effectiveDays.join(','), selectedIds, candidates, rooms, ruangId, recurrence, tanggal, jamMulai, jamSelesai, status, keterangan, editingSchedule]);
+  })), [effectiveDays.join(','), selectedIds, candidates, rooms, ruangId, recurrence, tanggal, jamMulai, jamSelesai, keterangan, editingSchedule]);
   const conflicts = drafts.filter(s => s.status !== 'DIBATALKAN').map(s => ScheduleService.checkConflict(s, allSchedules)).filter(c => c.hasConflict);
   const changeDay = (day: DayOfWeek) => {
     setDays(prev => editingSchedule ? [day] : prev.includes(day) ? prev.filter(d => d !== day) : DAYS_LIST.filter(d => d === day || prev.includes(d)));
@@ -84,6 +83,10 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting.current) return;
+    if (editingSchedule?.status === 'DIBATALKAN') {
+      setError('Jadwal dibatalkan. Aktifkan kembali dari daftar jadwal sebelum mengedit.');
+      return;
+    }
     setError(''); setInfo('');
     if (!drafts.length) { setError('Pilih minimal satu hari dan satu petugas.'); return; }
     if (!activeRooms.some(r => r.id === ruangId)) { setError('Pilih pos piket yang masih aktif.'); return; }
@@ -125,7 +128,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
         <div className="grid grid-cols-2 gap-3"><label className="space-y-1 text-xs font-semibold">Jam mulai<input aria-label="Jam mulai" type="time" required value={jamMulai} onChange={e => setJamMulai(e.target.value)} className={fieldClass} /></label><label className="space-y-1 text-xs font-semibold">Jam selesai<input aria-label="Jam selesai" type="time" required value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} className={fieldClass} /></label></div>
         <p className="text-xs text-slate-500 dark:text-slate-400">Jam di atas berlaku untuk semua hari dan petugas yang dipilih. Gunakan formulir terpisah bila jam tugas berbeda.</p>
         <button type="button" onClick={applyShift} className="min-h-9 text-xs underline underline-offset-2">Gunakan jam sekolah terbaru ({effectiveDays[0] || defaultDay})</button>
-        <label className="block space-y-1 text-xs font-semibold">Status<select aria-label="Status jadwal" value={status} onChange={e => setStatus(e.target.value as ScheduleStatus)} className={fieldClass}>{(['TERJADWAL','BERJALAN','SELESAI','DIGANTIKAN','DIBATALKAN'] as ScheduleStatus[]).map(s => <option key={s}>{s}</option>)}</select></label>
+        <p className="text-xs p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Status tugas otomatis mengikuti presensi masuk/pulang. Gunakan tombol <strong>Berhalangan</strong> atau <strong>Batalkan</strong> pada Jadwal Piket untuk kondisi khusus.</p>
         <label className="block space-y-1 text-xs font-semibold">Catatan tugas<input aria-label="Catatan tugas" value={keterangan} onChange={e => setKeterangan(e.target.value)} className={fieldClass} placeholder="Opsional" /></label>
         {conflicts.length > 0 && <p className="text-sm text-amber-800 dark:text-amber-200">{conflicts[0].reason}</p>}
         <p role="status" className="text-sm font-medium">{selectedIds.length} petugas × {effectiveDays.length} hari = {drafts.length} jadwal. Beberapa petugas dapat menempati pos yang sama.</p>
