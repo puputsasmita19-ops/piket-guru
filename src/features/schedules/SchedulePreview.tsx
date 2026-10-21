@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CalendarDays,
   Plus,
@@ -23,6 +23,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
+import { UserAvatar } from '../../components/common/UserAvatar';
 import { DAYS_LIST, DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { AttendanceRecord, DayOfWeek, ScheduleItem, SchoolSettings, UserProfile } from '../../types';
 import { TeacherRecord, StaffRecord, RoomRecord } from '../../types/master.types';
@@ -240,6 +241,22 @@ export const SchedulePreview: React.FC = () => {
     return matchDay && matchStatus && matchSearch;
   });
 
+  const userLookup = useMemo(() => {
+    const byId = new Map<string, UserProfile>();
+    const byName = new Map<string, UserProfile>();
+    users.forEach((user) => {
+      if (user.id) byId.set(user.id, user);
+      if (user.fullName) byName.set(user.fullName.trim().toLocaleLowerCase('id-ID'), user);
+    });
+    return { byId, byName };
+  }, [users]);
+
+  const getScheduleUser = (item: ScheduleItem) => {
+    return userLookup.byId.get(item.petugasId)
+      || userLookup.byName.get(item.petugasName.trim().toLocaleLowerCase('id-ID'))
+      || null;
+  };
+
   return (
     <div data-tour="schedules-container" className="space-y-6">
       {/* Header section */}
@@ -330,7 +347,7 @@ export const SchedulePreview: React.FC = () => {
             setSelectedDate(value); setSelectedDay(getCurrentDayName(`${value}T12:00:00+07:00`) as DayOfWeek);
           }} className="min-h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs" />
         </label>
-        <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. Guru mendadak izin gunakan Berhalangan; pembatalan gunakan Batalkan.</p>
+        <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. <strong>Berhalangan</strong> dipakai jika guru mendadak tidak bisa bertugas dan perlu pengganti. <strong>Batalkan</strong> dipakai untuk menonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang melalui konfirmasi admin.</p>
       </div>
 
       {/* Search & Status Filter Bar */}
@@ -390,13 +407,13 @@ export const SchedulePreview: React.FC = () => {
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.length > 0 ? (
-            filtered.map((item) => (
+            filtered.map((item) => {
+              const scheduleUser = getScheduleUser(item);
+              return (
               <Card key={item.id} hoverable className="transition-all">
                 <CardContent className="p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)] font-bold flex items-center justify-center text-sm shadow-inner flex-shrink-0">
-                      {item.petugasName.charAt(0)}
-                    </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <UserAvatar user={scheduleUser ? { fullName: scheduleUser.fullName, avatarUrl: scheduleUser.avatarUrl || null } : { fullName: item.petugasName }} className="w-14 h-14 rounded-2xl border border-[var(--theme-primary-border)] text-lg shadow-inner bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]" />
                     <Badge
                       variant={
                         statusOf(item) === 'BERJALAN'
@@ -448,20 +465,27 @@ export const SchedulePreview: React.FC = () => {
                   </div>
 
                   {/* Quick Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)]">
-                    <span className="text-[11px] font-semibold text-slate-500" title="Status berasal dari presensi masuk/pulang dan pengecualian berhalangan/pembatalan; bukan diubah manual.">Status otomatis</span>
+                  <div className="pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)] space-y-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-[11px] font-semibold text-slate-500" title="Status berasal dari presensi masuk/pulang dan pengecualian berhalangan/pembatalan; bukan diubah manual.">Status otomatis</span>
+                      <span className="text-[10px] text-slate-400">Batalkan = nonaktifkan jadwal pada tanggal ini / jadwal berulang.</span>
+                    </div>
 
-                    <div className="flex items-center gap-1">
-                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-9 px-2 rounded-lg border border-amber-200 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
+                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-3 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
                       {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
-                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-9 px-2 rounded-lg border border-emerald-200 text-emerald-700 text-[11px] font-bold">Aktifkan Kembali</button>
+                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-10 px-3 rounded-xl border border-emerald-200 bg-emerald-50/80 text-emerald-700 text-[11px] font-bold">Aktifkan Kembali</button>
                       ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
-                        <button type="button" onClick={() => requestCancel(item)} className="min-h-9 px-2 rounded-lg border border-rose-200 text-rose-700 text-[11px] font-bold">Batalkan</button>
+                        <button type="button" onClick={() => requestCancel(item)} className="min-h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/80 text-rose-700 text-[11px] font-bold" title="Nonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang">Batalkan</button>
                       ) : null)}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 justify-end">
                       <button
                         type="button"
                         onClick={() => handleTriggerWaReminder(item)}
-                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer"
+                        className="min-w-10 min-h-10 p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer"
                         title="Kirim Notifikasi WA"
                       >
                         <MessageSquare className="w-4 h-4" />
@@ -474,25 +498,26 @@ export const SchedulePreview: React.FC = () => {
                               setEditingSchedule(item);
                               setIsFormModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[var(--theme-primary)] hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] cursor-pointer"
+                            className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-[var(--theme-primary)] hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] cursor-pointer"
                             title="Ubah Jadwal"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmSchedule(item)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+                            className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
                             title="Hapus Jadwal"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </>
                       )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))
+            )})
           ) : (
             <div className="col-span-full py-16 text-center text-slate-500 dark:text-slate-400">
               <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -524,9 +549,14 @@ export const SchedulePreview: React.FC = () => {
                 {filtered.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
-                      {item.petugasName}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <UserAvatar user={getScheduleUser(item) ? { fullName: getScheduleUser(item)!.fullName, avatarUrl: getScheduleUser(item)!.avatarUrl || null } : { fullName: item.petugasName }} className="w-10 h-10 rounded-xl border border-[var(--theme-primary-border)] text-sm shrink-0" />
+                        <div className="min-w-0">
+                          <p className="truncate">{item.petugasName}</p>
                       {cancelFor(item) && <span className="block text-[11px] text-rose-700">Dibatalkan khusus {selectedDate}</span>}
                       {Boolean(coverFor(item)) && <span className="block text-[11px] text-amber-700">{(() => { const c = coverFor(item)!; return c.status === 'DIBATALKAN' ? 'Berhalangan · Menunggu Pengganti' : `Berhalangan · Digantikan ${c.petugasName}`; })()}</span>}
+                        </div>
+                      </div>
                     </td>
                     <td className="p-4 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold">
                       {item.ruangName}
@@ -549,9 +579,9 @@ export const SchedulePreview: React.FC = () => {
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
-                          <button type="button" onClick={() => restoreCancel(item)} className="px-2 py-1 rounded text-emerald-700 border border-emerald-200 text-[11px] font-semibold">Aktifkan Kembali</button>
+                          <button type="button" onClick={() => restoreCancel(item)} className="px-2 py-1 rounded-xl text-emerald-700 border border-emerald-200 text-[11px] font-semibold">Aktifkan Kembali</button>
                         ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
-                          <button type="button" onClick={() => requestCancel(item)} className="px-2 py-1 rounded text-rose-700 border border-rose-200 text-[11px] font-semibold">Batalkan</button>
+                          <button type="button" onClick={() => requestCancel(item)} className="px-2 py-1 rounded-xl text-rose-700 border border-rose-200 text-[11px] font-semibold" title="Nonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang">Batalkan</button>
                         ) : null)}
                         <button
                           type="button"
