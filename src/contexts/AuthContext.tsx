@@ -276,8 +276,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(true);
       }
 
-      // Otherwise (session restore / page refresh), perform strict profile validation
-      preloadAuthenticatedShell();
+      // Otherwise (session restore / page refresh), validate first. Avoid competing
+      // with the Firebase profile/token requests for bandwidth on slow phones.
       try {
         const valRes = await validateFirebaseUserProfile(fbUser, { clearInvalidSession: false });
         if (!isMounted || activeEpoch !== sessionEpochRef.current) return;
@@ -294,6 +294,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isMounted && activeEpoch === sessionEpochRef.current) {
           setCurrentUser(valRes.profile);
           setIsOfflineSession(!!valRes.isOfflineSession);
+          preloadAuthenticatedShell();
           setIsLoading(false);
           SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
         }
@@ -403,7 +404,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
     manualLoginEpochRef.current = currentEpoch;
-    preloadAuthenticatedShell();
     try {
       const res = await authService.authenticateWithPin(nipOrUserId, pin, { isCurrent: () => currentEpoch === sessionEpochRef.current });
       if (currentEpoch !== sessionEpochRef.current) {
@@ -416,6 +416,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         LastLoginPreference.remember(res.user, OfflineStorage.isTrustedDevice());
         setCurrentUser(res.user);
         setIsOfflineSession(false);
+        preloadAuthenticatedShell();
         setIsLoading(false);
         SyncQueueService.refreshStatus(res.user.id).catch(() => {});
         void AuditService.recordLogin('PIN');
@@ -440,7 +441,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (manualLoginEpochRef.current !== null || logoutInProgressRef.current) return { success: false, error: 'Autentikasi sedang diproses. Tunggu sebentar.' };
     const currentEpoch = ++sessionEpochRef.current;
     manualLoginEpochRef.current = currentEpoch;
-    preloadAuthenticatedShell();
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -476,6 +476,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSessionNotice(null);
       setCurrentUser(valRes.profile);
       setIsOfflineSession(!!valRes.isOfflineSession);
+      preloadAuthenticatedShell();
       setIsLoading(false);
       SyncQueueService.refreshStatus(valRes.profile.id).catch(() => {});
       void AuditService.recordLogin('GOOGLE');

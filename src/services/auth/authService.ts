@@ -104,7 +104,7 @@ class AuthService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'low' });
+      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'auto' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -141,7 +141,9 @@ class AuthService {
   public async getUsersList(options: { forceRefresh?: boolean } = {}): Promise<UserSummaryItem[]> {
     await this.init();
     const age = Date.now() - this.usersUpdatedAt;
-    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 15000) return this.refreshUsersList();
+    // Reduce duplicate requests on focus/visibility while keeping the picker fresh.
+    // The backend still validates active status and credentials on every login.
+    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 45000) return this.refreshUsersList();
     return this.usersList;
   }
 

@@ -37,7 +37,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, DEFAULT_LOGIN_SUPPORT_CONTACT, ROLE_LABELS } from '../../config/constants';
 import { SchoolSettings, LoginContactType } from '../../types';
-import { preloadAuthenticatedShell } from '../../appBootstrap';
 import { useSlowOperation } from '../../hooks/useSlowOperation';
 
 export const LoginPage: React.FC = () => {
@@ -148,11 +147,14 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    void refreshLoginUsers(true);
+    void refreshLoginUsers();
     const visible = () => { if (!document.hidden) void refreshLoginUsers(); };
     const online = () => { void refreshLoginUsers(true); };
     const preference = LastLoginPreference.subscribe(() => {
-      if (!selectionTouchedRef.current && !loginBusyRef.current) { selectedUidRef.current = null; void refreshLoginUsers(true); }
+      if (!selectionTouchedRef.current && !loginBusyRef.current) {
+        selectedUidRef.current = null;
+        void refreshLoginUsers();
+      }
     });
     window.addEventListener('focus', visible); document.addEventListener('visibilitychange', visible); window.addEventListener('online', online);
     return () => { mountedRef.current = false; preference(); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', online); };
@@ -544,13 +546,12 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      onFocusCapture={() => preloadAuthenticatedShell()}
       className="login-page min-h-screen min-h-[100dvh] flex flex-col justify-start sm:justify-center items-center px-3 py-4 sm:p-6 selection:text-white transition-colors duration-200 relative overflow-x-hidden overflow-y-auto"
       style={{
         backgroundColor: 'var(--theme-bg-app)',
       }}
     >
-      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop config={publicAppearanceReady ? schoolSettings.loginAppearance : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' }} /></div>
+      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop paused={isSubmitting || isGoogleSubmitting} config={publicAppearanceReady ? schoolSettings.loginAppearance : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' }} /></div>
       {/* Main App Card */}
       <div className="login-card relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
         {/* Integrated Theme Settings Button & Popover */}
