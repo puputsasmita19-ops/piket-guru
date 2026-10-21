@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Pin,
   PinOff,
+  RealtimeMonitorLogo,
 } from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -70,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const adminMenuItems: MenuItem[] = [
-    { id: 'attendance-monitor', label: 'Monitoring Piket Realtime', icon: MapPin, permission: PERMISSIONS.ATTENDANCE_VIEW_ALL },
+    { id: 'attendance-monitor', label: 'Monitoring Piket Realtime', icon: RealtimeMonitorLogo, permission: PERMISSIONS.ATTENDANCE_VIEW_ALL },
     { id: 'reports', label: 'Laporan & Rekap', icon: FileBarChart2, permission: PERMISSIONS.REPORTS_VIEW },
     { id: 'users', label: 'Master Pengguna', icon: Users, permission: PERMISSIONS.USERS_VIEW },
     { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },

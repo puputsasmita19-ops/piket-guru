@@ -141,3 +141,4 @@ export { WifiOff } from './WifiOff';
 export { X } from './X';
 export { XCircle } from './XCircle';
 export { Zap } from './Zap';
+export { RealtimeMonitorLogo } from './RealtimeMonitorLogo';
