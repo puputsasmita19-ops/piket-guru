@@ -73,6 +73,9 @@ export interface ScheduleItem extends BaseEntityMetadata {
   absentOfficerName?: string;
   absenceReason?: string;
   coverageUpdatedBy?: string;
+  /** Per-date cancellation marker refers to original weekly/one-time schedule. */
+  cancelForScheduleId?: string;
+  cancellationReason?: string;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;

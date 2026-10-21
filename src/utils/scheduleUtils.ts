@@ -1,4 +1,4 @@
-import { DayOfWeek, SchoolSettings, UserProfile, UserRole, ScheduleItem } from '../types';
+import { DayOfWeek, SchoolSettings, UserProfile, UserRole, ScheduleItem, AttendanceRecord, ScheduleStatus } from '../types';
 import { TeacherRecord, StaffRecord } from '../types/master.types';
 import { DEFAULT_DAILY_SCHEDULES } from '../config/constants';
 import { getCurrentDayName, getTodayISODate } from './dateUtils';
@@ -19,21 +19,65 @@ export function dutyCoverageId(dateISO: string, sourceScheduleId: string): strin
   return `duty-cover~${dateISO}~${encodeURIComponent(sourceScheduleId)}`;
 }
 
+/** A one-day cancellation is a separate document; weekly templates remain untouched. */
+export function dutyCancellationId(dateISO: string, sourceScheduleId: string): string {
+  return `duty-cancel~${dateISO}~${encodeURIComponent(sourceScheduleId)}`;
+}
+
+/** Only correctly keyed, dated cancellation markers are allowed to suppress an assignment. */
+export function getDutyCancellationForDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
+  const sources = new Set(schedules.filter(s => !s.coverageForScheduleId && !s.cancelForScheduleId &&
+    isScheduleOnDate(s, dateISO)).map(s => s.id));
+  return schedules.filter(s => s.cancelForScheduleId && s.status === 'DIBATALKAN' &&
+    getScheduleRecurrence(s) === 'ONCE' && s.tanggal === dateISO &&
+    s.id === dutyCancellationId(dateISO, s.cancelForScheduleId) &&
+    sources.has(s.cancelForScheduleId));
+}
+
+/** UI-only status; do not write attendance-driven status to the weekly schedule document. */
+export type OperationalScheduleStatus = ScheduleStatus | 'MENUNGGU_PENGGANTI';
+
+export function getOperationalScheduleStatus(
+  schedule: ScheduleItem,
+  allSchedules: ScheduleItem[],
+  records: AttendanceRecord[],
+  dateISO: string
+): OperationalScheduleStatus {
+  if (schedule.status === 'DIBATALKAN' || schedule.cancelForScheduleId ||
+    getDutyCancellationForDate(allSchedules, dateISO).some(c => c.cancelForScheduleId === schedule.id)) {
+    return 'DIBATALKAN';
+  }
+  const cover = getDutyCoverageForDate(allSchedules, dateISO)
+    .find(c => c.coverageForScheduleId === schedule.id);
+  if (cover) return cover.status === 'DIBATALKAN' ? 'MENUNGGU_PENGGANTI' : 'DIGANTIKAN';
+
+  const attendance = records.find(a => a.tanggal === dateISO &&
+    (a.scheduleId === schedule.id || a.userId === schedule.petugasId));
+  if (attendance) return attendance.jamPulang ? 'SELESAI' : 'BERJALAN';
+  return 'TERJADWAL';
+}
+
 /** Valid emergency overrides can only apply on their explicit date (including pending cover). */
 export function getDutyCoverageForDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
-  const sources = new Set(schedules.filter(s => !s.coverageForScheduleId && isScheduleOnDate(s, dateISO)).map(s => s.id));
+  const sources = new Set(schedules.filter(s => !s.coverageForScheduleId && !s.cancelForScheduleId &&
+    isScheduleOnDate(s, dateISO)).map(s => s.id));
   return schedules.filter(s => s.coverageForScheduleId && s.recurrence === 'ONCE' &&
     s.tanggal === dateISO && s.id === dutyCoverageId(dateISO, s.coverageForScheduleId) &&
     sources.has(s.coverageForScheduleId));
 }
 
-/** Replace one day's officer with the substitute; a pending absence removes the original slot. */
+/** Effective daily duty excludes dated cancellations and replaced/pending assignments. */
 export function getEffectiveSchedulesOnDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
   const overrides = getDutyCoverageForDate(schedules, dateISO);
-  const suppressed = new Set(overrides.map(s => s.coverageForScheduleId));
+  const cancelled = getDutyCancellationForDate(schedules, dateISO);
+  const suppressed = new Set([
+    ...overrides.map(s => s.coverageForScheduleId),
+    ...cancelled.map(s => s.cancelForScheduleId),
+  ]);
   return [
-    ...schedules.filter(s => !s.coverageForScheduleId && !suppressed.has(s.id) && isScheduleOnDate(s, dateISO)),
-    ...overrides.filter(s => s.status !== 'DIBATALKAN'),
+    ...schedules.filter(s => !s.coverageForScheduleId && !s.cancelForScheduleId &&
+      !suppressed.has(s.id) && isScheduleOnDate(s, dateISO)),
+    ...overrides.filter(s => s.status !== 'DIBATALKAN' && !suppressed.has(s.id)),
   ];
 }
 
