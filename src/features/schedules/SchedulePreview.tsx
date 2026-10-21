@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CalendarDays,
   Plus,
@@ -48,6 +48,41 @@ function nextWeekdayDate(day: DayOfWeek, todayISO: string): string {
   today.setUTCDate(today.getUTCDate() + gap);
   return today.toISOString().slice(0, 10);
 }
+
+/** Defer authenticated photo requests until a schedule card is close to the viewport. */
+const ScheduleTeacherAvatar: React.FC<{ name: string; avatarUrl?: string | null }> = React.memo(({ name, avatarUrl }) => {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (visible) return;
+    if (typeof IntersectionObserver === 'undefined') { setVisible(true); return; }
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '160px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  return <span ref={containerRef} className="inline-flex w-12 h-12 shrink-0 aspect-square rounded-xl overflow-hidden border border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] shadow-sm">
+    {visible
+      ? <UserAvatar user={{ fullName: name, avatarUrl: avatarUrl || null }} className="w-full h-full rounded-xl text-base" />
+      : <span aria-hidden="true" className="w-full h-full flex items-center justify-center font-bold text-base">{name.trim().charAt(0).toUpperCase() || 'P'}</span>}
+  </span>;
+});
+
+const ScheduleActionGuide: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => <details className="text-[11px] text-slate-600 dark:text-slate-300">
+  <summary className="cursor-pointer w-fit min-h-9 inline-flex items-center font-semibold text-[var(--theme-primary-text)] underline underline-offset-2">Apa fungsi tombol?</summary>
+  <div className="mt-1.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 space-y-1.5 leading-relaxed">
+    {isAdmin && <><p><strong>Berhalangan:</strong> guru tidak dapat bertugas hari ini; admin bisa menunjuk pengganti.</p><p><strong>Batalkan:</strong> nonaktifkan jadwal untuk tanggal pilihan atau seluruh jadwal rutin setelah konfirmasi.</p></>}
+    <p><strong>Pesan:</strong> siapkan pengingat WhatsApp.</p>
+    {isAdmin && <><p><strong>Edit:</strong> ubah detail jadwal, bukan status presensi.</p><p><strong>Hapus:</strong> hapus entri jadwal, berbeda dari membatalkan jadwal.</p></>}
+  </div>
+</details>;
 
 export const SchedulePreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -413,7 +448,7 @@ export const SchedulePreview: React.FC = () => {
               <Card key={item.id} hoverable className="transition-all">
                 <CardContent className="p-5 space-y-4">
                   <div className="flex items-start justify-between gap-3">
-                    <UserAvatar user={scheduleUser ? { fullName: scheduleUser.fullName, avatarUrl: scheduleUser.avatarUrl || null } : { fullName: item.petugasName }} className="w-14 h-14 rounded-2xl border border-[var(--theme-primary-border)] text-lg shadow-inner bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]" />
+                    <ScheduleTeacherAvatar name={item.petugasName} avatarUrl={scheduleUser?.avatarUrl} />
                     <Badge
                       variant={
                         statusOf(item) === 'BERJALAN'
@@ -473,11 +508,11 @@ export const SchedulePreview: React.FC = () => {
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-2">
-                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-3 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
+                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-3 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-700 text-[11px] font-bold" title="Guru mendadak tidak bisa piket; cari pengganti untuk hari ini" aria-label={`Catat ${item.petugasName} berhalangan dan pilih pengganti`}>Berhalangan</button>}
                       {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
-                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-10 px-3 rounded-xl border border-emerald-200 bg-emerald-50/80 text-emerald-700 text-[11px] font-bold">Aktifkan Kembali</button>
+                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-10 px-3 rounded-xl border border-emerald-200 bg-emerald-50/80 text-emerald-700 text-[11px] font-bold" title="Pulihkan jadwal yang telah dibatalkan">Aktifkan Kembali</button>
                       ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
-                        <button type="button" onClick={() => requestCancel(item)} className="min-h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/80 text-rose-700 text-[11px] font-bold" title="Nonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang">Batalkan</button>
+                        <button type="button" onClick={() => requestCancel(item)} className="min-h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/80 text-rose-700 text-[11px] font-bold" title="Nonaktifkan jadwal tanggal pilihan atau jadwal berulang, bukan menghapus guru">Batalkan</button>
                       ) : null)}
                       </div>
 
@@ -486,7 +521,8 @@ export const SchedulePreview: React.FC = () => {
                         type="button"
                         onClick={() => handleTriggerWaReminder(item)}
                         className="min-w-10 min-h-10 p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer"
-                        title="Kirim Notifikasi WA"
+                        title="Siapkan pesan pengingat WhatsApp"
+                        aria-label={`Kirim pengingat WhatsApp untuk ${item.petugasName}`}
                       >
                         <MessageSquare className="w-4 h-4" />
                       </button>
@@ -500,6 +536,7 @@ export const SchedulePreview: React.FC = () => {
                             }}
                             className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-[var(--theme-primary)] hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] cursor-pointer"
                             title="Ubah Jadwal"
+                            aria-label={`Edit detail jadwal ${item.petugasName}`}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -507,6 +544,7 @@ export const SchedulePreview: React.FC = () => {
                             onClick={() => setDeleteConfirmSchedule(item)}
                             className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
                             title="Hapus Jadwal"
+                            aria-label={`Hapus jadwal ${item.petugasName}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -514,6 +552,7 @@ export const SchedulePreview: React.FC = () => {
                       )}
                       </div>
                     </div>
+                    <ScheduleActionGuide isAdmin={isAdmin} />
                   </div>
                 </CardContent>
               </Card>
@@ -550,7 +589,7 @@ export const SchedulePreview: React.FC = () => {
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
                       <div className="flex items-center gap-3 min-w-0">
-                        <UserAvatar user={getScheduleUser(item) ? { fullName: getScheduleUser(item)!.fullName, avatarUrl: getScheduleUser(item)!.avatarUrl || null } : { fullName: item.petugasName }} className="w-10 h-10 rounded-xl border border-[var(--theme-primary-border)] text-sm shrink-0" />
+                        <ScheduleTeacherAvatar name={item.petugasName} avatarUrl={getScheduleUser(item)?.avatarUrl} />
                         <div className="min-w-0">
                           <p className="truncate">{item.petugasName}</p>
                       {cancelFor(item) && <span className="block text-[11px] text-rose-700">Dibatalkan khusus {selectedDate}</span>}
@@ -577,7 +616,7 @@ export const SchedulePreview: React.FC = () => {
                       {item.keterangan || '-'}
                     </td>
                     <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[180px]">
                         {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
                           <button type="button" onClick={() => restoreCancel(item)} className="px-2 py-1 rounded-xl text-emerald-700 border border-emerald-200 text-[11px] font-semibold">Aktifkan Kembali</button>
                         ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
@@ -586,26 +625,31 @@ export const SchedulePreview: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleTriggerWaReminder(item)}
-                          className="p-1 rounded text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                          className="min-w-10 min-h-10 p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer"
                           title="Kirim Pesan WhatsApp"
+                          aria-label={`Kirim pengingat WhatsApp untuk ${item.petugasName}`}
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                         </button>
                         {isAdmin && (
                           <>
-                            {selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="px-2 py-1 rounded text-amber-700 border border-amber-200 text-[11px] font-semibold">Berhalangan</button>}
+                            {selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-2 py-1 rounded-lg text-amber-700 border border-amber-200 text-[11px] font-semibold" title="Catat berhalangan dan pilih guru pengganti">Berhalangan</button>}
                             <button
                               onClick={() => {
                                 setEditingSchedule(item);
                                 setIsFormModalOpen(true);
                               }}
-                              className="p-1 rounded text-slate-400 hover:text-[var(--theme-primary)] cursor-pointer"
+                              className="min-w-10 min-h-10 p-2 rounded-lg text-slate-400 hover:text-[var(--theme-primary)] cursor-pointer"
+                              title="Edit rincian jadwal"
+                              aria-label={`Edit detail jadwal ${item.petugasName}`}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => setDeleteConfirmSchedule(item)}
-                              className="p-1 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                              className="min-w-10 min-h-10 p-2 rounded-lg text-slate-400 hover:text-rose-600 cursor-pointer"
+                              title="Hapus jadwal dari daftar"
+                              aria-label={`Hapus jadwal ${item.petugasName}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -621,19 +665,38 @@ export const SchedulePreview: React.FC = () => {
         </Card>
       )}
 
-      <Modal isOpen={!!cancelSource} onClose={() => { if (!cancellationBusy) setCancelSource(null); }} title="Pembatalan Jadwal Piket" maxWidth="sm">
-        <div className="space-y-4">
-          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{cancelSource?.petugasName} · {cancelSource?.ruangName}</div>
-          <p className="text-xs text-slate-600 dark:text-slate-300">Tanggal dipilih: <strong>{selectedDate}</strong>. Pilih cakupan pembatalan secara hati-hati.</p>
-          <fieldset className="space-y-2"><legend className="text-xs font-bold">Cakupan pembatalan</legend>
-            <label className="flex items-start gap-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs cursor-pointer"><input type="radio" name="cancel-scope" checked={cancelScope === 'DAY'} onChange={() => setCancelScope('DAY')} /> <span><strong>Hanya tanggal {selectedDate}</strong><span className="block mt-1 text-slate-500">Jadwal minggu berikutnya tetap berjalan.</span></span></label>
-            {cancelSource && getScheduleRecurrence(cancelSource) === 'WEEKLY' && <label className="flex items-start gap-2 rounded-xl border border-rose-200 p-3 text-xs cursor-pointer"><input type="radio" name="cancel-scope" checked={cancelScope === 'RECURRING'} onChange={() => setCancelScope('RECURRING')} /> <span><strong>Seluruh jadwal berulang</strong><span className="block mt-1 text-rose-700">Jadwal mingguan akan dinonaktifkan sampai admin mengaktifkannya kembali.</span></span></label>}
+      <Modal isOpen={!!cancelSource} onClose={() => { if (!cancellationBusy) setCancelSource(null); }} title="Batalkan Penugasan Piket" maxWidth="sm">
+        <div className="space-y-4 text-sm">
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3 space-y-1">
+            <p className="font-bold text-slate-900 dark:text-white break-words">{cancelSource?.petugasName}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">{cancelSource?.ruangName} · {cancelSource?.jamMulai}–{cancelSource?.jamSelesai} WIB</p>
+            <p className="text-xs text-slate-500">Tanggal yang dipilih: <strong>{selectedDate}</strong></p>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">Gunakan pembatalan saat kegiatan piket <strong>tidak jadi dilaksanakan</strong>. Jika guru tetap perlu digantikan pada hari ini, tutup dialog lalu pilih <strong>Berhalangan</strong>. Pembatalan tidak menghapus akun guru maupun riwayat presensi.</p>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">1. Pilih cakupan pembatalan</legend>
+            <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${cancelScope === 'DAY' ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)]' : 'border-slate-200 dark:border-slate-700'}`}>
+              <input type="radio" name="cancel-scope" checked={cancelScope === 'DAY'} onChange={() => setCancelScope('DAY')} className="mt-1 shrink-0" />
+              <span className="min-w-0"><strong className="block text-sm">Hanya tanggal {selectedDate}</strong><span className="block text-xs text-slate-600 dark:text-slate-300 mt-1">Jadwal berikutnya tetap aktif seperti biasa.</span></span>
+            </label>
+            {cancelSource && getScheduleRecurrence(cancelSource) === 'WEEKLY' && <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${cancelScope === 'RECURRING' ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
+              <input type="radio" name="cancel-scope" checked={cancelScope === 'RECURRING'} onChange={() => setCancelScope('RECURRING')} className="mt-1 shrink-0" />
+              <span className="min-w-0"><strong className="block text-sm">Seluruh jadwal mingguan</strong><span className="block text-xs text-rose-700 dark:text-rose-300 mt-1">Penugasan rutin dinonaktifkan sampai admin memilih Aktifkan Kembali.</span></span>
+            </label>}
           </fieldset>
-          <label className="block space-y-1 text-xs font-semibold">Alasan pembatalan (wajib, minimal 10 karakter)
-            <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} maxLength={500} rows={3} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm" placeholder="Contoh: kegiatan sekolah dibatalkan oleh pimpinan" />
+          <label className="block space-y-1.5 text-sm font-semibold">
+            <span>2. Alasan pembatalan <span className="text-rose-600">*</span></span>
+            <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} maxLength={500} rows={3} className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm font-normal min-h-24" placeholder="Contoh: kegiatan piket ditiadakan karena perubahan agenda sekolah" />
+            <span className="flex justify-between text-[11px] text-slate-500 font-normal"><span>Minimal 10 karakter untuk jejak audit.</span><span>{cancelReason.trim().length}/500</span></span>
           </label>
-          {cancelError && <p role="alert" className="text-xs text-rose-700">{cancelError}</p>}
-          <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={cancellationBusy} onClick={() => setCancelSource(null)}>Kembali</Button><Button variant="danger" size="sm" disabled={cancellationBusy || cancelReason.trim().length < 10} onClick={executeCancel}>{cancellationBusy ? 'Menyimpan...' : 'Konfirmasi Pembatalan'}</Button></div>
+          <div role="status" className={`rounded-xl p-3 text-xs leading-relaxed border ${cancelScope === 'RECURRING' ? 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800' : 'border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-800'}`}>
+            <strong>Ringkasan dampak: </strong>{cancelScope === 'DAY' ? `Piket ${selectedDate} tidak dilaksanakan. Jadwal mingguan tetap ada.` : 'Semua penugasan pada jadwal mingguan ini akan dinonaktifkan, sampai dipulihkan admin.'}
+          </div>
+          {cancelError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 p-3 text-xs">{cancelError}</p>}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-3">
+            <Button variant="outline" size="sm" disabled={cancellationBusy} onClick={() => setCancelSource(null)}>Kembali tanpa mengubah</Button>
+            <Button variant="danger" size="sm" disabled={cancellationBusy || cancelReason.trim().length < 10} onClick={executeCancel}>{cancellationBusy ? 'Memproses…' : cancelScope === 'DAY' ? 'Batalkan Tanggal Terpilih' : 'Nonaktifkan Jadwal Mingguan'}</Button>
+          </div>
         </div>
       </Modal>
 
