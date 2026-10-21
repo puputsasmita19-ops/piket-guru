@@ -11,14 +11,9 @@ import {
   AlertTriangle,
   RefreshCw,
   ShieldCheck,
-  Navigation,
   Clock,
-  User,
-  Calendar,
-  Layers,
   Image as ImageIcon,
   Check,
-  X,
   Trash2,
 } from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
@@ -44,7 +39,6 @@ import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
-import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 
 interface AttendanceFeedback {
   tone: 'success' | 'error' | 'info';
@@ -81,9 +75,6 @@ const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = 
 export const AttendancePreview: React.FC = () => {
   const { currentUser, hasRole, hasPermission, isOffline } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
-  const canManageHistory = hasRole('ADMIN');
-  const [adminSelection, setAdminSelection] = useState<AdminAttendanceSelection | null>(null);
-  const [adminFeedback, setAdminFeedback] = useState('');
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -123,6 +114,7 @@ export const AttendancePreview: React.FC = () => {
 
   // Active Tab: Presensi Mandiri vs Rekap Kehadiran
   const [activeTab, setActiveTab] = useState<'presensi' | 'riwayat'>('presensi');
+  const [showLocationMap, setShowLocationMap] = useState(() => typeof window === 'undefined' ? true : window.innerWidth >= 640);
   const history = useHistoryPeriod(settings);
   const [historyView, setHistoryView] = useHistoryView();
   const [historyUser, setHistoryUser] = useState('all');
@@ -192,10 +184,15 @@ export const AttendancePreview: React.FC = () => {
   const refreshGpsLocation = async (isManual = false) => {
     if (!settingsReady || !validSchoolLocation) return;
     const requestId = ++gpsRequestRef.current;
-    setCoords(null);
-    setGeofence(null);
+    const hadPreviousReading = !!coords && !!geofence;
+    if (!hadPreviousReading) {
+      setCoords(null);
+      setGeofence(null);
+    }
     setIsLocating(true);
-    setIsProvisional(false);
+    if (!hadPreviousReading) {
+      setIsProvisional(false);
+    }
     setGpsError(null);
     try {
       const position = await LocationService.getCurrentPosition({
@@ -242,13 +239,15 @@ export const AttendancePreview: React.FC = () => {
       if (requestId !== gpsRequestRef.current) return;
       console.warn('GPS detection error:', err);
       setGpsError(err.message || 'Gagal membaca koordinat GPS.');
-      setCoords(null);
-      setGeofence({
-        distanceMeters: 999,
-        isWithinRadius: false,
-        accuracyQuality: 'RENDAH',
-        status: 'GPS_ERROR',
-      });
+      if (!hadPreviousReading) {
+        setCoords(null);
+        setGeofence({
+          distanceMeters: 999,
+          isWithinRadius: false,
+          accuracyQuality: 'RENDAH',
+          status: 'GPS_ERROR',
+        });
+      }
     } finally {
       if (requestId === gpsRequestRef.current) setIsLocating(false);
     }
@@ -711,96 +710,122 @@ export const AttendancePreview: React.FC = () => {
               />
               <CardContent className="p-5 sm:p-6 space-y-6">
                 {/* Geolocation Status HUD */}
-                <div data-tour="gps-status" className="attendance-gps-panel p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-card-border)] space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="gps-search-heading" role="status" aria-live="polite" aria-atomic="true">
-                      <div className={isLocating ? 'gps-search-indicator' : 'p-2.5 rounded-2xl bg-[var(--theme-card-bg)] text-slate-800 dark:text-slate-100'} aria-hidden="true" data-gps-search={isLocating ? 'active' : 'idle'}>
-                        <MapPin className="w-5 h-5" />
+                <div data-tour="gps-status" className="attendance-gps-panel rounded-2xl border border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] shadow-xs overflow-hidden">
+                  <div className="p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="gps-search-heading" role="status" aria-live="polite" aria-atomic="true">
+                        <div className={isLocating ? 'gps-search-indicator' : 'attendance-gps-icon'} aria-hidden="true" data-gps-search={isLocating ? 'active' : 'idle'}>
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="gps-search-title">{isLocating ? (isProvisional ? 'Memperbarui lokasi GPS' : 'Mencari lokasi GPS') : !settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : coords ? 'Lokasi siap digunakan' : 'Siapkan lokasi GPS'}</h4>
+                          <p className="gps-search-caption">
+                            {settingsReady && validSchoolLocation
+                              ? `${settings.schoolName} · radius ${settings.allowedRadiusMeters} meter`
+                              : 'Pengaturan koordinat dan radius perlu diisi oleh admin.'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="gps-search-title">{isLocating ? (isProvisional ? 'Menyempurnakan posisi Anda' : 'Mencari posisi Anda') : !settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : gpsError ? 'Lokasi belum siap' : coords ? 'Lokasi GPS diperbarui' : 'Siapkan lokasi Anda'}</h4>
-                        <p className="gps-search-caption">{isLocating ? (isProvisional && coords ? `Pembacaan sementara ±${Math.round(coords.accuracy)} m · maksimal 2,5 detik.` : 'Izinkan akses lokasi pada browser · maksimal 2,5 detik.') : settingsReady && validSchoolLocation ? `${settings.schoolName} · radius ${settings.allowedRadiusMeters} m` : 'Pengaturan koordinat dan radius harus tersedia dari admin.'}</p>
+
+                      <div className="attendance-gps-actions">
+                        {settingsReady && validSchoolLocation && (
+                          <button
+                            type="button"
+                            className="attendance-map-toggle"
+                            onClick={() => setShowLocationMap((value) => !value)}
+                          >
+                            {showLocationMap ? 'Sembunyikan Peta' : 'Lihat Peta'}
+                          </button>
+                        )}
+                        <Button
+                          data-tour="refresh-gps-button"
+                          variant="outline"
+                          size="sm"
+                          className="text-xs shrink-0 min-h-[44px]"
+                          disabled={isLocating || isCheckingOut || !settingsReady || !validSchoolLocation}
+                          leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                          onClick={() => refreshGpsLocation(true)}
+                        >
+                          {isLocating ? 'Memperbarui…' : gpsError ? 'Coba Lagi' : 'Perbarui GPS'}
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      data-tour="refresh-gps-button"
-                      variant="outline" size="sm"
-                      className="text-xs self-start sm:self-center shrink-0 min-h-[44px]"
-                      disabled={isLocating || isCheckingOut || !settingsReady || !validSchoolLocation}
-                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-                      onClick={() => refreshGpsLocation(true)}
-                    >{isLocating ? 'Mencari lokasi…' : gpsError ? 'Coba GPS lagi' : 'Perbarui GPS'}</Button>
+
+                    {coords ? (
+                      <div className="attendance-gps-grid">
+                        <div className="attendance-gps-stat">
+                          <span className="attendance-gps-label">Jarak Sekolah</span>
+                          <strong className={`attendance-gps-value ${geofence?.isWithinRadius ? 'is-good' : 'is-bad'}`}>
+                            {geofence?.distanceMeters ?? '-'} m
+                          </strong>
+                          <span className="attendance-gps-note">
+                            {geofence?.isWithinRadius ? 'Dalam radius' : 'Di luar radius'}
+                          </span>
+                        </div>
+
+                        <div className="attendance-gps-stat">
+                          <span className="attendance-gps-label">Akurasi GPS</span>
+                          <strong className={`attendance-gps-value ${
+                            coords.accuracy <= 20 ? 'is-good' : coords.accuracy <= 50 ? 'is-warn' : 'is-bad'
+                          }`}>
+                            ±{Math.round(coords.accuracy)} m{isProvisional ? '*' : ''}
+                          </strong>
+                          <span className="attendance-gps-note">
+                            {coords.accuracy <= 50 ? 'Akurasi memadai' : 'Akurasi perlu ditingkatkan'}
+                          </span>
+                        </div>
+
+                        <div className="attendance-gps-stat">
+                          <span className="attendance-gps-label">Waktu Baca</span>
+                          <strong className="attendance-gps-value text-slate-800 dark:text-slate-100">
+                            {new Date(coords.timestamp).toLocaleTimeString('id-ID', {
+                              timeZone: 'Asia/Jakarta',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })} WIB
+                          </strong>
+                          <span className="attendance-gps-note">Waktu perangkat</span>
+                        </div>
+
+                        <div className="attendance-gps-stat">
+                          <span className="attendance-gps-label">Koordinat</span>
+                          <strong className="attendance-gps-value attendance-gps-coords text-slate-700 dark:text-slate-200">
+                            {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                          </strong>
+                          <span className="attendance-gps-note">Data GPS terbaru</span>
+                        </div>
+                      </div>
+                    ) : !isLocating ? (
+                      <p className="attendance-gps-empty">Posisi Anda akan muncul setelah GPS terbaca. Peta hanya bersifat membantu dan tidak menggantikan validasi lokasi.</p>
+                    ) : null}
+
+                    {gpsError && (
+                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 font-semibold text-rose-900 dark:text-rose-100">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                          <span>Kendala pembacaan GPS</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-rose-700 dark:text-rose-300">{gpsError}</p>
+                      </div>
+                    )}
+
+                    {isProvisional && coords && !gpsError && (
+                      <p className="attendance-gps-helper">* GPS sudah terbaca dan sedang disempurnakan. Anda tetap dapat menunggu atau menekan Perbarui GPS.</p>
+                    )}
                   </div>
 
-                  {settingsReady && validSchoolLocation && <AttendanceMapPreview
-                    schoolLat={settings.schoolLat} schoolLng={settings.schoolLng}
-                    radiusMeters={settings.allowedRadiusMeters} schoolName={settings.schoolName}
-                    coords={coords} provisional={isProvisional}
-                  />}
-
-                  {gpsError ? (
-                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs space-y-1">
-                      <div className="flex items-center gap-2 font-bold text-xs text-rose-900 dark:text-rose-100">
-                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                        <span>Kendala Sinyal / Izin GPS</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-rose-700 dark:text-rose-300">
-                        {gpsError}
-                      </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 italic pt-1">
-                        Pindah ke area terbuka, aktifkan izin lokasi browser, lalu ketuk "Coba GPS lagi".
-                      </p>
+                  {showLocationMap && settingsReady && validSchoolLocation && (
+                    <div className="attendance-gps-map-wrap border-t border-slate-200/80 dark:border-slate-800">
+                      <AttendanceMapPreview
+                        schoolLat={settings.schoolLat}
+                        schoolLng={settings.schoolLng}
+                        radiusMeters={settings.allowedRadiusMeters}
+                        schoolName={settings.schoolName}
+                        coords={coords}
+                        provisional={isProvisional}
+                      />
                     </div>
-                  ) : coords && !isLocating ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-[11px]">
-                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Jarak Sekolah:</span>
-                        <span className={`font-bold font-mono text-sm block mt-0.5 ${geofence?.isWithinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {geofence?.distanceMeters ?? '-'} Meter
-                        </span>
-                        <span className="text-[10px] text-slate-400 block font-medium">
-                          {geofence?.isWithinRadius ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Dalam Radius</> : <><XCircle className="w-3.5 h-3.5 mr-1" />Di Luar Radius</>}
-                        </span>
-                      </div>
-
-                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Akurasi GPS:</span>
-                        <span className={`font-bold font-mono text-xs block mt-0.5 ${
-                          coords.accuracy <= 20
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : coords.accuracy <= 50
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-rose-600 dark:text-rose-400'
-                        }`}>
-                          ± {Math.round(coords.accuracy)} Meter {isProvisional ? '(Sementara)' : ''}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block font-medium">
-                          {coords.accuracy <= 50 ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Akurasi Memadai</> : <><AlertCircle className="w-3.5 h-3.5 mr-1" />Akurasi Rendah</>}
-                        </span>
-                      </div>
-
-                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Waktu Pembacaan:</span>
-                        <span className="font-mono text-slate-800 dark:text-slate-200 text-xs font-bold block mt-0.5">
-                          {new Date(coords.timestamp).toLocaleTimeString('id-ID', {
-                            timeZone: 'Asia/Jakarta',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                          })} WIB
-                        </span>
-                        <span className="text-[10px] text-slate-400 block font-medium">Waktu Server HP</span>
-                      </div>
-
-                      <div className="min-w-0 p-2 rounded-lg bg-white/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Koordinat Terbaca:</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px] font-bold block mt-0.5 break-all">
-                          {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    !isLocating && <p className="text-xs text-slate-500 dark:text-slate-400">Posisi Anda akan muncul setelah GPS terbaca. Peta tidak menggantikan validasi lokasi.</p>
                   )}
                 </div>
 
@@ -817,26 +842,31 @@ export const AttendancePreview: React.FC = () => {
                   };
 
                   return (
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2">
+                    <div className="attendance-shift-card p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 flex flex-col gap-3 text-xs">
+                      <div className="flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row">
+                        <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-[var(--theme-primary)] shrink-0" />
                         <div>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            Jadwal Shift Hari Ini ({todayName}):
-                          </span>
-                          <span className="text-slate-600 dark:text-slate-400 ml-1 font-semibold">
-                            {todayShiftConfig.start} - {todayShiftConfig.end} WIB
-                          </span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                              Jadwal Shift Hari Ini ({todayName})
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-400 font-semibold">
+                              {todayShiftConfig.start} - {todayShiftConfig.end} WIB
+                            </span>
+                          </div>
                         </div>
+                        <Badge variant="neutral" size="sm">Jadwal Aktif</Badge>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
-                        <span>
-                          Masuk: <strong className="text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">{todayShiftConfig.checkInStart} - {todayShiftConfig.checkInEnd}</strong>
-                        </span>
-                        <span>•</span>
-                        <span>
-                          Pulang: <strong className="text-indigo-600 dark:text-indigo-400">{todayShiftConfig.checkOutStart} - {todayShiftConfig.checkOutEnd}</strong>
-                        </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-700 px-3 py-2 font-mono text-slate-600 dark:text-slate-300">
+                          <span className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">Masuk</span>
+                          <strong className="text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)]">{todayShiftConfig.checkInStart} - {todayShiftConfig.checkInEnd}</strong>
+                        </div>
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-700 px-3 py-2 font-mono text-slate-600 dark:text-slate-300">
+                          <span className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">Pulang</span>
+                          <strong className="text-indigo-600 dark:text-indigo-400">{todayShiftConfig.checkOutStart} - {todayShiftConfig.checkOutEnd}</strong>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1062,9 +1092,9 @@ export const AttendancePreview: React.FC = () => {
                       <p className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
                         {existingAttendanceToday.jamPulang ? formatTime(existingAttendanceToday.jamPulang) : '-'}
                       </p>
-                      {existingAttendanceToday.jamPulang && (existingAttendanceToday.keteranganCheckout || existingAttendanceToday.checkoutPolicy?.keterangan) && (
+                      {existingAttendanceToday.jamPulang && (existingAttendanceToday.checkoutPolicy?.keterangan || existingAttendanceToday.keteranganCheckout) && (
                         <p className="text-[11px] text-slate-500">
-                          Keterangan: <strong>{existingAttendanceToday.keteranganCheckout || existingAttendanceToday.checkoutPolicy?.keterangan}</strong>
+                          Keterangan: <strong>{existingAttendanceToday.checkoutPolicy?.keterangan || existingAttendanceToday.keteranganCheckout}</strong>
                         </p>
                       )}
                     </div>
@@ -1102,7 +1132,6 @@ export const AttendancePreview: React.FC = () => {
             subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
 
           />
-          {adminFeedback && <p role="status" className="m-3 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">{adminFeedback}</p>}
           <div className="p-3"><HistoryControls history={history} view={historyView} onViewChange={setHistoryView} user={historyUser} onUserChange={setHistoryUser} users={historyUsers}/>{historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}</div>
           <HistoryTable view={historyView}>
           <CardContent className="p-0 overflow-x-auto">
@@ -1117,13 +1146,12 @@ export const AttendancePreview: React.FC = () => {
                   <th className="p-4">Jarak GPS</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-center">Foto</th>
-                  {canManageHistory && <th className="p-4">Tindakan Admin</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageHistory ? 9 : 8} className="p-8 text-center text-slate-400">
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
                       Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
@@ -1167,10 +1195,6 @@ export const AttendancePreview: React.FC = () => {
                           <span className="text-slate-300 text-[10px]">-</span>
                         )}
                       </td>
-                      {canManageHistory && <td className="p-4"><div className="flex items-center gap-2">
-                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'edit' })} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[var(--theme-primary)] text-xs font-bold">Edit</button>
-                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'delete' })} className="px-3 py-2 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold">Hapus</button>
-                      </div></td>}
                     </tr>
                   ))
                 )}
@@ -1181,8 +1205,6 @@ export const AttendancePreview: React.FC = () => {
           <HistoryPagination {...historyPage} />
         </Card>
       )}
-
-      {canManageHistory && <AdminAttendanceDialog selection={adminSelection} onClose={() => setAdminSelection(null)} onCompleted={setAdminFeedback} />}
 
       {/* CAMERA CAPTURE MODAL */}
       <CameraCaptureModal

@@ -3,6 +3,25 @@
 .gps-search-title { font-size: 13px; font-weight: 750; line-height: 1.5; }
 .gps-search-caption { font-size: 11px; color: #475569; line-height: 1.6; margin-top: 2px; }
 .dark .gps-search-caption { color: #cbd5e1; }
+.attendance-gps-icon { height: 46px; width: 46px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: var(--theme-primary-light); color: var(--icon-ink, #252525); }
+.attendance-gps-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; }
+.attendance-map-toggle { min-height: 44px; padding: 8px 12px; border: 1px solid var(--theme-card-border); border-radius: 12px; font-size: 11px; font-weight: 700; background: var(--theme-card-bg); color: var(--theme-primary-text); cursor: pointer; }
+.attendance-map-toggle:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
+.attendance-gps-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.attendance-gps-stat { min-width: 0; padding: 12px; border-radius: 16px; border: 1px solid rgba(148,163,184,.22); background: color-mix(in srgb, var(--theme-card-bg) 88%, transparent); display: flex; flex-direction: column; gap: 4px; }
+.attendance-gps-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: #64748b; }
+.dark .attendance-gps-label { color: #94a3b8; }
+.attendance-gps-value { font-size: 1.15rem; line-height: 1.25; font-weight: 800; color: #0f172a; }
+.dark .attendance-gps-value { color: #e2e8f0; }
+.attendance-gps-value.is-good { color: #059669; }
+.attendance-gps-value.is-warn { color: #d97706; }
+.attendance-gps-value.is-bad { color: #dc2626; }
+.attendance-gps-coords { font-size: .82rem; word-break: break-word; }
+.attendance-gps-note { font-size: 11px; line-height: 1.45; color: #64748b; }
+.dark .attendance-gps-note { color: #94a3b8; }
+.attendance-gps-empty, .attendance-gps-helper { font-size: 11px; line-height: 1.65; color: #64748b; }
+.dark .attendance-gps-empty, .dark .attendance-gps-helper { color: #94a3b8; }
+.attendance-gps-map-wrap { background: var(--theme-card-bg); }
 .gps-search-indicator { position: relative; height: 46px; width: 46px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--theme-primary-light); color: var(--icon-ink, #252525); }
 .gps-search-indicator::after { content: ''; position: absolute; inset: 0; border: 2px solid var(--theme-primary-border); border-top-color: var(--theme-primary-text); border-radius: inherit; animation: gps-orbit 1.15s linear infinite; }
 @keyframes gps-orbit { to { transform: rotate(360deg); } }
@@ -56,3 +75,13 @@
 .dark .gps-map-connection small { color: #cbd5e1; }
 .gps-map-directions { min-height: 44px; display: inline-flex; align-items: center; color: var(--theme-primary-text); text-decoration: underline; text-underline-offset: 3px; font-size: 11px; font-weight: 650; }
 .gps-map-directions:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
+@media (max-width: 639px) {
+  .gps-search-heading { align-items: flex-start; }
+  .attendance-gps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-gps-stat { padding: 11px; border-radius: 14px; }
+  .attendance-gps-value { font-size: 1.05rem; }
+}
+@media (min-width: 640px) {
+  .attendance-gps-actions { justify-content: flex-end; }
+  .attendance-gps-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

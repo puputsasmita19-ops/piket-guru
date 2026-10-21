@@ -24,12 +24,58 @@ export interface WatchPositionOptions {
 export class LocationService {
   /** Strictly enforced maximum attendance accuracy limit (50 meters) */
   public static readonly MAX_ATTENDANCE_ACCURACY_METERS = 50;
+  private static readonly CACHE_KEY = 'piket-guru:last-valid-position';
   private static activeWatchId: number | null = null;
   private static activeTimeoutId: any = null;
   private static activeRefineTimeoutId: any = null;
   private static currentRequestId = 0;
   private static activeRejector: ((reason?: any) => void) | null = null;
   public static lastValidPosition: LocationCoordinates | null = null;
+
+  private static persistLastValidPosition(position: LocationCoordinates | null): void {
+    this.lastValidPosition = position;
+    if (typeof window === 'undefined') return;
+    try {
+      if (!position) {
+        window.sessionStorage.removeItem(this.CACHE_KEY);
+        return;
+      }
+      window.sessionStorage.setItem(this.CACHE_KEY, JSON.stringify(position));
+    } catch {}
+  }
+
+  private static restoreCachedPosition(maxAgeMs: number): LocationCoordinates | null {
+    if (this.isFreshPosition(this.lastValidPosition, maxAgeMs) && this.lastValidPosition!.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
+      return this.lastValidPosition;
+    }
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.sessionStorage.getItem(this.CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as LocationCoordinates;
+      if (!this.isFreshPosition(parsed, maxAgeMs) || parsed.accuracy > this.MAX_ATTENDANCE_ACCURACY_METERS) {
+        window.sessionStorage.removeItem(this.CACHE_KEY);
+        return null;
+      }
+      this.lastValidPosition = parsed;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private static normalizePosition(position: GeolocationPosition): LocationCoordinates {
+    const now = Date.now();
+    const posTime = position.timestamp || now;
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude,
+      speed: position.coords.speed,
+      timestamp: posTime,
+    };
+  }
 
   /**
    * Checks whether a given position reading is fresh and mathematically valid.
@@ -212,13 +258,10 @@ export class LocationService {
       }
 
       // Fast Path: If recent valid reading exists (<=30s) and meets accuracy (<=50m), return immediately
-      if (
-        this.lastValidPosition &&
-        this.isFreshPosition(this.lastValidPosition, maxStaleAgeMs) &&
-        this.lastValidPosition.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS
-      ) {
-        if (onProgress) onProgress(this.lastValidPosition, false);
-        resolve(this.lastValidPosition);
+      const restored = this.restoreCachedPosition(maxStaleAgeMs);
+      if (restored) {
+        if (onProgress) onProgress(restored, false);
+        resolve(restored);
         return;
       }
 
@@ -252,7 +295,7 @@ export class LocationService {
         if (hasCompleted || requestId !== this.currentRequestId) return;
         hasCompleted = true;
         cleanup();
-        this.lastValidPosition = coords;
+        this.persistLastValidPosition(coords);
         resolve(coords);
       };
 
@@ -286,7 +329,31 @@ export class LocationService {
         }
       }, timeoutMs);
 
+      const quickTimeout = Math.min(timeoutMs, 1200);
       try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (hasCompleted || requestId !== this.currentRequestId) return;
+            const reading = this.normalizePosition(pos);
+            if (!this.isFreshPosition(reading, maxStaleAgeMs)) return;
+
+            bestReading = !bestReading || reading.accuracy < bestReading.accuracy ? reading : bestReading;
+            onProgress?.(reading, reading.accuracy > desiredAccuracyMeters);
+
+            if (reading.accuracy <= desiredAccuracyMeters) {
+              finishSuccess(reading);
+            }
+          },
+          () => {
+            // Ignore quick-path failures and continue with watchPosition.
+          },
+          {
+            enableHighAccuracy: false,
+            maximumAge: maxStaleAgeMs,
+            timeout: quickTimeout,
+          }
+        );
+
         this.activeWatchId = navigator.geolocation.watchPosition(
           (pos) => {
             if (hasCompleted || requestId !== this.currentRequestId) return;
@@ -298,14 +365,7 @@ export class LocationService {
               return;
             }
 
-            const reading: LocationCoordinates = {
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              accuracy: pos.coords.accuracy,
-              altitude: pos.coords.altitude,
-              speed: pos.coords.speed,
-              timestamp: posTime,
-            };
+            const reading = this.normalizePosition(pos);
 
             if (!bestReading || reading.accuracy < bestReading.accuracy) {
               bestReading = reading;
