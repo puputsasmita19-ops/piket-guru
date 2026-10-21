@@ -29,26 +29,46 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const streamModeRef = useRef<'user' | 'environment' | null>(null);
   const generationRef = useRef(0);
   const busyRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const startCamera = async (mode: 'user' | 'environment') => {
     const generation = ++generationRef.current;
     setCameraError(null);
+    setCameraReady(false);
+
+    // Retake with the same lens: reuse the live stream instead of opening the camera again.
+    if (streamModeRef.current === mode && streamRef.current?.getVideoTracks().some((track) => track.readyState === 'live')) {
+      streamRef.current.getVideoTracks().forEach((track) => { track.enabled = true; });
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = streamRef.current;
+        void video.play().catch(() => {
+          if (generation === generationRef.current) setCameraError('Video belum dapat diputar. Ketuk Coba Kamera Lagi.');
+        });
+      }
+      return;
+    }
+
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    streamModeRef.current = null;
 
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: mode,
-          width: { ideal: 800 },
-          height: { ideal: 600 },
+          facingMode: { ideal: mode },
+          // Selfie needs a legible watermark, not a high-resolution preview.
+          // Capture at 640x480 to keep camera startup and image processing light on phones.
+          width: { ideal: prepareCapture ? 640 : 800 },
+          height: { ideal: prepareCapture ? 480 : 600 },
         },
         audio: false,
       });
@@ -58,8 +78,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         return;
       }
       streamRef.current = newStream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
+      streamModeRef.current = mode;
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = newStream;
+        void video.play().catch(() => {
+          if (generation === generationRef.current) setCameraError('Video belum dapat diputar. Ketuk Coba Kamera Lagi.');
+        });
       }
     } catch (err: any) {
       if (generation !== generationRef.current) return;
@@ -71,6 +96,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       );
     }
   };
+
+  // When the photo preview is removed, React remounts the video element.
+  // Reattach the existing live stream; do not request another permission/stream.
+  useEffect(() => {
+    if (!isOpen || capturedImage || !videoRef.current || !streamRef.current) return;
+    const video = videoRef.current;
+    video.srcObject = streamRef.current;
+    void video.play().catch(() => {});
+  }, [capturedImage, isOpen]);
 
   useEffect(() => {
     setCaptureError(null);
@@ -87,6 +121,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       ++generationRef.current;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      streamModeRef.current = null;
     };
   }, [isOpen]);
 
@@ -103,7 +138,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      if (!video || !canvas || !cameraReady || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
         throw new Error('Kamera belum siap. Tunggu gambar kamera muncul lalu coba lagi.');
       }
 
@@ -124,6 +159,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       }
 
+      // Suspend camera capture while reviewing the picture. Stream stays allocated
+      // so retake is instant, and closing the dialog still stops all tracks.
+      streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = false; });
       setCapturedImage(dataUrl);
     } catch (error: any) {
       if (generation === generationRef.current) {
@@ -139,8 +177,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   const handleRetake = () => {
     setCaptureError(null);
+    setCameraReady(false);
+    streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = true; });
     setCapturedImage(null);
-    startCamera(facingMode);
+    // Stream is reattached by the effect when the video preview returns.
+    if (!streamRef.current?.getVideoTracks().some((track) => track.readyState === 'live')) {
+      void startCamera(facingMode);
+    }
   };
 
   const handleConfirm = () => {
@@ -285,6 +328,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <video
                 ref={videoRef}
                 autoPlay
+                onLoadedData={(event) => { if (event.currentTarget.srcObject === streamRef.current) setCameraReady(true); }}
+                onPlaying={(event) => { if (event.currentTarget.srcObject === streamRef.current) setCameraReady(true); }}
                 playsInline
                 muted
                 className={`w-full h-full object-cover ${facingMode === 'user' ? 'transform scale-x-[-1]' : ''}`}
@@ -377,11 +422,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   variant="primary"
                   size="sm"
                   onClick={handleTakeSnapshot}
-                  disabled={isProcessing || !videoRef.current}
+                  disabled={isProcessing || !cameraReady || !!cameraError}
                   leftIcon={<Camera className="w-4 h-4" />}
                   className="w-full sm:w-auto font-bold shadow-md"
                 >
-                  Jepret Foto
+                  {cameraReady ? 'Jepret Foto' : 'Menyiapkan Kamera…'}
                 </Button>
               </div>
             </>

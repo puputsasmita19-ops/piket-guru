@@ -39,6 +39,7 @@ import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
+import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 
 interface AttendanceFeedback {
   tone: 'success' | 'error' | 'info';
@@ -75,6 +76,9 @@ const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = 
 export const AttendancePreview: React.FC = () => {
   const { currentUser, hasRole, hasPermission, isOffline } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const canManageHistory = hasRole('ADMIN');
+  const [adminSelection, setAdminSelection] = useState<AdminAttendanceSelection | null>(null);
+  const [adminFeedback, setAdminFeedback] = useState('');
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -268,9 +272,10 @@ export const AttendancePreview: React.FC = () => {
   // Today's schedule for current logged in user (strictly bound by ID/UID akun, with legacy teacher fallback)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
-  const todayUserSchedules = schedules.filter(
-    (s) => isScheduleOnDate(s, todayISO) && (isAdmin || isMySchedule(s))
-  );
+  // Stable derived schedules: GPS/UI state changes must not rebuild the daily roster.
+  const todayUserSchedules = React.useMemo(() => schedules.filter(
+    (s) => isScheduleOnDate(s, todayISO) && (isAdmin || isScheduleMatchingUser(s, currentUser, teachers, staff))
+  ), [schedules, todayISO, isAdmin, currentUser, teachers, staff]);
 
   useEffect(() => {
     if (!todayUserSchedules.some(s => s.id === selectedScheduleId)) {
@@ -646,8 +651,18 @@ export const AttendancePreview: React.FC = () => {
     }
   };
 
-  const filteredAttendance = attendanceList.filter(item => !history.range.error && item.tanggal >= history.range.start && item.tanggal <= history.range.end && (historyUser === 'all' || item.userId === (historyUser === 'me' ? currentUser?.id : historyUser)));
-  const historyUsers = [...new Map([...teachers.map(t => ({ id: t.userId || t.id, name: t.fullName })), ...staff.map(t => ({ id: t.userId || t.id, name: t.fullName })), ...attendanceList.map(a => ({ id: a.userId, name: a.userName }))].filter(u => u.id !== currentUser?.id).map(u => [u.id, u])).values()].sort((a,b) => a.name.localeCompare(b.name));
+  // History filters are only needed on the recap tab, not during GPS/photo updates.
+  const filteredAttendance = React.useMemo(() => activeTab !== 'riwayat' || history.range.error ? [] : attendanceList.filter(
+    item => item.tanggal >= history.range.start && item.tanggal <= history.range.end &&
+      (historyUser === 'all' || item.userId === (historyUser === 'me' ? currentUser?.id : historyUser))
+  ), [activeTab, attendanceList, history.range.error, history.range.start, history.range.end, historyUser, currentUser?.id]);
+  const historyUsers = React.useMemo(() => activeTab !== 'riwayat' ? [] : [
+    ...new Map([
+      ...teachers.map(t => ({ id: t.userId || t.id, name: t.fullName })),
+      ...staff.map(t => ({ id: t.userId || t.id, name: t.fullName })),
+      ...attendanceList.map(a => ({ id: a.userId, name: a.userName })),
+    ].filter(u => u.id !== currentUser?.id).map(u => [u.id, u])).values(),
+  ].sort((a, b) => a.name.localeCompare(b.name)), [activeTab, teachers, staff, attendanceList, currentUser?.id]);
   const historyPage = useHistoryPagination(filteredAttendance, history.key + ':' + historyUser);
 
   return (
@@ -872,6 +887,8 @@ export const AttendancePreview: React.FC = () => {
                   );
                 })()}
 
+                {/* Show schedule selection and selfie only while check-in is pending. */}
+                {!existingAttendanceToday && <>
                 {/* Shift Selector */}
                 {todayUserSchedules.length > 0 ? (
                   <div className="space-y-1.5">
@@ -968,24 +985,24 @@ export const AttendancePreview: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div
+                    <button
+                      type="button"
                       onClick={() => setIsCameraModalOpen(true)}
-                      className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--theme-primary)] rounded-2xl p-6 text-center bg-slate-50/50 dark:bg-[var(--theme-surface-subtle)]/50 flex flex-col items-center justify-center space-y-2 cursor-pointer transition-all"
+                      className="w-full flex items-center gap-3 text-left rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--theme-primary)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/50 p-3 sm:p-5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]"
                     >
-                      <div className="w-12 h-12 rounded-full bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] flex items-center justify-center">
-                        <Camera className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                          Klik untuk Ambil Swafoto Selfie
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Gunakan kamera depan ponsel atau laptop di pos piket
-                        </span>
-                      </div>
-                    </div>
+                      <span className="w-10 h-10 shrink-0 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] flex items-center justify-center">
+                        <Camera className="w-5 h-5" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Ambil Swafoto</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">Kamera depan · watermark GPS otomatis</span>
+                      </span>
+                      <span className="text-[11px] font-bold text-[var(--theme-primary-text)]">Buka</span>
+                    </button>
                   )}
                 </div>
+
+                </>}
 
                 {/* Submit Actions */}
                 <div data-tour="attendance-actions" className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -1132,6 +1149,7 @@ export const AttendancePreview: React.FC = () => {
             subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
 
           />
+          {adminFeedback && <p role="status" className="m-3 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">{adminFeedback}</p>}
           <div className="p-3"><HistoryControls history={history} view={historyView} onViewChange={setHistoryView} user={historyUser} onUserChange={setHistoryUser} users={historyUsers}/>{historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}</div>
           <HistoryTable view={historyView}>
           <CardContent className="p-0 overflow-x-auto">
@@ -1146,12 +1164,13 @@ export const AttendancePreview: React.FC = () => {
                   <th className="p-4">Jarak GPS</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-center">Foto</th>
+                  {canManageHistory && <th className="p-4">Tindakan Admin</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                    <td colSpan={canManageHistory ? 9 : 8} className="p-8 text-center text-slate-400">
                       Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
@@ -1195,6 +1214,10 @@ export const AttendancePreview: React.FC = () => {
                           <span className="text-slate-300 text-[10px]">-</span>
                         )}
                       </td>
+                      {canManageHistory && <td className="p-4"><div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'edit' })} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[var(--theme-primary)] text-xs font-bold">Edit</button>
+                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'delete' })} className="px-3 py-2 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold">Hapus</button>
+                      </div></td>}
                     </tr>
                   ))
                 )}
@@ -1206,9 +1229,11 @@ export const AttendancePreview: React.FC = () => {
         </Card>
       )}
 
+      {canManageHistory && <AdminAttendanceDialog selection={adminSelection} onClose={() => setAdminSelection(null)} onCompleted={setAdminFeedback} />}
+
       {/* CAMERA CAPTURE MODAL */}
-      <CameraCaptureModal
-        isOpen={isCameraModalOpen}
+      {isCameraModalOpen && <CameraCaptureModal
+        isOpen={true}
         onClose={() => setIsCameraModalOpen(false)}
         allowFileUpload={false}
         prepareCapture={prepareSelfieCapture}
@@ -1229,7 +1254,7 @@ export const AttendancePreview: React.FC = () => {
           }
           pendingSelfieRef.current = null;
         }}
-      />
+      />}
 
       {/* PHOTO PREVIEW MODAL */}
       <Modal
