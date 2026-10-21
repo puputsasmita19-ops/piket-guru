@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   List,
   MessageSquare,
+  HelpCircle,
 } from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -75,14 +76,26 @@ const ScheduleTeacherAvatar: React.FC<{ name: string; avatarUrl?: string | null 
   </span>;
 });
 
-const ScheduleActionGuide: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => <details className="text-[11px] text-slate-600 dark:text-slate-300">
-  <summary className="cursor-pointer w-fit min-h-9 inline-flex items-center font-semibold text-[var(--theme-primary-text)] underline underline-offset-2">Apa fungsi tombol?</summary>
-  <div className="mt-1.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 space-y-1.5 leading-relaxed">
-    {isAdmin && <><p><strong>Berhalangan:</strong> guru tidak dapat bertugas hari ini; admin bisa menunjuk pengganti.</p><p><strong>Batalkan:</strong> nonaktifkan jadwal untuk tanggal pilihan atau seluruh jadwal rutin setelah konfirmasi.</p></>}
-    <p><strong>Pesan:</strong> siapkan pengingat WhatsApp.</p>
-    {isAdmin && <><p><strong>Edit:</strong> ubah detail jadwal, bukan status presensi.</p><p><strong>Hapus:</strong> hapus entri jadwal, berbeda dari membatalkan jadwal.</p></>}
-  </div>
-</details>;
+/** Compact, keyboard-accessible contextual help. Native <details> avoids rerendering all schedule cards. */
+const ScheduleActionGuide: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => (
+  <details name="schedule-action-help" className="group relative shrink-0 text-[11px] text-slate-600 dark:text-slate-300">
+    <summary
+      aria-label="Apa fungsi tombol jadwal piket?"
+      title="Apa fungsi tombol?"
+      className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-300 hover:text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] [&::-webkit-details-marker]:hidden"
+    >
+      <HelpCircle className="h-[18px] w-[18px]" aria-hidden="true" />
+      <span className="sr-only">Apa fungsi tombol?</span>
+    </summary>
+    <div className="absolute right-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-3rem))] space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 leading-relaxed shadow-lg">
+      <p className="mb-2 font-bold text-slate-800 dark:text-slate-100">Panduan tombol jadwal</p>
+      {isAdmin && <><p><strong>Berhalangan:</strong> guru tidak dapat bertugas hari ini; admin bisa menunjuk pengganti.</p><p><strong>Batalkan:</strong> nonaktifkan jadwal untuk tanggal pilihan atau seluruh jadwal rutin setelah konfirmasi.</p></>}
+      <p><strong>Pesan:</strong> siapkan pengingat WhatsApp.</p>
+      {isAdmin && <><p><strong>Edit:</strong> ubah detail jadwal, bukan status presensi.</p><p><strong>Hapus:</strong> hapus entri jadwal, berbeda dari membatalkan jadwal.</p></>}
+      <p className="pt-1 text-[10px] text-slate-500 dark:text-slate-400">Ketuk ikon bantuan lagi untuk menutup.</p>
+    </div>
+  </details>
+);
 
 export const SchedulePreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
@@ -364,9 +377,9 @@ export const SchedulePreview: React.FC = () => {
 
                   {/* Quick Actions */}
                   <div className="pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)] space-y-3">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] font-semibold text-slate-500" title="Status berasal dari presensi masuk/pulang dan pengecualian berhalangan/pembatalan; bukan diubah manual.">Status otomatis</span>
-                      <span className="text-[10px] text-slate-400">Batalkan = nonaktifkan jadwal pada tanggal ini / jadwal berulang.</span>
+                      <ScheduleActionGuide isAdmin={isAdmin} />
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -415,7 +428,6 @@ export const SchedulePreview: React.FC = () => {
                       )}
                       </div>
                     </div>
-                    <ScheduleActionGuide isAdmin={isAdmin} />
                   </div>
                 </CardContent>
               </Card>
