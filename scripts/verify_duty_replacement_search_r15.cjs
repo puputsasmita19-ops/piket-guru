@@ -40,7 +40,7 @@ check('Candidate entries expose display name and role separately', () => {
 check('Search covers login ID, NIP and NUPTK', () => assert.match(dialog, /\[user\.loginId, user\.nip, user\.nuptk\]/));
 check('Picker has a search box and filtered options', () => {
   assert.match(picker, /type="search"/);
-  assert.match(picker, /options\.filter\(/);
+  assert.match(picker, /(?:options|indexedOptions)\.filter\(/);
 });
 check('Picker displays a readable empty search state', () => assert.match(picker, /Tidak ditemukan\. Coba kata kunci lain/));
 check('Picker list limits height and supports scroll on mobile', () => assert.match(picker, /overflow-y-auto overscroll-contain/));

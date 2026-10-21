@@ -31,7 +31,7 @@ const fieldClass = 'w-full min-h-11 p-2.5 rounded-xl border border-slate-200 dar
 
 export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, onClose, onSave, onSaveMultiple, editingSchedule, users, teachers = [], staff = [], rooms, allSchedules, defaultDay, settings, isLoadingData = false, initialMultiPerson = false }) => {
   const candidates = useMemo(() => buildOfficerCandidates(users, teachers, staff), [users, teachers, staff]);
-  const activeRooms = rooms.filter(r => r.isActive !== false);
+  const activeRooms = useMemo(() => rooms.filter(r => r.isActive !== false), [rooms]);
   const [days, setDays] = useState<DayOfWeek[]>([defaultDay]);
   const [tanggal, setTanggal] = useState(getTodayISODate());
   const [recurrence, setRecurrence] = useState<'WEEKLY' | 'ONCE'>('WEEKLY');
@@ -62,7 +62,7 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
     setError(''); setInfo('');
   }, [isOpen, editId, defaultDay, settings, editingSchedule, initialMultiPerson]);
 
-  const effectiveDays = recurrence === 'ONCE' ? [getCurrentDayName(`${tanggal}T12:00:00+07:00`)] : days;
+  const effectiveDays = useMemo(() => recurrence === 'ONCE' ? [getCurrentDayName(`${tanggal}T12:00:00+07:00`)] : days, [recurrence, tanggal, days]);
   const drafts = useMemo<ScheduleItem[]>(() => effectiveDays.flatMap(hari => selectedIds.map(petugasId => {
     const officer = candidates.find(c => c.userId === petugasId);
     const room = rooms.find(r => r.id === ruangId);
@@ -72,8 +72,8 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({ isOpen, on
       ruangId, ruangName: room?.name || '', status: 'TERJADWAL', keterangan };
     if (!editingSchedule) item.id = scheduleSlotId(item);
     return item;
-  })), [effectiveDays.join(','), selectedIds, candidates, rooms, ruangId, recurrence, tanggal, jamMulai, jamSelesai, keterangan, editingSchedule]);
-  const conflicts = drafts.filter(s => s.status !== 'DIBATALKAN').map(s => ScheduleService.checkConflict(s, allSchedules)).filter(c => c.hasConflict);
+  })), [effectiveDays, selectedIds, candidates, rooms, ruangId, recurrence, tanggal, jamMulai, jamSelesai, keterangan, editingSchedule]);
+  const conflicts = useMemo(() => drafts.filter(s => s.status !== 'DIBATALKAN').map(s => ScheduleService.checkConflict(s, allSchedules)).filter(c => c.hasConflict), [drafts, allSchedules]);
   const changeDay = (day: DayOfWeek) => {
     setDays(prev => editingSchedule ? [day] : prev.includes(day) ? prev.filter(d => d !== day) : DAYS_LIST.filter(d => d === day || prev.includes(d)));
     if (!editingSchedule && days.length <= 1) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   CalendarDays,
   Plus,
@@ -186,7 +186,7 @@ export const SchedulePreview: React.FC = () => {
   }, [teachers, rooms, schedules.length]);
 
   // Trigger WhatsApp Reminder
-  const handleTriggerWaReminder = (schedule: ScheduleItem) => {
+  const handleTriggerWaReminder = useCallback((schedule: ScheduleItem) => {
     const user = users.find((u) => u.id === schedule.petugasId);
     const teacher = teachers.find((t) => (t.userId && t.userId === schedule.petugasId) || t.id === schedule.petugasId || t.fullName === schedule.petugasName);
     const staffMember = staff.find((s) => (s.userId && s.userId === schedule.petugasId) || s.id === schedule.petugasId || s.fullName === schedule.petugasName);
@@ -199,7 +199,7 @@ export const SchedulePreview: React.FC = () => {
       message: msg,
       title: `Kirim Pengingat Tugas Piket: ${schedule.petugasName}`,
     });
-  };
+  }, [users, teachers, staff, settings.schoolName]);
 
   // Creation is atomic across all chosen days/officers, with stable slot identities.
   const handleSaveMultipleSchedules = async (items: ScheduleItem[]) => {
@@ -242,10 +242,11 @@ export const SchedulePreview: React.FC = () => {
     setDeleteConfirmSchedule(null);
   };
 
-  const statusOf = (item: ScheduleItem) => getOperationalScheduleStatus(item, schedules, attendanceForDate, selectedDate);
-  const cancelFor = (item: ScheduleItem) => schedules.find(s => s.id === dutyCancellationId(selectedDate, item.id));
-  const coverFor = (item: ScheduleItem) => schedules.find(s => s.id === dutyCoverageId(selectedDate, item.id));
-  const requestCancel = (item: ScheduleItem) => { setCancelSource(item); setCancelScope('DAY'); setCancelReason(''); setCancelError(''); };
+  const statusOf = useCallback((item: ScheduleItem) => getOperationalScheduleStatus(item, schedules, attendanceForDate, selectedDate), [schedules, attendanceForDate, selectedDate]);
+  const scheduleById = useMemo(() => new Map(schedules.map(item => [item.id, item])), [schedules]);
+  const cancelFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCancellationId(selectedDate, item.id)), [scheduleById, selectedDate]);
+  const coverFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCoverageId(selectedDate, item.id)), [scheduleById, selectedDate]);
+  const requestCancel = useCallback((item: ScheduleItem) => { setCancelSource(item); setCancelScope('DAY'); setCancelReason(''); setCancelError(''); }, []);
   const executeCancel = async () => {
     if (!cancelSource || !currentUser || !isAdmin || cancellationBusy) return;
     setCancellationBusy(true); setCancelError('');
@@ -257,7 +258,7 @@ export const SchedulePreview: React.FC = () => {
     } catch (error: any) { setCancelError(error?.message || 'Pembatalan gagal.'); }
     finally { setCancellationBusy(false); }
   };
-  const restoreCancel = async (item: ScheduleItem) => {
+  const restoreCancel = useCallback(async (item: ScheduleItem) => {
     if (!isAdmin || !currentUser || !window.confirm('Aktifkan kembali jadwal piket ini?')) return;
     try {
       const dayCancel = cancelFor(item);
@@ -265,16 +266,26 @@ export const SchedulePreview: React.FC = () => {
       else await DutyCancellationService.restoreRecurring(item, currentUser.fullName);
       setCoverageFeedback('Jadwal piket berhasil dipulihkan.');
     } catch (error: any) { setCoverageFeedback(error?.message || 'Gagal memulihkan jadwal.'); }
-  };
+  }, [isAdmin, currentUser, cancelFor]);
 
-  const filtered = schedules.filter((s) => {
+  const dayCounts = useMemo(() => {
+    const counts = new Map<DayOfWeek, number>();
+    schedules.forEach(schedule => {
+      if (!schedule.coverageForScheduleId && !schedule.cancelForScheduleId) {
+        counts.set(schedule.hari, (counts.get(schedule.hari) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [schedules]);
+
+  const filtered = useMemo(() => schedules.filter((s) => {
     if (s.coverageForScheduleId || s.cancelForScheduleId) return false;
     const matchDay = s.hari === selectedDay && (getScheduleRecurrence(s) !== 'ONCE' || s.tanggal === selectedDate);
     const matchStatus = statusFilter === 'SEMUA' || statusOf(s) === statusFilter;
     const query = searchQuery.toLocaleLowerCase('id-ID');
     const matchSearch = [s.petugasName, s.ruangName, s.keterangan || ''].some(v => v.toLocaleLowerCase('id-ID').includes(query));
     return matchDay && matchStatus && matchSearch;
-  });
+  }), [schedules, selectedDay, selectedDate, statusFilter, searchQuery, statusOf]);
 
   const userLookup = useMemo(() => {
     const byId = new Map<string, UserProfile>();
@@ -286,163 +297,15 @@ export const SchedulePreview: React.FC = () => {
     return { byId, byName };
   }, [users]);
 
-  const getScheduleUser = (item: ScheduleItem) => {
+  const getScheduleUser = useCallback((item: ScheduleItem) => {
     return userLookup.byId.get(item.petugasId)
       || userLookup.byName.get(item.petugasName.trim().toLocaleLowerCase('id-ID'))
       || null;
-  };
+  }, [userLookup]);
 
-  return (
-    <div data-tour="schedules-container" className="space-y-6">
-      {/* Header section */}
-      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <CalendarDays className="w-6 h-6 text-[var(--theme-primary)]" />
-            Jadwal Piket Guru & Staff
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Lihat jadwal dan penugasan guru piket.</p>
-        </div>
-
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Sparkles className="w-4 h-4 text-[var(--theme-primary)]" />}
-              onClick={() => setIsRecurringModalOpen(true)}
-            >
-              Generate Otomatis
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Users className="w-4 h-4" />}
-              onClick={() => {
-                setEditingSchedule(null);
-                setIsInitialMultiPerson(true);
-                setIsFormModalOpen(true);
-              }}
-            >
-              + Jadwal Multi-Petugas
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingSchedule(null);
-                setIsInitialMultiPerson(false);
-                setIsFormModalOpen(true);
-              }}
-            >
-              + Buat Jadwal
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Filter Tabs by Day of Week */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {DAYS_LIST.map((day) => {
-          const isToday = getCurrentDayName() === day;
-          const count = schedules.filter((s) => s.hari === day && !s.coverageForScheduleId && !s.cancelForScheduleId).length;
-          const isSelected = selectedDay === day;
-
-          return (
-            <button
-              key={day}
-              onClick={() => { setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                isSelected
-                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-[1.02]'
-                  : 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[var(--theme-card-border)] hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
-              }`}
-            >
-              <span>{day}</span>
-              {isToday && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold ${isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
-                  HARI INI
-                </span>
-              )}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500'}`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
-        <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-2">
-          Tanggal pemantauan
-          <input type="date" aria-label="Tanggal pemantauan piket" value={selectedDate} onChange={event => {
-            const value = event.target.value;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
-            setSelectedDate(value); setSelectedDay(getCurrentDayName(`${value}T12:00:00+07:00`) as DayOfWeek);
-          }} className="min-h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs" />
-        </label>
-        <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. <strong>Berhalangan</strong> dipakai jika guru mendadak tidak bisa bertugas dan perlu pengganti. <strong>Batalkan</strong> dipakai untuk menonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang melalui konfirmasi admin.</p>
-      </div>
-
-      {/* Search & Status Filter Bar */}
-      <Card>
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari guru, ruangan, atau catatan..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-input-bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
-              />
-            </div>
-
-            <div className="app-filter-group flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
-              >
-                <option value="SEMUA">Semua Status</option>
-                <option value="TERJADWAL">TERJADWAL</option>
-                <option value="BERJALAN">BERJALAN</option>
-                <option value="SELESAI">SELESAI</option>
-                <option value="DIGANTIKAN">DIGANTIKAN</option>
-                <option value="MENUNGGU_PENGGANTI">MENUNGGU PENGGANTI</option>
-                <option value="DIBATALKAN">DIBATALKAN</option>
-              </select></label>
-
-              {/* View Mode Toggle */}
-              <div className="flex items-center border border-slate-200 dark:border-[var(--theme-card-border)] rounded-xl p-1 bg-slate-50 dark:bg-[var(--theme-input-bg)]">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
-                  title="Tampilan Kartu"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
-                  title="Tampilan Tabel"
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {coverageFeedback && <div role="status" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 text-xs">{coverageFeedback}</div>}
-      {/* SCHEDULE VIEW: GRID */}
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.length > 0 ? (
-            filtered.map((item) => {
+  // Memoize the large schedule card/table trees. Opening a dialog must not
+  // reconstruct every teacher card or refetch profile photos on each click.
+  const gridRows = useMemo(() => filtered.map((item) => {
               const scheduleUser = getScheduleUser(item);
               return (
               <Card key={item.id} hoverable className="transition-all">
@@ -556,36 +419,9 @@ export const SchedulePreview: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
-            )})
-          ) : (
-            <div className="col-span-full py-16 text-center text-slate-500 dark:text-slate-400">
-              <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                Tidak ada jadwal piket pada hari {selectedDay}
-              </h4>
-              <p className="text-xs mt-1">
-                Gunakan tombol "+ Buat Jadwal" atau "Generate Otomatis" untuk mengalokasikan guru piket.
-              </p>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* SCHEDULE VIEW: TABLE */
-        <Card>
-          <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border-b border-slate-200 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-300 font-bold">
-                <tr>
-                  <th className="p-4">Guru / Petugas Piket</th>
-                  <th className="p-4">Pos / Lokasi</th>
-                  <th className="p-4">Waktu Shift</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Keterangan</th>
-                  <th className="p-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[var(--theme-card-border)]">
-                {filtered.map((item) => (
+            )}),
+    [filtered, getScheduleUser, statusOf, cancelFor, coverFor, requestCancel, restoreCancel, handleTriggerWaReminder, isAdmin, selectedDate, todayISO]);
+  const tableRows = useMemo(() => filtered.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
                       <div className="flex items-center gap-3 min-w-0">
@@ -658,7 +494,189 @@ export const SchedulePreview: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )),
+    [filtered, getScheduleUser, statusOf, cancelFor, coverFor, requestCancel, restoreCancel, handleTriggerWaReminder, isAdmin, selectedDate, todayISO]);
+
+  return (
+    <div data-tour="schedules-container" className="space-y-6">
+      {/* Header section */}
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+            <CalendarDays className="w-6 h-6 text-[var(--theme-primary)]" />
+            Jadwal Piket Guru & Staff
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Lihat jadwal dan penugasan guru piket.</p>
+        </div>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Sparkles className="w-4 h-4 text-[var(--theme-primary)]" />}
+              onClick={() => setIsRecurringModalOpen(true)}
+            >
+              Generate Otomatis
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Users className="w-4 h-4" />}
+              onClick={() => {
+                setEditingSchedule(null);
+                setIsInitialMultiPerson(true);
+                setIsFormModalOpen(true);
+              }}
+            >
+              + Jadwal Multi-Petugas
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setEditingSchedule(null);
+                setIsInitialMultiPerson(false);
+                setIsFormModalOpen(true);
+              }}
+            >
+              + Buat Jadwal
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Filter Tabs by Day of Week */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {DAYS_LIST.map((day) => {
+          const isToday = getCurrentDayName() === day;
+          const count = dayCounts.get(day) || 0;
+          const isSelected = selectedDay === day;
+
+          return (
+            <button
+              key={day}
+              onClick={() => { setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                isSelected
+                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-[1.02]'
+                  : 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[var(--theme-card-border)] hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
+              }`}
+            >
+              <span>{day}</span>
+              {isToday && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold ${isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                  HARI INI
+                </span>
+              )}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
+        <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-2">
+          Tanggal pemantauan
+          <input type="date" aria-label="Tanggal pemantauan piket" value={selectedDate} onChange={event => {
+            const value = event.target.value;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+            setSelectedDate(value); setSelectedDay(getCurrentDayName(`${value}T12:00:00+07:00`) as DayOfWeek);
+          }} className="min-h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs" />
+        </label>
+        <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. <strong>Berhalangan</strong> dipakai jika guru mendadak tidak bisa bertugas dan perlu pengganti. <strong>Batalkan</strong> dipakai untuk menonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang melalui konfirmasi admin.</p>
+      </div>
+
+      {/* Search & Status Filter Bar */}
+      <Card>
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari guru, ruangan, atau catatan..."
+                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/50 dark:bg-[var(--theme-input-bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
+              />
+            </div>
+
+            <div className="app-filter-group flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+              <label className="app-filter-field"><span>Status</span><select aria-label="Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-xs font-semibold"
+              >
+                <option value="SEMUA">Semua Status</option>
+                <option value="TERJADWAL">TERJADWAL</option>
+                <option value="BERJALAN">BERJALAN</option>
+                <option value="SELESAI">SELESAI</option>
+                <option value="DIGANTIKAN">DIGANTIKAN</option>
+                <option value="MENUNGGU_PENGGANTI">MENUNGGU PENGGANTI</option>
+                <option value="DIBATALKAN">DIBATALKAN</option>
+              </select></label>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center border border-slate-200 dark:border-[var(--theme-card-border)] rounded-xl p-1 bg-slate-50 dark:bg-[var(--theme-input-bg)]">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
+                  title="Tampilan Kartu"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-[var(--theme-surface-subtle)] shadow-xs text-[var(--theme-primary)] font-bold' : 'text-slate-400'}`}
+                  title="Tampilan Tabel"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {coverageFeedback && <div role="status" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 text-xs">{coverageFeedback}</div>}
+      {/* SCHEDULE VIEW: GRID */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.length > 0 ? (
+gridRows
+          ) : (
+            <div className="col-span-full py-16 text-center text-slate-500 dark:text-slate-400">
+              <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                Tidak ada jadwal piket pada hari {selectedDay}
+              </h4>
+              <p className="text-xs mt-1">
+                Gunakan tombol "+ Buat Jadwal" atau "Generate Otomatis" untuk mengalokasikan guru piket.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* SCHEDULE VIEW: TABLE */
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-[var(--theme-surface-subtle)] border-b border-slate-200 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-300 font-bold">
+                <tr>
+                  <th className="p-4">Guru / Petugas Piket</th>
+                  <th className="p-4">Pos / Lokasi</th>
+                  <th className="p-4">Waktu Shift</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Keterangan</th>
+                  <th className="p-4 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-[var(--theme-card-border)]">
+                {tableRows}
               </tbody>
             </table>
           </CardContent>
