@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../../components/common/Modal';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { ScheduleItem, UserProfile } from '../../types';
 import { DutyCoverageService, validateDutyCoverage } from '../../services/firebase/dutyCoverageService';
 import { dutyCoverageId } from '../../utils/scheduleUtils';
@@ -23,6 +24,15 @@ export const DutyCoverageDialog: React.FC<Props> = ({ source, dateISO, allSchedu
   const candidates = useMemo(() => users.filter(u => u.isActive === true && u.requiresActivation !== true &&
     ['GURU', 'TENAGA_KEPENDIDIKAN', 'ADMIN', 'KEPALA_SEKOLAH'].includes(u.role) && u.id !== source?.petugasId)
     .sort((a,b) => a.fullName.localeCompare(b.fullName, 'id-ID')), [users, source?.petugasId]);
+  const replacementOptions = useMemo(() => [
+    { value: '', label: 'Belum ada — Menunggu Pengganti', description: 'Tetapkan pengganti nanti' },
+    ...candidates.map(user => ({
+      value: user.id,
+      label: user.fullName,
+      description: user.role.replaceAll('_', ' '),
+      keywords: [user.loginId, user.nip, user.nuptk].filter(Boolean).join(' '),
+    })),
+  ], [candidates]);
 
   useEffect(() => {
     if (!source) return;
@@ -66,12 +76,21 @@ export const DutyCoverageDialog: React.FC<Props> = ({ source, dateISO, allSchedu
         <textarea rows={3} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} placeholder="Contoh: mendadak izin keluarga / sakit / tugas kedinasan" className="w-full mt-1 min-h-24 p-3 border rounded-xl bg-white dark:bg-slate-900 dark:border-slate-700 text-sm" />
         <span className="text-[11px] text-slate-500 font-normal">Wajib 10–500 karakter untuk jejak penugasan.</span>
       </label>
-      <label className="block text-sm font-semibold">Petugas pengganti
-        <select value={replacementId} onChange={e => setReplacementId(e.target.value)} className="block w-full mt-1 min-h-11 p-2.5 border rounded-xl bg-white dark:bg-slate-900 dark:border-slate-700 text-sm">
-          <option value="">Belum ada — Menunggu Pengganti</option>
-          {candidates.map(user => <option key={user.id} value={user.id}>{user.fullName} · {user.role}</option>)}
-        </select>
-      </label>
+      <div className="space-y-1.5">
+        <label className="block text-sm font-semibold">Petugas pengganti</label>
+        <SearchableSelect
+          label="Petugas Pengganti Piket"
+          value={replacementId}
+          onChange={setReplacementId}
+          options={replacementOptions}
+          disabled={busy}
+          placeholder="Cari dan pilih nama pengganti"
+        />
+        <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          Ketuk pilihan di atas untuk mencari nama, ID login, atau NIP/NUPTK.
+          Pilih “Menunggu Pengganti” jika belum ada petugas yang ditetapkan.
+        </p>
+      </div>
       <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl">Pengganti yang dipilih menggunakan presensi GPS dan swafoto dengan akun miliknya sendiri. Status menunggu pengganti tidak dihitung sebagai guru yang hadir.</p>
       {error && <p role="alert" className="rounded-xl bg-rose-50 text-rose-700 p-3 text-xs">{error}</p>}
       <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-3">
