@@ -10,7 +10,7 @@ import { FirestoreService } from './firestoreService';
 import { AttendanceRecord, AttendanceStatus, UserRole, SchoolSettings } from '../../types';
 import { LocationService, LocationCoordinates, GeofenceResult } from '../location/locationService';
 import { formatTime, getTodayISODate, getCurrentDayName, getCurrentTimeHHMM } from '../../utils/dateUtils';
-import { getShiftHoursForDay } from '../../utils/scheduleUtils';
+import { getShiftHoursForDay, dutyCoverageId, isScheduleOnDate } from '../../utils/scheduleUtils';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { AttendancePolicy, AttendanceError } from '../attendance/attendancePolicy';
 import { checkSelfieDataUrlSize } from '../attendance/selfieWatermark';
@@ -185,6 +185,36 @@ export class AttendanceService {
       await runTransaction(db, async transaction => {
         assertSession();
         const latest = await transaction.get(docRef);
+        // Resolve the effective daily assignment inside this transaction. An emergency override
+        // blocks the original officer, while the substitute may use the one-day schedule.
+        if (effectiveMode === 'TERJADWAL' && storedScheduleId) {
+          const assignedSnap = await transaction.get(doc(db, 'schedules', storedScheduleId));
+          if (!assignedSnap.exists()) throw new Error('Jadwal piket sudah dihapus. Muat ulang aplikasi.');
+          const assigned = { id: assignedSnap.id, ...assignedSnap.data() } as import('../../types').ScheduleItem;
+          if (!isScheduleOnDate(assigned, tanggal)) throw new Error('Jadwal sudah tidak berlaku untuk hari ini.');
+          if (assigned.coverageForScheduleId) {
+            if (assigned.id !== dutyCoverageId(tanggal, assigned.coverageForScheduleId)) throw new Error('Data pengganti tidak valid.');
+            const sourceSnap = await transaction.get(doc(db, 'schedules', assigned.coverageForScheduleId));
+            if (!sourceSnap.exists() || !isScheduleOnDate({ id: sourceSnap.id, ...sourceSnap.data() } as import('../../types').ScheduleItem, tanggal)) {
+              throw new Error('Jadwal asal pengganti sudah tidak berlaku.');
+            }
+          } else {
+            const overrideSnap = await transaction.get(doc(db, 'schedules', dutyCoverageId(tanggal, assigned.id)));
+            if (overrideSnap.exists() && overrideSnap.data().coverageForScheduleId === assigned.id) {
+              throw new Error('Guru asli sedang berhalangan pada tanggal ini. Silakan hubungi admin jika jadwal perlu dipulihkan.');
+            }
+          }
+          if (assigned.petugasId !== userId && userRole !== 'ADMIN') {
+            // Older schedules may point at the linked teacher/staff master ID rather than users.id.
+            const [teacher, staff] = await Promise.all([
+              transaction.get(doc(db, 'teachers', assigned.petugasId)),
+              transaction.get(doc(db, 'staff', assigned.petugasId)),
+            ]);
+            if (teacher.data()?.userId !== userId && staff.data()?.userId !== userId) {
+              throw new Error('Penugasan piket bukan untuk akun Anda.');
+            }
+          }
+        }
         assertSession();
         if (latest.exists()) {
           throw new Error(`Presensi masuk hari ini (${tanggal}) sudah pernah tercatat pada pukul ${formatTime(latest.data().jamMasuk)}.`);

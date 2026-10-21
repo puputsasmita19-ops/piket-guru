@@ -1,4 +1,4 @@
-import { isScheduleOnDate } from '../../utils/scheduleUtils';
+import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import React, { useState, useEffect } from 'react';
 import {
   Radio,
@@ -99,7 +99,7 @@ export const CommandCenterPreview: React.FC = () => {
   }, []);
 
   // Today's metrics
-  const todaySchedules = schedules.filter((s) => isScheduleOnDate(s, todayISO));
+  const todaySchedules = getEffectiveSchedulesOnDate(schedules, todayISO);
   const activeVisitors = visitors.filter((v) => v.status === 'SEDANG_BERKUNJUNG');
   const activePermits = permits.filter((p) => p.status === 'SEDANG_KELUAR');
   const todayTardy = tardyList.filter((t) => t.tanggal === todayISO);

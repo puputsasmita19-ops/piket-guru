@@ -1,7 +1,7 @@
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { appLogo } from '../../utils/reportBranding';
 import { useWibToday } from '../../hooks/useWibToday';
-import { isScheduleOnDate } from '../../utils/scheduleUtils';
+import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { Megaphone } from '../../components/icons';
 import React, { useState, useEffect } from 'react';
 import {
@@ -219,7 +219,7 @@ export const KioskPreview: React.FC = () => {
             <div className="grid grid-cols-3 gap-2 my-5">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
                 <span className="text-xs text-slate-300">Guru Piket</span>
-                <div className="text-3xl font-bold text-white mt-1">{schedules.filter(row => isScheduleOnDate(row, todayISO)).length}</div>
+                <div className="text-3xl font-bold text-white mt-1">{getEffectiveSchedulesOnDate(schedules, todayISO).length}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
                 <span className="text-xs text-slate-300">Guru Inval</span>

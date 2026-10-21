@@ -14,6 +14,29 @@ export function isScheduleOnDate(schedule: ScheduleItem, dateISO: string): boole
     : schedule.hari === getCurrentDayName(`${dateISO}T12:00:00+07:00`);
 }
 
+/** Deterministic, per-date document ID prevents duplicate emergency assignments. */
+export function dutyCoverageId(dateISO: string, sourceScheduleId: string): string {
+  return `duty-cover~${dateISO}~${encodeURIComponent(sourceScheduleId)}`;
+}
+
+/** Valid emergency overrides can only apply on their explicit date (including pending cover). */
+export function getDutyCoverageForDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
+  const sources = new Set(schedules.filter(s => !s.coverageForScheduleId && isScheduleOnDate(s, dateISO)).map(s => s.id));
+  return schedules.filter(s => s.coverageForScheduleId && s.recurrence === 'ONCE' &&
+    s.tanggal === dateISO && s.id === dutyCoverageId(dateISO, s.coverageForScheduleId) &&
+    sources.has(s.coverageForScheduleId));
+}
+
+/** Replace one day's officer with the substitute; a pending absence removes the original slot. */
+export function getEffectiveSchedulesOnDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
+  const overrides = getDutyCoverageForDate(schedules, dateISO);
+  const suppressed = new Set(overrides.map(s => s.coverageForScheduleId));
+  return [
+    ...schedules.filter(s => !s.coverageForScheduleId && !suppressed.has(s.id) && isScheduleOnDate(s, dateISO)),
+    ...overrides.filter(s => s.status !== 'DIBATALKAN'),
+  ];
+}
+
 export function filterOfficerCandidates(candidates: OfficerCandidate[], search: string): OfficerCandidate[] {
   const terms = search.trim().toLocaleLowerCase('id-ID').split(/\s+/).filter(Boolean);
   return candidates.filter(c => {

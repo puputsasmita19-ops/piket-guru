@@ -32,7 +32,9 @@ import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { RecurringScheduleModal } from './RecurringScheduleModal';
 import { useAuth } from '../../contexts/AuthContext';
-import { getScheduleRecurrence } from '../../utils/scheduleUtils';
+import { dutyCoverageId, getScheduleRecurrence } from '../../utils/scheduleUtils';
+import { getTodayISODate } from '../../utils/dateUtils';
+import { DutyCoverageDialog } from '../attendance/DutyCoverageDialog';
 import { getCurrentDayName } from '../../utils/dateUtils';
 
 export const SchedulePreview: React.FC = () => {
@@ -62,6 +64,8 @@ export const SchedulePreview: React.FC = () => {
   const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
   const [deleteConfirmSchedule, setDeleteConfirmSchedule] = useState<ScheduleItem | null>(null);
+  const [coverageSource, setCoverageSource] = useState<ScheduleItem | null>(null);
+  const [coverageFeedback, setCoverageFeedback] = useState('');
 
   // WhatsApp reminder modal
   const [waModalData, setWaModalData] = useState<{
@@ -185,6 +189,7 @@ export const SchedulePreview: React.FC = () => {
 
   // Filtered list
   const filtered = schedules.filter((s) => {
+    if (s.coverageForScheduleId) return false; // One-day overrides are shown under original roster cards.
     const matchDay = s.hari === selectedDay;
     const matchStatus = statusFilter === 'SEMUA' || s.status === statusFilter;
     const matchSearch =
@@ -327,6 +332,7 @@ export const SchedulePreview: React.FC = () => {
         </CardContent>
       </Card>
 
+      {coverageFeedback && <div role="status" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 text-xs">{coverageFeedback}</div>}
       {/* SCHEDULE VIEW: GRID */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -377,6 +383,14 @@ export const SchedulePreview: React.FC = () => {
                         "{item.keterangan}"
                       </p>
                     )}
+                    {selectedDay === getCurrentDayName() && schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id)) && (() => {
+                      const cover = schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id))!;
+                      return <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 p-2 space-y-1">
+                        <p className="text-xs font-bold text-amber-800">Berhalangan hari ini</p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-300">{cover.absenceReason}</p>
+                        <p className="text-xs font-semibold text-amber-700">{cover.status === 'DIBATALKAN' ? 'Menunggu Pengganti' : `Pengganti: ${cover.petugasName}`}</p>
+                      </div>;
+                    })()}
                   </div>
 
                   {/* Quick Actions */}
@@ -394,6 +408,7 @@ export const SchedulePreview: React.FC = () => {
                     </select>
 
                     <div className="flex items-center gap-1">
+                      {isAdmin && selectedDay === getCurrentDayName() && item.status !== 'DIBATALKAN' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-9 px-2 rounded-lg border border-amber-200 text-amber-700 text-[11px] font-bold" title="Catat guru piket berhalangan hari ini">Berhalangan</button>}
                       <button
                         type="button"
                         onClick={() => handleTriggerWaReminder(item)}
@@ -461,6 +476,7 @@ export const SchedulePreview: React.FC = () => {
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
                       {item.petugasName}
+                      {selectedDay === getCurrentDayName() && schedules.find(c => c.id === dutyCoverageId(getTodayISODate(), item.id)) && <span className="block text-[11px] text-amber-700">{(() => { const c = schedules.find(s => s.id === dutyCoverageId(getTodayISODate(), item.id))!; return c.status === 'DIBATALKAN' ? 'Berhalangan · Menunggu Pengganti' : `Berhalangan · Digantikan ${c.petugasName}`; })()}</span>}
                     </td>
                     <td className="p-4 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold">
                       {item.ruangName}
@@ -492,6 +508,7 @@ export const SchedulePreview: React.FC = () => {
                         </button>
                         {isAdmin && (
                           <>
+                            {selectedDay === getCurrentDayName() && item.status !== 'DIBATALKAN' && <button type="button" onClick={() => setCoverageSource(item)} className="px-2 py-1 rounded text-amber-700 border border-amber-200 text-[11px] font-semibold">Berhalangan</button>}
                             <button
                               onClick={() => {
                                 setEditingSchedule(item);
@@ -519,6 +536,7 @@ export const SchedulePreview: React.FC = () => {
         </Card>
       )}
 
+      <DutyCoverageDialog source={coverageSource} dateISO={getTodayISODate()} allSchedules={schedules} users={users} actorName={currentUser?.fullName || 'Administrator'} onClose={() => setCoverageSource(null)} onSaved={setCoverageFeedback} />
       {/* SCHEDULE FORM MODAL */}
       <ScheduleFormModal
         isOpen={isFormModalOpen}

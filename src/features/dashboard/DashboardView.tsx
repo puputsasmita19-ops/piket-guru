@@ -61,7 +61,7 @@ import { VisitorRecord } from '../../types/visitor.types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
-import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
+import { isScheduleMatchingUser, isScheduleOnDate, getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
 import { buildSubstitutionFlashSummary } from './substitutionFlashSummary';
 
@@ -252,10 +252,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
-  const myTodaySchedule = schedules.find((s) => isScheduleOnDate(s, todayISO) && isMySchedule(s));
+  const myTodaySchedule = getEffectiveSchedulesOnDate(schedules, todayISO).find(isMySchedule);
   const myAttendance = attendance.find((a) => a.tanggal === todayISO && a.userId === currentUser?.id);
   const myDutyBook = dutyBooks.find((b) => b.tanggal === todayISO && (b.petugasId === currentUser?.id || (teachers.some(t => t.userId === currentUser?.id && t.id === b.petugasId))));
-  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
+  const myOtherSchedules = schedules.filter((s) => !s.coverageForScheduleId && isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;

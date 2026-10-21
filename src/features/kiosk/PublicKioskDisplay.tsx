@@ -1,7 +1,7 @@
 import './kioskDisplay.css';
 import { tvTypography, tvPageCapacity, tvChunks, tvTextPages, tvAnnouncementBudget, tvSubstitutionDetails } from './tvLayout';
 import { ALL_TV_PANELS } from '../../types/lobbyTv.types';
-import { isScheduleOnDate } from '../../utils/scheduleUtils';
+import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { appLogo } from '../../utils/reportBranding';
 import { Megaphone } from '../../components/icons';
 import { MapPin } from '../../components/icons';
@@ -111,7 +111,7 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
 
   // Filtered operational records for public consumption (safe, non-sensitive)
   const todaySchedules = useMemo(
-    () => schedules.filter((s) => isScheduleOnDate(s, todayISO)),
+    () => getEffectiveSchedulesOnDate(schedules, todayISO),
     [schedules, todayISO]
   );
   const todaySubs = useMemo(

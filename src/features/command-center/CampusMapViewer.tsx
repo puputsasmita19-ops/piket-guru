@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { ScheduleItem, AttendanceRecord } from '../../types';
+import { getTodayISODate } from '../../utils/dateUtils';
+import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { VisitorRecord } from '../../types/visitor.types';
 import { IncidentRecord } from '../../types/incident.types';
 import { Badge } from '../../components/common/Badge';
@@ -93,9 +95,10 @@ export const CampusMapViewer: React.FC<CampusMapViewerProps> = ({
     },
   ];
 
+  const actualTodaySchedules = getEffectiveSchedulesOnDate(schedules, getTodayISODate());
   const activePost = posts.find((p) => p.id === selectedPostId);
   const activePostSchedules = activePost
-    ? schedules.filter(
+    ? actualTodaySchedules.filter(
         (s) =>
           s.ruangName.toLowerCase().includes(activePost.name.toLowerCase().split(' ')[0]) ||
           s.ruangName.includes(activePost.code)
@@ -157,7 +160,7 @@ export const CampusMapViewer: React.FC<CampusMapViewerProps> = ({
 
         {/* POST NODES */}
         {posts.map((post) => {
-          const assignedSchedules = schedules.filter(
+          const assignedSchedules = actualTodaySchedules.filter(
             (s) =>
               s.ruangName.toLowerCase().includes(post.name.toLowerCase().split(' ')[0]) ||
               s.ruangName.includes(post.code)

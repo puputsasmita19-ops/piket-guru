@@ -34,7 +34,7 @@ import { AttendanceRecord, AttendanceStatus, ScheduleItem, SchoolSettings } from
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate, toEpochMs } from '../../utils/dateUtils';
-import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
+import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
@@ -273,8 +273,8 @@ export const AttendancePreview: React.FC = () => {
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
   // Stable derived schedules: GPS/UI state changes must not rebuild the daily roster.
-  const todayUserSchedules = React.useMemo(() => schedules.filter(
-    (s) => isScheduleOnDate(s, todayISO) && (isAdmin || isScheduleMatchingUser(s, currentUser, teachers, staff))
+  const todayUserSchedules = React.useMemo(() => getEffectiveSchedulesOnDate(schedules, todayISO).filter(
+    (s) => isAdmin || isScheduleMatchingUser(s, currentUser, teachers, staff)
   ), [schedules, todayISO, isAdmin, currentUser, teachers, staff]);
 
   useEffect(() => {
@@ -889,6 +889,15 @@ export const AttendancePreview: React.FC = () => {
 
                 {/* Show schedule selection and selfie only while check-in is pending. */}
                 {!existingAttendanceToday && <>
+                {todayUserSchedules.some(s => s.coverageForScheduleId && isScheduleMatchingUser(s, currentUser, teachers, staff)) && (
+                  <div role="status" className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 p-3 text-xs text-sky-900 dark:text-sky-200">
+                    <strong className="block">Anda ditugaskan sebagai guru piket pengganti hari ini.</strong>
+                    {todayUserSchedules.filter(s => s.coverageForScheduleId && isScheduleMatchingUser(s, currentUser, teachers, staff)).map(s => (
+                      <p key={s.id} className="mt-1">Menggantikan {s.absentOfficerName} · {s.ruangName}. Presensi tetap menggunakan GPS dan swafoto Anda sendiri.</p>
+                    ))}
+                  </div>
+                )}
+
                 {/* Shift Selector */}
                 {todayUserSchedules.length > 0 ? (
                   <div className="space-y-1.5">

@@ -7,10 +7,12 @@ import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AttendanceRecord, ScheduleItem, SchoolSettings } from '../../types';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
-import { isScheduleOnDate } from '../../utils/scheduleUtils';
+import { getDutyCoverageForDate, getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { formatIndonesianDate, formatTime, toEpochMs } from '../../utils/dateUtils';
 import { HistoryControls, HistoryPagination, useHistoryView } from '../../components/common/HistoryControls';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
+import { DutyCoverageDialog } from './DutyCoverageDialog';
+import { UserProfile } from '../../types';
 import { Activity, Users, CheckCircle2, AlertTriangle, Clock, MapPin, Edit3, Trash2, RealtimeMonitorLogo } from '../../components/icons';
 
 type DailyRow = { id: string; name: string; assignment: string; attendance?: AttendanceRecord };
@@ -34,6 +36,8 @@ export const AdminAttendanceDashboard: React.FC = () => {
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [historicalRecords, setHistoricalRecords] = useState<AttendanceRecord[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [coverageSource, setCoverageSource] = useState<ScheduleItem | null>(null);
   const [dutyBooks, setDutyBooks] = useState<DutyBookRecord[]>([]);
   const [expandDutyBooks, setExpandDutyBooks] = useState(false);
   const [todayError, setTodayError] = useState('');
@@ -47,7 +51,8 @@ export const AdminAttendanceDashboard: React.FC = () => {
     if (!admin) return;
     const stopSchool = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => { if (data) setSchool(data); });
     const stopSchedule = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules, error => setTodayError(error?.message || 'Jadwal tidak dapat dibaca.'));
-    return () => { stopSchool(); stopSchedule(); };
+    const stopUsers = FirestoreService.subscribeToCollection<UserProfile>('users', setUsers, error => setTodayError(error?.message || 'Daftar guru tidak dapat dimuat.'));
+    return () => { stopSchool(); stopSchedule(); stopUsers(); };
   }, [admin]);
 
   useEffect(() => {
@@ -73,7 +78,7 @@ export const AdminAttendanceDashboard: React.FC = () => {
 
   // Each person is one row even with several shifts; do not count a multi-shift teacher twice.
   const dailyRows: DailyRow[] = useMemo(() => {
-    const active = schedules.filter(s => isScheduleOnDate(s, today));
+    const active = getEffectiveSchedulesOnDate(schedules, today);
     const rows = new Map<string, DailyRow>();
     for (const schedule of active) {
       const key = schedule.petugasId || `name:${schedule.petugasName}`;
@@ -91,6 +96,8 @@ export const AdminAttendanceDashboard: React.FC = () => {
     return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'id-ID'));
   }, [schedules, todayRecords, today]);
 
+  const coverages = useMemo(() => getDutyCoverageForDate(schedules, today), [schedules, today]);
+  const pendingCoverages = coverages.filter(c => c.status === 'DIBATALKAN');
   const assignedRows = dailyRows.filter(r => !r.id.startsWith('extra:'));
   const hadir = assignedRows.filter(r => Boolean(r.attendance)).length;
   const belumHadir = assignedRows.filter(r => !r.attendance).length;
@@ -127,14 +134,30 @@ export const AdminAttendanceDashboard: React.FC = () => {
     </div>
     {feedback && <div role="status" className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-semibold">{feedback}</div>}
     {(todayError || historyError) && <div role="alert" className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs">{todayError || historyError}</div>}
-    <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-7 gap-3">
       <Metric label="Guru Dijadwalkan" value={assignedRows.length} description="Petugas unik hari ini" icon={<Users className="w-5 h-5" />} />
       <Metric label="Sudah Hadir" value={hadir} description="Dari guru dijadwalkan" icon={<CheckCircle2 className="w-5 h-5" />} tone="text-emerald-700 dark:text-emerald-400" />
       <Metric label="Belum Hadir" value={belumHadir} description="Dari guru dijadwalkan" icon={<Clock className="w-5 h-5" />} tone="text-amber-700 dark:text-amber-400" />
       <Metric label="Belum Pulang" value={belumPulang} description="Sudah masuk, belum checkout" icon={<AlertTriangle className="w-5 h-5" />} tone="text-orange-700 dark:text-orange-400" />
       <Metric label="Selesai Piket" value={selesai} description={`${gpsWarning} presensi berstatus GPS perhatian`} icon={<CheckCircle2 className="w-5 h-5" />} tone="text-sky-700 dark:text-sky-400" />
       <Metric label="Jurnal Piket" value={submittedBooks} description={`${dutyBooks.length} jurnal hari ini, termasuk draf`} icon={<Activity className="w-5 h-5" />} tone="text-violet-700 dark:text-violet-400" />
+      <Metric label="Berhalangan" value={coverages.length} description={`${pendingCoverages.length} menunggu pengganti`} icon={<AlertTriangle className="w-5 h-5" />} tone="text-rose-700 dark:text-rose-400" />
     </div>
+    <section aria-labelledby="coverages-today" className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
+      <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700">
+        <div><h2 id="coverages-today" className="font-bold text-slate-900 dark:text-white">Guru Berhalangan & Pengganti Hari Ini</h2><p className="text-xs text-slate-500">Penggantian berlaku satu hari. Jadwal rutin tidak berubah.</p></div>
+        <span className="text-xs font-semibold text-amber-700">{coverages.length} berhalangan · {pendingCoverages.length} menunggu</span>
+      </div>
+      <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+        {coverages.length === 0 ? <p className="text-xs text-slate-500 p-2">Belum ada guru berhalangan hari ini. Gunakan tombol “Berhalangan” pada aktivitas piket untuk mencatat izin dan menunjuk pengganti.</p> : coverages.map(c => <div key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-1 min-w-0"><p className="text-sm font-bold text-slate-900 dark:text-white">{c.absentOfficerName} <span className="font-normal text-slate-500">· {c.ruangName}</span></p>
+            <p className="text-xs text-slate-500 break-words">Keterangan: {c.absenceReason}</p>
+            <p className={`text-xs font-semibold ${c.status === 'DIBATALKAN' ? 'text-amber-700' : 'text-emerald-700'}`}>{c.status === 'DIBATALKAN' ? 'Menunggu Pengganti' : `Pengganti: ${c.petugasName}`}</p>
+          </div>
+          <button type="button" onClick={() => setCoverageSource(schedules.find(s => s.id === c.coverageForScheduleId) || null)} className="min-h-11 rounded-xl px-3 border border-slate-200 dark:border-slate-700 text-xs font-bold text-[var(--theme-primary)] self-start">Kelola Pengganti</button>
+        </div>)}
+      </div>
+    </section>
     <section aria-labelledby="status-today" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
       <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2"><div><h2 id="status-today" className="font-bold text-slate-900 dark:text-white">Aktivitas Piket Hari Ini</h2><p className="text-xs text-slate-500">Guru berdasarkan jadwal aktif, ditambah presensi tanpa jadwal. {loading && 'Memuat data…'}</p></div><span className="text-[11px] font-semibold text-slate-500">Tampilan {monitorView === 'grid' ? 'grid' : 'list'} · scroll aktif</span></div>
       {dailyRows.length === 0 ? <div className="p-6 text-sm text-slate-500">{loading ? 'Memuat status piket…' : 'Belum ada jadwal atau presensi hari ini.'}</div> : <div className="max-h-[34rem] overflow-y-auto p-3 pr-2"><div className={monitorView === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-3'}>
@@ -143,7 +166,13 @@ export const AdminAttendanceDashboard: React.FC = () => {
             <span className={`rounded-full px-2 py-1 text-[10px] font-bold whitespace-nowrap ${!row.attendance ? 'bg-amber-100 text-amber-800' : row.attendance.jamPulang ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'}`}>{!row.attendance ? 'Belum hadir' : row.attendance.jamPulang ? 'Selesai' : 'Bertugas'}</span></div>
           <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2 flex-wrap"><Clock className="w-3.5 h-3.5 shrink-0" /> Masuk {row.attendance ? formatTime(row.attendance.jamMasuk) : '—'} · Pulang {row.attendance?.jamPulang ? formatTime(row.attendance.jamPulang) : '—'}</div>
           {row.attendance && <p className="text-[11px] text-slate-500 flex gap-1 items-center flex-wrap"><MapPin className="w-3.5 h-3.5" /> {row.attendance.status} · {row.attendance.distance} m</p>}</div>
-          {row.attendance && <div className="shrink-0">{buttons(row.attendance)}</div>}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {row.attendance && buttons(row.attendance)}
+            {!row.id.startsWith('extra:') && <button type="button" onClick={() => {
+              const displayed = getEffectiveSchedulesOnDate(schedules, today).find(s => (s.petugasId || `name:${s.petugasName}`) === row.id);
+              setCoverageSource(schedules.find(s => s.id === (displayed?.coverageForScheduleId || displayed?.id)) || null);
+            }} className="min-h-10 px-3 rounded-lg border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">{row.attendance ? 'Kelola Tugas' : 'Berhalangan'}</button>}
+          </div>
         </div>)}
       </div></div>}
     </section>
@@ -174,5 +203,6 @@ export const AdminAttendanceDashboard: React.FC = () => {
       <HistoryPagination {...page} />
     </section>
     <AdminAttendanceDialog selection={selection} onClose={() => setSelection(null)} onCompleted={setFeedback} />
+    <DutyCoverageDialog source={coverageSource} dateISO={today} allSchedules={schedules} users={users} actorName={currentUser?.fullName || 'Administrator'} onClose={() => setCoverageSource(null)} onSaved={setFeedback} />
   </div>;
 };

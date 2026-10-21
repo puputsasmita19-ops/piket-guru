@@ -67,6 +67,12 @@ export interface ScheduleItem extends BaseEntityMetadata {
   ruangName: string;
   status: ScheduleStatus;
   keterangan?: string;
+  /** One-day emergency absence/cover override. The recurring source schedule is never edited. */
+  coverageForScheduleId?: string;
+  absentOfficerId?: string;
+  absentOfficerName?: string;
+  absenceReason?: string;
+  coverageUpdatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;

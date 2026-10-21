@@ -1,5 +1,5 @@
 import { isOperationalRecord, type ScheduleItem } from '../types';
-import { isScheduleOnDate } from './scheduleUtils';
+import { getEffectiveSchedulesOnDate } from './scheduleUtils';
 
 /** Input is already a WIB calendar date; UTC calendar arithmetic avoids host timezone changes. */
 export function nextDutyDate(todayISO: string): string {
@@ -10,6 +10,6 @@ export function nextDutyDate(todayISO: string): string {
 }
 
 export function dutyRosterForDate(schedules: ScheduleItem[], dateISO: string): ScheduleItem[] {
-  return schedules.filter(s => isOperationalRecord(s) && isScheduleOnDate(s, dateISO))
+  return getEffectiveSchedulesOnDate(schedules.filter(isOperationalRecord), dateISO)
     .sort((a, b) => a.jamMulai.localeCompare(b.jamMulai) || a.petugasName.localeCompare(b.petugasName, 'id-ID') || a.ruangName.localeCompare(b.ruangName, 'id-ID'));
 }
