@@ -51,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTogglePin,
 }) => {
   const { activeTab, setActiveTab } = useNavigation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole } = useAuth();
   const [menuSearch, setMenuSearch] = useState('');
   useEffect(() => { if (!isOpen) setMenuSearch(''); }, [isOpen]);
 
@@ -70,12 +70,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const adminMenuItems: MenuItem[] = [
+    { id: 'attendance-monitor', label: 'Monitoring Piket Realtime', icon: MapPin, permission: PERMISSIONS.ATTENDANCE_VIEW_ALL },
     { id: 'reports', label: 'Laporan & Rekap', icon: FileBarChart2, permission: PERMISSIONS.REPORTS_VIEW },
     { id: 'users', label: 'Master Pengguna', icon: Users, permission: PERMISSIONS.USERS_VIEW },
     { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
   ];
 
   const searchAliases: Partial<Record<NavigationTab, string>> = {
+    'attendance-monitor': 'dashboard piket realtime riwayat presensi admin koreksi hapus',
     attendance: 'absen hadir masuk pulang lokasi gps', 'duty-book': 'jurnal catatan kegiatan',
     'student-tardiness': 'siswa telat keterlambatan', 'student-permits': 'izin keluar masuk pulang gerbang',
     substitutions: 'inval berhalangan pengganti', visitors: 'tamu pengunjung', kiosk: 'mode layar lobi kiosk',
@@ -83,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const matchesMenu = (item: MenuItem) => hasPermission(item.permission) &&
     `${item.label} ${item.id} ${searchAliases[item.id] || ''}`.toLowerCase().includes(menuSearch.trim().toLowerCase());
   const visibleMainItems = mainMenuItems.filter(matchesMenu);
-  const visibleAdminItems = adminMenuItems.filter(matchesMenu);
+  const visibleAdminItems = adminMenuItems.filter(item => (item.id !== 'attendance-monitor' || hasRole('ADMIN')) && matchesMenu(item));
 
   const handleMenuClick = (tab: NavigationTab) => {
     setActiveTab(tab);

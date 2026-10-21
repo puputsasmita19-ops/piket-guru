@@ -44,6 +44,7 @@ import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
+import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 
 interface AttendanceFeedback {
   tone: 'success' | 'error' | 'info';
@@ -80,6 +81,9 @@ const InlineAttendanceStatus: React.FC<{ status: AttendanceFeedback | null }> = 
 export const AttendancePreview: React.FC = () => {
   const { currentUser, hasRole, hasPermission, isOffline } = useAuth();
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const canManageHistory = hasRole('ADMIN');
+  const [adminSelection, setAdminSelection] = useState<AdminAttendanceSelection | null>(null);
+  const [adminFeedback, setAdminFeedback] = useState('');
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -1058,9 +1062,9 @@ export const AttendancePreview: React.FC = () => {
                       <p className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
                         {existingAttendanceToday.jamPulang ? formatTime(existingAttendanceToday.jamPulang) : '-'}
                       </p>
-                      {existingAttendanceToday.jamPulang && (existingAttendanceToday.checkoutPolicy?.keterangan || existingAttendanceToday.keteranganCheckout) && (
+                      {existingAttendanceToday.jamPulang && (existingAttendanceToday.keteranganCheckout || existingAttendanceToday.checkoutPolicy?.keterangan) && (
                         <p className="text-[11px] text-slate-500">
-                          Keterangan: <strong>{existingAttendanceToday.checkoutPolicy?.keterangan || existingAttendanceToday.keteranganCheckout}</strong>
+                          Keterangan: <strong>{existingAttendanceToday.keteranganCheckout || existingAttendanceToday.checkoutPolicy?.keterangan}</strong>
                         </p>
                       )}
                     </div>
@@ -1098,6 +1102,7 @@ export const AttendancePreview: React.FC = () => {
             subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
 
           />
+          {adminFeedback && <p role="status" className="m-3 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">{adminFeedback}</p>}
           <div className="p-3"><HistoryControls history={history} view={historyView} onViewChange={setHistoryView} user={historyUser} onUserChange={setHistoryUser} users={historyUsers}/>{historyError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{historyError}</p>}</div>
           <HistoryTable view={historyView}>
           <CardContent className="p-0 overflow-x-auto">
@@ -1112,12 +1117,13 @@ export const AttendancePreview: React.FC = () => {
                   <th className="p-4">Jarak GPS</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-center">Foto</th>
+                  {canManageHistory && <th className="p-4">Tindakan Admin</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                    <td colSpan={canManageHistory ? 9 : 8} className="p-8 text-center text-slate-400">
                       Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
@@ -1161,6 +1167,10 @@ export const AttendancePreview: React.FC = () => {
                           <span className="text-slate-300 text-[10px]">-</span>
                         )}
                       </td>
+                      {canManageHistory && <td className="p-4"><div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'edit' })} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[var(--theme-primary)] text-xs font-bold">Edit</button>
+                        <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'delete' })} className="px-3 py-2 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold">Hapus</button>
+                      </div></td>}
                     </tr>
                   ))
                 )}
@@ -1171,6 +1181,8 @@ export const AttendancePreview: React.FC = () => {
           <HistoryPagination {...historyPage} />
         </Card>
       )}
+
+      {canManageHistory && <AdminAttendanceDialog selection={adminSelection} onClose={() => setAdminSelection(null)} onCompleted={setAdminFeedback} />}
 
       {/* CAMERA CAPTURE MODAL */}
       <CameraCaptureModal

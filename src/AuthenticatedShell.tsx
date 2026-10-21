@@ -9,6 +9,7 @@ import { DashboardView } from './features/dashboard/DashboardView';
 const CommandCenterPreview = lazy(() => import('./features/command-center/CommandCenterPreview').then((module) => ({ default: module.CommandCenterPreview })));
 const KioskPreview = lazy(() => import('./features/kiosk/KioskPreview').then((module) => ({ default: module.KioskPreview })));
 const SchedulePreview = lazy(() => import('./features/schedules/SchedulePreview').then((module) => ({ default: module.SchedulePreview })));
+const AdminAttendanceDashboard = lazy(() => import('./features/attendance/AdminAttendanceDashboard').then(m => ({ default: m.AdminAttendanceDashboard })));
 const AttendancePreview = lazy(() => import('./features/attendance/AttendancePreview').then((module) => ({ default: module.AttendancePreview })));
 const DutyBookPreview = lazy(() => import('./features/duty-book/DutyBookPreview').then((module) => ({ default: module.DutyBookPreview })));
 const IncidentPreview = lazy(() => import('./features/incidents/IncidentPreview').then((module) => ({ default: module.IncidentPreview })));
@@ -21,11 +22,13 @@ const UsersPreview = lazy(() => import('./features/users/UsersPreview').then((mo
 const SettingsPreview = lazy(() => import('./features/settings/SettingsPreview').then((module) => ({ default: module.SettingsPreview })));
 import { PermissionGuard } from './components/auth/PermissionGuard';
 import { PERMISSIONS } from './config/permissions';
+import { useAuth } from './contexts/AuthContext';
 
 
 export default function AuthenticatedShell() {
   useAutomaticSync();
   const { activeTab, setActiveTab } = useNavigation();
+  const { hasRole } = useAuth();
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -58,6 +61,12 @@ export default function AuthenticatedShell() {
             <AttendancePreview />
           </PermissionGuard>
         );
+      case 'attendance-monitor':
+        return hasRole('ADMIN') ? (
+          <PermissionGuard permission={PERMISSIONS.ATTENDANCE_VIEW_ALL}>
+            <AdminAttendanceDashboard />
+          </PermissionGuard>
+        ) : <div role="alert" className="p-6 text-rose-700">Akses monitoring presensi hanya untuk Administrator.</div>;
       case 'duty-book':
         return (
           <PermissionGuard permission={PERMISSIONS.DUTYBOOK_VIEW}>

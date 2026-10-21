@@ -98,6 +98,8 @@ export interface AttendanceRecord extends BaseEntityMetadata {
     keterangan: string;
   };
   keteranganCheckout?: string;
+  /** Last administrator correction (full change history is in auditLogs). */
+  adminCorrection?: { at: string; byId: string; byName: string; reason: string; before: unknown; after: unknown };
   createdAt?: DateValue;
   updatedAt?: DateValue;
 }
@@ -277,6 +279,7 @@ export type NavigationTab =
   | 'kiosk'
   | 'schedules'
   | 'attendance'
+  | 'attendance-monitor'
   | 'duty-book'
   | 'incidents'
   | 'student-tardiness'

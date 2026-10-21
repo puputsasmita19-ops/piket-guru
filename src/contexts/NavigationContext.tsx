@@ -15,6 +15,7 @@ const VALID_TABS: NavigationTab[] = [
   'kiosk',
   'schedules',
   'attendance',
+  'attendance-monitor',
   'duty-book',
   'incidents',
   'student-tardiness',
