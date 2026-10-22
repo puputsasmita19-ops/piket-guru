@@ -979,6 +979,7 @@ export const AttendancePreview: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setIsCameraModalOpen(true)}
+                            data-tour="selfie-trigger"
                             className="text-xs text-[var(--theme-primary)] hover:underline font-semibold cursor-pointer"
                           >
                             Ganti Foto
@@ -999,6 +1000,7 @@ export const AttendancePreview: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsCameraModalOpen(true)}
+                      data-tour="selfie-trigger"
                       className="w-full flex items-center gap-3 text-left rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--theme-primary)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/50 p-3 sm:p-5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]"
                     >
                       <span className="w-10 h-10 shrink-0 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] flex items-center justify-center">
@@ -1049,6 +1051,7 @@ export const AttendancePreview: React.FC = () => {
                         <Button
                           variant="primary"
                           size="lg"
+                          data-tour="checkout-button"
                           className="w-full sm:w-auto"
                           isLoading={isCheckingOut}
                           disabled={isCheckingOut || isSubmitting || isLocating || !settingsReady || !validSchoolLocation}
@@ -1072,7 +1075,7 @@ export const AttendancePreview: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
+                      <div data-tour="attendance-complete" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                         <span>Presensi Masuk &amp; Pulang Hari Ini Telah Lengkap Selesai</span>
                       </div>

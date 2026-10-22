@@ -21,6 +21,8 @@ import { useNavigation } from '../../contexts/NavigationContext';
 import { NavigationTab } from '../../types';
 import { Button } from '../common/Button';
 import { PERMISSIONS, PermissionKey } from '../../config/permissions';
+import { clipGuideFocus, getGuideAreas, needsGuideScroll } from './guidePositioning';
+import type { GuideRect } from './guidePositioning';
 
 export interface TourStep {
   id: string;
@@ -115,13 +117,12 @@ export const GURU_STEPS: TourStep[] = [
     id: 'guru-gps',
     targetTab: 'attendance',
     selectors: [
-      '[data-tour="gps-status"]',
       '[data-tour="refresh-gps-button"]',
-      '[data-tour="attendance-container"]',
+      '[data-tour="gps-status"]',
     ],
     title: 'Pembaruan & Status GPS',
     location: 'Seksi Status Lokasi GPS',
-    action: 'Ketuk tombol "Perbarui Lokasi GPS" untuk memverifikasi koordinat posisi Anda.',
+    action: 'Perhatikan tombol Perbarui GPS yang disorot. Setelah panduan ditutup, ketuk tombol itu untuk memperbarui posisi Anda.',
     expectedResult: 'Status lokasi menampilkan jarak posisi Anda terhadap radius resmi sekolah.',
     icon: MapPin,
     requiredPermission: PERMISSIONS.ATTENDANCE_VIEW,
@@ -130,12 +131,12 @@ export const GURU_STEPS: TourStep[] = [
     id: 'guru-selfie',
     targetTab: 'attendance',
     selectors: [
+      '[data-tour="selfie-trigger"]',
       '[data-tour="camera-section"]',
-      '[data-tour="attendance-container"]',
     ],
     title: 'Kamera Swafoto',
     location: 'Seksi Swafoto Kehadiran',
-    action: 'Ambil foto selfie secara langsung sebagai bukti kehadiran visual.',
+    action: 'Perhatikan tombol Ambil Swafoto yang disorot. Sebelum mengirim presensi masuk, gunakan kamera untuk mengambil foto diri.',
     expectedResult: 'Foto selfie tersimpan dengan tanggal, jam, dan lokasi pengambilan foto.',
     icon: Camera,
     requiredPermission: PERMISSIONS.ATTENDANCE_CREATE,
@@ -144,13 +145,14 @@ export const GURU_STEPS: TourStep[] = [
     id: 'guru-submit',
     targetTab: 'attendance',
     selectors: [
-      '[data-tour="attendance-actions"]',
       '[data-tour="checkin-button"]',
-      '[data-tour="attendance-container"]',
+      '[data-tour="checkout-button"]',
+      '[data-tour="attendance-complete"]',
+      '[data-tour="attendance-actions"]',
     ],
     title: 'Kirim Presensi',
     location: 'Tombol Presensi Masuk / Pulang',
-    action: 'Sesudah lokasi dan foto siap, ketuk Presensi Masuk. Saat selesai bertugas, gunakan Presensi Pulang.',
+    action: 'Lihat tombol yang disorot. Setelah lokasi dan foto siap, kirim Presensi Masuk. Saat selesai bertugas, kirim Presensi Pulang.',
     expectedResult: 'Periksa pesan berhasil dan riwayat presensi; jangan menekan tombol berulang kali.',
     icon: Clock,
     requiredPermission: PERMISSIONS.ATTENDANCE_CREATE,
@@ -173,11 +175,18 @@ export const GURU_STEPS: TourStep[] = [
 
 const TOUR_PERMISSIONS = [...new Set([...ADMIN_STEPS, ...GURU_STEPS].map(step => step.requiredPermission).filter((value): value is PermissionKey => Boolean(value)))];
 
-interface ElementRect {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
+type TargetState = 'searching' | 'found' | 'missing';
+
+/** Locate actual UI controls rather than generic page containers. Off-screen elements are valid: we scroll to them. */
+function findGuideTarget(selectors: string[]): { element: HTMLElement; selector: string } | null {
+  for (const selector of selectors) {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (!element || !element.getClientRects().length) continue;
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    return { element, selector };
+  }
+  return null;
 }
 
 export const InteractiveGuideTour: React.FC = () => {
@@ -186,8 +195,6 @@ export const InteractiveGuideTour: React.FC = () => {
   const { activeTab, setActiveTab } = useNavigation();
   const navigateRef = useRef(setActiveTab);
   navigateRef.current = setActiveTab;
-  // Permission functions are recreated by AuthContext on render. Derive stable primitive
-  // dependencies so opening a step never tears down/restarts all DOM measurements.
   const adminTour = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const permissionSignature = TOUR_PERMISSIONS.filter(permission => hasPermission(permission)).join('|');
   const steps = useMemo(() => [...(adminTour ? ADMIN_STEPS : GURU_STEPS), {
@@ -195,107 +202,178 @@ export const InteractiveGuideTour: React.FC = () => {
     location: 'Ikon koneksi di header atas', action: 'Simpan formulir. Periksa antrean pada ikon koneksi; biarkan aplikasi terbuka saat internet kembali.',
     expectedResult: 'Antrean terkirim otomatis. Draf belum dikirim tetap perlu dibuka dan dikirim sendiri.', icon: Info, requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
   }].filter(step => !step.requiredPermission || permissionSignature.split('|').includes(step.requiredPermission)), [adminTour, permissionSignature]);
-  const [index, setIndex] = useState(0), [targetRect, setTargetRect] = useState<ElementRect | null>(null);
-  const [dock, setDock] = useState<'top' | 'bottom'>('bottom');
-  const [size, setSize] = useState({ width: window.innerWidth, height: window.visualViewport?.height || window.innerHeight, card: 270 });
-  const cardRef = useRef<HTMLDivElement>(null), previousFocus = useRef<HTMLElement | null>(null);
+  const [index, setIndex] = useState(0);
+  const [targetRect, setTargetRect] = useState<GuideRect | null>(null);
+  const [targetState, setTargetState] = useState<TargetState>('searching');
+  const [targetSelector, setTargetSelector] = useState('');
+  const [size, setSize] = useState(() => ({
+    width: typeof window === 'undefined' ? 375 : window.innerWidth,
+    height: typeof window === 'undefined' ? 760 : (window.visualViewport?.height || window.innerHeight),
+    card: 280,
+  }));
+  const cardRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
   const step = steps[Math.min(index, steps.length - 1)];
-  const close = useCallback(() => { stopGuideTour(); setTargetRect(null); requestAnimationFrame(() => previousFocus.current?.focus({ preventScroll: true })); }, [stopGuideTour]);
-  useEffect(() => { if (isGuideTourActive) { setIndex(0); previousFocus.current = document.activeElement as HTMLElement; requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); } }, [isGuideTourActive]);
+  const mobile = size.width < 768;
+  const bottomNavStep = mobile && step?.id === 'admin-nav';
+  const headerBottom = typeof document !== 'undefined' ? document.querySelector('.app-topbar')?.getBoundingClientRect().bottom || 64 : 64;
+  const areas = getGuideAreas(size.width, size.height, size.card, headerBottom, bottomNavStep);
+
+  const close = useCallback(() => {
+    stopGuideTour();
+    setTargetRect(null);
+    requestAnimationFrame(() => previousFocus.current?.focus({ preventScroll: true }));
+  }, [stopGuideTour]);
+
+  useEffect(() => {
+    if (!isGuideTourActive) return;
+    setIndex(0);
+    previousFocus.current = document.activeElement as HTMLElement;
+    document.documentElement.classList.add('guide-tour-active');
+    requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
+    return () => document.documentElement.classList.remove('guide-tour-active');
+  }, [isGuideTourActive]);
+
   useEffect(() => {
     if (!isGuideTourActive || !step) return;
     if (activeTab !== step.targetTab) navigateRef.current(step.targetTab);
+    setTargetRect(null);
+    setTargetState('searching');
+    setTargetSelector('');
 
     let frame = 0;
-    let polling: ReturnType<typeof setInterval> | null = null;
-    let scrolled = false;
-    let foundTarget = false;
-    let lastRect = '';
+    let retryTimer: ReturnType<typeof setInterval> | null = null;
+    let tries = 0;
+    let scrolledToTarget = false;
+    let previousSignature = '';
+    let focusElement: HTMLElement | null = null;
+    let originalScrollMargin = '';
+
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const width = window.innerWidth;
         const height = window.visualViewport?.height || window.innerHeight;
-        const card = cardRef.current?.offsetHeight || 270;
-        setSize(prev => prev.width === width && prev.height === height && prev.card === card ? prev : { width, height, card });
-        const selectors = step.id === 'admin-nav' && width < 1024 ? ['[data-tour="mobile-nav"]'] : step.selectors;
-        const target = selectors.map(selector => document.querySelector<HTMLElement>(selector)).find(el => el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && el.getBoundingClientRect().right > 0 && el.getBoundingClientRect().left < width);
-        if (!target) {
-          foundTarget = false;
-          if (lastRect !== 'null') { lastRect = 'null'; setTargetRect(null); }
+        const card = cardRef.current?.offsetHeight || 280;
+        setSize(previous => previous.width === width && previous.height === height && previous.card === card
+          ? previous : { width, height, card });
+
+        const header = document.querySelector('.app-topbar')?.getBoundingClientRect().bottom || 64;
+        const isMobileNav = step.id === 'admin-nav' && width < 1024;
+        const selectors = isMobileNav ? ['[data-tour="mobile-nav"]'] : step.selectors;
+        const hit = findGuideTarget(selectors);
+        if (!hit) {
+          if (previousSignature !== 'none') {
+            previousSignature = 'none';
+            setTargetRect(null);
+          }
           return;
         }
-        foundTarget = true;
-        // On mobile, smooth scrolling moved the floating card during taps and
-        // made users press Lanjut repeatedly. Keep the guide anchored instead.
-        if (!scrolled && width >= 768) {
-          scrolled = true;
-          const rect = target.getBoundingClientRect();
-          if (rect.top < 70 || rect.bottom > height - 90) target.scrollIntoView({ block: 'center', behavior: 'auto' });
+        const { element, selector } = hit;
+        setTargetState('found');
+        setTargetSelector(previous => previous === selector ? previous : selector);
+
+        const fixedNavigation = Boolean(element.closest('.app-mobile-nav'));
+        const region = getGuideAreas(width, height, card, header, fixedNavigation);
+        const bounds = element.getBoundingClientRect();
+        const rect = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height };
+
+        // Scroll ONCE per step to reveal the real control above the tutorial card.
+        // The temporary bottom padding allows the last controls to reach the visible zone.
+        if (!scrolledToTarget && !fixedNavigation && needsGuideScroll(rect, region.focusTop, region.focusBottom)) {
+          scrolledToTarget = true;
+          focusElement = element;
+          originalScrollMargin = element.style.scrollMarginTop;
+          element.style.scrollMarginTop = `${Math.round(region.focusTop + 12)}px`;
+          element.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' });
+          requestAnimationFrame(measure);
+          return;
         }
-        const fixedControl = !!target.closest('header, [data-tour="mobile-nav"]');
-        const r = target.getBoundingClientRect();
-        const nextDock = r.top > height / 2 ? 'top' : 'bottom';
-        if (width >= 768) setDock(nextDock);
-        const effectiveDock = width < 768 ? 'bottom' : nextDock;
-        const cardTop = effectiveDock === 'top' ? 76 : Math.max(76, height - card - 84);
-        const top = Math.max(fixedControl ? 8 : 68, r.top, effectiveDock === 'top' ? cardTop + card + 14 : 0);
-        const bottom = Math.min(height - (fixedControl ? 8 : 76), r.bottom, effectiveDock === 'bottom' ? cardTop - 14 : height);
-        const rect = bottom > top ? { top, left: Math.max(8, r.left), width: Math.min(width - 16, r.width), height: bottom - top } : null;
-        const signature = JSON.stringify(rect);
-        if (signature !== lastRect) { lastRect = signature; setTargetRect(rect); }
+        const clipped = clipGuideFocus(rect, width, region.focusTop, region.focusBottom);
+        const signature = JSON.stringify(clipped);
+        if (signature !== previousSignature) {
+          previousSignature = signature;
+          setTargetRect(clipped);
+        }
       });
     };
 
-    const resize = new ResizeObserver(measure);
-    if (cardRef.current) resize.observe(cardRef.current);
-    // Only poll briefly while the target tab/lazy component is mounting. Do NOT
-    // observe the entire React root: doing so causes repeated reflows/renders.
-    let attempts = 0;
-    polling = setInterval(() => {
-      attempts += 1;
-      if (foundTarget || attempts >= 25) {
-        if (polling) clearInterval(polling);
-        polling = null;
-      } else measure();
-    }, 240);
+    // Lazy-loaded pages may mount after navigation. Brief, bounded retries avoid
+    // a heavy MutationObserver on the entire app (which caused delayed taps on mobile).
+    retryTimer = setInterval(() => {
+      tries += 1;
+      if (findGuideTarget(step.id === 'admin-nav' && window.innerWidth < 1024 ? ['[data-tour="mobile-nav"]'] : step.selectors)) {
+        if (retryTimer) clearInterval(retryTimer);
+        retryTimer = null;
+      } else if (tries >= 18) {
+        if (retryTimer) clearInterval(retryTimer);
+        retryTimer = null;
+        setTargetState('missing');
+      }
+      measure();
+    }, 200);
+
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (cardRef.current) observer?.observe(cardRef.current);
     window.addEventListener('resize', measure, { passive: true });
     window.addEventListener('scroll', measure, { passive: true, capture: true });
     window.visualViewport?.addEventListener('resize', measure, { passive: true });
     measure();
+
     return () => {
       cancelAnimationFrame(frame);
-      if (polling) clearInterval(polling);
-      resize.disconnect();
+      if (retryTimer) clearInterval(retryTimer);
+      observer?.disconnect();
+      if (focusElement) focusElement.style.scrollMarginTop = originalScrollMargin;
       window.removeEventListener('resize', measure);
       window.removeEventListener('scroll', measure, true);
       window.visualViewport?.removeEventListener('resize', measure);
     };
   }, [isGuideTourActive, step, activeTab]);
+
   useEffect(() => {
     if (!isGuideTourActive) return;
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-      if (e.key !== 'Tab') return;
-      const buttons = Array.from(cardRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || []), first = buttons[0], last = buttons.at(-1);
-      if (e.shiftKey && (document.activeElement === first || document.activeElement === cardRef.current)) { e.preventDefault(); last?.focus(); }
-      else if (!e.shiftKey && (document.activeElement === last || !cardRef.current?.contains(document.activeElement))) { e.preventDefault(); first?.focus(); }
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+      if (event.key !== 'Tab') return;
+      const buttons = Array.from(cardRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || []);
+      const first = buttons[0], last = buttons.at(-1);
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === cardRef.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !cardRef.current?.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
     };
-    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
   }, [isGuideTourActive, close]);
+
   if (!isGuideTourActive || !step) return null;
-  const mobile = size.width < 768, width = Math.min(360, size.width - 24), maxTop = Math.max(76, size.height - size.card - 84);
-  const top = mobile ? maxTop : dock === 'top' ? 76 : maxTop;
-  const left = mobile ? (size.width - width) / 2 : Math.max(12, Math.min(targetRect?.left || (size.width - width) / 2, size.width - width - 12));
+  const width = Math.min(370, size.width - 24);
+  const left = Math.max(12, Math.min((size.width - width) / 2, size.width - width - 12));
+  const cardTop = areas.cardTop;
+  const complete = targetSelector === '[data-tour="attendance-complete"]';
+  const targetLabel = complete ? 'Presensi hari ini sudah lengkap' : step.location;
+  const missingReason = step.id === 'guru-selfie'
+    ? 'Tombol swafoto hanya tampil sebelum presensi masuk. Jika Anda sudah check-in, langkah ini tidak perlu diulang.'
+    : 'Bagian ini tidak sedang ditampilkan. Anda bisa menutup panduan, kembali ke menu terkait, lalu mencoba lagi.';
+
   return <div className="guide-layer print:hidden">
-    <div className="guide-blocker" aria-hidden="true"/>
-    {targetRect && <div data-guide-spotlight className="guide-spotlight" style={{ top: targetRect.top - 4, left: targetRect.left - 4, width: targetRect.width + 8, height: targetRect.height + 8 }}/ >}
-    <section ref={cardRef} role="dialog" aria-modal="true" aria-label="Panduan Interaktif Penggunaan Aplikasi" aria-describedby="guide-action" tabIndex={-1} className="guide-card" style={{ width, left, top: Math.min(top, maxTop), maxHeight: Math.max(180, size.height - 150) }}>
-      <div className="guide-heading"><span className="guide-progress">Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4"/></button></div>
-      <h2>{step.title}</h2><p className="guide-location">{step.id === 'admin-nav' && mobile ? 'Menu di bagian bawah layar; ketuk Lainnya untuk menu lengkap.' : step.location}</p>
-      <p id="guide-action">{step.action}</p><p className="guide-result"><Check className="w-4 h-4 shrink-0"/>{step.expectedResult}</p>
-      {!targetRect && <p className="guide-location">Cari bagian ini di menu {step.targetTab === 'dashboard' ? 'Beranda' : step.location}. Anda tetap dapat melanjutkan panduan.</p>}
-      <footer><button type="button" onClick={close}>Tutup dulu</button><div><Button type="button" size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(i => i - 1)}>Kembali</Button><Button type="button" size="sm" onClick={() => index === steps.length - 1 ? close() : setIndex(i => i + 1)}>{index === steps.length - 1 ? 'Selesai' : 'Lanjut'}</Button></div></footer>
+    <div className="guide-blocker" aria-hidden="true" />
+    {targetRect && <>
+      <div data-guide-spotlight className="guide-spotlight" style={{ top: targetRect.top - 4, left: targetRect.left - 4, width: targetRect.width + 8, height: targetRect.height + 8 }} />
+      <div className="guide-target-flag" style={{ top: targetRect.top > 118 ? targetRect.top - 31 : targetRect.top + targetRect.height + 7, left: Math.max(12, Math.min(targetRect.left, size.width - 180)) }} aria-hidden="true">
+        <MapPin className="w-3.5 h-3.5" /> Bagian yang dimaksud
+      </div>
+    </>}
+    <section ref={cardRef} role="dialog" aria-modal="true" aria-label="Panduan Interaktif Penggunaan Aplikasi" aria-describedby="guide-action" tabIndex={-1}
+      className="guide-card guide-card-guided" style={{ width, left, top: cardTop, maxHeight: mobile ? Math.min(315, Math.max(200, size.height * .44)) : Math.max(180, size.height - 150) }}>
+      <div className="guide-heading"><span className="guide-progress">Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4" /></button></div>
+      <h2>{step.title}</h2>
+      <p className="guide-location">{step.id === 'admin-nav' && mobile ? 'Menu bawah layar; ketuk Lainnya untuk menu lengkap.' : targetLabel}</p>
+      <p id="guide-action">{complete ? 'Presensi masuk dan pulang sudah selesai. Bagian yang disorot menunjukkan status tersebut.' : step.action}</p>
+      <p className="guide-result"><Check className="w-4 h-4 shrink-0" />{step.expectedResult}</p>
+      {targetState === 'found' && targetRect && <p className="guide-focus-note" role="status">Lihat area yang diberi garis sorot. Tutup panduan untuk mencoba tombolnya.</p>}
+      {targetState === 'searching' && !targetRect && <p className="guide-location" role="status">Menunjukkan lokasi fitur…</p>}
+      {targetState === 'missing' && !targetRect && <p className="guide-missing-note" role="status">{missingReason}</p>}
+      <footer><button type="button" onClick={close}>Tutup dulu</button><div><Button type="button" size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(value => Math.max(0, value - 1))}>Kembali</Button><Button type="button" size="sm" onClick={() => index === steps.length - 1 ? close() : setIndex(value => Math.min(steps.length - 1, value + 1))}>{index === steps.length - 1 ? 'Selesai' : 'Lanjut'}</Button></div></footer>
     </section>
   </div>;
 };
