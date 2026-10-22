@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import {
   CalendarDays,
   Plus,
@@ -18,6 +18,7 @@ import {
   List,
   MessageSquare,
   HelpCircle,
+  ChevronDown,
 } from '../../components/icons';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -34,7 +35,7 @@ import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { RecurringScheduleModal } from './RecurringScheduleModal';
 import { useAuth } from '../../contexts/AuthContext';
-import { dutyCoverageId, dutyCancellationId, getOperationalScheduleStatus, getScheduleRecurrence } from '../../utils/scheduleUtils';
+import { dutyCoverageId, dutyCancellationId, getDutyCoverageForDate, getDutyCancellationForDate, getScheduleRecurrence } from '../../utils/scheduleUtils';
 import { getTodayISODate } from '../../utils/dateUtils';
 import { where } from 'firebase/firestore';
 import { DutyCancellationService, DutyCancellationScope } from '../../services/firebase/dutyCancellationService';
@@ -103,7 +104,7 @@ export const SchedulePreview: React.FC = () => {
   const todayISO = useWibToday();
 
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [attendanceForDate, setAttendanceForDate] = useState<AttendanceRecord[]>([]);
+  const [attendanceSnapshot, setAttendanceSnapshot] = useState<{ date: string; records: AttendanceRecord[] }>({ date: '', records: [] });
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staff, setStaff] = useState<StaffRecord[]>([]);
@@ -120,6 +121,15 @@ export const SchedulePreview: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('SEMUA');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  // Urgent day-button feedback renders first; the heavier roster follows concurrently.
+  // Day and date must be deferred together to avoid mixing two different dates.
+  const selection = useMemo(() => ({ day: selectedDay, date: selectedDate }), [selectedDay, selectedDate]);
+  const displaySelection = useDeferredValue(selection);
+  const selectionPending = displaySelection !== selection;
+  const displayDay = displaySelection.day;
+  const displayDate = displaySelection.date;
+
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -185,10 +195,15 @@ export const SchedulePreview: React.FC = () => {
 
   // Only one dated attendance listener. Status is never persisted on weekly templates.
   useEffect(() => {
-    setAttendanceForDate([]);
-    return FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setAttendanceForDate,
+    // Keep the response date with its records: a previous day's listener must never
+    // accidentally mark a newly selected day as BERJALAN or SELESAI.
+    let active = true;
+    setAttendanceSnapshot({ date: selectedDate, records: [] });
+    const unsubscribe = FirestoreService.subscribeToCollection<AttendanceRecord>('attendance',
+      records => { if (active) setAttendanceSnapshot({ date: selectedDate, records }); },
       error => console.warn('[SCHEDULES] Presensi tidak dapat dimuat:', error?.message),
       [where('tanggal', '==', selectedDate)], { cacheKey: `schedule-live-status:${selectedDate}` });
+    return () => { active = false; unsubscribe(); };
   }, [selectedDate]);
 
   // Bootstrap seed if empty
@@ -255,10 +270,37 @@ export const SchedulePreview: React.FC = () => {
     setDeleteConfirmSchedule(null);
   };
 
-  const statusOf = useCallback((item: ScheduleItem) => getOperationalScheduleStatus(item, schedules, attendanceForDate, selectedDate), [schedules, attendanceForDate, selectedDate]);
   const scheduleById = useMemo(() => new Map(schedules.map(item => [item.id, item])), [schedules]);
-  const cancelFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCancellationId(selectedDate, item.id)), [scheduleById, selectedDate]);
-  const coverFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCoverageId(selectedDate, item.id)), [scheduleById, selectedDate]);
+  const cancelFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCancellationId(displayDate, item.id)), [scheduleById, displayDate]);
+  const coverFor = useCallback((item: ScheduleItem) => scheduleById.get(dutyCoverageId(displayDate, item.id)), [scheduleById, displayDate]);
+
+  // Prepare indexes ONCE for the selected date instead of rescanning all schedules
+  // and attendance records independently for every teacher card.
+  const operationalIndex = useMemo(() => {
+    const cancelled = new Set<string>(getDutyCancellationForDate(schedules, displayDate)
+      .map(item => item.cancelForScheduleId).filter((id): id is string => Boolean(id)));
+    const covered = new Map<string, ScheduleItem>(getDutyCoverageForDate(schedules, displayDate)
+      .filter(item => Boolean(item.coverageForScheduleId))
+      .map(item => [item.coverageForScheduleId!, item] as const));
+    const bySchedule = new Map<string, { order: number; record: AttendanceRecord }>();
+    const byUser = new Map<string, { order: number; record: AttendanceRecord }>();
+    const records = attendanceSnapshot.date === displayDate ? attendanceSnapshot.records : [];
+    records.forEach((record, order) => {
+      if (record.tanggal !== displayDate) return;
+      if (record.scheduleId && !bySchedule.has(record.scheduleId)) bySchedule.set(record.scheduleId, { order, record });
+      if (record.userId && !byUser.has(record.userId)) byUser.set(record.userId, { order, record });
+    });
+    return { cancelled, covered, bySchedule, byUser };
+  }, [schedules, displayDate, attendanceSnapshot]);
+  const statusOf = useCallback((item: ScheduleItem) => {
+    if (item.status === 'DIBATALKAN' || item.cancelForScheduleId || operationalIndex.cancelled.has(item.id)) return 'DIBATALKAN';
+    const replacement = operationalIndex.covered.get(item.id);
+    if (replacement) return replacement.status === 'DIBATALKAN' ? 'MENUNGGU_PENGGANTI' : 'DIGANTIKAN';
+    const bySchedule = operationalIndex.bySchedule.get(item.id);
+    const byUser = operationalIndex.byUser.get(item.petugasId);
+    const entry = !bySchedule || (byUser && byUser.order < bySchedule.order) ? byUser : bySchedule;
+    return entry ? (entry.record.jamPulang ? 'SELESAI' : 'BERJALAN') : 'TERJADWAL';
+  }, [operationalIndex]);
   const requestCancel = useCallback((item: ScheduleItem) => { setCancelSource(item); setCancelScope('DAY'); setCancelReason(''); setCancelError(''); }, []);
   const executeCancel = async () => {
     if (!cancelSource || !currentUser || !isAdmin || cancellationBusy) return;
@@ -291,14 +333,21 @@ export const SchedulePreview: React.FC = () => {
     return counts;
   }, [schedules]);
 
-  const filtered = useMemo(() => schedules.filter((s) => {
-    if (s.coverageForScheduleId || s.cancelForScheduleId) return false;
-    const matchDay = s.hari === selectedDay && (getScheduleRecurrence(s) !== 'ONCE' || s.tanggal === selectedDate);
-    const matchStatus = statusFilter === 'SEMUA' || statusOf(s) === statusFilter;
-    const query = searchQuery.toLocaleLowerCase('id-ID');
-    const matchSearch = [s.petugasName, s.ruangName, s.keterangan || ''].some(v => v.toLocaleLowerCase('id-ID').includes(query));
-    return matchDay && matchStatus && matchSearch;
-  }), [schedules, selectedDay, selectedDate, statusFilter, searchQuery, statusOf]);
+  // Resolve only the chosen day first, then apply search/status filters to this small subset.
+  const daySchedules = useMemo(() => schedules.filter(item =>
+    !item.coverageForScheduleId && !item.cancelForScheduleId &&
+    item.hari === displayDay &&
+    (getScheduleRecurrence(item) !== 'ONCE' || item.tanggal === displayDate)
+  ), [schedules, displayDay, displayDate]);
+
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase('id-ID');
+    return daySchedules.filter(item =>
+      (statusFilter === 'SEMUA' || statusOf(item) === statusFilter) &&
+      (!query || [item.petugasName, item.ruangName, item.keterangan || '']
+        .some(text => text.toLocaleLowerCase('id-ID').includes(query)))
+    );
+  }, [daySchedules, statusFilter, searchQuery, statusOf]);
 
   const userLookup = useMemo(() => {
     const byId = new Map<string, UserProfile>();
@@ -318,121 +367,67 @@ export const SchedulePreview: React.FC = () => {
 
   // Memoize the large schedule card/table trees. Opening a dialog must not
   // reconstruct every teacher card or refetch profile photos on each click.
-  const gridRows = useMemo(() => filtered.map((item) => {
-              const scheduleUser = getScheduleUser(item);
-              return (
-              <Card key={item.id} hoverable className="transition-all">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <ScheduleTeacherAvatar name={item.petugasName} avatarUrl={scheduleUser?.avatarUrl} />
-                    <Badge
-                      variant={
-                        statusOf(item) === 'BERJALAN'
-                          ? 'success'
-                          : statusOf(item) === 'SELESAI'
-                          ? 'info'
-                          : statusOf(item) === 'DIGANTIKAN'
-                          ? 'warning'
-                          : statusOf(item) === 'DIBATALKAN'
-                          ? 'danger'
-                          : 'neutral'
-                      }
-                      size="sm"
-                    >
-                      {statusOf(item) === 'MENUNGGU_PENGGANTI' ? 'MENUNGGU PENGGANTI' : statusOf(item)}
-                    </Badge>
-                  </div>
+  const gridRows = useMemo(() => filtered.map(item => {
+    const person = getScheduleUser(item);
+    const status = statusOf(item);
+    const cancel = cancelFor(item);
+    const cover = coverFor(item);
+    const canChange = isAdmin && status === 'TERJADWAL';
+    return <Card key={item.id} className="schedule-duty-card">
+      <CardContent className="p-3 sm:p-5 space-y-2.5 sm:space-y-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <ScheduleTeacherAvatar name={item.petugasName} avatarUrl={person?.avatarUrl} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <h4 className="text-[13px] sm:text-sm font-bold text-slate-900 dark:text-white leading-snug break-words">{item.petugasName}</h4>
+            <p className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-[var(--theme-primary-text)]">
+              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" /><span className="truncate">{item.ruangName}</span>
+            </p>
+          </div>
+          <div className="shrink-0"><Badge variant={status === 'BERJALAN' ? 'success' : status === 'SELESAI' ? 'info' : status === 'DIGANTIKAN' || status === 'MENUNGGU_PENGGANTI' ? 'warning' : status === 'DIBATALKAN' ? 'danger' : 'neutral'} size="sm">
+            {status === 'MENUNGGU_PENGGANTI' ? 'MENUNGGU PENGGANTI' : status}
+          </Badge></div>
+        </div>
 
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
-                      {item.petugasName}
-                    </h4>
-                    <div className="flex items-center gap-1.5 text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold mt-1">
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>{item.ruangName}</span>
-                    </div>
-                  </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] sm:text-xs text-slate-600 dark:text-slate-300">
+          <Clock className="w-3.5 h-3.5 shrink-0 text-[var(--theme-primary)]" />
+          <span className="font-mono font-semibold">{item.jamMulai}–{item.jamSelesai} WIB</span>
+          <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">·</span>
+          <span className="text-slate-500 dark:text-slate-400">{getScheduleRecurrence(item) === 'ONCE' ? `Sekali · ${item.tanggal}` : `Setiap ${item.hari.toLowerCase()}`}</span>
+        </div>
 
-                  <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-[var(--theme-card-border)] text-xs text-slate-600 dark:text-slate-300">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-                      <span className="font-mono">{item.jamMulai} - {item.jamSelesai} WIB</span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{getScheduleRecurrence(item) === 'ONCE' ? `Sekali: ${item.tanggal}` : `Setiap ${item.hari.toLowerCase()}`}</p>
-                    {cancelFor(item) && <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800">Dibatalkan khusus {selectedDate}: {cancelFor(item)?.cancellationReason}</p>}
-                    {item.keterangan && (
-                      <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/50 p-2 rounded-lg">
-                        "{item.keterangan}"
-                      </p>
-                    )}
-                    {Boolean(coverFor(item)) && (() => {
-                      const cover = coverFor(item)!;
-                      return <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 p-2 space-y-1">
-                        <p className="text-xs font-bold text-amber-800">Berhalangan hari ini</p>
-                        <p className="text-[11px] text-slate-700 dark:text-slate-300">{cover.absenceReason}</p>
-                        <p className="text-xs font-semibold text-amber-700">{cover.status === 'DIBATALKAN' ? 'Menunggu Pengganti' : `Pengganti: ${cover.petugasName}`}</p>
-                      </div>;
-                    })()}
-                  </div>
+        {cancel && <p className="rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-2 text-[11px] text-rose-800 dark:text-rose-200">Dibatalkan khusus {displayDate}: {cancel.cancellationReason}</p>}
+        {cover && <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2.5 py-2 text-[11px] space-y-0.5">
+          <p className="font-bold text-amber-800 dark:text-amber-200">Guru berhalangan · {cover.status === 'DIBATALKAN' ? 'Menunggu pengganti' : `Pengganti: ${cover.petugasName}`}</p>
+          {cover.absenceReason && <p className="text-slate-600 dark:text-slate-300 break-words">{cover.absenceReason}</p>}
+        </div>}
+        {item.keterangan && <details className="group rounded-lg bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+          <summary className="min-h-7 flex items-center justify-between gap-2 cursor-pointer font-medium list-none [&::-webkit-details-marker]:hidden">
+            <span className="truncate">Catatan tugas</span><ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="pt-1.5 pb-1 whitespace-pre-wrap break-words leading-relaxed">{item.keterangan}</p>
+        </details>}
 
-                  {/* Quick Actions */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-[var(--theme-card-border)] space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-slate-500" title="Status berasal dari presensi masuk/pulang dan pengecualian berhalangan/pembatalan; bukan diubah manual.">Status otomatis</span>
-                      <ScheduleActionGuide isAdmin={isAdmin} />
-                    </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canChange && displayDate === todayISO && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-9 px-2.5 rounded-lg border border-amber-200 bg-amber-50/80 text-amber-700 dark:text-amber-300 text-[11px] font-bold" aria-label={`Catat ${item.petugasName} berhalangan`}>Berhalangan</button>}
+            {isAdmin && !cover && (status === 'DIBATALKAN' ?
+              <button type="button" onClick={() => restoreCancel(item)} className="min-h-9 px-2.5 rounded-lg border border-emerald-200 text-emerald-700 text-[11px] font-bold">Aktifkan Kembali</button>
+              : canChange && displayDate >= todayISO ?
+              <button type="button" onClick={() => requestCancel(item)} className="min-h-9 px-2.5 rounded-lg border border-rose-200 bg-rose-50/80 text-rose-700 text-[11px] font-bold">Batalkan</button> : null)}
+          </div>
+          <div className="flex items-center gap-0.5 ml-auto">
+            <button type="button" onClick={() => handleTriggerWaReminder(item)} className="min-h-9 min-w-9 p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50" title="Kirim pengingat WhatsApp" aria-label={`Kirim pengingat WhatsApp untuk ${item.petugasName}`}><MessageSquare className="w-4 h-4" /></button>
+            {isAdmin && <>
+              <button type="button" onClick={() => { setEditingSchedule(item); setIsFormModalOpen(true); }} className="min-h-9 min-w-9 p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Edit Jadwal" aria-label={`Edit detail jadwal ${item.petugasName}`}><Edit2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => setDeleteConfirmSchedule(item)} className="min-h-9 min-w-9 p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50" title="Hapus Jadwal" aria-label={`Hapus jadwal ${item.petugasName}`}><Trash2 className="w-4 h-4" /></button>
+            </>}
+            <ScheduleActionGuide isAdmin={isAdmin} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>;
+  }), [filtered, getScheduleUser, statusOf, cancelFor, coverFor, isAdmin, displayDate, todayISO, requestCancel, restoreCancel, handleTriggerWaReminder]);
 
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-2">
-                      {isAdmin && selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-3 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-700 text-[11px] font-bold" title="Guru mendadak tidak bisa piket; cari pengganti untuk hari ini" aria-label={`Catat ${item.petugasName} berhalangan dan pilih pengganti`}>Berhalangan</button>}
-                      {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
-                        <button type="button" onClick={() => restoreCancel(item)} className="min-h-10 px-3 rounded-xl border border-emerald-200 bg-emerald-50/80 text-emerald-700 text-[11px] font-bold" title="Pulihkan jadwal yang telah dibatalkan">Aktifkan Kembali</button>
-                      ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
-                        <button type="button" onClick={() => requestCancel(item)} className="min-h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/80 text-rose-700 text-[11px] font-bold" title="Nonaktifkan jadwal tanggal pilihan atau jadwal berulang, bukan menghapus guru">Batalkan</button>
-                      ) : null)}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleTriggerWaReminder(item)}
-                        className="min-w-10 min-h-10 p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer"
-                        title="Siapkan pesan pengingat WhatsApp"
-                        aria-label={`Kirim pengingat WhatsApp untuk ${item.petugasName}`}
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
-
-                      {isAdmin && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setEditingSchedule(item);
-                              setIsFormModalOpen(true);
-                            }}
-                            className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-[var(--theme-primary)] hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] cursor-pointer"
-                            title="Ubah Jadwal"
-                            aria-label={`Edit detail jadwal ${item.petugasName}`}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmSchedule(item)}
-                            className="min-w-10 min-h-10 p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
-                            title="Hapus Jadwal"
-                            aria-label={`Hapus jadwal ${item.petugasName}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}),
-    [filtered, getScheduleUser, statusOf, cancelFor, coverFor, requestCancel, restoreCancel, handleTriggerWaReminder, isAdmin, selectedDate, todayISO]);
   const tableRows = useMemo(() => filtered.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[var(--theme-surface-subtle)]/40">
                     <td className="p-4 font-bold text-slate-900 dark:text-white">
@@ -440,7 +435,7 @@ export const SchedulePreview: React.FC = () => {
                         <ScheduleTeacherAvatar name={item.petugasName} avatarUrl={getScheduleUser(item)?.avatarUrl} />
                         <div className="min-w-0">
                           <p className="truncate">{item.petugasName}</p>
-                      {cancelFor(item) && <span className="block text-[11px] text-rose-700">Dibatalkan khusus {selectedDate}</span>}
+                      {cancelFor(item) && <span className="block text-[11px] text-rose-700">Dibatalkan khusus {displayDate}</span>}
                       {Boolean(coverFor(item)) && <span className="block text-[11px] text-amber-700">{(() => { const c = coverFor(item)!; return c.status === 'DIBATALKAN' ? 'Berhalangan · Menunggu Pengganti' : `Berhalangan · Digantikan ${c.petugasName}`; })()}</span>}
                         </div>
                       </div>
@@ -467,7 +462,7 @@ export const SchedulePreview: React.FC = () => {
                       <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[180px]">
                         {isAdmin && !coverFor(item) && (statusOf(item) === 'DIBATALKAN' ? (
                           <button type="button" onClick={() => restoreCancel(item)} className="px-2 py-1 rounded-xl text-emerald-700 border border-emerald-200 text-[11px] font-semibold">Aktifkan Kembali</button>
-                        ) : statusOf(item) === 'TERJADWAL' && selectedDate >= todayISO ? (
+                        ) : statusOf(item) === 'TERJADWAL' && displayDate >= todayISO ? (
                           <button type="button" onClick={() => requestCancel(item)} className="px-2 py-1 rounded-xl text-rose-700 border border-rose-200 text-[11px] font-semibold" title="Nonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang">Batalkan</button>
                         ) : null)}
                         <button
@@ -481,7 +476,7 @@ export const SchedulePreview: React.FC = () => {
                         </button>
                         {isAdmin && (
                           <>
-                            {selectedDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-2 py-1 rounded-lg text-amber-700 border border-amber-200 text-[11px] font-semibold" title="Catat berhalangan dan pilih guru pengganti">Berhalangan</button>}
+                            {displayDate === todayISO && statusOf(item) === 'TERJADWAL' && <button type="button" onClick={() => setCoverageSource(item)} className="min-h-10 px-2 py-1 rounded-lg text-amber-700 border border-amber-200 text-[11px] font-semibold" title="Catat berhalangan dan pilih guru pengganti">Berhalangan</button>}
                             <button
                               onClick={() => {
                                 setEditingSchedule(item);
@@ -507,10 +502,10 @@ export const SchedulePreview: React.FC = () => {
                     </td>
                   </tr>
                 )),
-    [filtered, getScheduleUser, statusOf, cancelFor, coverFor, requestCancel, restoreCancel, handleTriggerWaReminder, isAdmin, selectedDate, todayISO]);
+    [filtered, getScheduleUser, statusOf, cancelFor, coverFor, requestCancel, restoreCancel, handleTriggerWaReminder, isAdmin, displayDate, todayISO]);
 
   return (
-    <div data-tour="schedules-container" className="space-y-6">
+    <div data-tour="schedules-container" className="space-y-4 sm:space-y-6">
       {/* Header section */}
       <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -560,7 +555,7 @@ export const SchedulePreview: React.FC = () => {
       </div>
 
       {/* Filter Tabs by Day of Week */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none">
         {DAYS_LIST.map((day) => {
           const isToday = getCurrentDayName() === day;
           const count = dayCounts.get(day) || 0;
@@ -569,10 +564,10 @@ export const SchedulePreview: React.FC = () => {
           return (
             <button
               key={day}
-              onClick={() => { setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => { if (day === selectedDay) return; setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
+              className={`flex shrink-0 items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
                 isSelected
-                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-md shadow-[var(--theme-ring)] scale-[1.02]'
+                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
                   : 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[var(--theme-card-border)] hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
               }`}
             >
@@ -590,7 +585,7 @@ export const SchedulePreview: React.FC = () => {
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
+      {isAdmin && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-2">
           Tanggal pemantauan
           <input type="date" aria-label="Tanggal pemantauan piket" value={selectedDate} onChange={event => {
@@ -600,7 +595,7 @@ export const SchedulePreview: React.FC = () => {
           }} className="min-h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs" />
         </label>
         <p className="text-xs text-slate-500">Status otomatis dari presensi: masuk → BERJALAN, pulang → SELESAI. <strong>Berhalangan</strong> dipakai jika guru mendadak tidak bisa bertugas dan perlu pengganti. <strong>Batalkan</strong> dipakai untuk menonaktifkan jadwal pada tanggal dipilih atau seluruh jadwal berulang melalui konfirmasi admin.</p>
-      </div>
+      </div>}
 
       {/* Search & Status Filter Bar */}
       <Card>
@@ -655,16 +650,16 @@ export const SchedulePreview: React.FC = () => {
       </Card>
 
       {coverageFeedback && <div role="status" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 text-xs">{coverageFeedback}</div>}
-      {/* SCHEDULE VIEW: GRID */}
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Keep day selection responsive; never expose actions from the previous date. */}
+      {selectionPending ? <div role="status" aria-live="polite" className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/50 p-4 text-xs text-slate-500">Menampilkan jadwal {selectedDay.toLowerCase()}…</div> : viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
           {filtered.length > 0 ? (
 gridRows
           ) : (
             <div className="col-span-full py-16 text-center text-slate-500 dark:text-slate-400">
               <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                Tidak ada jadwal piket pada hari {selectedDay}
+                Tidak ada jadwal piket pada hari {displayDay}
               </h4>
               <p className="text-xs mt-1">
                 Gunakan tombol "+ Buat Jadwal" atau "Generate Otomatis" untuk mengalokasikan guru piket.
