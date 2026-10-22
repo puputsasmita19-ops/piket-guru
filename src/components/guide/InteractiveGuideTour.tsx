@@ -40,7 +40,7 @@ export const ADMIN_STEPS: TourStep[] = [
   {
     id: 'admin-nav',
     targetTab: 'dashboard',
-    selectors: ['[data-tour="sidebar-nav"]', '[data-tour="mobile-nav"]', 'aside'],
+    selectors: ['[data-tour="sidebar-nav"]', 'button.header-sidebar-toggle', '[data-tour="mobile-nav"]', 'aside'],
     title: 'Navigasi Utama',
     location: 'Panel menu di samping kiri pada komputer',
     action: 'Buka menu navigasi untuk mengakses modul operasional, pengelola pengguna, dan laporan.',
@@ -184,6 +184,10 @@ function findGuideTarget(selectors: string[]): { element: HTMLElement; selector:
   for (const selector of selectors) {
     const element = document.querySelector<HTMLElement>(selector);
     if (!element || !element.getClientRects().length) continue;
+    // Horizontal off-screen drawers (e.g. collapsed sidebar) are not usable targets.
+    // Vertically off-screen controls remain valid: the guide scrolls to them.
+    const horizontalBounds = element.getBoundingClientRect();
+    if (horizontalBounds.right <= 0 || horizontalBounds.left >= window.innerWidth) continue;
     const style = window.getComputedStyle(element);
     if (style.display === 'none' || style.visibility === 'hidden') continue;
     return { element, selector };
@@ -192,18 +196,30 @@ function findGuideTarget(selectors: string[]): { element: HTMLElement; selector:
 }
 
 export const InteractiveGuideTour: React.FC = () => {
-  const { isGuideTourActive, stopGuideTour } = useGuide();
+  const { isGuideTourActive, guideTourMode, stopGuideTour } = useGuide();
   const { hasRole, hasPermission } = useAuth();
   const { activeTab, setActiveTab } = useNavigation();
   const navigateRef = useRef(setActiveTab);
   navigateRef.current = setActiveTab;
   const adminTour = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const permissionSignature = TOUR_PERMISSIONS.filter(permission => hasPermission(permission)).join('|');
-  const steps = useMemo(() => [...(adminTour ? ADMIN_STEPS : GURU_STEPS), {
-    id: 'sync-status', targetTab: 'dashboard' as NavigationTab, selectors: ['[data-tour="sync-status"] button', '[data-tour="sync-status"]'], title: 'Saat internet terputus',
-    location: 'Ikon koneksi di header atas', action: 'Simpan formulir. Periksa antrean pada ikon koneksi; biarkan aplikasi terbuka saat internet kembali.',
-    expectedResult: 'Antrean terkirim otomatis. Draf belum dikirim tetap perlu dibuka dan dikirim sendiri.', icon: Info, requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
-  }].filter(step => !step.requiredPermission || permissionSignature.split('|').includes(step.requiredPermission)), [adminTour, permissionSignature]);
+  const steps = useMemo(() => {
+    const fullSteps: TourStep[] = [...(adminTour ? ADMIN_STEPS : GURU_STEPS), {
+      id: 'sync-status', targetTab: 'dashboard' as NavigationTab, selectors: ['[data-tour="sync-status"] button', '[data-tour="sync-status"]'], title: 'Saat internet terputus',
+      location: 'Ikon koneksi di header atas', action: 'Simpan formulir. Periksa antrean pada ikon koneksi; biarkan aplikasi terbuka saat internet kembali.',
+      expectedResult: 'Antrean terkirim otomatis. Draf belum dikirim tetap perlu dibuka dan dikirim sendiri.', icon: Info, requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
+    }].filter(step => !step.requiredPermission || permissionSignature.split('|').includes(step.requiredPermission));
+    if (guideTourMode === 'full') return fullSteps;
+    const quickIds = adminTour
+      ? ['admin-nav', 'admin-schedules', 'admin-reports']
+      : ['guru-gps', 'guru-selfie', 'guru-submit'];
+    const selected = quickIds.map(id => fullSteps.find(step => step.id === id)).filter((value): value is TourStep => Boolean(value));
+    // Respect permissions: fill any inaccessible slot with another permitted step.
+    if (selected.length < 3) {
+      fullSteps.forEach(step => { if (selected.length < 3 && !selected.some(value => value.id === step.id)) selected.push(step); });
+    }
+    return selected;
+  }, [adminTour, permissionSignature, guideTourMode]);
   const [index, setIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<GuideRect | null>(null);
   const [targetState, setTargetState] = useState<TargetState>('searching');
@@ -234,7 +250,7 @@ export const InteractiveGuideTour: React.FC = () => {
     document.documentElement.classList.add('guide-tour-active');
     requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
     return () => document.documentElement.classList.remove('guide-tour-active');
-  }, [isGuideTourActive]);
+  }, [isGuideTourActive, guideTourMode]);
 
   useEffect(() => {
     if (!isGuideTourActive || !step) return;
@@ -387,7 +403,7 @@ export const InteractiveGuideTour: React.FC = () => {
     </>}
     <section ref={cardRef} role="dialog" aria-modal="true" aria-label="Panduan Interaktif Penggunaan Aplikasi" aria-describedby="guide-action" tabIndex={-1}
       className="guide-card guide-card-guided" style={{ width, left, top: cardTop, maxHeight: mobile ? Math.min(315, Math.max(200, size.height * .44)) : Math.max(180, size.height - 150) }}>
-      <div className="guide-heading"><span className="guide-progress">Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4" /></button></div>
+      <div className="guide-heading"><span className="guide-progress">{guideTourMode === 'quick' ? 'Panduan Cepat · ' : 'Panduan Lengkap · '}Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4" /></button></div>
       <h2>{step.title}</h2>
       <p className="guide-location">{effectiveTargetLabel}</p>
       <p id="guide-action">{complete ? 'Presensi masuk dan pulang sudah selesai. Bagian yang disorot menunjukkan status tersebut.' : step.action}</p>

@@ -7,6 +7,7 @@ import { ScrollToTop } from '../common/ScrollToTop';
 
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { InteractiveGuideTour } from '../guide/InteractiveGuideTour';
+import { GuideWelcomePrompt } from '../guide/GuideWelcomePrompt';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { ModuleAppearanceProvider } from '../../contexts/ModuleAppearanceContext';
 import { getModuleStyle } from '../../config/moduleAppearance';
@@ -94,6 +95,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <AppUpdateBanner />
       <EmergencyBanner />
       <InteractiveGuideTour />
+      <GuideWelcomePrompt />
       <Header
         onToggleSidebar={() => setSidebarOpen(true)}
         isDesktopSidebarHidden={isDesktopHidden}

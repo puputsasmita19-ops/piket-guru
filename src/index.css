@@ -1413,3 +1413,24 @@ button.bg-\[var\(--theme-primary\)\],
   .guide-card-guided footer { bottom: -11px; padding: 7px 0 0; margin-top: 3px; }
   .guide-card-guided .guide-focus-note { font-size: 10px; }
 }
+
+/* R26: lightweight, opt-in first-use invitation; no full-screen overlay. */
+.guide-welcome-prompt {
+  position: fixed; z-index: 120; right: 20px; bottom: 24px;
+  width: min(360px, calc(100vw - 28px));
+  border: 1px solid var(--theme-card-border); border-radius: 20px;
+  padding: 14px; color: var(--theme-text, #0f172a); background: var(--theme-card-bg);
+  box-shadow: 0 12px 36px rgb(15 23 42 / .17);
+}
+.guide-welcome-heading { display: flex; align-items: flex-start; gap: 10px; }
+.guide-welcome-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: var(--theme-primary-light); color: var(--theme-primary-text); }
+.guide-welcome-heading strong { font-size: 13px; line-height: 1.5; }
+.guide-welcome-heading p { font-size: 11px; margin-top: 3px; line-height: 1.55; color: #64748b; }
+.guide-welcome-dismiss { flex: none; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+.guide-welcome-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.guide-welcome-actions button { min-height: 44px; border-radius: 12px; padding: 9px 12px; font-size: 12px; font-weight: 750; }
+.guide-welcome-later { color: #64748b; }
+.guide-welcome-start { display: inline-flex; align-items: center; gap: 6px; background: var(--theme-primary); color: var(--theme-primary-contrast, #1e293b); }
+.guide-welcome-caption { font-size: 10px; color: #64748b; line-height: 1.5; margin-top: 10px; }
+@media (max-width: 767px) { .guide-welcome-prompt { left: 14px; right: 14px; bottom: calc(5.7rem + env(safe-area-inset-bottom)); width: auto; padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .guide-welcome-prompt * { animation: none !important; } }

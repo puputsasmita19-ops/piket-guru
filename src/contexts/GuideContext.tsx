@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { useNavigation } from './NavigationContext';
+
+export type GuideTourMode = 'full' | 'quick';
 
 interface GuideContextType {
   showOnLogin: boolean;
   setShowOnLogin: (val: boolean) => void;
   isGuideTourActive: boolean;
-  startGuideTour: () => void;
+  startGuideTour: (mode?: GuideTourMode) => void;
+  guideTourMode: GuideTourMode;
+  isWelcomeGuideOpen: boolean;
+  dismissWelcomeGuide: () => void;
   stopGuideTour: () => void;
   isGuideMenuOpen: boolean;
   openGuideMenu: () => void;
@@ -17,6 +23,7 @@ const GuideContext = createContext<GuideContextType | undefined>(undefined);
 
 export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, isAuthenticated } = useAuth();
+  const { activeTab } = useNavigation();
   const userId = currentUser?.id || 'guest';
 
   // Preference for auto-showing guide on login (stored in localStorage per user ID)
@@ -33,6 +40,8 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [isGuideMenuOpen, setIsGuideMenuOpen] = useState<boolean>(false);
   const [isGuideTourActive, setIsGuideTourActive] = useState<boolean>(false);
+  const [guideTourMode, setGuideTourMode] = useState<GuideTourMode>('full');
+  const [isWelcomeGuideOpen, setIsWelcomeGuideOpen] = useState(false);
   const previousUserId = useRef<string | null>(null);
 
   // Sync preference state when currentUser changes
@@ -40,6 +49,7 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!currentUser?.id || (previousUserId.current && previousUserId.current !== currentUser.id)) {
       setIsGuideMenuOpen(false);
       setIsGuideTourActive(false);
+      setIsWelcomeGuideOpen(false);
     }
     if (!currentUser?.id && previousUserId.current) {
       try { sessionStorage.removeItem(`piket_guide_shown_session_${previousUserId.current}`); } catch {}
@@ -79,6 +89,9 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (showOnLogin && !alreadyShownInSession) {
       // Delay briefly to allow main dashboard and DOM to render cleanly
       const timer = setTimeout(() => {
+        setGuideTourMode('full');
+        setIsWelcomeGuideOpen(false);
+        try { localStorage.setItem(`piket_guide_welcome_v1_${currentUser.id}`, 'seen'); } catch {}
         setIsGuideTourActive(true);
         try {
           sessionStorage.setItem(sessionKey, 'true');
@@ -88,10 +101,32 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [isAuthenticated, currentUser?.id, showOnLogin]);
 
-  const startGuideTour = useCallback(() => {
+  // Show only a small invitation on a user's first visit on this device.
+  // Never start a tour without consent or interrupt a manual/full tour.
+  useEffect(() => {
+    if (activeTab !== 'dashboard') setIsWelcomeGuideOpen(false);
+    if (!isAuthenticated || !currentUser?.id || activeTab !== 'dashboard' || showOnLogin || isGuideTourActive) return;
+    const key = `piket_guide_welcome_v1_${currentUser.id}`;
+    try { if (localStorage.getItem(key)) return; } catch { return; }
+    const timer = setTimeout(() => {
+      try { if (!localStorage.getItem(key)) setIsWelcomeGuideOpen(true); } catch {}
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, currentUser?.id, activeTab, showOnLogin, isGuideTourActive]);
+
+  const dismissWelcomeGuide = useCallback(() => {
+    setIsWelcomeGuideOpen(false);
+    if (currentUser?.id) {
+      try { localStorage.setItem(`piket_guide_welcome_v1_${currentUser.id}`, 'seen'); } catch {}
+    }
+  }, [currentUser?.id]);
+
+  const startGuideTour = useCallback((mode: GuideTourMode = 'full') => {
+    dismissWelcomeGuide();
     setIsGuideMenuOpen(false);
+    setGuideTourMode(mode);
     setIsGuideTourActive(true);
-  }, []);
+  }, [dismissWelcomeGuide]);
 
   const stopGuideTour = useCallback(() => {
     setIsGuideTourActive(false);
@@ -113,6 +148,9 @@ export const GuideProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setShowOnLogin,
         isGuideTourActive,
         startGuideTour,
+        guideTourMode,
+        isWelcomeGuideOpen,
+        dismissWelcomeGuide,
         stopGuideTour,
         isGuideMenuOpen,
         openGuideMenu,
@@ -133,6 +171,9 @@ export const useGuide = (): GuideContextType => {
       setShowOnLogin: () => {},
       isGuideTourActive: false,
       startGuideTour: () => {},
+      guideTourMode: 'full',
+      isWelcomeGuideOpen: false,
+      dismissWelcomeGuide: () => {},
       stopGuideTour: () => {},
       isGuideMenuOpen: false,
       openGuideMenu: () => {},

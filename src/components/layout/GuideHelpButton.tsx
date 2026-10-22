@@ -162,30 +162,34 @@ export const GuideHelpButton: React.FC<GuideHelpButtonProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-              Jika aktif, panduan muncul setiap kali Anda login.
+              Jika aktif, panduan lengkap muncul sekali per sesi masuk.
             </p>
           </div>
 
-          {/* Manual Launch Button */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={(e) => {
+          {/* Manual guide modes: fast onboarding or complete role-specific walkthrough. */}
+          <div className="pt-1 space-y-2">
+            <button type="button" onClick={(e) => {
                 e.stopPropagation();
-                e.preventDefault();
                 handleClose();
                 if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
-                launchTimerRef.current = setTimeout(() => {
-                  startGuideTour();
-                }, 50);
+                launchTimerRef.current = setTimeout(() => startGuideTour('quick'), 50);
               }}
-              className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-[var(--theme-primary)] hover:opacity-90 active:scale-[0.98] text-[var(--theme-primary-contrast)] font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-[var(--theme-ring)] transition-all cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-[var(--theme-primary)] hover:opacity-90 text-[var(--theme-primary-contrast)] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Play className="w-4 h-4 fill-current shrink-0" />
-              <span>Mulai Panduan</span>
+              <Play className="w-4 h-4 shrink-0" /> Panduan Cepat · 3 Langkah
             </button>
-            <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-2 font-medium">
-              Jelajahi fitur utama aplikasi langkah demi langkah
+            <button type="button" onClick={(e) => {
+                e.stopPropagation();
+                handleClose();
+                if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
+                launchTimerRef.current = setTimeout(() => startGuideTour('full'), 50);
+              }}
+              className="w-full min-h-[44px] py-2.5 px-4 rounded-xl border border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-surface-subtle)] text-slate-700 dark:text-slate-100 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <BookOpen className="w-4 h-4 shrink-0" /> Panduan Lengkap sesuai Role
+            </button>
+            <p className="text-[10px] text-center text-slate-500 mt-2 font-medium">
+              Langkah disesuaikan dengan izin akses akun Anda.
             </p>
           </div>
         </div>
