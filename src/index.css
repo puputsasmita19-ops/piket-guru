@@ -1126,6 +1126,21 @@ button.bg-\[var\(--theme-primary\)\],
 .attendance-tabs { text-align: center; }
 .guide-blocker { position: fixed; inset: 0; z-index: 9990; background: transparent; }
 .guide-spotlight { position: fixed; z-index: 9991; pointer-events: none; border: 2px solid var(--theme-primary-text); border-radius: 14px; box-shadow: 0 0 0 9999px rgb(15 23 42 / .28); }
+[data-guide-active-target="true"] {
+  position: relative;
+  z-index: 9993 !important;
+  border-radius: 14px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary-text) 58%, white), 0 0 0 8px color-mix(in srgb, var(--theme-primary-light) 72%, transparent) !important;
+  animation: guide-target-pulse 1.35s ease-in-out infinite;
+}
+[data-guide-active-target="true"]::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px dashed color-mix(in srgb, var(--theme-primary-text) 60%, white);
+  pointer-events: none;
+}
 .guide-card { position: fixed; z-index: 9999; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; background: var(--theme-card-bg); color: #0f172a; border: 1px solid var(--theme-card-border); border-radius: 20px; box-shadow: 0 12px 40px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.5; outline: none; animation: guide-appear .18s ease-out; }
 .dark .guide-card { color: #f1f5f9; }
 .guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1141,6 +1156,10 @@ button.bg-\[var\(--theme-primary\)\],
 .guide-heading button { display: flex; align-items: center; justify-content: center; }
 .guide-card button:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
 @keyframes guide-appear { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+@keyframes guide-target-pulse {
+  0%, 100% { transform: translateZ(0) scale(1); }
+  50% { transform: translateZ(0) scale(1.02); }
+}
 @media (prefers-reduced-motion: reduce) { .guide-card { animation: none; } }
 @media (max-width: 767px) {
   .history-controls { padding: 10px; gap: 8px; border-radius: 14px; }

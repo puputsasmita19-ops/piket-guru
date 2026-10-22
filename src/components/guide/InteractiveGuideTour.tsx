@@ -133,6 +133,8 @@ export const GURU_STEPS: TourStep[] = [
     selectors: [
       '[data-tour="selfie-trigger"]',
       '[data-tour="camera-section"]',
+      '[data-tour="attendance-actions"]',
+      '[data-tour="attendance-complete"]',
     ],
     title: 'Kamera Swafoto',
     location: 'Seksi Swafoto Kehadiran',
@@ -198,7 +200,7 @@ export const InteractiveGuideTour: React.FC = () => {
   const adminTour = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const permissionSignature = TOUR_PERMISSIONS.filter(permission => hasPermission(permission)).join('|');
   const steps = useMemo(() => [...(adminTour ? ADMIN_STEPS : GURU_STEPS), {
-    id: 'sync-status', targetTab: 'dashboard' as NavigationTab, selectors: ['[data-tour="sync-status"]'], title: 'Saat internet terputus',
+    id: 'sync-status', targetTab: 'dashboard' as NavigationTab, selectors: ['[data-tour="sync-status"] button', '[data-tour="sync-status"]'], title: 'Saat internet terputus',
     location: 'Ikon koneksi di header atas', action: 'Simpan formulir. Periksa antrean pada ikon koneksi; biarkan aplikasi terbuka saat internet kembali.',
     expectedResult: 'Antrean terkirim otomatis. Draf belum dikirim tetap perlu dibuka dan dikirim sendiri.', icon: Info, requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
   }].filter(step => !step.requiredPermission || permissionSignature.split('|').includes(step.requiredPermission)), [adminTour, permissionSignature]);
@@ -247,6 +249,7 @@ export const InteractiveGuideTour: React.FC = () => {
     let scrolledToTarget = false;
     let previousSignature = '';
     let focusElement: HTMLElement | null = null;
+    let highlightedElement: HTMLElement | null = null;
     let originalScrollMargin = '';
 
     const measure = () => {
@@ -274,22 +277,30 @@ export const InteractiveGuideTour: React.FC = () => {
         setTargetSelector(previous => previous === selector ? previous : selector);
 
         const fixedNavigation = Boolean(element.closest('.app-mobile-nav'));
+        const headerTarget = Boolean(element.closest('.app-topbar') || element.closest('header'));
         const region = getGuideAreas(width, height, card, header, fixedNavigation);
         const bounds = element.getBoundingClientRect();
         const rect = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height };
 
+        if (highlightedElement !== element) {
+          highlightedElement?.removeAttribute('data-guide-active-target');
+          highlightedElement = element;
+          highlightedElement.setAttribute('data-guide-active-target', 'true');
+        }
+
         // Scroll ONCE per step to reveal the real control above the tutorial card.
         // The temporary bottom padding allows the last controls to reach the visible zone.
-        if (!scrolledToTarget && !fixedNavigation && needsGuideScroll(rect, region.focusTop, region.focusBottom)) {
+        const effectiveFocusTop = headerTarget ? 8 : region.focusTop;
+        if (!scrolledToTarget && !fixedNavigation && !headerTarget && needsGuideScroll(rect, effectiveFocusTop, region.focusBottom)) {
           scrolledToTarget = true;
           focusElement = element;
           originalScrollMargin = element.style.scrollMarginTop;
-          element.style.scrollMarginTop = `${Math.round(region.focusTop + 12)}px`;
+          element.style.scrollMarginTop = `${Math.round(effectiveFocusTop + 12)}px`;
           element.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' });
           requestAnimationFrame(measure);
           return;
         }
-        const clipped = clipGuideFocus(rect, width, region.focusTop, region.focusBottom);
+        const clipped = clipGuideFocus(rect, width, effectiveFocusTop, region.focusBottom);
         const signature = JSON.stringify(clipped);
         if (signature !== previousSignature) {
           previousSignature = signature;
@@ -325,6 +336,7 @@ export const InteractiveGuideTour: React.FC = () => {
       if (retryTimer) clearInterval(retryTimer);
       observer?.disconnect();
       if (focusElement) focusElement.style.scrollMarginTop = originalScrollMargin;
+      highlightedElement?.removeAttribute('data-guide-active-target');
       window.removeEventListener('resize', measure);
       window.removeEventListener('scroll', measure, true);
       window.visualViewport?.removeEventListener('resize', measure);
@@ -351,8 +363,18 @@ export const InteractiveGuideTour: React.FC = () => {
   const cardTop = areas.cardTop;
   const complete = targetSelector === '[data-tour="attendance-complete"]';
   const targetLabel = complete ? 'Presensi hari ini sudah lengkap' : step.location;
+  const effectiveTargetLabel = (() => {
+    if (step.id === 'sync-status') return 'Ikon koneksi / antrean di kanan atas header';
+    if (targetSelector === '[data-tour="refresh-gps-button"]') return 'Tombol Perbarui GPS';
+    if (targetSelector === '[data-tour="selfie-trigger"]') return 'Tombol Ambil / Ganti Swafoto';
+    if (step.id === 'guru-selfie' && targetSelector === '[data-tour="camera-section"]') return 'Bagian Swafoto Kehadiran';
+    if (step.id === 'guru-selfie' && (targetSelector === '[data-tour="attendance-actions"]' || targetSelector === '[data-tour="attendance-complete"]')) return 'Area presensi terkait swafoto';
+    if (targetSelector === '[data-tour="checkin-button"]') return 'Tombol Presensi Masuk';
+    if (targetSelector === '[data-tour="checkout-button"]') return 'Tombol Presensi Pulang';
+    return step.id === 'admin-nav' && mobile ? 'Menu bawah layar; ketuk Lainnya untuk menu lengkap.' : targetLabel;
+  })();
   const missingReason = step.id === 'guru-selfie'
-    ? 'Tombol swafoto hanya tampil sebelum presensi masuk. Jika Anda sudah check-in, langkah ini tidak perlu diulang.'
+    ? 'Tombol swafoto hanya tampil sebelum presensi masuk. Jika Anda sudah check-in, panduan akan menunjuk area presensi yang paling relevan.'
     : 'Bagian ini tidak sedang ditampilkan. Anda bisa menutup panduan, kembali ke menu terkait, lalu mencoba lagi.';
 
   return <div className="guide-layer print:hidden">
@@ -367,10 +389,10 @@ export const InteractiveGuideTour: React.FC = () => {
       className="guide-card guide-card-guided" style={{ width, left, top: cardTop, maxHeight: mobile ? Math.min(315, Math.max(200, size.height * .44)) : Math.max(180, size.height - 150) }}>
       <div className="guide-heading"><span className="guide-progress">Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4" /></button></div>
       <h2>{step.title}</h2>
-      <p className="guide-location">{step.id === 'admin-nav' && mobile ? 'Menu bawah layar; ketuk Lainnya untuk menu lengkap.' : targetLabel}</p>
+      <p className="guide-location">{effectiveTargetLabel}</p>
       <p id="guide-action">{complete ? 'Presensi masuk dan pulang sudah selesai. Bagian yang disorot menunjukkan status tersebut.' : step.action}</p>
       <p className="guide-result"><Check className="w-4 h-4 shrink-0" />{step.expectedResult}</p>
-      {targetState === 'found' && targetRect && <p className="guide-focus-note" role="status">Lihat area yang diberi garis sorot. Tutup panduan untuk mencoba tombolnya.</p>}
+      {targetState === 'found' && targetRect && <p className="guide-focus-note" role="status">Bagian yang dijelaskan sedang disorot: <strong>{effectiveTargetLabel}</strong>. Tutup panduan untuk mencoba tombolnya.</p>}
       {targetState === 'searching' && !targetRect && <p className="guide-location" role="status">Menunjukkan lokasi fitur…</p>}
       {targetState === 'missing' && !targetRect && <p className="guide-missing-note" role="status">{missingReason}</p>}
       <footer><button type="button" onClick={close}>Tutup dulu</button><div><Button type="button" size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(value => Math.max(0, value - 1))}>Kembali</Button><Button type="button" size="sm" onClick={() => index === steps.length - 1 ? close() : setIndex(value => Math.min(steps.length - 1, value + 1))}>{index === steps.length - 1 ? 'Selesai' : 'Lanjut'}</Button></div></footer>
