@@ -1344,3 +1344,11 @@ button.bg-\[var\(--theme-primary\)\],
   @media(max-width:639px) { .audit-history-nav { align-items:flex-start; flex-direction:column; } }
 }
 
+
+/* Tour R22: stable, touch-friendly controls during mobile scrolling. */
+@media (max-width: 767px) {
+  .guide-card { touch-action: pan-y; }
+  .guide-card footer { position: sticky; bottom: -14px; z-index: 1; background: var(--theme-card-bg); padding: 10px 0 4px; flex-shrink: 0; }
+  .guide-card footer > div { flex-shrink: 0; }
+  .guide-card footer button { touch-action: manipulation; }
+}

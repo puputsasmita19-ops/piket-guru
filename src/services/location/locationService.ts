@@ -19,6 +19,7 @@ export interface WatchPositionOptions {
   desiredAccuracyMeters?: number;
   maxStaleAgeMs?: number;
   onProgress?: (pos: LocationCoordinates, isProvisional: boolean) => void;
+  forceFresh?: boolean;
 }
 
 export class LocationService {
@@ -225,8 +226,8 @@ export class LocationService {
   }
 
   /**
-   * Retrieves current position using geolocation with strict wait time (2.5 seconds max UI wait).
-   * Displays real-time onProgress updates, stops loading spinner instantly on timeout or resolution.
+   * Retrieves a fresh reading quickly when available and keeps searching on slower devices.
+   * Any valid reading meeting the 50m accuracy policy resolves immediately.
    */
   public static getCurrentPosition(
     options: WatchPositionOptions | boolean = {}
@@ -234,9 +235,10 @@ export class LocationService {
     const opts: WatchPositionOptions = typeof options === 'boolean' ? {} : options;
 
     const {
-      timeoutMs = 2500, // Capped strictly at 2.5 seconds (2,500 ms)
+      timeoutMs = 8500, // Allow slower devices to establish a real GPS fix without a UI countdown
       desiredAccuracyMeters = 20,
       maxStaleAgeMs = 30000,
+      forceFresh = false,
       onProgress,
     } = opts;
 
@@ -258,7 +260,7 @@ export class LocationService {
       }
 
       // Fast Path: If recent valid reading exists (<=30s) and meets accuracy (<=50m), return immediately
-      const restored = this.restoreCachedPosition(maxStaleAgeMs);
+      const restored = forceFresh ? null : this.restoreCachedPosition(maxStaleAgeMs);
       if (restored) {
         if (onProgress) onProgress(restored, false);
         resolve(restored);
@@ -266,7 +268,7 @@ export class LocationService {
       }
 
       // Cancel any previous concurrent search immediately
-      this.clearCurrentWatcher(false);
+      this.clearCurrentWatcher(true);
       const requestId = ++this.currentRequestId;
       this.activeRejector = reject;
 
@@ -306,7 +308,7 @@ export class LocationService {
         reject(err);
       };
 
-      // Strict 2,500ms timeout handler
+      // Keep searching briefly on slower devices; the UI never displays a countdown.
       this.activeTimeoutId = setTimeout(() => {
         if (hasCompleted || requestId !== this.currentRequestId) return;
 
@@ -323,7 +325,7 @@ export class LocationService {
         } else {
           finishError(
             new Error(
-              'Pencarian GPS mencapai batas waktu tunggu (2,5 detik). Pastikan GPS HP aktif di area terbuka lalu klik Coba Lagi.'
+              'Lokasi belum terbaca. Aktifkan GPS, coba area terbuka, lalu pilih Perbarui GPS.'
             )
           );
         }
@@ -340,7 +342,7 @@ export class LocationService {
             bestReading = !bestReading || reading.accuracy < bestReading.accuracy ? reading : bestReading;
             onProgress?.(reading, reading.accuracy > desiredAccuracyMeters);
 
-            if (reading.accuracy <= desiredAccuracyMeters) {
+            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
               finishSuccess(reading);
             }
           },
@@ -349,7 +351,7 @@ export class LocationService {
           },
           {
             enableHighAccuracy: false,
-            maximumAge: maxStaleAgeMs,
+            maximumAge: forceFresh ? 0 : maxStaleAgeMs,
             timeout: quickTimeout,
           }
         );
@@ -375,21 +377,14 @@ export class LocationService {
               onProgress(reading, reading.accuracy > desiredAccuracyMeters);
             }
 
-            // High accuracy (<=20m) -> resolve immediately
-            if (reading.accuracy <= desiredAccuracyMeters) {
+            // Any fresh reading within the existing 50m policy is already
+            // sufficient; do not force users to wait for an arbitrary refine timer.
+            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
               finishSuccess(reading);
               return;
             }
 
-            // Valid accuracy (<=50m) -> set 1s refine timer or finish
-            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS && !this.activeRefineTimeoutId) {
-              this.activeRefineTimeoutId = setTimeout(() => {
-                if (hasCompleted || requestId !== this.currentRequestId) return;
-                if (bestReading && bestReading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-                  finishSuccess(bestReading);
-                }
-              }, 1000);
-            }
+
           },
           (err) => {
             if (hasCompleted || requestId !== this.currentRequestId) return;
@@ -406,7 +401,7 @@ export class LocationService {
                 break;
               case err.TIMEOUT:
                 msg =
-                  'Waktu permintaan lokasi GPS habis (2,5 detik). Pastikan sinyal GPS aktif lalu klik Coba Lagi.';
+                  'Lokasi belum terbaca. Pastikan GPS aktif lalu pilih Perbarui GPS.';
                 break;
             }
 

@@ -184,7 +184,7 @@ export const AttendancePreview: React.FC = () => {
   }, [currentUser?.id, currentUser?.fullName, currentUser?.loginId, settings.schoolName,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
 
-  // 2. Fetch live GPS position on mount & manual refresh (2.5s max UI wait limit)
+  // 2. Fetch GPS on mount and refresh manually, without blocking the status once valid.
   const refreshGpsLocation = async (isManual = false) => {
     if (!settingsReady || !validSchoolLocation) return;
     const requestId = ++gpsRequestRef.current;
@@ -200,8 +200,9 @@ export const AttendancePreview: React.FC = () => {
     setGpsError(null);
     try {
       const position = await LocationService.getCurrentPosition({
-        timeoutMs: 2500, // Capped at strictly 2.5 seconds
+        timeoutMs: 8500,
         desiredAccuracyMeters: 20,
+        forceFresh: isManual,
         onProgress: (pos, isProv) => {
           if (requestId !== gpsRequestRef.current) return;
           setCoords(pos);
@@ -241,17 +242,18 @@ export const AttendancePreview: React.FC = () => {
       }
     } catch (err: any) {
       if (requestId !== gpsRequestRef.current) return;
+      if (err?.name === 'AbortError') return;
       console.warn('GPS detection error:', err);
       setGpsError(err.message || 'Gagal membaca koordinat GPS.');
-      if (!hadPreviousReading) {
-        setCoords(null);
-        setGeofence({
-          distanceMeters: 999,
-          isWithinRadius: false,
-          accuracyQuality: 'RENDAH',
-          status: 'GPS_ERROR',
-        });
-      }
+      // Never leave an old successful badge active after a failed refresh.
+      setCoords(null);
+      setIsProvisional(false);
+      setGeofence({
+        distanceMeters: 999,
+        isWithinRadius: false,
+        accuracyQuality: 'RENDAH',
+        status: 'GPS_ERROR',
+      });
     } finally {
       if (requestId === gpsRequestRef.current) setIsLocating(false);
     }
@@ -717,9 +719,9 @@ export const AttendancePreview: React.FC = () => {
               <CardHeader
                 title={`Formulir Presensi: ${currentUser?.fullName}`}
                 subtitle={`Hari ini: ${formatIndonesianDate(new Date())}`}
-                action={!isLocating && settingsReady && validSchoolLocation ? (
-                  <Badge variant={geofence?.status === 'DALAM_LOKASI' ? 'success' : geofence?.status === 'AKURASI_RENDAH' ? 'warning' : geofence?.status === 'DI_LUAR_LOKASI' ? 'danger' : 'neutral'} icon={<ShieldCheck className="w-3.5 h-3.5" />}>
-                    {geofence?.status === 'DALAM_LOKASI' ? 'Dalam Radius Sekolah' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi GPS Rendah' : geofence?.status === 'DI_LUAR_LOKASI' ? 'Di Luar Radius' : 'GPS Belum Terhubung'}
+                action={settingsReady && validSchoolLocation ? (
+                  <Badge variant={!gpsError && geofence?.status === 'DALAM_LOKASI' ? 'success' : geofence?.status === 'AKURASI_RENDAH' ? 'warning' : geofence?.status === 'DI_LUAR_LOKASI' ? 'danger' : 'neutral'} icon={<ShieldCheck className="w-3.5 h-3.5" />}>
+                    {!gpsError && geofence?.status === 'DALAM_LOKASI' ? 'Dalam Radius Sekolah' : isLocating && !coords ? 'Memeriksa GPS' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi GPS Rendah' : geofence?.status === 'DI_LUAR_LOKASI' ? 'Di Luar Radius' : 'GPS Belum Terhubung'}
                   </Badge>
                 ) : undefined}
               />
@@ -733,7 +735,7 @@ export const AttendancePreview: React.FC = () => {
                           <MapPin className="w-5 h-5" />
                         </div>
                         <div>
-                          <h4 className="gps-search-title">{isLocating ? (isProvisional ? 'Memperbarui lokasi GPS' : 'Mencari lokasi GPS') : !settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : coords ? 'Lokasi siap digunakan' : 'Siapkan lokasi GPS'}</h4>
+                          <h4 className="gps-search-title">{!settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : !gpsError && geofence?.status === 'DALAM_LOKASI' ? 'Dalam radius sekolah' : isLocating ? 'Memeriksa lokasi GPS' : coords ? 'Lokasi GPS terbaca' : 'Siapkan lokasi GPS'}</h4>
                           <p className="gps-search-caption">
                             {settingsReady && validSchoolLocation
                               ? `${settings.schoolName} · radius ${settings.allowedRadiusMeters} meter`
@@ -770,11 +772,11 @@ export const AttendancePreview: React.FC = () => {
                       <div className="attendance-gps-grid">
                         <div className="attendance-gps-stat">
                           <span className="attendance-gps-label">Jarak Sekolah</span>
-                          <strong className={`attendance-gps-value ${geofence?.isWithinRadius ? 'is-good' : 'is-bad'}`}>
+                          <strong className={`attendance-gps-value ${geofence?.status === 'DALAM_LOKASI' ? 'is-good' : 'is-bad'}`}>
                             {geofence?.distanceMeters ?? '-'} m
                           </strong>
                           <span className="attendance-gps-note">
-                            {geofence?.isWithinRadius ? 'Dalam radius' : 'Di luar radius'}
+                            {geofence?.status === 'DALAM_LOKASI' ? 'Dalam radius' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi belum memadai' : 'Di luar radius'}
                           </span>
                         </div>
 

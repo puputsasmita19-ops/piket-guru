@@ -171,6 +171,8 @@ export const GURU_STEPS: TourStep[] = [
   },
 ];
 
+const TOUR_PERMISSIONS = [...new Set([...ADMIN_STEPS, ...GURU_STEPS].map(step => step.requiredPermission).filter((value): value is PermissionKey => Boolean(value)))];
+
 interface ElementRect {
   top: number;
   left: number;
@@ -182,11 +184,17 @@ export const InteractiveGuideTour: React.FC = () => {
   const { isGuideTourActive, stopGuideTour } = useGuide();
   const { hasRole, hasPermission } = useAuth();
   const { activeTab, setActiveTab } = useNavigation();
-  const steps = useMemo(() => [...(hasRole('ADMIN', 'KEPALA_SEKOLAH') ? ADMIN_STEPS : GURU_STEPS), {
+  const navigateRef = useRef(setActiveTab);
+  navigateRef.current = setActiveTab;
+  // Permission functions are recreated by AuthContext on render. Derive stable primitive
+  // dependencies so opening a step never tears down/restarts all DOM measurements.
+  const adminTour = hasRole('ADMIN', 'KEPALA_SEKOLAH');
+  const permissionSignature = TOUR_PERMISSIONS.filter(permission => hasPermission(permission)).join('|');
+  const steps = useMemo(() => [...(adminTour ? ADMIN_STEPS : GURU_STEPS), {
     id: 'sync-status', targetTab: 'dashboard' as NavigationTab, selectors: ['[data-tour="sync-status"]'], title: 'Saat internet terputus',
     location: 'Ikon koneksi di header atas', action: 'Simpan formulir. Periksa antrean pada ikon koneksi; biarkan aplikasi terbuka saat internet kembali.',
     expectedResult: 'Antrean terkirim otomatis. Draf belum dikirim tetap perlu dibuka dan dikirim sendiri.', icon: Info, requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
-  }].filter(step => !step.requiredPermission || hasPermission(step.requiredPermission)), [hasRole, hasPermission]);
+  }].filter(step => !step.requiredPermission || permissionSignature.split('|').includes(step.requiredPermission)), [adminTour, permissionSignature]);
   const [index, setIndex] = useState(0), [targetRect, setTargetRect] = useState<ElementRect | null>(null);
   const [dock, setDock] = useState<'top' | 'bottom'>('bottom');
   const [size, setSize] = useState({ width: window.innerWidth, height: window.visualViewport?.height || window.innerHeight, card: 270 });
@@ -196,34 +204,74 @@ export const InteractiveGuideTour: React.FC = () => {
   useEffect(() => { if (isGuideTourActive) { setIndex(0); previousFocus.current = document.activeElement as HTMLElement; requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); } }, [isGuideTourActive]);
   useEffect(() => {
     if (!isGuideTourActive || !step) return;
-    if (activeTab !== step.targetTab) setActiveTab(step.targetTab);
-    let frame = 0, scrolled = false;
+    if (activeTab !== step.targetTab) navigateRef.current(step.targetTab);
+
+    let frame = 0;
+    let polling: ReturnType<typeof setInterval> | null = null;
+    let scrolled = false;
+    let foundTarget = false;
+    let lastRect = '';
     const measure = () => {
-      cancelAnimationFrame(frame); frame = requestAnimationFrame(() => {
-        const width = window.innerWidth, height = window.visualViewport?.height || window.innerHeight;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const width = window.innerWidth;
+        const height = window.visualViewport?.height || window.innerHeight;
         const card = cardRef.current?.offsetHeight || 270;
         setSize(prev => prev.width === width && prev.height === height && prev.card === card ? prev : { width, height, card });
         const selectors = step.id === 'admin-nav' && width < 1024 ? ['[data-tour="mobile-nav"]'] : step.selectors;
-        const target = selectors.flatMap(selector => Array.from(document.querySelectorAll<HTMLElement>(selector))).find(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && el.getBoundingClientRect().right > 0 && el.getBoundingClientRect().left < width);
-        if (!target) { setTargetRect(null); return; }
-        if (!scrolled) { scrolled = true; const r = target.getBoundingClientRect(); if (r.top < 70 || r.bottom > height - 90) target.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }
+        const target = selectors.map(selector => document.querySelector<HTMLElement>(selector)).find(el => el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && el.getBoundingClientRect().right > 0 && el.getBoundingClientRect().left < width);
+        if (!target) {
+          foundTarget = false;
+          if (lastRect !== 'null') { lastRect = 'null'; setTargetRect(null); }
+          return;
+        }
+        foundTarget = true;
+        // On mobile, smooth scrolling moved the floating card during taps and
+        // made users press Lanjut repeatedly. Keep the guide anchored instead.
+        if (!scrolled && width >= 768) {
+          scrolled = true;
+          const rect = target.getBoundingClientRect();
+          if (rect.top < 70 || rect.bottom > height - 90) target.scrollIntoView({ block: 'center', behavior: 'auto' });
+        }
         const fixedControl = !!target.closest('header, [data-tour="mobile-nav"]');
-        const r = target.getBoundingClientRect(), nextDock = r.top > height / 2 ? 'top' : 'bottom';
-        setDock(nextDock);
-        const cardTop = nextDock === 'top' ? 76 : Math.max(76, height - card - 84);
-        // Show the actual visible part of a large panel in a reserved area.
-        // The explanation card never sits on the highlighted controls.
-        const top = Math.max(fixedControl ? 8 : 68, r.top, nextDock === 'top' ? cardTop + card + 14 : 0);
-        const bottom = Math.min(height - (fixedControl ? 8 : 76), r.bottom, nextDock === 'bottom' ? cardTop - 14 : height);
+        const r = target.getBoundingClientRect();
+        const nextDock = r.top > height / 2 ? 'top' : 'bottom';
+        if (width >= 768) setDock(nextDock);
+        const effectiveDock = width < 768 ? 'bottom' : nextDock;
+        const cardTop = effectiveDock === 'top' ? 76 : Math.max(76, height - card - 84);
+        const top = Math.max(fixedControl ? 8 : 68, r.top, effectiveDock === 'top' ? cardTop + card + 14 : 0);
+        const bottom = Math.min(height - (fixedControl ? 8 : 76), r.bottom, effectiveDock === 'bottom' ? cardTop - 14 : height);
         const rect = bottom > top ? { top, left: Math.max(8, r.left), width: Math.min(width - 16, r.width), height: bottom - top } : null;
-        setTargetRect(prev => JSON.stringify(prev) === JSON.stringify(rect) ? prev : rect);
+        const signature = JSON.stringify(rect);
+        if (signature !== lastRect) { lastRect = signature; setTargetRect(rect); }
       });
     };
-    const resize = new ResizeObserver(measure); if (cardRef.current) resize.observe(cardRef.current);
-    const observer = new MutationObserver(measure); observer.observe(document.getElementById('root') || document.body, { childList: true, subtree: true });
-    window.addEventListener('resize', measure); window.addEventListener('scroll', measure, true); window.visualViewport?.addEventListener('resize', measure); measure();
-    return () => { cancelAnimationFrame(frame); resize.disconnect(); observer.disconnect(); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); window.visualViewport?.removeEventListener('resize', measure); };
-  }, [isGuideTourActive, step, activeTab, setActiveTab]);
+
+    const resize = new ResizeObserver(measure);
+    if (cardRef.current) resize.observe(cardRef.current);
+    // Only poll briefly while the target tab/lazy component is mounting. Do NOT
+    // observe the entire React root: doing so causes repeated reflows/renders.
+    let attempts = 0;
+    polling = setInterval(() => {
+      attempts += 1;
+      if (foundTarget || attempts >= 25) {
+        if (polling) clearInterval(polling);
+        polling = null;
+      } else measure();
+    }, 240);
+    window.addEventListener('resize', measure, { passive: true });
+    window.addEventListener('scroll', measure, { passive: true, capture: true });
+    window.visualViewport?.addEventListener('resize', measure, { passive: true });
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      if (polling) clearInterval(polling);
+      resize.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+      window.visualViewport?.removeEventListener('resize', measure);
+    };
+  }, [isGuideTourActive, step, activeTab]);
   useEffect(() => {
     if (!isGuideTourActive) return;
     const key = (e: KeyboardEvent) => {
@@ -237,7 +285,7 @@ export const InteractiveGuideTour: React.FC = () => {
   }, [isGuideTourActive, close]);
   if (!isGuideTourActive || !step) return null;
   const mobile = size.width < 768, width = Math.min(360, size.width - 24), maxTop = Math.max(76, size.height - size.card - 84);
-  const top = dock === 'top' ? 76 : maxTop;
+  const top = mobile ? maxTop : dock === 'top' ? 76 : maxTop;
   const left = mobile ? (size.width - width) / 2 : Math.max(12, Math.min(targetRect?.left || (size.width - width) / 2, size.width - width - 12));
   return <div className="guide-layer print:hidden">
     <div className="guide-blocker" aria-hidden="true"/>
