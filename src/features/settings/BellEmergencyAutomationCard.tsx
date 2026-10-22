@@ -20,78 +20,30 @@ import { Modal } from '../../components/common/Modal';
 import { SchoolBellService } from '../../services/audio/bellService';
 import { EmergencyService } from '../../services/notifications/emergencyService';
 import { EmergencyAlert, EmergencyType } from '../../types/security.types';
+import { normalizeCommandCenterConfig, BELL_DAY_LABELS, type CommandCenterConfig } from '../../types/commandCenterConfig.types';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 interface BellEmergencyAutomationCardProps {
   schoolName: string;
+  config?: CommandCenterConfig;
 }
 
-interface ScheduledBell {
-  id: string;
-  time: string;
-  label: string;
-  toneType: string;
-  description: string;
+/** Time display is always interpreted in the school's WIB timezone, not device timezone. */
+function wibClock(now: Date): {day: number; seconds: number} {
+  const parts = new Intl.DateTimeFormat('en-GB', {timeZone:'Asia/Jakarta', hour:'2-digit', minute:'2-digit', second:'2-digit', weekday:'short', hourCycle:'h23'}).formatToParts(now);
+  const part = (key: string) => parts.find(p => p.type === key)?.value || '';
+  const days: Record<string, number> = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+  return { day: days[part('weekday')] ?? 0, seconds: Number(part('hour')) * 3600 + Number(part('minute')) * 60 + Number(part('second')) };
 }
-
-const DEFAULT_SCHEDULED_BELLS: ScheduledBell[] = [
-  {
-    id: 'bell_1',
-    time: '06:45',
-    label: 'Bel Masuk Sekolah & Apel Pagi',
-    toneType: 'MORNING_IN',
-    description: 'Chime Westminster klasik 4 ketukan menyambut kehadiran siswa dan guru.',
-  },
-  {
-    id: 'bell_2',
-    time: '07:15',
-    label: 'Penutupan Gerbang Utama',
-    toneType: 'PERIOD_CHANGE',
-    description: 'Batas akhir toleransi hadir; dimulainya pencatatan siswa terlambat di Pos Piket.',
-  },
-  {
-    id: 'bell_3',
-    time: '09:45',
-    label: 'Bel Istirahat Pertama',
-    toneType: 'BREAK',
-    description: 'Nada ceria 3 ketukan jeda istirahat dan kudapan pagi.',
-  },
-  {
-    id: 'bell_4',
-    time: '10:15',
-    label: 'Bel Masuk Jam Pembelajaran Kedua',
-    toneType: 'PERIOD_CHANGE',
-    description: 'Nada double ding-dong pergantian jam belajar kelas.',
-  },
-  {
-    id: 'bell_5',
-    time: '12:00',
-    label: 'Bel Istirahat Siang & Shalat Dzuhur',
-    toneType: 'BREAK',
-    description: 'Istirahat makan siang dan ibadah bersama civitas sekolah.',
-  },
-  {
-    id: 'bell_6',
-    time: '12:45',
-    label: 'Bel Masuk Sesi Pembelajaran Siang',
-    toneType: 'PERIOD_CHANGE',
-    description: 'Melanjutkan pembelajaran jam sesi sore.',
-  },
-  {
-    id: 'bell_7',
-    time: '15:30',
-    label: 'Bel Pulang Sekolah (Dismissal)',
-    toneType: 'DISMISSAL',
-    description: 'Melodi 4 nada penutupan hari pembelajaran dan pergantian piket.',
-  },
-];
 
 export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardProps> = ({
   schoolName,
+  config,
 }) => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
+  const bellSchedule = React.useMemo(() => normalizeCommandCenterConfig(config).scheduledBells, [config]);
 
   const [activeEmergency, setActiveEmergency] = useState<EmergencyAlert | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
@@ -121,44 +73,29 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
     return () => unsub();
   }, []);
 
-  // Compute Next Bell Countdown
+  // Reference countdown only: this module never schedules or broadcasts a sound by itself.
   useEffect(() => {
     const updateCountdown = () => {
-      const now = new Date();
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const currentSeconds = now.getSeconds();
-      const currentTotalSeconds = currentHours * 3600 + currentMinutes * 60 + currentSeconds;
-
-      let found = false;
-      for (const bell of DEFAULT_SCHEDULED_BELLS) {
-        const [bH, bM] = bell.time.split(':').map(Number);
-        const bellTotalSeconds = bH * 3600 + bM * 60;
-
-        if (bellTotalSeconds > currentTotalSeconds) {
-          const diffSeconds = bellTotalSeconds - currentTotalSeconds;
-          const hrs = Math.floor(diffSeconds / 3600);
-          const mins = Math.floor((diffSeconds % 3600) / 60);
-          const secs = diffSeconds % 60;
-          setNextBellCountdown(
-            `${hrs > 0 ? hrs + 'j ' : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}d`
-          );
-          setNextBellLabel(`${bell.label} (${bell.time} WIB)`);
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
+      const {day, seconds} = wibClock(new Date());
+      const next = bellSchedule.filter(bell => bell.isActive && bell.days.includes(day) && /^\d{2}:\d{2}$/.test(bell.time))
+        .map(bell => ({bell, seconds: Number(bell.time.slice(0,2))*3600 + Number(bell.time.slice(3,5))*60}))
+        .find(entry => entry.seconds > seconds);
+      if (!next) {
         setNextBellCountdown('Selesai hari ini');
-        setNextBellLabel('Semua sesi bel hari ini telah terlewati');
+        setNextBellLabel('Tidak ada sesi berikutnya hari ini');
+        return;
       }
+      const diffSeconds = next.seconds - seconds;
+      const hrs = Math.floor(diffSeconds / 3600);
+      const mins = Math.floor((diffSeconds % 3600) / 60);
+      const secs = diffSeconds % 60;
+      setNextBellCountdown(`${hrs > 0 ? hrs+'j ' : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}d`);
+      setNextBellLabel(`${next.bell.label} (${next.bell.time} WIB)`);
     };
-
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [bellSchedule]);
 
   const handleRequestPushNotification = async () => {
     const perm = await EmergencyService.requestNotificationPermission();
@@ -179,20 +116,10 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
   };
 
   const openTriggerModal = (type: EmergencyType) => {
+    const template = normalizeCommandCenterConfig(config).emergencyTemplates[type];
     setSelectedEmergencyType(type);
-    if (type === 'EARTHQUAKE') {
-      setEmergencyTitle('Gempa Bumi Terdeteksi');
-      setEmergencyMessage('Semua civitas sekolah dimohon berlindung di bawah meja lalu evakuasi tertib ke Titik Kumpul Lapangan Utama.');
-    } else if (type === 'FIRE') {
-      setEmergencyTitle('Peringatan Kebakaran / Asap');
-      setEmergencyMessage('Terdeteksi indikasi api/kebakaran. Segera evakuasi melalui tangga darurat dan jangan gunakan lift.');
-    } else if (type === 'SECURITY') {
-      setEmergencyTitle('Siaga Keamanan / Lockdown');
-      setEmergencyMessage('Harap kunci pintu ruang kelas dan tetap berada di dalam ruangan hingga instruksi keamanan selesai.');
-    } else {
-      setEmergencyTitle('Pengumuman Darurat Penting');
-      setEmergencyMessage('Seluruh guru piket dan koordinator harap segera berkumpul di Pos Komando Utama.');
-    }
+    setEmergencyTitle(template.title);
+    setEmergencyMessage(template.message);
     setIsPanicModalOpen(true);
   };
 
@@ -345,8 +272,8 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
       {/* SCHEDULED AUTOMATED BELL SECTION */}
       <Card>
         <CardHeader
-          title="Jadwal Bel Sekolah Digital Otomatis"
-          subtitle="Sinkronisasi jadwal pergantian jam belajar, istirahat, dan kepulangan siswa"
+          title="Jadwal Bel Sekolah (Referensi)"
+          subtitle="Dapat diedit admin: jam, hari, nada dan keterangan. Jadwal ini tidak memutar suara otomatis."
           action={
             <div className="flex items-center gap-2">
               {notificationPermission !== 'granted' ? (
@@ -368,12 +295,15 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
           }
         />
         <CardContent className="p-5 sm:p-6 space-y-5">
+          <p className="text-xs text-amber-800 dark:text-amber-300 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-3">
+            Jadwal bel di bawah hanya referensi dan hitung mundur. Audio hanya dimainkan saat tombol <strong>Putar</strong> ditekan di perangkat ini. Tidak ada alarm atau siaran otomatis ke pengguna lain.
+          </p>
           {/* Next Bell Countdown Widget */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
             <div className="space-y-1">
               <div className="text-[11px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5" />
-                Bel Terjadwal Berikutnya:
+                Sesi Bel Referensi Berikutnya:
               </div>
               <div className="text-base sm:text-lg font-black">{nextBellLabel}</div>
             </div>
@@ -393,12 +323,12 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
                 <tr>
                   <th className="p-3.5">Waktu (WIB)</th>
                   <th className="p-3.5">Nama Sesi Bel</th>
-                  <th className="p-3.5">Karakter Nada Audio</th>
+                  <th className="p-3.5">Hari / Nada</th>
                   <th className="p-3.5 text-center">Uji Dengar</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {DEFAULT_SCHEDULED_BELLS.map((item) => (
+                {bellSchedule.filter(item => item.isActive).map((item) => (
                   <tr
                     key={item.id}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
@@ -413,6 +343,7 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
                       </div>
                     </td>
                     <td className="p-3.5 font-mono text-[10px] text-slate-500">
+                      <p className="mb-1">{item.days.map(day => BELL_DAY_LABELS[day]).join(', ')}</p>
                       <Badge variant="primary" size="sm">
                         {item.toneType}
                       </Badge>
@@ -429,6 +360,7 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
                     </td>
                   </tr>
                 ))}
+                {!bellSchedule.some(item => item.isActive) && <tr><td colSpan={4} className="p-5 text-center text-xs text-slate-500">Tidak ada bel yang aktif. Admin dapat mengaturnya pada tab Jadwal Bel di atas.</td></tr>}
               </tbody>
             </table>
           </div>

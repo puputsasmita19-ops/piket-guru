@@ -1,5 +1,8 @@
 import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
+import { normalizeCommandCenterConfig } from '../../types/commandCenterConfig.types';
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigation } from '../../contexts/NavigationContext';
 import {
   Radio,
   Bell,
@@ -37,6 +40,9 @@ import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
 
 export const CommandCenterPreview: React.FC = () => {
+  const { hasRole } = useAuth();
+  const { navigateTo } = useNavigation();
+  const isAdmin = hasRole('ADMIN');
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -52,9 +58,7 @@ export const CommandCenterPreview: React.FC = () => {
   const todayISO = getTodayISODate();
 
   useEffect(() => {
-    FirestoreService.getById<SchoolSettings>('settings', 'school_config').then((data) => {
-      if (data) setSettings(data);
-    });
+    const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => { if (data) setSettings(data); });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
     const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
@@ -89,6 +93,7 @@ export const CommandCenterPreview: React.FC = () => {
     );
 
     return () => {
+      unsubSettings();
       unsubSched();
       unsubAtt();
       unsubVis();
@@ -97,6 +102,8 @@ export const CommandCenterPreview: React.FC = () => {
       unsubInc();
     };
   }, []);
+
+  const commandConfig = normalizeCommandCenterConfig(settings.commandCenterConfig);
 
   // Today's metrics
   const todaySchedules = getEffectiveSchedulesOnDate(schedules, todayISO);
@@ -125,15 +132,16 @@ export const CommandCenterPreview: React.FC = () => {
             <span>PUSAT KOMANDO SIAGA PIKET • LIVE MONITORING</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            Pusat Pengawasan Real-Time & Peta Kampus
+            {commandConfig.heading}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
-            Integrasi monitoring pos piket, sebaran guru siaga, lonceng bel sekolah digital, dan panggilan darurat terpadu.
+            {commandConfig.description}
           </p>
         </div>
 
         {/* Action Buttons: Emergency & Chimes */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {isAdmin && <Button type="button" size="sm" variant="outline" className="text-xs !text-white border-white/40 hover:bg-white/10" onClick={() => navigateTo('settings', 'bell')}>Edit Bel & Komando</Button>}
           <Button
             variant="danger"
             size="md"
@@ -150,7 +158,7 @@ export const CommandCenterPreview: React.FC = () => {
       <Card>
         <CardHeader
           title="Lonceng Bel Sekolah Digital (Audio Synthesizer)"
-          subtitle="Aktivasi suara bel otomatis tanpa memerlukan perangkat audio eksternal"
+          subtitle="Bel manual di perangkat ini; jadwal sesi dapat diedit admin melalui Pengaturan Sekolah."
           action={
             <div className="flex items-center gap-1.5 text-xs text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] font-semibold font-mono">
               <Volume2 className="w-4 h-4" />
@@ -159,6 +167,7 @@ export const CommandCenterPreview: React.FC = () => {
           }
         />
         <CardContent className="p-4 sm:p-5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Jadwal bel yang tersimpan di Firebase bersifat referensi. Suara hanya diputar ketika tombol bel manual ditekan.</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <button
               onClick={() => handlePlayBell('MASUK')}
@@ -169,7 +178,7 @@ export const CommandCenterPreview: React.FC = () => {
               }`}
             >
               <Bell className="w-5 h-5 text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] mb-1" />
-              <div className="font-bold text-xs">Bel Masuk Pagi</div>
+              <div className="font-bold text-xs">{commandConfig.bellLabels.MASUK}</div>
               <div className="text-[10px] opacity-75">Westminster 4-Tone</div>
             </button>
 
@@ -182,7 +191,7 @@ export const CommandCenterPreview: React.FC = () => {
               }`}
             >
               <Clock className="w-5 h-5 text-purple-500 mb-1" />
-              <div className="font-bold text-xs">Bel Ganti Jam Mapel</div>
+              <div className="font-bold text-xs">{commandConfig.bellLabels.GANTI_JAM}</div>
               <div className="text-[10px] opacity-75">Double Ding-Dong</div>
             </button>
 
@@ -195,7 +204,7 @@ export const CommandCenterPreview: React.FC = () => {
               }`}
             >
               <Sparkles className="w-5 h-5 text-amber-500 mb-1" />
-              <div className="font-bold text-xs">Bel Jam Istirahat</div>
+              <div className="font-bold text-xs">{commandConfig.bellLabels.ISTIRAHAT}</div>
               <div className="text-[10px] opacity-75">Triple Harmony Chime</div>
             </button>
 
@@ -208,9 +217,19 @@ export const CommandCenterPreview: React.FC = () => {
               }`}
             >
               <DoorOpen className="w-5 h-5 text-emerald-500 mb-1" />
-              <div className="font-bold text-xs">Bel Pulang Sekolah</div>
+              <div className="font-bold text-xs">{commandConfig.bellLabels.PULANG}</div>
               <div className="text-[10px] opacity-75">Full Dismissal Melody</div>
             </button>
+          </div>
+          <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">Jadwal Bel Hari Ini (WIB)</p>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {commandConfig.scheduledBells.filter(item => item.isActive && item.days.includes(new Date(`${todayISO}T12:00:00Z`).getUTCDay())).length ?
+                commandConfig.scheduledBells.filter(item => item.isActive && item.days.includes(new Date(`${todayISO}T12:00:00Z`).getUTCDay())).map(item =>
+                  <div key={item.id} className="shrink-0 w-40 rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50/70 dark:bg-slate-800/30">
+                    <p className="text-sm font-bold tabular-nums">{item.time} WIB</p><p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{item.label}</p>
+                  </div>) : <p className="text-xs text-slate-500">Tidak ada sesi bel aktif hari ini.</p>}
+            </div>
           </div>
         </CardContent>
       </Card>

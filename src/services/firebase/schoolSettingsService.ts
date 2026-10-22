@@ -1,3 +1,4 @@
+import { normalizeCommandCenterConfig, validateCommandCenterConfig, type CommandCenterConfig } from '../../types/commandCenterConfig.types';
 import { sanitizeLoginAppearance, type LoginAppearanceConfig } from '../../types/loginAppearance.types';
 import { normalizeLetterhead, validateBrandLogo } from '../../utils/reportBranding';
 import type { LetterheadConfig } from '../../types';
@@ -147,7 +148,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'sessionPolicy', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'sessionPolicy', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance', 'commandCenterConfig'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -175,6 +176,39 @@ export class SchoolSettingsService {
    * Authoritative Lobby TV configuration persistence in settings/school_config.
    * Enforces server-side administrator role verification at the storage layer.
    */
+  /** Persist command-center display, bell labels and emergency content without modifying other school settings. */
+  public static async saveCommandCenterConfig(
+    config: CommandCenterConfig, userId: string, expectedConfig?: CommandCenterConfig
+  ): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists() || userSnap.data()?.role !== 'ADMIN' || userSnap.data()?.isActive !== true) {
+      throw new Error('Hanya Administrator aktif yang dapat mengubah konfigurasi Pusat Komando.');
+    }
+    const normalized = normalizeCommandCenterConfig(config);
+    const errors = validateCommandCenterConfig(normalized);
+    if (errors.length) throw new Error(errors.join(' '));
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('Pengaturan sekolah belum ada. Simpan profil sekolah terlebih dahulu.');
+      const current = snap.data() as SchoolSettings;
+      const previous = normalizeCommandCenterConfig(current.commandCenterConfig);
+      // Prevent two admins from silently overwriting one another's emergency configuration.
+      if (expectedConfig && JSON.stringify(previous) !== JSON.stringify(normalizeCommandCenterConfig(expectedConfig))) {
+        throw new Error('Pengaturan berubah di perangkat lain. Muat ulang konfigurasi sebelum menyimpan.');
+      }
+      const payload: CommandCenterConfig = { ...normalized, updatedAt: new Date().toISOString(), updatedBy: uid };
+      transaction.update(ref, { commandCenterConfig: payload, updatedAt: serverTimestamp() });
+      expected = { ...current, commandCenterConfig: payload };
+    });
+    void AuditService.log({ userId: uid, userName: userSnap.data()?.fullName || 'Administrator', role: 'ADMIN',
+      action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', target: 'Bel Darurat & Pusat Komando',
+      details: 'Admin memperbarui label dan jadwal referensi bel sekolah, template siaga, kontak darurat, SOP serta tampilan Pusat Komando' });
+    return this.receipt(expected);
+  }
+
   public static async saveNotificationSettings(config: NotificationConfig, userId: string): Promise<SchoolSettingsSaveResult> {
     const uid = this.actor(userId);
     const userSnap = await getDocFromServer(doc(db, 'users', uid));
