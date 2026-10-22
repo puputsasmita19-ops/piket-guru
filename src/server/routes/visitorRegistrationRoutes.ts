@@ -1,5 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
+import { FieldValue } from 'firebase-admin/firestore';
+import { validateVisitorQrPhoto } from './visitorPhotoValidation.js';
 import { adminDb } from '../firebaseAdmin.js';
 import { requireAuth } from './authRoutes.js';
 import { normalizeVisitorNames, formatVisitorBadge } from '../../utils/visitorRegistrationUtils.js';
@@ -68,7 +70,7 @@ async function createVisitGroup(input: any, names: string[], actor: string, requ
       tx.create(auditRef, { id: auditRef.id, timestamp: now, userId: clean(input.petugasPiketId), userName: actor, role: actorRole, action: 'CREATE', module: 'VISITORS', status: 'SUCCESS', recordId: id, details: `Check-in tamu ${names[i]}, nomor badge ${badge}` });
     }
     tx.set(ref, { last: next, updatedAt: now }, { merge: true });
-    if (pendingRef) tx.update(pendingRef, { status: 'APPROVED', reviewedAt: now, approvedVisitId: requestId, reviewedBy: actor });
+    if (pendingRef) tx.update(pendingRef, { status: 'APPROVED', reviewedAt: now, approvedVisitId: requestId, reviewedBy: actor, fotoUrl: FieldValue.delete() });
     return { firstId: requestId, firstBadge: formatVisitorBadge(date, previous + 1), count: names.length, alreadyRegistered: false };
   });
 }
@@ -106,6 +108,7 @@ visitorRegistrationRouter.post('/self-submit', async (req, res) => {
     if (typeof input.token !== 'string' || !/^[0-9a-f-]{36}$/.test(input.token)) throw new Error('Tautan QR tidak valid.');
     const names = normalizeVisitorNames(input.namaRombongan, input.namaTamu);
     validateVisit(input, names, true);
+    const safePhoto = validateVisitorQrPhoto(input.fotoUrl, input.photoConsent);
     const requestId = typeof input.requestId === 'string' && /^[0-9a-f-]{36}$/.test(input.requestId) ? input.requestId : randomUUID();
     const linkRef = adminDb.collection('visitorCheckinLinks').doc(input.token);
     const pendingRef = adminDb.collection('visitorSelfCheckinRequests').doc(requestId);
@@ -126,6 +129,7 @@ visitorRegistrationRouter.post('/self-submit', async (req, res) => {
         id: requestId, status: 'PENDING', tanggal: input.tanggal, namaTamu: names[0], namaRombongan: names, kategori: input.kategori,
         keteranganLainnya: clean(input.keteranganLainnya, 300), instansiAsal: clean(input.instansiAsal),
         noHp: clean(input.noHp, 30), tujuanBertemu: clean(input.tujuanBertemu), keperluan: clean(input.keperluan, 500),
+        ...(safePhoto ? { fotoUrl: safePhoto, photoConsent: true } : {}),
         createdAt: new Date().toISOString(), qrLinkId: input.token,
       });
       return { id: requestId };
@@ -157,7 +161,7 @@ visitorRegistrationRouter.post('/review', requireAuth, staffOnly, async (req, re
       await adminDb.runTransaction(async tx => {
         const fresh = await tx.get(ref);
         if (fresh.data()?.status !== 'PENDING') throw new Error('Pendaftaran sudah diproses.');
-        tx.update(ref, { status: 'REJECTED', reviewedBy: actor, reviewedAt: new Date().toISOString() });
+        tx.update(ref, { status: 'REJECTED', reviewedBy: actor, reviewedAt: new Date().toISOString(), fotoUrl: FieldValue.delete() });
       });
       res.json({ success: true }); return;
     }

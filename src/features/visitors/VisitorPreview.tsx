@@ -327,18 +327,19 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
         {filteredVisitors.length > 0 ? (
           historyPage.records.map((item) => (
             <Card key={item.id} className="overflow-hidden border border-slate-200 dark:border-slate-800">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
+              <CardContent className="p-3.5 sm:p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {item.fotoUrl ? <AuthenticatedImage src={item.fotoUrl} loading="lazy" decoding="async" alt={`Foto ${item.namaTamu}`} className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 object-cover shrink-0" /> : <span aria-hidden="true" className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold text-sm flex items-center justify-center shrink-0">{item.namaTamu.trim().charAt(0).toUpperCase() || 'T'}</span>}
                     <span className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 font-mono font-bold text-blue-700 dark:text-blue-300 text-xs border border-blue-200 dark:border-blue-900 shrink-0">
                       {item.nomorBadge}
                     </span>
-                    <div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm text-slate-900 dark:text-white break-words">
                         {item.namaTamu}
                       </div>
                       {Boolean(item.groupSize && item.groupSize > 1) && <p className="text-[10px] font-semibold text-sky-700">Rombongan Â· {item.groupIndex} dari {item.groupSize}</p>}
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                      <div className="text-xs text-slate-500 dark:text-slate-400 break-words">
                         {item.instansiAsal}
                       </div>
                     </div>

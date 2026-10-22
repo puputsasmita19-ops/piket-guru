@@ -1005,6 +1005,23 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
             </section>
           )}
 
+          {/* Visitor photo is next to identification, not buried below every field. */}
+          <section className="rounded-2xl border border-blue-100 dark:border-slate-700 bg-blue-50/40 dark:bg-slate-800/30 p-3 sm:p-4 space-y-3" aria-label="Foto kunjungan tamu">
+            <div className="flex items-start gap-2.5">
+              <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0"><Camera className="h-5 w-5" /></div>
+              <div className="min-w-0"><h3 className="text-sm font-bold text-slate-900 dark:text-white">Foto Tamu Utama <span className="text-xs font-normal text-slate-500">(opsional)</span></h3>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">Ambil foto wajah untuk dokumentasi kunjungan. Jika rombongan, foto ini hanya untuk tamu utama. Foto hanya dapat dilihat petugas berwenang.</p></div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {fotoUrl ? <AuthenticatedImage src={fotoUrl} alt={`Foto tamu ${namaTamu || 'utama'}`} className="h-24 w-24 rounded-2xl object-cover border border-blue-200 dark:border-slate-600" loading="lazy" decoding="async" />
+                : <div className="h-24 w-24 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300 dark:border-slate-700 bg-white/75 dark:bg-slate-900"><Camera className="w-7 h-7" /></div>}
+              <div className="flex-1 min-w-[150px] flex flex-wrap gap-2 items-center">
+                <Button type="button" variant="outline" size="sm" className="min-h-11 text-xs" leftIcon={<Camera className="h-4 w-4" />} onClick={() => setIsCameraOpen(true)}>{fotoUrl ? 'Ambil Ulang Foto' : 'Ambil Foto Tamu'}</Button>
+                {fotoUrl && <button type="button" aria-label="Hapus foto tamu" onClick={() => setFotoUrl(undefined)} className="min-h-11 px-3 rounded-xl text-xs font-semibold text-rose-700 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Hapus</button>}
+              </div>
+            </div>
+          </section>
+
           {/* Row 3: Kategori & No Badge */}
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1456,40 +1473,6 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
             />
           </div>
 
-          {/* Foto Bukti Tamu / KTP */}
-          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5 text-blue-500" />
-                <span>Foto Wajah / Dokumen Identitas Tamu (Opsional)</span>
-              </label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-xs min-h-[36px]"
-                leftIcon={<Camera className="w-3.5 h-3.5" />}
-                onClick={() => setIsCameraOpen(true)}
-              >
-                {fotoUrl ? 'Ambil Ulang Foto' : '+ Ambil Foto Tamu'}
-              </Button>
-            </div>
-
-            {fotoUrl && (
-              <div className="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
-                <AuthenticatedImage src={fotoUrl} alt="Foto Tamu" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setFotoUrl(undefined)}
-                  className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white cursor-pointer shadow-sm hover:bg-rose-700"
-                  title="Hapus Foto"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Error Alert */}
           {errorMessage && (
             <div role="alert" className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
@@ -1508,8 +1491,9 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onCapture={(img) => setFotoUrl(img)}
+        initialFacingMode="user"
         title="Dokumentasi Tamu Sekolah"
-        subtitle="Foto otomatis diberi watermark panel bawah resmi (identitas tamu, instansi, waktu WIB, dan GPS jika ada)"
+        subtitle="Ambil foto wajah tamu. Watermark tanggal, identitas dan sekolah ditambahkan otomatis."
         watermarkProcessor={async (canvas, capturedAt, isUpload) => {
           const coords = await detectLocationForWatermark();
           const briefIdentity = `Tamu: ${namaTamu || 'Tamu Umum'}${instansiAsal ? ` • Instansi: ${instansiAsal}` : ''}${tujuanBertemu ? ` • Bertemu: ${tujuanBertemu}` : ''}`;

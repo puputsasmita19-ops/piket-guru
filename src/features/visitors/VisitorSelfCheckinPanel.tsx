@@ -5,7 +5,7 @@ import { createQrSvg } from '../../utils/visitorQrSvg';
 
 interface PendingVisitor {
   id: string; namaTamu: string; namaRombongan?: string[]; instansiAsal: string;
-  tujuanBertemu: string; keperluan: string; createdAt: string;
+  tujuanBertemu: string; keperluan: string; createdAt: string; fotoUrl?: string;
 }
 
 async function visitorAdminApi(path: string, method: 'GET' | 'POST' = 'GET', data?: object) {
@@ -103,7 +103,10 @@ export function VisitorSelfCheckinPanel({ isOpen, onClose }: { isOpen: boolean; 
           {pending.map(item => <article key={item.id} className="border rounded-xl p-3 space-y-2">
             <h4 className="text-sm font-bold">{item.namaTamu} {item.namaRombongan && item.namaRombongan.length > 1 ? `+${item.namaRombongan.length - 1} anggota` : ''}</h4>
             {item.namaRombongan && item.namaRombongan.length > 1 && <p className="text-xs text-slate-600 dark:text-slate-300">{item.namaRombongan.join(', ')}</p>}
-            <p className="text-xs text-slate-500">{item.instansiAsal} · {item.tujuanBertemu}</p><p className="text-xs">{item.keperluan}</p>
+            <div className="flex items-start gap-3">
+              {item.fotoUrl && <img src={item.fotoUrl} alt={`Foto pendaftar ${item.namaTamu}`} loading="lazy" decoding="async" className="w-16 h-16 rounded-xl border border-slate-200 object-cover shrink-0" />}
+              <div className="min-w-0"><p className="text-xs text-slate-500">{item.instansiAsal} · {item.tujuanBertemu}</p><p className="text-xs mt-1 break-words">{item.keperluan}</p><p className="text-[11px] text-slate-500 mt-1">{item.fotoUrl ? 'Foto tamu utama terlampir · cocokkan dengan identitas asli' : 'Tanpa foto · verifikasi identitas secara langsung'}</p></div>
+            </div>
             <div className="flex gap-2 flex-wrap"><button type="button" disabled={Boolean(reviewing)} onClick={() => void review(item, 'APPROVED')} className="min-h-10 px-4 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-40">Terima & Terbitkan Badge</button><button type="button" disabled={Boolean(reviewing)} onClick={() => void review(item, 'REJECTED')} className="min-h-10 px-4 border border-rose-300 text-rose-700 rounded-lg text-xs font-semibold disabled:opacity-40">Tolak</button></div>
           </article>)}
         </div>

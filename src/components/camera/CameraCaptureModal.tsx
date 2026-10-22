@@ -8,6 +8,7 @@ interface CameraCaptureModalProps {
   onClose: () => void;
   onCapture: (imageDataUrl: string) => void;
   allowFileUpload?: boolean;
+  initialFacingMode?: 'user' | 'environment';
   title?: string;
   subtitle?: string;
   // Called before the shutter, so GPS can be refreshed before the photo is taken (for attendance)
@@ -21,6 +22,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   onClose,
   onCapture,
   allowFileUpload = true,
+  initialFacingMode,
   title,
   subtitle,
   prepareCapture,
@@ -113,7 +115,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     if (isOpen) {
       setCapturedImage(null);
       // For attendance selfie, default to front camera ('user'). For documentation, default to environment.
-      const initialMode = prepareCapture ? 'user' : 'environment';
+      const initialMode = initialFacingMode || (prepareCapture ? 'user' : 'environment');
       setFacingMode(initialMode);
       startCamera(initialMode);
     }
