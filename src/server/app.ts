@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { authRouter } from './routes/authRoutes.js';
 import { driveRouter } from './routes/driveRoutes.js';
 import { profilePhotoRouter } from './routes/profilePhotoRoutes.js';
+import { visitorRegistrationRouter } from './routes/visitorRegistrationRoutes.js';
 
 dotenv.config();
 
@@ -25,7 +26,7 @@ export function createApp(): Express {
     if (req.path.startsWith('/api/')) {
       // Drive uploads contain private photos. OAuth requests may contain secrets.
       // Log only method/path for these routes, never the request body or query.
-      if (req.path.startsWith('/api/drive/')) {
+      if (req.path.startsWith('/api/drive/') || req.path.startsWith('/api/visitor-registration/')) {
         console.log(`[API] ${req.method} ${req.path}`);
         next();
         return;
@@ -43,6 +44,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/drive', profilePhotoRouter);
   app.use('/api/drive', driveRouter);
+  app.use('/api/visitor-registration', visitorRegistrationRouter);
 
   // Serve audit artifacts explicitly
   app.use('/artifacts', express.static(path.resolve(__dirname, '../../public/artifacts')));

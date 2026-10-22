@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NavigationProvider } from './contexts/NavigationContext';
 import { GuideProvider } from './contexts/GuideContext';
 import { LoginPage } from './features/auth/LoginPage';
+const PublicVisitorCheckin = lazy(() => import('./features/visitors/PublicVisitorCheckin').then(module => ({ default: module.PublicVisitorCheckin })));
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
 import { PageLoading } from './components/common/PageLoading';
 import { loadAuthenticatedShell } from './appBootstrap';
@@ -48,6 +49,8 @@ const AppContent: React.FC = () => {
     };
   }, []);
 
+  const guestToken = new URLSearchParams(window.location.search).get('visitor-checkin');
+  if (guestToken) return <Suspense fallback={<PageLoading fullScreen label="Membuka formulir tamu…" />}><PublicVisitorCheckin token={guestToken} /></Suspense>;
   if (isLoading) return <PageLoading fullScreen label="Memverifikasi sesi…" />;
   if (!isAuthenticated) return <LoginPage />;
   return (

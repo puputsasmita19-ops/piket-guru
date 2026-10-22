@@ -32,6 +32,7 @@ import { Modal } from '../../components/common/Modal';
 import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { VisitorFormModal } from './VisitorFormModal';
+import { VisitorSelfCheckinPanel } from './VisitorSelfCheckinPanel';
 import { VisitorPassPrintModal } from './VisitorPassPrintModal';
 import {
   VisitorRecord,
@@ -72,6 +73,8 @@ export const VisitorPreview: React.FC = () => {
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState<VisitorRecord | null>(null);
+  const [showSelfCheckin, setShowSelfCheckin] = useState(false);
+  const [registrationFeedback, setRegistrationFeedback] = useState('');
   const [printVisitor, setPrintVisitor] = useState<VisitorRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<VisitorRecord | null>(null);
   const [photoVisitor, setPhotoVisitor] = useState<VisitorRecord | null>(null);
@@ -122,7 +125,9 @@ export const VisitorPreview: React.FC = () => {
     if (isEdit && data.id) {
       await VisitorService.updateVisitor(data, currentUser);
     } else {
-      await VisitorService.registerVisitor(data, currentUser);
+      const saved = await VisitorService.registerVisitor(data, currentUser);
+      const count = Array.isArray(data.namaRombongan) ? data.namaRombongan.length : 1;
+      setRegistrationFeedback(`${count} tamu berhasil didaftarkan. Nomor badge dimulai dari ${saved.nomorBadge}.`);
     }
   };
 
@@ -204,8 +209,9 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Catat tamu masuk, tujuan kunjungan, dan waktu pulang.</p>
         </div>
 
-        <div className="page-actions flex items-center gap-2">
+        <div className="page-actions flex flex-wrap items-center gap-2">
           <OperationalExport report={buildReport()} settings={settings} disabled={Boolean(history.range.error)} />
+          {canEdit && <Button variant="outline" size="sm" onClick={() => setShowSelfCheckin(true)}>QR Tamu Mandiri & Verifikasi</Button>}
           {canEdit && (
             <Button
               variant="primary"
@@ -221,6 +227,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
           )}
         </div>
       </div>
+
+      {registrationFeedback && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 p-3 text-xs font-semibold">{registrationFeedback}</div>}
 
       {/* METRIC SUMMARY CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -329,6 +337,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                       <div className="font-bold text-sm text-slate-900 dark:text-white">
                         {item.namaTamu}
                       </div>
+                      {Boolean(item.groupSize && item.groupSize > 1) && <p className="text-[10px] font-semibold text-sky-700">Rombongan Â· {item.groupIndex} dari {item.groupSize}</p>}
                       <div className="text-xs text-slate-500 dark:text-slate-400">
                         {item.instansiAsal}
                       </div>
@@ -474,6 +483,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                           <div className="font-bold text-slate-900 dark:text-white">
                             {item.namaTamu}
                           </div>
+                          {Boolean(item.groupSize && item.groupSize > 1) && <p className="text-[10px] font-semibold text-sky-700">Rombongan Â· {item.groupIndex}/{item.groupSize}</p>}
                           <div className="text-[11px] text-slate-500 font-mono">
                             {item.noHp || 'Tanpa No HP'}
                           </div>
@@ -620,6 +630,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
         staffList={staffList}
         usersList={usersList}
       />
+
+      {canEdit && <VisitorSelfCheckinPanel isOpen={showSelfCheckin} onClose={() => setShowSelfCheckin(false)} />}
 
       {/* PRINT PASS MODAL */}
       <Modal isOpen={!!photoVisitor} onClose={() => setPhotoVisitor(null)} title="Dokumentasi Foto Tamu" maxWidth="md">

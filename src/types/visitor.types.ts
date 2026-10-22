@@ -16,6 +16,11 @@ export interface VisitorRecord extends BaseEntityMetadata {
   jamMasuk: string; // HH:mm WIB
   jamKeluar?: string; // HH:mm WIB
   namaTamu: string;
+  /** Every visitor in a group has a separate record and an individually allocated badge. */
+  namaRombongan?: string[];
+  groupId?: string;
+  groupSize?: number;
+  groupIndex?: number;
   instansiAsal: string;
   kategori: VisitorCategory;
   keteranganLainnya?: string; // Wajib diisi jika kategori === 'LAINNYA', maks 300 char

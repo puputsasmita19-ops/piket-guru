@@ -101,12 +101,13 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
   const [jamMasuk, setJamMasuk] = useState(formatTime(new Date()));
   const [jamKeluar, setJamKeluar] = useState<string | undefined>(undefined);
   const [namaTamu, setNamaTamu] = useState('');
+  const [extraNames, setExtraNames] = useState<string[]>([]);
   const [instansiAsal, setInstansiAsal] = useState('');
   const [kategori, setKategori] = useState<VisitorCategory>('UMUM');
   const [keteranganLainnya, setKeteranganLainnya] = useState('');
   const [noHp, setNoHp] = useState('');
   const [nomorIdentitas, setNomorIdentitas] = useState('');
-  const [nomorBadge, setNomorBadge] = useState('TAMU-01');
+  const [nomorBadge, setNomorBadge] = useState('');
 
   // Recipient / Host States (Combobox)
   const [selectedRecipient, setSelectedRecipient] = useState<RecipientOption | null>(null);
@@ -309,6 +310,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         setJamMasuk(editingVisitor.jamMasuk || formatTime(new Date()));
         setJamKeluar(editingVisitor.jamKeluar);
         setNamaTamu(editingVisitor.namaTamu || '');
+        setExtraNames([]);
         setInstansiAsal(editingVisitor.instansiAsal || '');
         setKategori(editingVisitor.kategori || 'UMUM');
         setKeteranganLainnya(editingVisitor.keteranganLainnya || '');
@@ -366,12 +368,13 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         setJamMasuk(formatTime(new Date()));
         setJamKeluar(undefined);
         setNamaTamu('');
+        setExtraNames([]);
         setInstansiAsal('');
         setKategori('UMUM');
         setKeteranganLainnya('');
         setNoHp('');
         setNomorIdentitas('');
-        setNomorBadge(`TAMU-${Math.floor(Math.random() * 20 + 1).toString().padStart(2, '0')}`);
+        setNomorBadge('');
         setTujuanBertemu('');
         setSelectedRecipient(null);
         setKeperluan('');
@@ -461,6 +464,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         jamMasuk,
         jamKeluar,
         namaTamu,
+        namaRombongan: [namaTamu, ...extraNames],
         instansiAsal,
         kategori,
         keteranganLainnya,
@@ -488,6 +492,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     jamMasuk,
     jamKeluar,
     namaTamu,
+    extraNames,
     instansiAsal,
     kategori,
     keteranganLainnya,
@@ -510,6 +515,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     if (d.jamMasuk) setJamMasuk(d.jamMasuk);
     if (d.jamKeluar !== undefined) setJamKeluar(d.jamKeluar);
     if (d.namaTamu) setNamaTamu(d.namaTamu);
+    if (Array.isArray(d.namaRombongan) && d.namaRombongan.length > 1) setExtraNames(d.namaRombongan.slice(1, 12));
     if (d.instansiAsal !== undefined) setInstansiAsal(d.instansiAsal);
     if (d.kategori) setKategori(d.kategori);
     if (d.keteranganLainnya !== undefined) setKeteranganLainnya(d.keteranganLainnya);
@@ -665,9 +671,9 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
       missing.push('Instansi Asal');
     }
 
-    if (!nomorBadge.trim()) {
-      errors.nomorBadge = 'Nomor badge tamu wajib diisi';
-      missing.push('Nomor Badge');
+    if (!editingVisitor && extraNames.some(name => name.trim().length < 2)) {
+      errors.extraNames = 'Lengkapi semua nama rombongan atau hapus kolom kosong.';
+      missing.push('Nama Anggota Rombongan');
     }
 
     // Recipient selection validation: must have selected a valid recipient OR has non-empty tujuanBertemu
@@ -717,12 +723,13 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         jamMasuk,
         jamKeluar: editingVisitor?.jamKeluar || jamKeluar,
         namaTamu: namaTamu.trim(),
+        namaRombongan: editingVisitor ? editingVisitor.namaRombongan : [namaTamu.trim(), ...extraNames.map(name => name.trim())],
         instansiAsal: instansiAsal.trim(),
         kategori,
         keteranganLainnya: kategori === 'LAINNYA' ? keteranganLainnya.trim() : undefined,
         noHp: noHp.trim() || '',
         nomorIdentitas: nomorIdentitas.trim() || '',
-        nomorBadge: nomorBadge.trim(),
+        nomorBadge: editingVisitor ? nomorBadge.trim() : '',
         tujuanBertemu: finalTujuanSnapshot,
         // Clear the old teacher association explicitly when changing the destination.
         tujuanRecipientId: selectedRecipient ? (selectedRecipient.targetType === 'CUSTOM' ? '' : selectedRecipient.recipientId || '') : editingVisitor?.tujuanRecipientId || '',
@@ -970,6 +977,34 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
             </div>
           </div>
 
+          {!editingVisitor && (
+            <section className="rounded-2xl border border-sky-200 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-950/20 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Jenis kunjungan: Perorangan / Rombongan</p>
+                  <p className="text-[11px] text-slate-500">Satu formulir, setiap tamu mendapat nomor badge tersendiri.</p>
+                </div>
+                <button type="button" disabled={extraNames.length >= 11} onClick={() => setExtraNames(prev => [...prev, ''])}
+                  className="min-h-10 px-3 rounded-xl border border-sky-300 bg-white dark:bg-slate-800 text-xs font-bold text-sky-700 dark:text-sky-300 disabled:opacity-40">
+                  + Tambah Anggota
+                </button>
+              </div>
+              {extraNames.map((name, index) => (
+                <div className="flex items-center gap-2" key={index}>
+                  <label className="flex-1 space-y-1 min-w-0">
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Nama tamu {index + 2}</span>
+                    <input type="text" value={name} maxLength={120} onChange={event => setExtraNames(prev => prev.map((v, i) => i === index ? event.target.value : v))}
+                      placeholder="Nama lengkap anggota rombongan" className="w-full min-h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs" />
+                  </label>
+                  <button type="button" aria-label={`Hapus anggota ${index + 2}`} onClick={() => setExtraNames(prev => prev.filter((_, i) => i !== index))}
+                    className="min-w-11 min-h-11 mt-4 rounded-xl border border-rose-200 text-rose-600 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+              {fieldErrors.extraNames && <p role="alert" className="text-xs text-rose-700">{fieldErrors.extraNames}</p>}
+              <p className="text-[11px] text-slate-500">Total {extraNames.length + 1} orang · Maksimal 12 orang per registrasi.</p>
+            </section>
+          )}
+
           {/* Row 3: Kategori & No Badge */}
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1012,26 +1047,12 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-purple-500" />
-                  <span>Nomor Badge Tamu *</span>
+                  <span>Nomor Badge Tamu</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={nomorBadge}
-                  onChange={(e) => {
-                    setNomorBadge(e.target.value);
-                    if (fieldErrors.nomorBadge) setFieldErrors((prev) => ({ ...prev, nomorBadge: '' }));
-                  }}
-                  placeholder="TAMU-01"
-                  className={`w-full p-2.5 rounded-xl border ${
-                    fieldErrors.nomorBadge
-                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
-                      : 'border-slate-200 dark:border-slate-800'
-                  } bg-white dark:bg-slate-900 text-xs font-mono font-bold text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-                />
-                {fieldErrors.nomorBadge && (
-                  <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{fieldErrors.nomorBadge}</p>
-                )}
+                <div className="min-h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 flex items-center justify-center text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
+                  {editingVisitor ? nomorBadge : 'Otomatis saat disimpan'}
+                </div>
+                {!editingVisitor && <p className="text-[10px] text-slate-500">Urutan diberikan server saat check-in berhasil.</p>}
               </div>
             </div>
 

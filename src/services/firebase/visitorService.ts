@@ -4,6 +4,7 @@ import { VisitorRecord, VisitorStatus } from '../../types/visitor.types';
 import { UserProfile } from '../../types';
 import { formatTime } from '../../utils/dateUtils';
 import { processPhotoForStorage } from '../drive/photoUploadHelper';
+import { auth } from './firebase';
 
 export class VisitorService {
   /**
@@ -96,42 +97,29 @@ export class VisitorService {
         return existingDoc;
       }
 
-      const now = new Date().toISOString();
-
+      // Badge allocation and group writes are committed atomically by the backend.
+      // Client-provided badge values are intentionally ignored on new registrations.
       const cleanData = { ...data };
-      if (cleanData.kategori !== 'LAINNYA') {
-        delete cleanData.keteranganLainnya;
-      }
+      if (cleanData.kategori !== 'LAINNYA') delete cleanData.keteranganLainnya;
       if (cleanData.fotoUrl) {
         session.assertActive();
         const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', id, id);
         cleanData.fotoUrl = photo.photoUrl;
       }
-
-      const payload: VisitorRecord = {
-        ...cleanData,
-        id,
-        dataSource: 'PRODUCTION',
-        isDemo: false,
-        createdAt: now,
-        createdBy: user.fullName,
-        updatedAt: now,
-        updatedBy: user.fullName,
-      };
-
       session.assertActive();
-      await FirestoreService.setDocument('visitors', id, payload, { expectedState: null });
-      await FirestoreService.logAudit({
-        userId: user.id,
-        userName: user.fullName,
-        role: user.role,
-        action: 'CREATE',
-        module: 'VISITORS',
-        recordId: id,
-        details: `Mencatat tamu baru: ${payload.namaTamu} (${payload.instansiAsal}) bertemu dengan ${payload.tujuanBertemu}`,
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Sesi Firebase belum siap. Masuk kembali.');
+      const response = await fetch('/api/visitor-registration/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ ...cleanData, id }),
+        cache: 'no-store',
       });
-
-      return payload;
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.error || 'Registrasi tamu belum berhasil.');
+      session.assertActive();
+      const saved = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', id);
+      if (!saved) throw new Error('Data tersimpan, tetapi belum dapat dibaca. Muat ulang daftar tamu.');
+      return saved;
     } finally {
       session.close();
     }
