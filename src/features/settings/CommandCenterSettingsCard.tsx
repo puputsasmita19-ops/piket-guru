@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Save, Edit2, ShieldAlert, Volume2, Plus, Trash2 } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import type { SchoolSettings } from '../../types';
+import type { EmergencyType } from '../../types/security.types';
 import { SchoolSettingsService } from '../../services/firebase/schoolSettingsService';
 import { SchoolBellService } from '../../services/audio/bellService';
 import {
   normalizeCommandCenterConfig, validateCommandCenterConfig, SCHOOL_BELL_KINDS,
-  EMERGENCY_TYPES, BELL_TONE_TYPES, BELL_WEEKDAYS, BELL_DAY_LABELS, type CommandCenterConfig, type SchoolBellKind,
+  EMERGENCY_TYPES, EMERGENCY_CONTACT_IDS, BELL_TONE_TYPES, BELL_WEEKDAYS, BELL_DAY_LABELS, type CommandCenterConfig, type SchoolBellKind,
 } from '../../types/commandCenterConfig.types';
 
 const BELLS: Record<SchoolBellKind, () => void> = {
@@ -23,11 +24,14 @@ const labelStyle = 'block text-xs font-semibold text-slate-600 dark:text-slate-3
 
 type Tab = 'command' | 'bell' | 'schedule' | 'emergency' | 'contacts';
 
-export function CommandCenterSettingsCard({ settings, onUpdated }: { settings: SchoolSettings; onUpdated: (value: SchoolSettings) => void }) {
+export type EmergencyEditorRequest = { tab: 'emergency' | 'schedule' | 'bell'; type?: EmergencyType; sequence: number };
+export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }: { settings: SchoolSettings; onUpdated: (value: SchoolSettings) => void; focusRequest?: EmergencyEditorRequest | null }) {
   const { currentUser, hasRole } = useAuth();
   const admin = hasRole('ADMIN');
   const [tab, setTab] = useState<Tab>('command');
   const [editing, setEditing] = useState(false);
+  const [selectedEmergency, setSelectedEmergency] = useState<EmergencyType>('EARTHQUAKE');
+  const editorRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<CommandCenterConfig>(() => normalizeCommandCenterConfig(settings.commandCenterConfig));
   const [original, setOriginal] = useState<CommandCenterConfig>(() => normalizeCommandCenterConfig(settings.commandCenterConfig));
@@ -38,6 +42,19 @@ export function CommandCenterSettingsCard({ settings, onUpdated }: { settings: S
     const next = normalizeCommandCenterConfig(settings.commandCenterConfig);
     setDraft(next); setOriginal(next);
   }, [settings.commandCenterConfig, editing]);
+
+  useEffect(() => {
+    if (!focusRequest || !admin) return;
+    setTab(focusRequest.tab);
+    if (focusRequest.type) setSelectedEmergency(focusRequest.type);
+    if (!editing) {
+      const next = normalizeCommandCenterConfig(settings.commandCenterConfig);
+      setOriginal(next); setDraft(next); setMessage(null); setEditing(true);
+    }
+    const frame = requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+    // Sequence is a user click signal; unchanged settings must not reset an active editor.
+  }, [focusRequest?.sequence]);
 
   const change = (part: Partial<CommandCenterConfig>) => setDraft(prev => ({ ...prev, ...part }));
   const editBell = (id: string, patch: Partial<CommandCenterConfig['scheduledBells'][number]>) =>
@@ -72,6 +89,7 @@ export function CommandCenterSettingsCard({ settings, onUpdated }: { settings: S
   };
 
   return <Card>
+    <div ref={editorRef} data-command-settings-editor className="scroll-mt-24" />
     <CardHeader title="Edit Bel Darurat & Pusat Komando" subtitle="Edit judul Pusat Komando, bel manual, jadwal bel referensi, pesan darurat, kontak, dan SOP (khusus Administrator)." />
     <CardContent className="p-4 sm:p-6 space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -121,13 +139,23 @@ export function CommandCenterSettingsCard({ settings, onUpdated }: { settings: S
         </div>)}
         {!draft.scheduledBells.length && <p className="text-xs text-slate-500">Belum ada sesi bel. Gunakan Tambah Sesi dalam mode edit.</p>}
       </div>}
-      {tab === 'emergency' && <div className="space-y-3">
-        <div className="p-3 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-xl flex gap-2"><ShieldAlert className="w-4 h-4 shrink-0"/> Teks di bawah menjadi usulan awal saat membuka konfirmasi siaran darurat. Admin masih harus memeriksa dan mengonfirmasi sebelum menyiarkan.</div>
-        {EMERGENCY_TYPES.map(type => <div key={type} className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
-          <p className="font-semibold text-sm">{TYPE_LABELS[type]}</p>
-          <label className="block"><span className={labelStyle}>Judul peringatan</span><input disabled={!editing} maxLength={80} className={inputStyle} value={draft.emergencyTemplates[type].title} onChange={e => change({ emergencyTemplates: { ...draft.emergencyTemplates, [type]: { ...draft.emergencyTemplates[type], title: e.target.value } } })}/></label>
-          <label className="block"><span className={labelStyle}>Pesan / instruksi</span><textarea disabled={!editing} maxLength={600} rows={2} className={inputStyle} value={draft.emergencyTemplates[type].message} onChange={e => change({ emergencyTemplates: { ...draft.emergencyTemplates, [type]: { ...draft.emergencyTemplates[type], message: e.target.value } } })}/></label>
-        </div>)}
+      {tab === 'emergency' && <div className="space-y-4">
+        <div className="p-3 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-xl flex gap-2"><ShieldAlert className="w-4 h-4 shrink-0"/> Pengaturan ini hanya mengubah isi kartu, petunjuk operator, dan pesan awal. <strong>Tidak mengirim siaran.</strong> Aktivasi darurat tetap membutuhkan tindakan dan konfirmasi terpisah.</div>
+        <div className="flex gap-2 overflow-x-auto pb-2" aria-label="Pilih jenis siaga untuk diatur">
+          {EMERGENCY_TYPES.map(type => <button key={type} type="button" onClick={() => setSelectedEmergency(type)} aria-pressed={selectedEmergency===type} className={`min-h-11 px-3 shrink-0 rounded-xl text-xs font-semibold border ${selectedEmergency===type ? 'bg-[var(--theme-primary-light)] border-[var(--theme-primary-border)] text-[var(--theme-primary-text)]' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200'}`}>{TYPE_LABELS[type]}</button>)}
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+          <div><h4 className="font-bold text-sm">Pengaturan {TYPE_LABELS[selectedEmergency]}</h4><p className="text-xs text-slate-500">Pratinjau kartu dan informasi kerja operator untuk satu jenis kejadian.</p></div>
+          <label className="block"><span className={labelStyle}>Nama tombol siaga</span><input disabled={!editing} maxLength={45} className={inputStyle} value={draft.emergencyOptions[selectedEmergency].label} onChange={e => change({ emergencyOptions: {...draft.emergencyOptions, [selectedEmergency]: {...draft.emergencyOptions[selectedEmergency], label: e.target.value}} })}/></label>
+          <label className="block"><span className={labelStyle}>Keterangan singkat pada kartu</span><textarea disabled={!editing} maxLength={180} rows={2} className={inputStyle} value={draft.emergencyOptions[selectedEmergency].description} onChange={e => change({ emergencyOptions: {...draft.emergencyOptions, [selectedEmergency]: {...draft.emergencyOptions[selectedEmergency], description: e.target.value}} })}/></label>
+          <label className="block"><span className={labelStyle}>Judul peringatan</span><input disabled={!editing} maxLength={80} className={inputStyle} value={draft.emergencyTemplates[selectedEmergency].title} onChange={e => change({ emergencyTemplates: { ...draft.emergencyTemplates, [selectedEmergency]: { ...draft.emergencyTemplates[selectedEmergency], title: e.target.value } } })}/></label>
+          <label className="block"><span className={labelStyle}>Pesan / instruksi saat siaran</span><textarea disabled={!editing} maxLength={600} rows={3} className={inputStyle} value={draft.emergencyTemplates[selectedEmergency].message} onChange={e => change({ emergencyTemplates: { ...draft.emergencyTemplates, [selectedEmergency]: { ...draft.emergencyTemplates[selectedEmergency], message: e.target.value } } })}/></label>
+          <label className="block"><span className={labelStyle}>Checklist operator (sebelum konfirmasi siaran)</span><textarea disabled={!editing} maxLength={500} rows={3} className={inputStyle} value={draft.emergencyOptions[selectedEmergency].operatorChecklist} onChange={e => change({ emergencyOptions: {...draft.emergencyOptions, [selectedEmergency]: {...draft.emergencyOptions[selectedEmergency], operatorChecklist: e.target.value}} })}/></label>
+          <label className="block"><span className={labelStyle}>Kontak rujukan saat kejadian</span><select disabled={!editing} className={inputStyle} value={draft.emergencyOptions[selectedEmergency].contactId} onChange={e => change({emergencyOptions: {...draft.emergencyOptions, [selectedEmergency]: {...draft.emergencyOptions[selectedEmergency], contactId: e.target.value as typeof draft.emergencyOptions[typeof selectedEmergency]['contactId']}}})}>
+            {EMERGENCY_CONTACT_IDS.map(id => { const contact = draft.emergencyContacts.find(c => c.id === id); return <option key={id} value={id}>{contact?.label || id} — {contact?.number || '-'}</option>; })}
+          </select></label>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50/60 dark:bg-slate-900/40 space-y-1" aria-label="Pratinjau tombol siaga"><p className="font-bold text-sm">{draft.emergencyOptions[selectedEmergency].label || 'Nama tombol'}</p><p className="text-xs text-slate-500">{draft.emergencyOptions[selectedEmergency].description || 'Keterangan kartu belum diisi.'}</p></div>
+        </div>
       </div>}
       {tab === 'contacts' && <div className="space-y-4">
         <p className="text-xs text-slate-500">Verifikasi nomor telepon dengan pihak sekolah/instansi sebelum digunakan dalam situasi darurat.</p>

@@ -7,6 +7,7 @@ import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import { AnnouncementSettingsCard } from './AnnouncementSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigation } from '../../contexts/NavigationContext';
 import {
   Settings,
   MapPin,
@@ -48,6 +49,9 @@ import { ThemeSettingsCard } from './ThemeSettingsCard';
 import { LobbyTvSettingsCard } from './LobbyTvSettingsCard';
 import { SecurityCenterCard } from './SecurityCenterCard';
 import { BellEmergencyAutomationCard } from './BellEmergencyAutomationCard';
+import { CommandCenterSettingsCard } from './CommandCenterSettingsCard';
+import type { EmergencyEditorRequest } from './CommandCenterSettingsCard';
+import type { EmergencyType } from '../../types/security.types';
 import { SnapshotManagerCard } from './SnapshotManagerCard';
 import { AuditForensicViewer } from './AuditForensicViewer';
 import { OperationalResetCard } from './OperationalResetCard';
@@ -91,8 +95,14 @@ const InlineSettingsStatus = ({ status }: { status: SettingsFeedback | null }) =
 export const SettingsView: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
+  const { subView, setSubView } = useNavigation();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('school');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => subView === 'bell' ? 'bell' : 'school');
+  const [emergencyEditorRequest, setEmergencyEditorRequest] = useState<EmergencyEditorRequest | null>(null);
+  const openEmergencyEditor = (tab: EmergencyEditorRequest['tab'], type?: EmergencyType) => {
+    setEmergencyEditorRequest(previous => ({tab, type, sequence: (previous?.sequence || 0) + 1}));
+  };
+  useEffect(() => { if (subView === 'bell') { setActiveTab('bell'); setSubView(null); } }, [subView, setSubView]);
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
@@ -2177,7 +2187,10 @@ export const SettingsView: React.FC = () => {
 
       {/* TAB 3: BELL AUTOMATION & PANIC EMERGENCY */}
       {activeTab === 'bell' && (
-        <BellEmergencyAutomationCard schoolName={settings.schoolName} />
+        <div className="space-y-6">
+          {isAdmin && <CommandCenterSettingsCard settings={settings} onUpdated={setSettings} focusRequest={emergencyEditorRequest} />}
+          <BellEmergencyAutomationCard schoolName={settings.schoolName} config={settings.commandCenterConfig} onConfigureEmergency={isAdmin ? type => openEmergencyEditor('emergency', type) : undefined} onConfigureSchedule={isAdmin ? () => openEmergencyEditor('schedule') : undefined} />
+        </div>
       )}
 
       {/* TAB 4: POINT-IN-TIME CLOUD SNAPSHOTS */}

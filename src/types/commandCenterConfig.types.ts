@@ -2,7 +2,15 @@ import type { EmergencyType, SchoolBellScheduleItem } from './security.types';
 
 export type SchoolBellKind = 'MASUK' | 'GANTI_JAM' | 'ISTIRAHAT' | 'PULANG';
 export type EmergencyTemplate = { title: string; message: string };
-export type EmergencyContact = { id: 'POLICE' | 'AMBULANCE' | 'FIRE' | 'BPBD'; label: string; number: string };
+export type EmergencyContactId = 'POLICE' | 'AMBULANCE' | 'FIRE' | 'BPBD';
+/** Operational display and guidance; never authorizes or triggers a broadcast. */
+export interface EmergencyCardOptions {
+  label: string;
+  description: string;
+  operatorChecklist: string;
+  contactId: EmergencyContactId;
+}
+export type EmergencyContact = { id: EmergencyContactId; label: string; number: string };
 
 /** Display configuration and scheduled bell reference; no automatic sound/broadcast mechanism is triggered. */
 export interface CommandCenterConfig {
@@ -10,6 +18,7 @@ export interface CommandCenterConfig {
   description: string;
   bellLabels: Record<SchoolBellKind, string>;
   emergencyTemplates: Record<EmergencyType, EmergencyTemplate>;
+  emergencyOptions: Record<EmergencyType, EmergencyCardOptions>;
   emergencyContacts: EmergencyContact[];
   protocolSteps: string[];
   scheduledBells: SchoolBellScheduleItem[];
@@ -18,6 +27,7 @@ export interface CommandCenterConfig {
 }
 
 export const EMERGENCY_TYPES: EmergencyType[] = ['EARTHQUAKE', 'FIRE', 'SECURITY', 'EVACUATION', 'GENERAL'];
+export const EMERGENCY_CONTACT_IDS: EmergencyContactId[] = ['POLICE', 'AMBULANCE', 'FIRE', 'BPBD'];
 export const SCHOOL_BELL_KINDS: SchoolBellKind[] = ['MASUK', 'GANTI_JAM', 'ISTIRAHAT', 'PULANG'];
 export const BELL_TONE_TYPES: SchoolBellScheduleItem['toneType'][] = ['MORNING_IN', 'PERIOD_CHANGE', 'BREAK', 'DISMISSAL'];
 export const BELL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 0]; // 0 Minggu, 1 Senin ... 6 Sabtu
@@ -45,6 +55,13 @@ export const DEFAULT_COMMAND_CENTER_CONFIG: CommandCenterConfig = {
     SECURITY: { title: 'Siaga Keamanan', message: 'Ikuti instruksi keamanan sekolah. Tetap berada di tempat aman sampai ada pemberitahuan resmi.' },
     EVACUATION: { title: 'Evakuasi Darurat', message: 'Ikuti arahan petugas dan bergerak menuju titik kumpul melalui jalur evakuasi yang telah ditentukan.' },
     GENERAL: { title: 'Pengumuman Darurat Penting', message: 'Seluruh guru piket dan koordinator dimohon segera menghubungi Pusat Komando Sekolah.' },
+  },
+  emergencyOptions: {
+    EARTHQUAKE: {label: 'Gempa Bumi', description: 'Instruksi berlindung dan evakuasi terkoordinasi.', operatorChecklist: 'Verifikasi guncangan, amankan diri, hubungi koordinator dan ikuti arahan evakuasi resmi.', contactId: 'BPBD'},
+    FIRE: {label: 'Kebakaran / Asap', description: 'Siaga kebakaran dan jalur keluar aman.', operatorChecklist: 'Verifikasi titik kejadian dari jarak aman, hubungi petugas pemadam dan arahkan ke jalur evakuasi aman.', contactId: 'FIRE'},
+    SECURITY: {label: 'Siaga Keamanan', description: 'Insiden keamanan di lingkungan sekolah.', operatorChecklist: 'Konfirmasi insiden kepada penanggung jawab keamanan dan hindari mendekati sumber ancaman.', contactId: 'POLICE'},
+    EVACUATION: {label: 'Evakuasi', description: 'Koordinasi perpindahan ke titik kumpul.', operatorChecklist: 'Verifikasi instruksi koordinator, jalur evakuasi dan titik kumpul yang dapat digunakan.', contactId: 'BPBD'},
+    GENERAL: {label: 'Siaran Khusus', description: 'Panggilan atau pengumuman penting sekolah.', operatorChecklist: 'Periksa informasi pengumuman, sasaran penerima dan persetujuan penanggung jawab.', contactId: 'BPBD'},
   },
   emergencyContacts: [
     { id: 'POLICE', label: 'Kepolisian', number: '110' },
@@ -77,6 +94,16 @@ export function normalizeCommandCenterConfig(raw?: Partial<CommandCenterConfig> 
       title: clean(raw?.emergencyTemplates?.[t]?.title, base.emergencyTemplates[t].title, 80),
       message: clean(raw?.emergencyTemplates?.[t]?.message, base.emergencyTemplates[t].message, 600),
     }])) as CommandCenterConfig['emergencyTemplates'],
+    emergencyOptions: Object.fromEntries(EMERGENCY_TYPES.map(type => {
+      const option = raw?.emergencyOptions?.[type];
+      const fallback = base.emergencyOptions[type];
+      return [type, {
+        label: clean(option?.label, fallback.label, 45),
+        description: clean(option?.description, fallback.description, 180),
+        operatorChecklist: clean(option?.operatorChecklist, fallback.operatorChecklist, 500),
+        contactId: EMERGENCY_CONTACT_IDS.includes(option?.contactId as EmergencyContactId) ? option!.contactId : fallback.contactId,
+      }];
+    })) as CommandCenterConfig['emergencyOptions'],
     emergencyContacts: base.emergencyContacts.map(def => {
       const candidate = contacts.find(c => c?.id === def.id);
       return {
@@ -111,6 +138,12 @@ export function validateCommandCenterConfig(config: CommandCenterConfig): string
   for (const type of EMERGENCY_TYPES) {
     const template = config.emergencyTemplates[type];
     if (!template.title.trim() || template.message.trim().length < 15) errors.push(`Judul/pesan siaga ${type} harus lengkap (pesan minimal 15 karakter).`);
+  }
+  for (const type of EMERGENCY_TYPES) {
+    const option = config.emergencyOptions?.[type];
+    if (!option?.label.trim() || option.label.length > 45 || !option.description.trim() || option.description.length > 180) errors.push(`Nama dan deskripsi tombol ${type} harus diisi.`);
+    if (!option?.operatorChecklist || option.operatorChecklist.trim().length < 15 || option.operatorChecklist.length > 500) errors.push(`Checklist operator ${type} minimal 15 karakter.`);
+    if (!option || !EMERGENCY_CONTACT_IDS.includes(option.contactId)) errors.push(`Kontak rujukan ${type} tidak valid.`);
   }
   for (const contact of config.emergencyContacts) {
     // tel: only allows numeric dialing characters; no URLs or control characters.

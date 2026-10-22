@@ -20,13 +20,15 @@ import { Modal } from '../../components/common/Modal';
 import { SchoolBellService } from '../../services/audio/bellService';
 import { EmergencyService } from '../../services/notifications/emergencyService';
 import { EmergencyAlert, EmergencyType } from '../../types/security.types';
-import { normalizeCommandCenterConfig, BELL_DAY_LABELS, type CommandCenterConfig } from '../../types/commandCenterConfig.types';
+import { normalizeCommandCenterConfig, EMERGENCY_TYPES, BELL_DAY_LABELS, type CommandCenterConfig } from '../../types/commandCenterConfig.types';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 interface BellEmergencyAutomationCardProps {
   schoolName: string;
   config?: CommandCenterConfig;
+  onConfigureEmergency?: (type: EmergencyType) => void;
+  onConfigureSchedule?: () => void;
 }
 
 /** Time display is always interpreted in the school's WIB timezone, not device timezone. */
@@ -40,10 +42,13 @@ function wibClock(now: Date): {day: number; seconds: number} {
 export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardProps> = ({
   schoolName,
   config,
+  onConfigureEmergency,
+  onConfigureSchedule,
 }) => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
-  const bellSchedule = React.useMemo(() => normalizeCommandCenterConfig(config).scheduledBells, [config]);
+  const liveConfig = React.useMemo(() => normalizeCommandCenterConfig(config), [config]);
+  const bellSchedule = liveConfig.scheduledBells;
 
   const [activeEmergency, setActiveEmergency] = useState<EmergencyAlert | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
@@ -116,7 +121,7 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
   };
 
   const openTriggerModal = (type: EmergencyType) => {
-    const template = normalizeCommandCenterConfig(config).emergencyTemplates[type];
+    const template = liveConfig.emergencyTemplates[type];
     setSelectedEmergencyType(type);
     setEmergencyTitle(template.title);
     setEmergencyMessage(template.message);
@@ -198,74 +203,31 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
         </div>
       )}
 
-      {/* PANIC BUTTONS SECTION */}
+      {/* PANIC BUTTONS SECTION: titles, descriptions and operator notes come from Firebase config. */}
       <Card>
         <CardHeader
-          title="Tombol Siaga Bencana & Sirine Darurat (Panic Broadcast)"
-          subtitle="Mengirim sinyal darurat visual ke seluruh layar Kiosk, Command Center, serta menyuarakan sirine audio sintetis"
+          title="Tombol Siaga & Darurat"
+          subtitle="Pilih jenis kejadian untuk meninjau arahan. Siaran baru berjalan setelah operator mengonfirmasi."
+          action={isAdmin && onConfigureEmergency ? <Button type="button" variant="outline" size="sm" onClick={() => onConfigureEmergency('EARTHQUAKE')}>Pengaturan Siaga</Button> : undefined}
         />
-        <CardContent className="p-5 sm:p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <button
-              onClick={() => openTriggerModal('EARTHQUAKE')}
-              className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 hover:border-rose-400 text-left transition group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                <AlertOctagon className="w-5 h-5" />
-              </div>
-              <div className="font-extrabold text-xs text-slate-900 dark:text-white mt-3">
-                Gempa Bumi
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Sirine getaran dan instruksi evakuasi ke lapangan terbuka.
-              </p>
-            </button>
-
-            <button
-              onClick={() => openTriggerModal('FIRE')}
-              className="p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900/60 hover:bg-orange-100 hover:border-orange-400 text-left transition group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                <Flame className="w-5 h-5" />
-              </div>
-              <div className="font-extrabold text-xs text-slate-900 dark:text-white mt-3">
-                Kebakaran / Asap
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Sirine hi-lo ganda evakuasi gedung ke titik kumpul.
-              </p>
-            </button>
-
-            <button
-              onClick={() => openTriggerModal('SECURITY')}
-              className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 hover:bg-amber-100 hover:border-amber-400 text-left transition group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div className="font-extrabold text-xs text-slate-900 dark:text-white mt-3">
-                Siaga Keamanan
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Penyusup / insiden fisik; kunci gerbang dan ruang kelas.
-              </p>
-            </button>
-
-            <button
-              onClick={() => openTriggerModal('GENERAL')}
-              className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 hover:bg-blue-100 hover:border-blue-400 text-left transition group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                <Megaphone className="w-5 h-5" />
-              </div>
-              <div className="font-extrabold text-xs text-slate-900 dark:text-white mt-3">
-                Siaran Khusus
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Panggilan darurat tim piket atau pengumuman massal.
-              </p>
-            </button>
+        <CardContent className="p-4 sm:p-6 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {EMERGENCY_TYPES.map(type => {
+              const option = liveConfig.emergencyOptions[type];
+              const Icon = type === 'EARTHQUAKE' ? AlertOctagon : type === 'FIRE' ? Flame : type === 'SECURITY' ? ShieldAlert : Megaphone;
+              return <div key={type} className="min-w-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3 flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="w-10 h-10 shrink-0 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 flex items-center justify-center"><Icon className="w-5 h-5" /></span>
+                  <div className="min-w-0 flex-1"><h4 className="font-bold text-sm text-slate-900 dark:text-white break-words">{option.label}</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed break-words mt-1">{option.description}</p></div>
+                </div>
+                <div className="mt-auto flex items-center gap-2">
+                  <button type="button" onClick={() => openTriggerModal(type)} disabled={isBroadcasting} className="min-h-11 px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-bold hover:bg-rose-100 disabled:opacity-50">Tinjau Siaga</button>
+                  {isAdmin && onConfigureEmergency && <button type="button" onClick={() => onConfigureEmergency(type)} className="min-h-11 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800" aria-label={`Atur ${option.label}`}>Atur</button>}
+                </div>
+              </div>;
+            })}
           </div>
+          <p className="text-[11px] text-slate-500">Tombol <strong>Atur</strong> membuka editor khusus admin. Mengubah teks dan checklist tidak otomatis membunyikan sirene atau mengirim siaran.</p>
         </CardContent>
       </Card>
 
@@ -276,6 +238,7 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
           subtitle="Dapat diedit admin: jam, hari, nada dan keterangan. Jadwal ini tidak memutar suara otomatis."
           action={
             <div className="flex items-center gap-2">
+              {isAdmin && onConfigureSchedule && <Button type="button" variant="outline" size="sm" onClick={onConfigureSchedule}>Atur Jadwal</Button>}
               {notificationPermission !== 'granted' ? (
                 <Button
                   variant="outline"
@@ -379,6 +342,11 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
             <span className="font-bold">Perhatian:</span> Penyiaran ini akan mengaktifkan banner siaga darurat pada seluruh sesi yang sedang aktif dan membunyikan sirine alarm secara instan.
           </div>
 
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800 p-3 bg-amber-50/50 dark:bg-amber-950/30 space-y-2 text-xs">
+            <p className="font-bold text-amber-900 dark:text-amber-100">Checklist operator — {liveConfig.emergencyOptions[selectedEmergencyType].label}</p>
+            <p className="text-amber-900 dark:text-amber-200 leading-relaxed whitespace-pre-wrap break-words">{liveConfig.emergencyOptions[selectedEmergencyType].operatorChecklist}</p>
+            {(() => { const contact = liveConfig.emergencyContacts.find(c => c.id === liveConfig.emergencyOptions[selectedEmergencyType].contactId); return contact ? <p className="text-amber-900 dark:text-amber-200">Kontak rujukan: <strong>{contact.label}</strong> · {contact.number} (tidak dihubungi otomatis)</p> : null; })()}
+          </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Judul Peringatan Darurat
