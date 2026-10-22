@@ -554,9 +554,9 @@ export const SchedulePreview: React.FC = () => {
         )}
       </div>
 
-      {/* Filter Tabs by Day of Week */}
-      <div className="flex items-center gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none">
-        {DAYS_LIST.map((day) => {
+      {/* All seven days stay visible on phones: 4 above, 3 below; desktop keeps the original row. */}
+      <nav aria-label="Pilih hari jadwal piket" className="grid grid-cols-12 gap-1.5 min-[370px]:gap-2 md:flex md:items-center md:gap-2 md:overflow-x-auto md:overscroll-x-contain md:pb-1 md:scrollbar-none">
+        {DAYS_LIST.map((day, dayIndex) => {
           const isToday = getCurrentDayName() === day;
           const count = dayCounts.get(day) || 0;
           const isSelected = selectedDay === day;
@@ -564,26 +564,29 @@ export const SchedulePreview: React.FC = () => {
           return (
             <button
               key={day}
+              type="button"
+              aria-pressed={isSelected}
+              aria-label={`Jadwal ${day.toLowerCase()}, ${count} jadwal${isToday ? ', hari ini' : ''}`}
               onClick={() => { if (day === selectedDay) return; setSelectedDay(day); setSelectedDate(nextWeekdayDate(day, todayISO)); }}
-              className={`flex shrink-0 items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`${dayIndex < 4 ? 'col-span-3' : 'col-span-4'} flex h-[56px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 text-[10px] font-bold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-primary)] md:h-auto md:shrink-0 md:flex-row md:gap-1.5 md:px-4 md:py-2.5 md:text-xs md:whitespace-nowrap ${
                 isSelected
-                  ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-sm shadow-[var(--theme-ring)]'
-                  : 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[var(--theme-card-border)] hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
+                  ? 'border-[var(--theme-primary)] bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] md:shadow-sm md:shadow-[var(--theme-ring)]'
+                  : 'border-slate-200 bg-white text-slate-600 dark:border-[var(--theme-card-border)] dark:bg-[var(--theme-card-bg)] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)]'
               }`}
             >
-              <span>{day}</span>
-              {isToday && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold ${isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
-                  HARI INI
+              <span className="flex min-w-0 items-center justify-center gap-1 leading-tight">
+                <span className="text-[10px] min-[370px]:text-[11px] md:text-xs">{day}</span>
+                <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[9px] md:h-auto md:min-w-0 md:px-1.5 md:py-0.5 md:text-[10px] ${isSelected ? 'bg-white/25' : 'bg-slate-100 text-slate-500 dark:bg-[var(--theme-surface-subtle)] dark:text-slate-400'}`}>
+                  {count}
                 </span>
-              )}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500'}`}>
-                {count}
               </span>
+              {isToday && <span className={`rounded-md px-1.5 py-0.5 text-[8px] font-extrabold leading-none md:text-[9px] ${isSelected ? 'bg-white/20' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                HARI INI
+              </span>}
             </button>
           );
         })}
-      </div>
+      </nav>
 
       {isAdmin && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] px-4 py-3">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-2">
