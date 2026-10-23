@@ -1308,8 +1308,8 @@ export const SettingsView: React.FC = () => {
                     <img src={appLogo(settings)} alt="Logo" className="w-full h-full object-contain rounded-lg" />
                   </div>
                 ) : (
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white mx-auto shadow-md">
-                    <ImageIcon className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-md border border-slate-700/60">
+                    <img src="/icon.svg" alt="Logo aplikasi" className="w-full h-full object-contain rounded-xl" />
                   </div>
                 )}
                 <div className="text-lg font-black text-white tracking-tight">{appName || 'PIKET GURU'}</div>
