@@ -17,13 +17,13 @@ export interface PastelThemeOption {
 export const PASTEL_THEMES: PastelThemeOption[] = [
   {
     id: 'default',
-    name: 'Krem Hangat',
-    tagline: 'Krem, Kuning & Jingga',
-    description: 'Latar krem lembut dengan aksen kuning, jingga, dan merah; ikon netral serta tulisan yang tetap jelas.',
-    primaryColor: '#fbc02d',
-    pastelBg: '#f5f5dc',
-    accentColor: '#ff8f00',
-    swatchColors: ['#f5f5dc', '#fbc02d', '#ff8f00', '#c62828'],
+    name: 'Modern Soft (Cyan)',
+    tagline: 'Putih bersih, abu lembut & cyan',
+    description: 'Modern Soft UI dengan kartu putih, bayangan minimalis, aksen cyan, dan font Inter.',
+    primaryColor: '#06abc9',
+    pastelBg: '#f4f6f9',
+    accentColor: '#06abc9',
+    swatchColors: ['#f4f6f9', '#ffffff', '#06abc9', '#19bda4'],
   },
   {
     id: 'sky',
@@ -100,7 +100,8 @@ const getInitialThemeMode = (): ThemeMode => {
   } catch (e) {
     console.warn('Unable to read theme mode from localStorage', e);
   }
-  return 'system';
+  // Modern Soft UI opens in light mode on a new browser; saved preferences still win.
+  return 'light';
 };
 
 const getInitialPastelTheme = (): PastelTheme => {
@@ -163,7 +164,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Sync browser theme-color meta tag for seamless status bar integration
     const metaColors: Record<'dark' | 'light', Record<PastelTheme, string>> = {
       dark: {
-        default: '#24221d',
+        default: '#192432',
         sky: '#0c1a26',
         mint: '#0a1f17',
         lavender: '#181028',
@@ -171,7 +172,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         rose: '#200d13',
       },
       light: {
-        default: '#fffef8',
+        default: '#ffffff',
         sky: '#0284c7',
         mint: '#059669',
         lavender: '#7c3aed',

@@ -1,0 +1,37 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+
+const main = fs.readFileSync('src/main.tsx', 'utf8');
+const css = fs.readFileSync('src/modern-soft.css', 'utf8');
+const theme = fs.readFileSync('src/contexts/ThemeContext.tsx', 'utf8');
+const nav = fs.readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
+const mobile = fs.readFileSync('src/components/layout/MobileNav.tsx', 'utf8');
+const shortcuts = fs.readFileSync('src/features/dashboard/QuickActions.tsx', 'utf8');
+let passed = 0;
+const check = (condition, message) => { assert(condition, message); passed++; };
+
+check(main.includes("import './index.css'") && main.includes("import './modern-soft.css'"), 'CSS R42 must be imported after the original stylesheet.');
+check(theme.includes("name: 'Modern Soft (Cyan)'"), 'Modern Soft must be labeled in the theme settings.');
+check(theme.includes("return 'light';"), 'The default for new browsers should be light.');
+check(theme.includes("const saved = localStorage.getItem(THEME_STORAGE_KEY)"), 'Existing Light/Dark/System preferences must be preserved.');
+check(theme.includes("setPastelTheme") && theme.includes("setTheme"), 'Theme toggles must remain functional.');
+check(css.includes('html[data-pastel-theme="default"]'), 'Existing saved default palette must show Modern Soft.');
+check(css.includes('html.dark[data-pastel-theme="default"]'), 'The dark theme must remain supported.');
+check(css.includes('html:not([data-pastel-theme])'), 'Before theme initialization, the initial palette must remain consistent.');
+check(!css.includes(':root, html[data-pastel-theme="default"]'), 'Modern color tokens must not override other optional palettes.');
+check(css.includes('--theme-primary: #06abc9'), 'The approved cyan accent must be present.');
+check(css.includes('--soft-shadow: 0 2px 9px'), 'Minimal shadows must be used.');
+check(css.includes('font-family: Inter'), 'Inter typography needs a system fallback.');
+check(css.includes('grid-template-columns: repeat(4,minmax(0,1fr))'), 'Desktop dashboard shortcuts should use a 4-column grid.');
+check(css.includes('grid-template-columns: repeat(2,minmax(0,1fr))'), 'Mobile dashboard shortcuts should use a 2-column grid.');
+check(css.includes('.app-content .quick-action.shortcut-tile .feature-illustration-glyph'), 'Floating icons must be visually adjusted.');
+check(css.includes('data-module="attendance"') && css.includes('data-module="incidents"'), 'Shortcut colors must be differentiated.');
+check(css.includes('.app-shell .module-nav-item[aria-current="page"]'), 'Active sidebar items must have a clear marker.');
+check(css.includes('.app-shell .app-mobile-nav'), 'Mobile navigation must use Modern Soft surfaces.');
+check(nav.includes('hasPermission(item.permission)') && nav.includes('setActiveTab(tab)'), 'Sidebar permission and navigation behavior must be retained.');
+check(mobile.includes('hasPermission(i.permission)') && mobile.includes('onOpenMore'), 'Mobile permissions and More menu must be retained.');
+check(shortcuts.includes('hasPermission(action.permission)') && shortcuts.includes('saveShortcutIds'), 'Dynamic shortcuts and their saved preferences must be retained.');
+check(shortcuts.includes('onNavigate(tab)'), 'Dashboard shortcut actions must remain live.');
+check(fs.existsSync('src/components/common/Card.tsx') && fs.existsSync('src/components/common/Button.tsx'), 'Existing common components must be retained.');
+console.log(`OK R42: ${passed}/${passed} UI integration checks passed.`);
+console.log('Modern Soft UI uses the original functional React components; no API or database migration.');
