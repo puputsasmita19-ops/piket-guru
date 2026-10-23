@@ -60,6 +60,8 @@ import { PhotoRecapItem } from '../../types/watermark.types';
 import { isPhotoAlreadyWatermarked } from '../../services/watermark/watermarkService';
 import { PhotoWatermarkReviewService } from '../../services/firebase/photoWatermarkReviewService';
 import { resolvePhotoWatermarkStatus, getPhotoWatermarkLabel } from '../../utils/photoWatermarkStatus';
+import { orderPhotoRecap, eligibleForVisualReview } from '../../utils/photoRecapOrdering';
+import type { PhotoSortDirection, PhotoWatermarkFilter } from '../../utils/photoRecapOrdering';
 import type { WatermarkStatus } from '../../types/watermark.types';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
@@ -93,6 +95,7 @@ type ReportTab =
 
 interface PhotoCardItemProps {
   photo: PhotoRecapItem;
+  ordinal: number;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
   onPreview: (photo: PhotoRecapItem) => void;
@@ -100,6 +103,7 @@ interface PhotoCardItemProps {
 
 const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
   photo,
+  ordinal,
   isSelected,
   onToggleSelect,
   onPreview,
@@ -130,7 +134,7 @@ const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
       }`}
     >
       {/* Top Header Card */}
-      <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+      <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -138,6 +142,7 @@ const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
             onChange={() => onToggleSelect(photo.id)}
             className="rounded text-[var(--theme-primary)] focus:ring-0 cursor-pointer"
           />
+          <span className="shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 text-[11px] font-bold tabular-nums" title="Nomor urut foto menurut filter dan pengurutan aktif">No. {ordinal}</span>
           {getModuleBadge(photo.sourceModule)}
         </label>
 
@@ -272,6 +277,15 @@ export const ReportsPreview: React.FC = () => {
   // Photo Recap Module Filter & Selection States
   const [photoModuleFilter, setPhotoModuleFilter] = useState<'ALL' | 'ATTENDANCE' | 'INCIDENT' | 'STUDENT_TARDY' | 'VISITOR'>('ALL');
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [photoSort, setPhotoSort] = useState<PhotoSortDirection>('NEWEST');
+  const [photoWatermarkFilter, setPhotoWatermarkFilter] = useState<PhotoWatermarkFilter>('ALL');
+  const [bulkReviewItems, setBulkReviewItems] = useState<PhotoRecapItem[]>([]);
+  const [bulkReviewIndex, setBulkReviewIndex] = useState(0);
+  const [bulkReviewChoices, setBulkReviewChoices] = useState<Record<string, 'WATERMARK' | 'ORIGINAL'>>({});
+  const [bulkReviewConfirmed, setBulkReviewConfirmed] = useState(false);
+  const [bulkReviewBusy, setBulkReviewBusy] = useState(false);
+  const [bulkReviewProgress, setBulkReviewProgress] = useState(0);
+  const [bulkReviewMessage, setBulkReviewMessage] = useState('');
   const [photoRecapPage, setPhotoRecapPage] = useState<number>(1);
   const [previewPhotoItem, setPreviewPhotoItem] = useState<PhotoRecapItem | null>(null);
   const [visitorPhotoMoveBusy, setVisitorPhotoMoveBusy] = useState(false);
@@ -787,18 +801,13 @@ export const ReportsPreview: React.FC = () => {
       }
     });
 
-    return items.sort((a, b) => {
-      const dateA = a.tanggalKejadian + (a.waktuKejadian || '');
-      const dateB = b.tanggalKejadian + (b.waktuKejadian || '');
-      return dateB.localeCompare(dateA);
-    });
+    return items;
   }, [attendanceList, incidents, studentTardiness, visitors, startDate, endDate, dateValidation.isValid]);
 
   const filteredPhotoItems = useMemo(() => {
-    return allPhotoItems.filter((item) => {
-      if (photoModuleFilter !== 'ALL' && item.sourceModule !== photoModuleFilter) {
-        return false;
-      }
+    const matches = allPhotoItems.filter((item) => {
+      if (photoModuleFilter !== 'ALL' && item.sourceModule !== photoModuleFilter) return false;
+      if (photoWatermarkFilter !== 'ALL' && (item.watermarkStatus || 'UNKNOWN') !== photoWatermarkFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = item.title.toLowerCase().includes(q);
@@ -812,7 +821,8 @@ export const ReportsPreview: React.FC = () => {
       }
       return true;
     });
-  }, [allPhotoItems, photoModuleFilter, searchQuery]);
+    return orderPhotoRecap(matches, photoSort);
+  }, [allPhotoItems, photoModuleFilter, photoWatermarkFilter, photoSort, searchQuery]);
 
   const PHOTO_PAGE_SIZE = 12;
   const totalPhotoPages = Math.ceil(filteredPhotoItems.length / PHOTO_PAGE_SIZE) || 1;
@@ -824,7 +834,7 @@ export const ReportsPreview: React.FC = () => {
   // Reset photo recap page on filter change
   useEffect(() => {
     setPhotoRecapPage(1);
-  }, [photoModuleFilter, searchQuery, startDate, endDate]);
+  }, [photoModuleFilter, photoWatermarkFilter, photoSort, searchQuery, startDate, endDate]);
 
   const handleToggleSelectPhoto = (id: string) => {
     setSelectedPhotoIds((prev) => {
@@ -835,12 +845,57 @@ export const ReportsPreview: React.FC = () => {
     });
   };
 
+  const selectedFilteredCount = useMemo(() => filteredPhotoItems.filter(photo => selectedPhotoIds.has(photo.id)).length, [filteredPhotoItems, selectedPhotoIds]);
   const handleSelectAllFiltered = () => {
-    if (selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0) {
-      setSelectedPhotoIds(new Set());
-    } else {
-      setSelectedPhotoIds(new Set(filteredPhotoItems.map((p) => p.id)));
+    const filteredIds = new Set(filteredPhotoItems.map(p => p.id));
+    const allSelected = filteredIds.size > 0 && filteredPhotoItems.every(p => selectedPhotoIds.has(p.id));
+    setSelectedPhotoIds(prev => {
+      const next = new Set(prev);
+      filteredIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
+
+  // Bulk verification is deliberately limited to currently selected UNKNOWN visitor/incident
+  // photos on this page. Each image must be inspected and marked individually first.
+  const reviewablePagePhotos = useMemo(() => paginatedPhotos.filter(eligibleForVisualReview), [paginatedPhotos]);
+  const selectedReviewablePagePhotos = useMemo(() => reviewablePagePhotos.filter(photo => selectedPhotoIds.has(photo.id)), [reviewablePagePhotos, selectedPhotoIds]);
+  const chooseUnverifiedOnPage = () => setSelectedPhotoIds(new Set(reviewablePagePhotos.map(photo => photo.id)));
+  const openBulkReview = () => {
+    if (currentUser?.role !== 'ADMIN' || !selectedReviewablePagePhotos.length) return;
+    setBulkReviewItems([...selectedReviewablePagePhotos]);
+    setBulkReviewIndex(0);
+    setBulkReviewChoices({});
+    setBulkReviewConfirmed(false);
+    setBulkReviewProgress(0);
+    setBulkReviewMessage('');
+  };
+  const saveBulkReview = async () => {
+    if (bulkReviewBusy || currentUser?.role !== 'ADMIN' || !bulkReviewConfirmed || !bulkReviewItems.length ||
+        bulkReviewItems.some(item => !bulkReviewChoices[item.id])) return;
+    setBulkReviewBusy(true);
+    setBulkReviewProgress(0);
+    const successes: string[] = [];
+    const errors: string[] = [];
+    // Sequential writes protect multi-photo incident records from overwriting each other's review.
+    for (const [idx, item] of bulkReviewItems.entries()) {
+      try {
+        await PhotoWatermarkReviewService.review(item.sourceModule as 'VISITOR' | 'INCIDENT',
+          item.sourceId, item.photoUrl, bulkReviewChoices[item.id], currentUser, item.sourcePhotoIndex, true);
+        successes.push(item.id);
+      } catch (error) {
+        errors.push(`${item.title}: ${error instanceof Error ? error.message : 'Gagal menyimpan'}`);
+      }
+      setBulkReviewProgress(idx + 1);
     }
+    if (successes.length) setSelectedPhotoIds(prev => {
+      const next = new Set(prev);
+      successes.forEach(id => next.delete(id));
+      return next;
+    });
+    setBulkReviewMessage(`${successes.length} dari ${bulkReviewItems.length} foto berhasil diverifikasi.${errors.length ? ` ${errors.length} gagal: ${errors.slice(0, 2).join(' | ')}` : ''}`);
+    setBulkReviewItems([]);
+    setBulkReviewBusy(false);
   };
 
   const selectedPhotosList = useMemo(() => {
@@ -2000,6 +2055,29 @@ export const ReportsPreview: React.FC = () => {
                 </div>
               </div>
 
+              {/* Chronology and review status are applied before pagination/numbering. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 space-y-1">
+                  <span className="block">Urutan foto</span>
+                  <select value={photoSort} onChange={event => setPhotoSort(event.target.value as PhotoSortDirection)}
+                    className="w-full min-h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3">
+                    <option value="NEWEST">Terbaru → Terlama</option>
+                    <option value="OLDEST">Terlama → Terbaru</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 space-y-1">
+                  <span className="block">Status verifikasi watermark</span>
+                  <select value={photoWatermarkFilter} onChange={event => setPhotoWatermarkFilter(event.target.value as PhotoWatermarkFilter)}
+                    className="w-full min-h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3">
+                    <option value="ALL">Semua status</option>
+                    <option value="UNKNOWN">Belum diverifikasi</option>
+                    <option value="WATERMARK">Berwatermark</option>
+                    <option value="ORIGINAL">Tanpa watermark</option>
+                  </select>
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500">Nomor pada kartu mengikuti urutan dan filter yang dipilih. No. 1 berarti foto paling awal dalam urutan yang sedang ditampilkan.</p>
+
               {/* Action Toolbar */}
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -2011,14 +2089,14 @@ export const ReportsPreview: React.FC = () => {
                     onClick={handleSelectAllFiltered}
                     disabled={filteredPhotoItems.length === 0}
                     leftIcon={
-                      selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0 ? (
+                      selectedFilteredCount === filteredPhotoItems.length && filteredPhotoItems.length > 0 ? (
                         <CheckSquare className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
                       ) : (
                         <Square className="w-3.5 h-3.5" />
                       )
                     }
                   >
-                    {selectedPhotoIds.size === filteredPhotoItems.length && filteredPhotoItems.length > 0
+                    {selectedFilteredCount === filteredPhotoItems.length && filteredPhotoItems.length > 0
                       ? 'Batal Pilih Semua'
                       : 'Pilih Seluruh Hasil Filter'}
                   </Button>
@@ -2026,7 +2104,7 @@ export const ReportsPreview: React.FC = () => {
                   <span className="text-slate-500 font-medium">
                     {selectedPhotoIds.size > 0 ? (
                       <span className="font-bold text-[var(--theme-primary)]">
-                        {selectedPhotoIds.size} dari {filteredPhotoItems.length} foto dipilih
+                        {selectedFilteredCount} dari {filteredPhotoItems.length} foto pada filter ini dipilih
                       </span>
                     ) : (
                       <span>Total {filteredPhotoItems.length} foto tersedia</span>
@@ -2046,6 +2124,28 @@ export const ReportsPreview: React.FC = () => {
                   Pratinjau / Unduh PDF Foto ({selectedPhotosList.length} Foto)
                 </Button>
               </div>
+
+              {currentUser?.role === 'ADMIN' && (
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-3" aria-label="Verifikasi watermark massal">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-xs text-slate-800 dark:text-slate-100">Verifikasi Foto Massal</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">Hanya foto Buku Tamu dan Laporan Kejadian yang belum diverifikasi. Maksimal {PHOTO_PAGE_SIZE} foto per halaman; setiap foto tetap harus dilihat satu per satu.</p>
+                    </div>
+                    <span className="text-[11px] font-semibold">{selectedReviewablePagePhotos.length} dipilih · {reviewablePagePhotos.length} tersedia di halaman ini</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" disabled={!reviewablePagePhotos.length || bulkReviewBusy}
+                      onClick={chooseUnverifiedOnPage}>Pilih Belum Diverifikasi (Halaman Ini)</Button>
+                    <Button type="button" size="sm" variant="outline" disabled={!selectedPhotoIds.size || bulkReviewBusy}
+                      onClick={() => setSelectedPhotoIds(new Set())}>Bersihkan Pilihan</Button>
+                    <Button type="button" size="sm" disabled={!selectedReviewablePagePhotos.length || bulkReviewBusy} onClick={openBulkReview}>
+                      Periksa &amp; Verifikasi ({selectedReviewablePagePhotos.length})
+                    </Button>
+                  </div>
+                  {bulkReviewMessage && <p role="status" className="text-xs text-slate-700 dark:text-slate-200">{bulkReviewMessage}</p>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -2129,10 +2229,11 @@ export const ReportsPreview: React.FC = () => {
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {paginatedPhotos.map((photo) => (
+                {paginatedPhotos.map((photo, photoIndex) => (
                   <PhotoCardItem
                     key={photo.id}
                     photo={photo}
+                    ordinal={(photoRecapPage - 1) * PHOTO_PAGE_SIZE + photoIndex + 1}
                     isSelected={selectedPhotoIds.has(photo.id)}
                     onToggleSelect={handleToggleSelectPhoto}
                     onPreview={openPhotoDetail}
@@ -2179,6 +2280,62 @@ export const ReportsPreview: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* One guided pass for a bounded page of photos; each photo gets an explicit decision. */}
+      {bulkReviewItems.length > 0 && currentUser?.role === 'ADMIN' && (
+        <Modal isOpen={true} onClose={() => { if (!bulkReviewBusy) setBulkReviewItems([]); }}
+          title="Verifikasi Watermark Massal" maxWidth="lg">
+          <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">Foto {bulkReviewIndex + 1} dari {bulkReviewItems.length}</p>
+              <p className="text-xs text-slate-500">{Object.keys(bulkReviewChoices).length}/{bulkReviewItems.length} diperiksa</p>
+            </div>
+            <div className="rounded-xl bg-slate-950 flex items-center justify-center p-2 min-h-[180px]">
+              <AuthenticatedImage src={bulkReviewItems[bulkReviewIndex].photoUrl}
+                alt={bulkReviewItems[bulkReviewIndex].title} loading="lazy"
+                className="max-w-full max-h-[45vh] w-auto h-auto object-contain rounded-lg" />
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <p className="font-semibold text-slate-900 dark:text-white">{bulkReviewItems[bulkReviewIndex].title}</p>
+              <p>{bulkReviewItems[bulkReviewIndex].briefIdentity}</p>
+              <p>Periksa seluruh foto termasuk panel informasi di bagian bawah, bukan hanya thumbnail.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-label="Hasil pemeriksaan foto ini">
+              <button type="button" disabled={bulkReviewBusy}
+                aria-pressed={bulkReviewChoices[bulkReviewItems[bulkReviewIndex].id] === 'WATERMARK'}
+                className={`min-h-11 rounded-xl border px-3 py-2 font-semibold text-xs ${bulkReviewChoices[bulkReviewItems[bulkReviewIndex].id] === 'WATERMARK' ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-200 dark:border-slate-700'}`}
+                onClick={() => { const id = bulkReviewItems[bulkReviewIndex].id; setBulkReviewChoices(prev => ({ ...prev, [id]: 'WATERMARK' })); setBulkReviewConfirmed(false); }}>
+                Watermark terlihat
+              </button>
+              <button type="button" disabled={bulkReviewBusy}
+                aria-pressed={bulkReviewChoices[bulkReviewItems[bulkReviewIndex].id] === 'ORIGINAL'}
+                className={`min-h-11 rounded-xl border px-3 py-2 font-semibold text-xs ${bulkReviewChoices[bulkReviewItems[bulkReviewIndex].id] === 'ORIGINAL' ? 'border-amber-600 bg-amber-50 text-amber-900' : 'border-slate-200 dark:border-slate-700'}`}
+                onClick={() => { const id = bulkReviewItems[bulkReviewIndex].id; setBulkReviewChoices(prev => ({ ...prev, [id]: 'ORIGINAL' })); setBulkReviewConfirmed(false); }}>
+                Tanpa watermark
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={bulkReviewBusy || bulkReviewIndex === 0}
+                onClick={() => setBulkReviewIndex(prev => Math.max(0, prev - 1))}>Sebelumnya</Button>
+              <Button type="button" size="sm" variant="outline" disabled={bulkReviewBusy || bulkReviewIndex === bulkReviewItems.length - 1}
+                onClick={() => setBulkReviewIndex(prev => Math.min(bulkReviewItems.length - 1, prev + 1))}>Foto Berikutnya</Button>
+            </div>
+            <label className="flex gap-2 items-start text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-3">
+              <input type="checkbox" className="mt-0.5" checked={bulkReviewConfirmed} disabled={bulkReviewBusy || bulkReviewItems.some(p => !bulkReviewChoices[p.id])}
+                onChange={event => setBulkReviewConfirmed(event.target.checked)} />
+              Saya telah melihat dan menentukan status setiap foto yang dipilih. Pemeriksaan ini tidak menjamin keaslian foto.
+            </label>
+            {bulkReviewBusy && <p role="status" className="text-xs font-medium">Menyimpan {bulkReviewProgress} dari {bulkReviewItems.length} foto. Jangan tutup halaman.</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={bulkReviewBusy} onClick={() => setBulkReviewItems([])}>Batal</Button>
+              <Button type="button" size="sm" disabled={bulkReviewBusy || !bulkReviewConfirmed || bulkReviewItems.some(p => !bulkReviewChoices[p.id])}
+                onClick={() => void saveBulkReview()}>
+                {bulkReviewBusy ? 'Menyimpan…' : `Simpan ${bulkReviewItems.length} Verifikasi`}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* SINGLE PHOTO DETAIL ZOOM MODAL */}

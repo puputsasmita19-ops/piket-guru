@@ -4,14 +4,14 @@ import type { UserProfile } from '../../types';
 import type { IncidentRecord } from '../../types/incident.types';
 import type { VisitorRecord } from '../../types/visitor.types';
 import type { PhotoWatermarkReview, WatermarkStatus } from '../../types/watermark.types';
-import { photoReviewKey } from '../../utils/photoWatermarkStatus';
+import { photoReviewKey, resolvePhotoWatermarkStatus } from '../../utils/photoWatermarkStatus';
 
 /** This confirms only whether the watermark is visibly present, NOT authenticity of the photo. */
 export class PhotoWatermarkReviewService {
   static async review(
     module: 'VISITOR' | 'INCIDENT', recordId: string, photoUrl: string,
     status: Exclude<WatermarkStatus, 'UNKNOWN'>, user: UserProfile,
-    photoIndex?: number
+    photoIndex?: number, onlyIfUnknown = false
   ): Promise<PhotoWatermarkReview> {
     if (user.role !== 'ADMIN' || !auth.currentUser || auth.currentUser.uid !== user.id) {
       throw new Error('Hanya Admin dengan sesi aktif yang boleh memverifikasi watermark foto.');
@@ -34,6 +34,9 @@ export class PhotoWatermarkReviewService {
       const visitor = existing as VisitorRecord;
       const actualUrl = visitor.fotoUrl || (visitor as any).photoUrl || (visitor as any).fotoTamu || (visitor as any).foto;
       if (actualUrl !== photoUrl) throw new Error('Foto telah berubah. Tutup lalu buka ulang detail foto.');
+      if (onlyIfUnknown && resolvePhotoWatermarkStatus(photoUrl, visitor.fotoWatermarkReview, visitor.fotoMode).status !== 'UNKNOWN') {
+        throw new Error('Foto ini sudah diverifikasi pengguna lain. Muat ulang arsip sebelum mengubahnya.');
+      }
       updated = { ...visitor, fotoWatermarkReview: review };
     } else {
       const incident = existing as IncidentRecord;
@@ -42,10 +45,16 @@ export class PhotoWatermarkReviewService {
             (incident.photos[photoIndex].url || (incident.photos[photoIndex] as any).photoUrl || (incident.photos[photoIndex] as any).fotoUrl || (incident.photos[photoIndex] as any).urlFoto) !== photoUrl) {
           throw new Error('Foto kejadian sudah berubah. Muat ulang arsip.');
         }
+        if (onlyIfUnknown && resolvePhotoWatermarkStatus(photoUrl, incident.photos[photoIndex].watermarkReview).status !== 'UNKNOWN') {
+          throw new Error('Foto ini sudah diverifikasi pengguna lain. Muat ulang arsip sebelum mengubahnya.');
+        }
         updated = { ...incident, photos: incident.photos.map((photo, idx) => idx === photoIndex ? { ...photo, watermarkReview: review } : photo) };
       } else {
         const legacyUrl = (incident as any).fotoUrl || (incident as any).photoUrl || (incident as any).foto || (incident as any).buktiFoto;
         if (legacyUrl !== photoUrl) throw new Error('Foto kejadian telah berubah. Muat ulang arsip.');
+        if (onlyIfUnknown && resolvePhotoWatermarkStatus(photoUrl, incident.fotoWatermarkReview).status !== 'UNKNOWN') {
+          throw new Error('Foto ini sudah diverifikasi pengguna lain. Muat ulang arsip sebelum mengubahnya.');
+        }
         updated = { ...incident, fotoWatermarkReview: review };
       }
     }
