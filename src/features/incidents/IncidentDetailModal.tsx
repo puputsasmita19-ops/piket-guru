@@ -28,6 +28,7 @@ interface IncidentDetailModalProps {
   incident: IncidentRecord | null;
   onStatusChange: (incidentId: string, status: IncidentStatus, note?: string) => Promise<void>;
   onEdit: (incident: IncidentRecord) => void;
+  canEdit: boolean;
 }
 
 export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
@@ -36,6 +37,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
   incident,
   onStatusChange,
   onEdit,
+  canEdit,
 }) => {
   const [resolutionNote, setResolutionNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,6 +47,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
   if (!incident) return null;
 
   const handleUpdateStatus = async (newStatus: IncidentStatus) => {
+    if (!canEdit) return;
     setIsSubmitting(true);
     try {
       await onStatusChange(incident.id, newStatus, resolutionNote || undefined);
@@ -188,6 +191,8 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
                 {incident.resolutionNote || 'Penanganan telah tuntas dan terkoordinasi dengan seluruh pihak terkait.'}
               </p>
             </div>
+          ) : !canEdit ? (
+            <p className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300">Laporan hanya dapat diubah oleh pencatat asli atau Administrator. Anda tetap dapat membaca rincian dan foto bukti.</p>
           ) : (
             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 space-y-3">
               <h5 className="text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -234,18 +239,13 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
           <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
             <span>Pelapor: <strong>{incident.createdBy}</strong></span>
             <div className="flex items-center gap-2">
-              <Button
+              {canEdit && <Button
                 variant="outline"
                 size="sm"
                 className="text-xs"
                 leftIcon={<Edit2 className="w-3.5 h-3.5" />}
-                onClick={() => {
-                  onClose();
-                  onEdit(incident);
-                }}
-              >
-                Edit Laporan
-              </Button>
+                onClick={() => { onClose(); onEdit(incident); }}
+              >Edit Laporan</Button>}
               <Button variant="outline" size="sm" onClick={onClose}>
                 Tutup
               </Button>
@@ -262,13 +262,9 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
         maxWidth="lg"
       >
         <div className="space-y-3">
-          {selectedPhoto && (
-            <AuthenticatedImage
-              src={selectedPhoto}
-              alt="Foto Bukti Kejadian Zoom"
-              className="w-full rounded-2xl object-cover max-h-[70vh] border border-slate-200 dark:border-slate-800 shadow-lg"
-            />
-          )}
+          {selectedPhoto && <div className="max-h-[72dvh] min-h-0 overflow-y-auto rounded-xl bg-slate-950/90 p-1 sm:p-2" role="region" aria-label="Foto bukti lengkap, dapat digulir">
+            <AuthenticatedImage src={selectedPhoto} alt="Foto Bukti Kejadian Lengkap termasuk watermark" className="block w-full h-auto max-w-full object-contain rounded-lg" />
+          </div>}
           <div className="flex justify-end pt-1">
             <Button variant="outline" size="sm" onClick={() => setSelectedPhoto(null)}>
               Tutup

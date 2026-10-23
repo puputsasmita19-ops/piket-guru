@@ -43,6 +43,7 @@ import { SchoolSettings } from '../../types';
 import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { StudentTardyService } from '../../services/firebase/studentTardyService';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate } from '../../utils/dateUtils';
@@ -102,11 +103,7 @@ export const StudentTardyPreview: React.FC = () => {
   }, [history.constraints, history.range.error]);
 
   // Check if user has permission to edit a specific tardy record
-  const canEditRecord = (item: StudentTardyRecord): boolean => {
-    if (!currentUser) return false;
-    if (currentUser.role === 'ADMIN' || currentUser.role === 'KEPALA_SEKOLAH') return true;
-    return item.petugasPiketId === currentUser.id || item.createdBy === currentUser.fullName;
-  };
+  const canEditRecord = (item: StudentTardyRecord): boolean => mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId');
 
   // Save or update tardy record
   const handleSaveTardy = async (data: Partial<StudentTardyRecord>, isEdit?: boolean) => {

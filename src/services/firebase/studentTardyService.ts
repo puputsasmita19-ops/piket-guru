@@ -1,5 +1,6 @@
 import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { StudentTardyRecord, TardyStatus } from '../../types/studentTardy.types';
 import { UserProfile } from '../../types';
 import { processPhotoForStorage } from '../drive/photoUploadHelper';
@@ -149,6 +150,7 @@ export class StudentTardyService {
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', id);
       const isNew = !existingDoc;
+      if (existingDoc) assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!isEdit && existingDoc && data.batchRequestId && existingDoc.batchRequestId === data.batchRequestId) {
         return existingDoc;
       }
@@ -207,8 +209,8 @@ export class StudentTardyService {
         noHpOrangTua: (data.noHpOrangTua || '').trim(),
         status: data.status || 'DALAM_PEMBINAAN',
         catatanPetugas: data.catatanPetugas ? data.catatanPetugas.trim() : undefined,
-        petugasPiketName: data.petugasPiketName || user.fullName,
-        petugasPiketId: data.petugasPiketId || user.id,
+        petugasPiketName: existingDoc?.petugasPiketName || user.fullName,
+        petugasPiketId: existingDoc?.petugasPiketId || user.id,
         ruleSnapshot: data.ruleSnapshot || existingDoc?.ruleSnapshot,
         isCorrectedByAdmin: data.isCorrectedByAdmin ?? existingDoc?.isCorrectedByAdmin ?? false,
         adminCorrection: data.adminCorrection || existingDoc?.adminCorrection,
@@ -486,6 +488,7 @@ export class StudentTardyService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', tardyId);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!existing) return;
 
       const updated: StudentTardyRecord = {

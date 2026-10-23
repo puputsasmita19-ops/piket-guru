@@ -38,6 +38,7 @@ import { UserFormModal } from './UserFormModal';
 import { StudentFormModal } from './StudentFormModal';
 import { ResetPinModal } from './ResetPinModal';
 import { ApplyGuruDutyPermissionsModal } from './ApplyGuruDutyPermissionsModal';
+import { BulkPermissionsModal } from './BulkPermissionsModal';
 import { OrphanReservationsModal } from './OrphanReservationsModal';
 import { BulkImportModal } from '../master/BulkImportModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -90,6 +91,7 @@ export const UserManagementView: React.FC = () => {
 
   // Modal for Terapkan Hak Akses Piket Guru
   const [isApplyGuruDutyModalOpen, setIsApplyGuruDutyModalOpen] = useState(false);
+  const [isBulkPermissionsOpen, setIsBulkPermissionsOpen] = useState(false);
   const [guruDutyTargetUser, setGuruDutyTargetUser] = useState<UserProfile | null>(null);
 
   // Modal for Orphan LoginId Reservations
@@ -520,6 +522,7 @@ export const UserManagementView: React.FC = () => {
 
                   {isAdmin && (
                     <>
+                      <Button variant="outline" size="sm" leftIcon={<ShieldCheck className="w-4 h-4" />} onClick={() => setIsBulkPermissionsOpen(true)}>Hak Akses Massal</Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -1177,6 +1180,7 @@ export const UserManagementView: React.FC = () => {
       </Modal>
 
       {/* BULK IMPORT MODAL */}
+      <BulkPermissionsModal isOpen={isBulkPermissionsOpen} onClose={() => setIsBulkPermissionsOpen(false)} users={users} actor={isAdmin ? currentUser : null} />
       <BulkImportModal
         isOpen={isBulkImportOpen}
         onClose={() => setIsBulkImportOpen(false)}

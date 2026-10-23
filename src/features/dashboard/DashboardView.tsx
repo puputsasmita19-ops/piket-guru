@@ -415,13 +415,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                       </Badge>
 
                     {isAdmin && <div className="flex items-center gap-1 shrink-0">
-                      {announcementConfig.allowPublishedEditing && <button type="button"
+                      {announcementConfig.allowPublishedEditing && (currentUser?.role === 'ADMIN' || ann.authorId === currentUser?.id) && <button type="button"
                         onClick={() => openAnnouncementForm(ann)}
                         aria-label={`Edit pengumuman: ${ann.title}`}
                         className="inline-flex items-center justify-center gap-1.5 min-h-[44px] min-w-[44px] px-2 text-xs font-medium text-current rounded-lg hover:bg-black/5 dark:hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]">
                         <Edit3 className="w-4 h-4" /><span>Edit</span>
                       </button>}
-                      <button type="button"
+                      {(currentUser?.role === 'ADMIN' || ann.authorId === currentUser?.id) && <button type="button"
                         onClick={() => handleDeleteAnnouncement(ann.id)}
                         disabled={!!deletingAnnouncement}
                         aria-label={`Hapus pengumuman: ${ann.title}`}
@@ -429,7 +429,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                         title="Hapus Pengumuman"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>}
                     </div>}
                   </div>
 

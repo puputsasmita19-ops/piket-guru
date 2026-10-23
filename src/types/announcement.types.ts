@@ -30,6 +30,7 @@ export interface AnnouncementRecord extends BaseEntityMetadata {
   content: string;
   priority: AnnouncementPriority;
   authorName: string;
+  authorId?: string; // Stable creator UID; legacy records are admin-only for edits.
   authorRole: string;
   date: string;
   targetRole?: string; // 'SEMUA' | 'GURU' | 'TENDIK' | 'SATPAM'

@@ -1,5 +1,6 @@
 import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { UserProfile } from '../../types';
 import { formatTime } from '../../utils/dateUtils';
@@ -143,6 +144,7 @@ export class StudentPermitService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!existing) {
         throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
       }
@@ -167,6 +169,8 @@ export class StudentPermitService {
         id: existing.id,
         createdAt: existing.createdAt,
         createdBy: existing.createdBy,
+        petugasPiketId: existing.petugasPiketId,
+        petugasPiketName: existing.petugasPiketName,
         dataSource: existing.dataSource,
         isDemo: existing.isDemo,
         updatedAt: now,
@@ -393,6 +397,7 @@ export class StudentPermitService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', permitId);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!existing) return;
 
       const returnTime = customReturnTime || formatTime(new Date());

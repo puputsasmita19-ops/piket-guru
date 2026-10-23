@@ -31,12 +31,14 @@ import { IncidentCategoryRecord } from '../../types/master.types';
 import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { IncidentService } from '../../services/firebase/incidentService';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export const IncidentPreview: React.FC = () => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
+  const mayEdit = (record: IncidentRecord) => mayEditOwnRecord(currentUser, record as unknown as Record<string, unknown>, 'pelaporId');
 
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
@@ -84,6 +86,7 @@ export const IncidentPreview: React.FC = () => {
   // Save / Update
   const handleSaveIncident = async (record: IncidentRecord) => {
     if (!currentUser) return;
+    if (incidents.some(item => item.id === record.id) && !mayEdit(record)) throw new Error('Hanya pencatat asli atau Admin yang dapat mengedit laporan.');
     await IncidentService.saveIncident(record, currentUser);
   };
 
@@ -94,6 +97,8 @@ export const IncidentPreview: React.FC = () => {
     note?: string
   ) => {
     if (!currentUser) return;
+    const original = incidents.find(i => i.id === incidentId);
+    if (!original || !mayEdit(original)) throw new Error('Status laporan hanya boleh diubah pelapor asli atau Admin.');
     await IncidentService.updateIncidentStatus(incidentId, newStatus, currentUser, note);
   };
 
@@ -441,6 +446,7 @@ export const IncidentPreview: React.FC = () => {
           setDetailIncident(null);
         }}
         incident={detailIncident}
+        canEdit={detailIncident ? mayEdit(detailIncident) : false}
         onStatusChange={handleStatusChange}
         onEdit={(inc) => {
           setEditingIncident(inc);

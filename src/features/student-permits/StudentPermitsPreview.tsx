@@ -50,6 +50,7 @@ import { FirestoreService } from '../../services/firebase/firestoreService';
 import { StudentPermitService } from '../../services/firebase/studentPermitService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { useAuth } from '../../contexts/AuthContext';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 
@@ -151,7 +152,7 @@ export const StudentPermitsPreview: React.FC = () => {
 
   // Selected Permits Object List
   const selectedPermits = useMemo(() => {
-    return permits.filter((p) => selectedPermitIds.has(p.id));
+    return permits.filter((p) => selectedPermitIds.has(p.id) && mayEditOwnRecord(currentUser, p as unknown as Record<string, unknown>, 'petugasPiketId'));
   }, [permits, selectedPermitIds]);
 
   // Selected permits currently outside (applicable for "Tiba Kembali")
@@ -161,6 +162,8 @@ export const StudentPermitsPreview: React.FC = () => {
 
   // Toggle selection
   const handleToggleSelect = (id: string) => {
+    const record = permits.find(p => p.id === id);
+    if (!record || !mayEditOwnRecord(currentUser, record as unknown as Record<string, unknown>, 'petugasPiketId')) return;
     setSelectedPermitIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -171,10 +174,11 @@ export const StudentPermitsPreview: React.FC = () => {
 
   // Toggle select all visible
   const handleToggleSelectAll = () => {
-    if (selectedPermitIds.size === filteredPermits.length && filteredPermits.length > 0) {
+    const eligible = filteredPermits.filter(p => mayEditOwnRecord(currentUser, p as unknown as Record<string, unknown>, 'petugasPiketId'));
+    if (selectedPermitIds.size === eligible.length && eligible.length > 0) {
       setSelectedPermitIds(new Set());
     } else {
-      setSelectedPermitIds(new Set(filteredPermits.map((p) => p.id)));
+      setSelectedPermitIds(new Set(eligible.map((p) => p.id)));
     }
   };
 
@@ -519,6 +523,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                       <button
                         type="button"
                         onClick={() => handleToggleSelect(item.id)}
+                        disabled={!mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId')}
                         className="mt-0.5 text-slate-400 hover:text-blue-600 cursor-pointer"
                       >
                         {isSelected ? (
@@ -597,7 +602,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                   {/* Mobile Actions */}
                   <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap">
                     <div className="flex items-center gap-1.5">
-                      {canEdit && (
+                      {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && (
                         <Button
                           type="button"
                           variant="primary"
@@ -628,7 +633,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {item.status === 'SEDANG_KELUAR' && (
+                      {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && item.status === 'SEDANG_KELUAR' && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -717,6 +722,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                         <button
                           type="button"
                           onClick={() => handleToggleSelect(item.id)}
+                          disabled={!mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId')}
                           className="text-slate-400 hover:text-blue-600 cursor-pointer"
                         >
                           {isSelected ? (
@@ -799,7 +805,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Edit Button */}
-                          {canEdit && (
+                          {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && (
                             <button
                               type="button"
                               onClick={() => {
@@ -837,7 +843,7 @@ Demikian informasi ini disampaikan. Terima kasih. 🙏`;
                           </button>
 
                           {/* Check-In Return */}
-                          {item.status === 'SEDANG_KELUAR' && (
+                          {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && item.status === 'SEDANG_KELUAR' && (
                             <Button
                               variant="outline"
                               size="sm"

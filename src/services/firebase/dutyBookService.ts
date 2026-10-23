@@ -1,5 +1,6 @@
 import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { DutyBookRecord } from '../../types/dutyBook.types';
 import { DutyBookStatus, UserProfile } from '../../types';
 import { PERMISSIONS, checkUserPermission } from '../../config/permissions';
@@ -75,6 +76,7 @@ export class DutyBookService {
       const now = FirestoreService.nextUpdatedAt(existing);
 
       if (existing) {
+        assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasId');
         if (user.role === 'GURU' && existing.petugasId !== user.id) {
           throw new Error('Akses ditolak: Anda hanya dapat mengubah buku piket yang menjadi tanggung jawab Anda.');
         }
@@ -94,8 +96,8 @@ export class DutyBookService {
       const payload: DutyBookRecord = {
         ...record,
         id,
-        petugasId: record.petugasId || user.id,
-        petugasName: record.petugasName || user.fullName,
+        petugasId: existing?.petugasId || user.id,
+        petugasName: existing?.petugasName || user.fullName,
         status: 'DRAFT',
         dataSource: 'PRODUCTION',
         isDemo: false,
@@ -153,6 +155,7 @@ export class DutyBookService {
       const now = FirestoreService.nextUpdatedAt(existing);
 
       if (existing) {
+        assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasId');
         if (user.role === 'GURU' && existing.petugasId !== user.id) {
           throw new Error('Akses ditolak: Anda hanya dapat mengirim buku piket milik Anda sendiri.');
         }
@@ -176,8 +179,8 @@ export class DutyBookService {
       const payload: DutyBookRecord = {
         ...record,
         id,
-        petugasId: record.petugasId || user.id,
-        petugasName: record.petugasName || user.fullName,
+        petugasId: existing?.petugasId || user.id,
+        petugasName: existing?.petugasName || user.fullName,
         status: 'DIAJUKAN',
         submittedAt: now,
         submittedBy: user.fullName,

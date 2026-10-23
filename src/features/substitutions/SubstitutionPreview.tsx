@@ -40,6 +40,7 @@ import { FirestoreService } from '../../services/firebase/firestoreService';
 import { SubstitutionService } from '../../services/firebase/substitutionService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { useAuth } from '../../contexts/AuthContext';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate } from '../../utils/dateUtils';
@@ -392,7 +393,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                 )}
 
                 {/* Status Selector for Mobile */}
-                {canEdit && (
+                {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && (
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <span className="text-[11px] font-semibold text-slate-500">Ubah Status:</span>
                     <select
@@ -411,7 +412,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                 {/* Action Buttons for Mobile */}
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap">
                   <div className="flex items-center gap-1.5">
-                    {canEdit && (
+                    {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && (
                       <Button
                         type="button"
                         variant="primary"
@@ -547,7 +548,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                     </td>
 
                     <td className="p-4">
-                      {canEdit ? (
+                      {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') ? (
                         <select
                           value={item.status}
                           onChange={(e) => handleUpdateStatus(item, e.target.value as SubstitutionStatus)}
@@ -583,7 +584,7 @@ Harap seluruh siswa tetap tertib dan mengerjakan tugas dengan sungguh-sungguh di
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {/* Edit Substitution */}
-                        {canEdit && (
+                        {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasPiketId') && (
                           <button
                             type="button"
                             onClick={() => {

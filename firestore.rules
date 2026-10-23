@@ -111,6 +111,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Ownership for operational records: identity is Firebase UID, never display name.
+    function isRecordOwner(field) {
+      return isValidActiveUser() &&
+        resource.data.get(field, '') == request.auth.uid &&
+        request.resource.data.get(field, '') == resource.data.get(field, '') &&
+        request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
+        request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null);
+    }
+    function creatingOwnRecord(field) {
+      return isValidActiveUser() &&
+        request.resource.data.get(field, '') == request.auth.uid;
+    }
+
     // -------------------------------------------------------------
     // 1. SETTINGS & CONFIGURATION
     // -------------------------------------------------------------
@@ -289,22 +302,23 @@ service cloud.firestore {
       //     * Cannot reassign petugasId
       //     * Can save draft (status == 'DRAFT') or submit journal (status == 'DIAJUKAN')
       //     * View-only permissions are strictly rejected
-      allow update: if isValidActiveUser() && (
-        isAdmin() ||
-        (
-          hasDutyBookApprovePerm() &&
-          (
-            (resource.data.status in ['DIAJUKAN', 'DIVERIFIKASI'] && request.resource.data.status in ['DIKUNCI', 'DISETUJUI']) ||
-            (resource.data.status in ['DIAJUKAN', 'DIVERIFIKASI'] && request.resource.data.status == 'DRAFT')
-          )
-        ) ||
-        (
-          isStaff() &&
-          hasDutyBookWritePerm() &&
-          request.auth.uid == resource.data.petugasId &&
-          request.resource.data.petugasId == resource.data.petugasId &&
-          resource.data.status == 'DRAFT' &&
-          request.resource.data.status in ['DRAFT', 'DIAJUKAN']
+      // Audit correction/approval belongs to ADMIN; staff edit only their own draft.
+      allow update: if isAdmin() || (
+        isStaff() && hasDutyBookWritePerm() && isRecordOwner('petugasId') &&
+        resource.data.status == 'DRAFT' &&
+        request.resource.data.status in ['DRAFT', 'DIAJUKAN']
+      ) || (
+        // Existing coordinator verification is a status-only workflow, NOT report editing.
+        hasDutyBookApprovePerm() && resource.data.status in ['DIAJUKAN', 'DIVERIFIKASI'] && (
+          (request.resource.data.status in ['DIKUNCI', 'DISETUJUI'] &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'lockedAt', 'lockedBy', 'approvedAt', 'approvedBy',
+              'verifiedAt', 'verifiedBy', 'updatedAt', 'updatedBy'
+            ])) ||
+          (request.resource.data.status == 'DRAFT' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'revisionReason', 'updatedAt', 'updatedBy'
+            ]))
         )
       );
 
@@ -351,13 +365,7 @@ service cloud.firestore {
       // - Reporter can edit report details (cannot reassign pelaporId)
       allow update: if isValidActiveUser() && (
         isAdmin() ||
-        isKepalaSekolah() ||
-        (
-          isStaff() &&
-          hasIncidentWritePerm() &&
-          request.auth.uid == resource.data.pelaporId &&
-          request.resource.data.pelaporId == resource.data.pelaporId
-        )
+        (isStaff() && hasIncidentWritePerm() && isRecordOwner('pelaporId'))
       );
 
       allow delete: if isAdmin();
@@ -470,45 +478,46 @@ service cloud.firestore {
 
     match /substitutions/{subId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      allow create: if isAdmin() || (isStaff() && creatingOwnRecord('petugasPiketId'));
+      allow update: if isAdmin() || (isStaff() && isRecordOwner('petugasPiketId'));
       allow delete: if isAdmin();
     }
 
     match /studentTardiness/{tardyId} {
       allow read: if isValidActiveUser();
-      allow create: if isStaff();
-      // Admin can update all fields including correction; non-admin staff can only update standard records without altering admin correction fields
-      allow update: if isValidActiveUser() && (
-        isAdmin() ||
-        (
-          isStaff() &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isCorrectedByAdmin', 'adminCorrection', 'menitTerlambatAsli']) &&
-          resource.data.get('isCorrectedByAdmin', false) == false
-        )
+      allow create: if isAdmin() || (isStaff() && creatingOwnRecord('petugasPiketId'));
+      // Admin correction is protected; ordinary edits require original creator UID.
+      allow update: if isAdmin() || (
+        isStaff() && isRecordOwner('petugasPiketId') &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isCorrectedByAdmin', 'adminCorrection', 'menitTerlambatAsli']) &&
+        resource.data.get('isCorrectedByAdmin', false) == false
       );
       allow delete: if isAdmin();
     }
 
     match /studentPermits/{permitId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      allow create: if isAdmin() || (isStaff() && creatingOwnRecord('petugasPiketId'));
+      allow update: if isAdmin() || (isStaff() && isRecordOwner('petugasPiketId'));
       allow delete: if isAdmin();
     }
 
     match /visitors/{visitorId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      allow create: if isAdmin() || (isStaff() && creatingOwnRecord('petugasPiketId'));
+      allow update: if isAdmin() || (isStaff() && isRecordOwner('petugasPiketId'));
       allow delete: if isAdmin();
     }
 
     match /announcements/{annId} {
       allow read: if isValidActiveUser();
-      allow create, delete: if isAdmin() || isKepalaSekolah();
-      // Enforce the admin's edit switch for older clients as well as the current UI.
-      allow update: if (isAdmin() || isKepalaSekolah()) &&
+      allow create: if isAdmin() || (isKepalaSekolah() && creatingOwnRecord('authorId'));
+      allow delete: if isAdmin() || (isKepalaSekolah() && resource.data.get('authorId', '') == request.auth.uid);
+      // Kepala Sekolah may edit their own announcements only, never others'.
+      allow update: if (isAdmin() || (isKepalaSekolah() && isRecordOwner('authorId'))) &&
         (!exists(/databases/$(database)/documents/settings/school_config) ||
           get(/databases/$(database)/documents/settings/school_config).data.get('announcementConfig', {}).get('allowPublishedEditing', true) == true) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['authorName', 'authorRole', 'createdAt', 'createdBy', 'date']);
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['authorId', 'authorName', 'authorRole', 'createdAt', 'createdBy', 'date']);
     }
 
     // -------------------------------------------------------------
@@ -523,7 +532,10 @@ service cloud.firestore {
     // Existing operational collections retained from the repository Rules.
     match /documents/{docId} {
       allow read: if isValidActiveUser();
-      allow create, update: if isStaff();
+      // New personal uploads must carry a trustworthy creator UID.
+      // Legacy entries lacking the UID remain editable only by Administrator.
+      allow create: if isAdmin() || (isStaff() && creatingOwnRecord('createdById'));
+      allow update: if isAdmin() || (isStaff() && isRecordOwner('createdById'));
       allow delete: if isAdmin();
     }
     match /backups/{backupId} {

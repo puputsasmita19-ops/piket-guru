@@ -1,4 +1,5 @@
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { AnnouncementRecord, AnnouncementSaveInput, sanitizeAnnouncementConfig } from '../../types/announcement.types';
 import { SchoolSettings, UserProfile } from '../../types';
 import { auth } from './firebaseAuth';
@@ -106,6 +107,7 @@ export class AnnouncementService {
       if (!record || record.updatedAt !== data.expectedState?.updatedAt) {
         throw new Error('Pengumuman telah berubah atau dihapus. Tutup formulir, lalu buka Edit lagi untuk melihat data terbaru.');
       }
+      assertRecordOwner(user, { pelaporId: record.authorId } as Record<string, unknown>, 'pelaporId');
       existing = record;
       if (title === record.title && content === record.content && data.priority === record.priority && targetRole === (record.targetRole || 'SEMUA')) return;
     }
@@ -113,7 +115,7 @@ export class AnnouncementService {
 
     const payload: AnnouncementRecord = {
       ...(existing || {
-        authorName: manager.fullName, authorRole: manager.role,
+        authorName: manager.fullName, authorId: user.id, authorRole: manager.role,
         date: getTodayISODate(), isActive: true, dataSource: 'PRODUCTION', isDemo: false,
         createdAt: now, createdBy: manager.fullName,
       }),
@@ -140,6 +142,9 @@ export class AnnouncementService {
   public static async deleteAnnouncement(id: string, user: UserProfile): Promise<void> {
     await this.manager(user.id);
     this.assertSession(user.id);
+    const existing = await FirestoreService.getByIdStrict<AnnouncementRecord>('announcements', id);
+    if (!existing) return;
+    assertRecordOwner(user, { pelaporId: existing.authorId } as Record<string, unknown>, 'pelaporId');
     await FirestoreService.deleteDocument('announcements', id);
     await FirestoreService.logAudit({
       userId: user.id,

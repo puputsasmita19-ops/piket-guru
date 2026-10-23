@@ -1,5 +1,6 @@
 import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { IncidentRecord, IncidentStatus } from '../../types/incident.types';
 import { UserProfile } from '../../types';
 import { processMultiplePhotosForStorage } from '../drive/photoUploadHelper';
@@ -119,6 +120,7 @@ export class IncidentService {
       // Forms reserve IDs before saving so retries keep the same photo identity.
       // A reserved ID is still a creation until its document exists on the server.
       const isNew = !existingDoc;
+      if (existingDoc) assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'pelaporId');
       if (!isNew && existingDoc && record.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== record.updatedAt) {
         throw new Error(`Konflik pembaruan: Laporan kejadian telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
       }
@@ -131,7 +133,7 @@ export class IncidentService {
         ...record,
         photos,
         id,
-        pelaporId: record.pelaporId || user.id,
+        pelaporId: existingDoc?.pelaporId || user.id,
         pelaporName: record.pelaporName || user.fullName,
         penanggungJawab: record.penanggungJawab || user.fullName,
         status: record.status || 'BARU',
@@ -139,8 +141,8 @@ export class IncidentService {
         isDemo: false,
         updatedAt: now,
         updatedBy: user.fullName,
-        createdAt: record.createdAt || now,
-        createdBy: record.createdBy || user.fullName,
+        createdAt: existingDoc?.createdAt || record.createdAt || now,
+        createdBy: existingDoc?.createdBy || user.fullName,
       };
 
       const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);
@@ -182,6 +184,7 @@ export class IncidentService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', incidentId);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'pelaporId');
       if (!existing) return;
 
       const now = FirestoreService.nextUpdatedAt(existing);

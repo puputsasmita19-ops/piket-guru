@@ -45,6 +45,7 @@ import { SchoolSettings, UserProfile } from '../../types';
 import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { VisitorService } from '../../services/firebase/visitorService';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
@@ -58,6 +59,7 @@ export const VisitorPreview: React.FC = () => {
       ['ADMIN', 'SUPER_ADMIN', 'PETUGAS_PIKET', 'GURU', 'STAFF', 'KEPALA_SEKOLAH'].includes(currentUser.role)
   );
 
+  const canEditRecord = (record: VisitorRecord) => mayEditOwnRecord(currentUser, record as unknown as Record<string, unknown>, 'petugasPiketId');
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staffList, setStaffList] = useState<StaffRecord[]>([]);
@@ -385,7 +387,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                         Foto
                       </Button>
                     )}
-                    {canEdit && (
+                    {canEditRecord(item) && (
                       <Button
                         type="button"
                         variant="primary"
@@ -413,7 +415,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                   </div>
 
                   <div className="flex items-center gap-1">
-                    {item.status === 'SEDANG_BERKUNJUNG' && (
+                    {canEditRecord(item) && item.status === 'SEDANG_BERKUNJUNG' && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -543,7 +545,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                             <Image className="w-4 h-4" />
                           </button>
                         )}
-                        {canEdit && (
+                        {canEditRecord(item) && (
                           <button
                             type="button"
                             onClick={() => {
@@ -578,7 +580,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                         </button>
 
                         {/* Check-Out button */}
-                        {item.status === 'SEDANG_BERKUNJUNG' && (
+                        {canEditRecord(item) && item.status === 'SEDANG_BERKUNJUNG' && (
                           <Button
                             variant="outline"
                             size="sm"

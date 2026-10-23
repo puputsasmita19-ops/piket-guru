@@ -1,5 +1,6 @@
 import { createAuthenticatedSession } from './sessionGuard';
 import { FirestoreService } from './firestoreService';
+import { assertRecordOwner } from '../../utils/recordOwnership';
 import { TeacherSubstitutionRecord, SubstitutionStatus } from '../../types/substitution.types';
 import { UserProfile } from '../../types';
 
@@ -113,6 +114,7 @@ export class SubstitutionService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!existing) {
         throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
       }
@@ -128,6 +130,8 @@ export class SubstitutionService {
         id: existing.id,
         createdAt: existing.createdAt,
         createdBy: existing.createdBy,
+        petugasPiketId: existing.petugasPiketId,
+        petugasPiketName: existing.petugasPiketName,
         updatedAt: now,
         updatedBy: user.fullName,
       };
@@ -166,6 +170,7 @@ export class SubstitutionService {
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', substitutionId);
+      if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!existing) return;
 
       const updated: TeacherSubstitutionRecord = {

@@ -23,6 +23,7 @@ import { DutyBookStatus, ScheduleItem, SchoolSettings } from '../../types';
 import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { DutyBookService } from '../../services/firebase/dutyBookService';
+import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, getTodayISODate } from '../../utils/dateUtils';
@@ -331,7 +332,7 @@ export const DutyBookPreview: React.FC = () => {
                     >
                       Pratinjau Cetak
                     </Button>
-                    <Button
+                    {mayEditOwnRecord(currentUser, item as unknown as Record<string, unknown>, 'petugasId') && <Button
                       variant="primary"
                       size="sm"
                       className="text-xs"
@@ -342,7 +343,7 @@ export const DutyBookPreview: React.FC = () => {
                       }}
                     >
                       {displayInfo.stage === 'SELESAI' && !isAdmin ? 'Lihat Jurnal' : 'Buka / Edit Jurnal'}
-                    </Button>
+                    </Button>}
                   </div>
                 </CardContent>
               </Card>
