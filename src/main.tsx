@@ -2,6 +2,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import './modern-soft.css';
+import './dashboard-compact-r46.css';
 
 // Intercept Firebase Auth SDK internal assertion errors in iframe context
 window.addEventListener('unhandledrejection', (event) => {

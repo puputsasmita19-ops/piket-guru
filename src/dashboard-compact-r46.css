@@ -1,0 +1,203 @@
+/* Piket Guru R46 — compact Dashboard, matched to REAL React markup:
+   DashboardFlashInfo + QuickActions. Import AFTER modern-soft.css.
+   Presentation only; role checks, click handlers, realtime and Firestore unchanged. */
+
+@media screen {
+  /* The flash carousel keeps one stable height while rotating. Long slide
+     summaries remain available through an internal scroll + detail button. */
+  .app-shell .app-content[data-module="dashboard"] .dashboard-flash {
+    min-width: 0;
+    padding: 10px 16px;
+    border-radius: 19px;
+    box-shadow: var(--soft-shadow, 0 2px 8px rgba(37,55,85,.035)) !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-heading {
+    height: 28px;
+    margin-bottom: 2px;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-slide {
+    height: 118px !important;
+    min-height: 118px !important;
+    max-height: 118px !important;
+    box-sizing: border-box;
+    padding: 2px 1px 7px;
+    overflow: hidden;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-content {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity {
+    min-height: 0;
+    gap: 12px;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity h2 {
+    font-size: clamp(16px, 1.5vw, 20px);
+    line-height: 1.3;
+    min-height: 0;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity-description {
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-controls {
+    min-height: 42px;
+    padding-top: 2px;
+  }
+
+  /* Desktop: align icon beside label, make each whole card a reachable button.
+     No fixed row height: unusually long translated labels may expand safely. */
+  .app-shell .app-content[data-module="dashboard"] .shortcut-section {
+    padding-top: 0;
+  }
+  .app-shell .app-content[data-module="dashboard"] .shortcut-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    align-items: stretch;
+    grid-auto-rows: auto;
+    gap: 12px !important;
+    padding-top: 3px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.quick-action.shortcut-tile {
+    display: grid !important;
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    justify-content: initial !important;
+    align-content: center;
+    align-items: center !important;
+    text-align: left;
+    column-gap: 12px;
+    row-gap: 2px;
+    width: 100%;
+    height: auto !important;
+    min-height: 96px !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    padding: 13px 15px !important;
+    border-radius: 17px !important;
+    box-shadow: var(--soft-shadow, 0 2px 8px rgba(37,55,85,.035)) !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .feature-illustration {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px;
+    margin: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .feature-illustration-glyph {
+    width: 20px !important;
+    height: 20px !important;
+    transform: none !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-title {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-description {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    margin-top: 1px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .app-shell .app-content[data-module="dashboard"] .shortcut-add {
+    min-height: 84px;
+    border-radius: 17px;
+  }
+}
+
+@media screen and (min-width: 640px) {
+  .app-shell .app-content[data-module="dashboard"] .shortcut-grid {
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+  }
+}
+@media screen and (min-width: 1200px) {
+  .app-shell .app-content[data-module="dashboard"] .shortcut-grid {
+    grid-template-columns: repeat(4, minmax(0,1fr)) !important;
+  }
+}
+
+@media screen and (max-width: 639px) {
+  .app-shell .app-content[data-module="dashboard"] .dashboard-flash {
+    padding: 9px 11px;
+    border-radius: 17px;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-slide {
+    height: 122px !important;
+    min-height: 122px !important;
+    max-height: 122px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity h2 { font-size: 16px; }
+  .app-shell .app-content[data-module="dashboard"] .shortcut-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    gap: 15px 9px !important;
+    padding-top: 6px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.quick-action.shortcut-tile {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 0;
+    height: auto !important;
+    min-height: 120px !important;
+    max-height: none !important;
+    padding: 15px 11px 12px !important;
+    border-radius: 17px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .feature-illustration {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px;
+    margin: -16px 0 9px 0 !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .feature-illustration-glyph {
+    width: 19px !important;
+    height: 19px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-title {
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-description {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .app-shell .app-content[data-module="dashboard"] .shortcut-add {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+}
+
+@media screen and (max-width:359px) {
+  .app-shell .app-content[data-module="dashboard"] button.quick-action.shortcut-tile {
+    min-height: 112px !important;
+    padding-inline: 9px !important;
+  }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-title { font-size: 11.5px; }
+  .app-shell .app-content[data-module="dashboard"] button.shortcut-tile .shortcut-tile-description { font-size: 10px; }
+}
+
+@media screen and (hover:hover) {
+  .app-shell .app-content[data-module="dashboard"] button.quick-action.shortcut-tile:hover {
+    box-shadow: var(--soft-shadow-hover, 0 4px 14px rgba(37,55,85,.06)) !important;
+    transform: translateY(-1px);
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .app-shell .app-content[data-module="dashboard"] button.quick-action.shortcut-tile {
+    transition: none !important;
+    transform: none !important;
+  }
+}
