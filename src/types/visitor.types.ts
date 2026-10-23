@@ -34,6 +34,10 @@ export interface VisitorRecord extends BaseEntityMetadata {
   tujuanDetail?: string; // Keterangan tambahan pembeda (misal: Mata Pelajaran, NIP, atau Divisi)
   keperluan: string; // Alasan kunjungan
   fotoUrl?: string; // Foto Tamu / Dokumen
+  /** Explicit metadata for new photos; absent on legacy records. */
+  fotoMode?: 'WATERMARK' | 'ORIGINAL';
+  /** Storage of the approved photo, not proof that Drive settings are currently enabled. */
+  fotoStorageProvider?: 'google_drive' | 'firestore_base64';
   status: VisitorStatus;
   catatanPetugas?: string;
   petugasPiketName: string;

@@ -4,7 +4,7 @@ import { assertRecordOwner } from '../../utils/recordOwnership';
 import { VisitorRecord, VisitorStatus } from '../../types/visitor.types';
 import { UserProfile } from '../../types';
 import { formatTime } from '../../utils/dateUtils';
-import { processPhotoForStorage } from '../drive/photoUploadHelper';
+import { isDriveStorageActive, processPhotoForStorage } from '../drive/photoUploadHelper';
 import { auth } from './firebase';
 
 export class VisitorService {
@@ -106,6 +106,7 @@ export class VisitorService {
         session.assertActive();
         const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', id, id);
         cleanData.fotoUrl = photo.photoUrl;
+        cleanData.fotoStorageProvider = photo.provider === 'google_drive' ? 'google_drive' : 'firestore_base64';
       }
       session.assertActive();
       const idToken = await auth.currentUser?.getIdToken();
@@ -154,6 +155,7 @@ export class VisitorService {
         session.assertActive();
         const photo = await processPhotoForStorage(cleanData.fotoUrl, 'visitors', data.id, data.id);
         cleanData.fotoUrl = photo.photoUrl;
+        cleanData.fotoStorageProvider = photo.provider === 'google_drive' ? 'google_drive' : 'firestore_base64';
       }
 
       // If kategori is not LAINNYA, delete keteranganLainnya
@@ -198,6 +200,28 @@ export class VisitorService {
     } finally {
       session.close();
     }
+  }
+
+  /** Admin-only, explicit migration of a legacy Firestore Base64 photo to private Drive.
+   * Never deletes the old photo until the Drive upload and record update succeed.
+   */
+  public static async migrateLegacyPhotoToDrive(visitorId: string, user: UserProfile): Promise<void> {
+    if (user.role !== 'ADMIN') throw new Error('Hanya Administrator yang dapat memindahkan foto lama.');
+    const session = createAuthenticatedSession(user.id);
+    try {
+      session.assertActive();
+      const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', visitorId);
+      if (!existing) throw new Error('Catatan tamu tidak ditemukan.');
+      if (!existing.fotoUrl?.startsWith('data:image/')) throw new Error('Foto sudah berada di penyimpanan eksternal atau tidak tersedia.');
+      if (!(await isDriveStorageActive())) throw new Error('Aktifkan penyimpanan Google Drive dan uji koneksinya terlebih dahulu.');
+      session.assertActive();
+      const photo = await processPhotoForStorage(existing.fotoUrl, 'visitors', existing.id, existing.id);
+      if (photo.provider !== 'google_drive') throw new Error('Unggah Drive belum dikonfirmasi. Foto lama tidak diubah.');
+      session.assertActive();
+      const updated: VisitorRecord = { ...existing, fotoUrl: photo.photoUrl, fotoStorageProvider: 'google_drive', updatedAt: FirestoreService.nextUpdatedAt(existing), updatedBy: user.fullName };
+      await FirestoreService.setDocument('visitors', existing.id, updated, { controlledReplace: true, expectedState: existing });
+      await FirestoreService.logAudit({ userId: user.id, userName: user.fullName, role: user.role, action: 'UPDATE', module: 'VISITORS', recordId: existing.id, details: 'Memindahkan foto tamu lama dari Firestore ke penyimpanan Google Drive pribadi.' });
+    } finally { session.close(); }
   }
 
   /**

@@ -80,6 +80,8 @@ export const VisitorPreview: React.FC = () => {
   const [printVisitor, setPrintVisitor] = useState<VisitorRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<VisitorRecord | null>(null);
   const [photoVisitor, setPhotoVisitor] = useState<VisitorRecord | null>(null);
+  const [photoMigrationBusy, setPhotoMigrationBusy] = useState(false);
+  const [photoMigrationMessage, setPhotoMigrationMessage] = useState('');
 
   // WhatsApp Alert Modal
   const [waModalData, setWaModalData] = useState<{
@@ -637,8 +639,22 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. �
       {canEdit && <VisitorSelfCheckinPanel isOpen={showSelfCheckin} onClose={() => setShowSelfCheckin(false)} />}
 
       {/* PRINT PASS MODAL */}
-      <Modal isOpen={!!photoVisitor} onClose={() => setPhotoVisitor(null)} title="Dokumentasi Foto Tamu" maxWidth="md">
-        {photoVisitor?.fotoUrl && <AuthenticatedImage src={photoVisitor.fotoUrl} alt={`Foto ${photoVisitor.namaTamu}`} className="w-full max-h-[70vh] object-contain rounded-xl" />}
+      <Modal isOpen={!!photoVisitor} onClose={() => { setPhotoVisitor(null); setPhotoMigrationMessage(''); }} title="Dokumentasi Foto Tamu" maxWidth="md">
+        <div className="space-y-3">
+          {photoVisitor?.fotoUrl && <AuthenticatedImage src={photoVisitor.fotoUrl} alt={`Foto ${photoVisitor.namaTamu}`} className="w-full max-h-[64vh] object-contain rounded-xl" />}
+          {photoVisitor?.fotoUrl && <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs space-y-1">
+            <p><strong>Penyimpanan:</strong> {photoVisitor.fotoUrl.startsWith('/api/drive/photo/') ? 'Google Drive pribadi · folder visitors' : photoVisitor.fotoUrl.startsWith('data:image/') ? 'Firestore (foto Base64; belum tersimpan di Drive)' : 'Tautan foto eksternal / arsip lama'}</p>
+            <p><strong>Watermark:</strong> {photoVisitor.fotoMode === 'WATERMARK' ? 'Berwatermark' : photoVisitor.fotoMode === 'ORIGINAL' ? 'Tanpa watermark' : 'Belum diketahui (foto lama)'}</p>
+          </div>}
+          {currentUser?.role === 'ADMIN' && photoVisitor?.fotoUrl?.startsWith('data:image/') && <button type="button" disabled={photoMigrationBusy} className="min-h-11 px-3 border rounded-xl text-xs font-semibold disabled:opacity-50" onClick={async () => {
+            if (!window.confirm('Unggah foto ini ke Google Drive pribadi sekolah? Foto lama tetap aman sampai penyimpanan baru berhasil.')) return;
+            setPhotoMigrationBusy(true); setPhotoMigrationMessage('');
+            try { await VisitorService.migrateLegacyPhotoToDrive(photoVisitor.id, currentUser); setRegistrationFeedback('Foto tamu berhasil dipindahkan ke Google Drive. Data diperbarui secara realtime.'); setPhotoVisitor(null); }
+            catch (error) { setPhotoMigrationMessage(error instanceof Error ? error.message : 'Pemindahan foto belum berhasil.'); }
+            finally { setPhotoMigrationBusy(false); }
+          }}>{photoMigrationBusy ? 'Memindahkan foto…' : 'Kirim Foto Lama ke Google Drive'}</button>}
+          {photoMigrationMessage && <p role="status" className="text-xs text-slate-700 dark:text-slate-200">{photoMigrationMessage}</p>}
+        </div>
       </Modal>
 
       <VisitorPassPrintModal

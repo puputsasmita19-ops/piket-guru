@@ -1,4 +1,4 @@
-import { normalizeVisitorConfig } from '../../types/visitorConfig.types';
+import { normalizeVisitorConfig, type VisitorPhotoMode } from '../../types/visitorConfig.types';
 import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -42,7 +42,9 @@ import {
 import { DraftService } from '../../services/offline/draftService';
 import { SyncQueueService } from '../../services/offline/syncQueueService';
 import { stampDocumentationPhoto, detectLocationForWatermark } from '../../services/watermark/watermarkService';
+import { DEFAULT_DOCUMENTATION_WATERMARK_CONFIG } from '../../types/watermark.types';
 import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
+import { DriveClientService } from '../../services/drive/driveClientService';
 import { SchoolSettings } from '../../types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 
@@ -119,6 +121,23 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
   const [keperluan, setKeperluan] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
+  const [photoCaptureMode, setPhotoCaptureMode] = useState<VisitorPhotoMode>('WATERMARK');
+  const [savedPhotoMode, setSavedPhotoMode] = useState<VisitorPhotoMode | undefined>(undefined);
+  const [photoStorageNotice, setPhotoStorageNotice] = useState('Memeriksa penyimpanan foto…');
+  useEffect(() => {
+    if (!isOpen || !currentUser) return;
+    let mounted = true;
+    setPhotoStorageNotice('Memeriksa penyimpanan foto…');
+    DriveClientService.getStorageStatus().then(status => {
+      if (!mounted) return;
+      setPhotoStorageNotice(status.enabled
+        ? status.status === 'CONNECTED' && status.configuredInEnv
+          ? 'Penyimpanan aktif: Google Drive pribadi / visitors. Foto baru harus berhasil diunggah sebelum data disimpan.'
+          : 'Drive aktif tetapi koneksi belum siap. Perbaiki pengaturan Drive sebelum menyimpan foto.'
+        : 'Penyimpanan Drive nonaktif: foto akan dicatat di Firestore (Base64). Hubungi Admin bila ingin menyimpan foto baru ke Drive.');
+    }).catch(() => { if (mounted) setPhotoStorageNotice('Status penyimpanan belum dapat dipastikan. Penyimpanan foto akan diperiksa lagi saat menyimpan.'); });
+    return () => { mounted = false; };
+  }, [isOpen, currentUser?.id]);
   const pendingRecordId = useRef('');
   useEffect(() => {
     if (isOpen) pendingRecordId.current = editingVisitor?.id || `vis-${crypto.randomUUID()}`;
@@ -360,6 +379,8 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
 
         setKeperluan(editingVisitor.keperluan || '');
         setFotoUrl(editingVisitor.fotoUrl);
+        setSavedPhotoMode(editingVisitor.fotoMode);
+        setPhotoCaptureMode(visitorConfig.allowPhotoModeChoice ? (editingVisitor.fotoMode || visitorConfig.defaultPhotoMode) : visitorConfig.defaultPhotoMode);
         setCatatanPetugas(editingVisitor.catatanPetugas || '');
         setOriginalUpdatedAt(editingVisitor.updatedAt || null);
       } else {
@@ -379,6 +400,8 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         setSelectedRecipient(null);
         setKeperluan('');
         setFotoUrl(undefined);
+        setSavedPhotoMode(undefined);
+        setPhotoCaptureMode(visitorConfig.defaultPhotoMode);
         setCatatanPetugas('');
         setOriginalUpdatedAt(null);
       }
@@ -478,6 +501,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         tujuanDetail: selectedRecipient?.subtitle,
         keperluan,
         fotoUrl: cleanFotoUrl,
+        fotoMode: savedPhotoMode,
         pendingRecordId: pendingRecordId.current,
         catatanPetugas,
       }, attachments);
@@ -503,6 +527,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     selectedRecipient,
     keperluan,
     fotoUrl,
+    savedPhotoMode,
     catatanPetugas,
     draftKey,
   ]);
@@ -547,6 +572,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
     }
     if (d.keperluan) setKeperluan(d.keperluan);
     if (d.catatanPetugas !== undefined) setCatatanPetugas(d.catatanPetugas);
+    if (d.fotoMode === 'ORIGINAL' || d.fotoMode === 'WATERMARK') setSavedPhotoMode(d.fotoMode);
 
     if (d.fotoUrl?.startsWith('attachment:') && availableDraft.attachments?.['visitor_photo']) {
       try {
@@ -738,6 +764,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
         tujuanDetail: selectedRecipient?.subtitle || (editingVisitor ? editingVisitor.tujuanDetail : undefined),
         keperluan: keperluan.trim(),
         fotoUrl: fotoUrl || undefined,
+        ...(fotoUrl && savedPhotoMode ? { fotoMode: savedPhotoMode } : {}),
         status: editingVisitor ? editingVisitor.status : 'SEDANG_BERKUNJUNG',
         catatanPetugas: catatanPetugas.trim() || undefined,
         petugasPiketName: editingVisitor?.petugasPiketName || currentUser?.fullName || 'Petugas Piket',
@@ -1012,12 +1039,17 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
               <div className="min-w-0"><h3 className="text-sm font-bold text-slate-900 dark:text-white">Foto Tamu Utama <span className="text-xs font-normal text-slate-500">(opsional)</span></h3>
                 <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">Ambil foto wajah untuk dokumentasi kunjungan. Jika rombongan, foto ini hanya untuk tamu utama. Foto hanya dapat dilihat petugas berwenang.</p></div>
             </div>
+            <p className="rounded-xl bg-white/70 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300" role="status">{photoStorageNotice}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
+              <label className="text-xs font-semibold space-y-1"><span className="block">Mode foto saat pengambilan</span><select value={photoCaptureMode} disabled={!visitorConfig.allowPhotoModeChoice} onChange={e => setPhotoCaptureMode(e.target.value as VisitorPhotoMode)} className="w-full min-h-11 border rounded-xl px-3 bg-white dark:bg-slate-900 dark:border-slate-700"><option value="WATERMARK">Dengan watermark sekolah</option><option value="ORIGINAL">Tanpa watermark (asli)</option></select></label>
+              <p className="text-[11px] text-slate-500">{visitorConfig.allowPhotoModeChoice ? 'Pilih sebelum mengambil foto. Mengubah pilihan tidak mengubah foto yang sudah diambil.' : 'Mode foto dikunci oleh Admin.'} {fotoUrl ? `Foto tersimpan: ${savedPhotoMode === 'WATERMARK' ? 'berwatermark' : savedPhotoMode === 'ORIGINAL' ? 'tanpa watermark' : 'mode tidak diketahui (foto lama)'}.` : ''}</p>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               {fotoUrl ? <AuthenticatedImage src={fotoUrl} alt={`Foto tamu ${namaTamu || 'utama'}`} className="h-24 w-24 rounded-2xl object-cover border border-blue-200 dark:border-slate-600" loading="lazy" decoding="async" />
                 : <div className="h-24 w-24 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300 dark:border-slate-700 bg-white/75 dark:bg-slate-900"><Camera className="w-7 h-7" /></div>}
               <div className="flex-1 min-w-[150px] flex flex-wrap gap-2 items-center">
                 <Button type="button" variant="outline" size="sm" className="min-h-11 text-xs" leftIcon={<Camera className="h-4 w-4" />} onClick={() => setIsCameraOpen(true)}>{fotoUrl ? 'Ambil Ulang Foto' : 'Ambil Foto Tamu'}</Button>
-                {fotoUrl && <button type="button" aria-label="Hapus foto tamu" onClick={() => setFotoUrl(undefined)} className="min-h-11 px-3 rounded-xl text-xs font-semibold text-rose-700 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Hapus</button>}
+                {fotoUrl && <button type="button" aria-label="Hapus foto tamu" onClick={() => { setFotoUrl(undefined); setSavedPhotoMode(undefined); }} className="min-h-11 px-3 rounded-xl text-xs font-semibold text-rose-700 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Hapus</button>}
               </div>
             </div>
           </section>
@@ -1490,11 +1522,11 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
       <CameraCaptureModal
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
-        onCapture={(img) => setFotoUrl(img)}
+        onCapture={(img) => { setFotoUrl(img); setSavedPhotoMode(visitorConfig.allowPhotoModeChoice ? photoCaptureMode : visitorConfig.defaultPhotoMode); }}
         initialFacingMode="user"
         title="Dokumentasi Tamu Sekolah"
-        subtitle="Ambil foto wajah tamu. Watermark tanggal, identitas dan sekolah ditambahkan otomatis."
-        watermarkProcessor={async (canvas, capturedAt, isUpload) => {
+        subtitle={(visitorConfig.allowPhotoModeChoice ? photoCaptureMode : visitorConfig.defaultPhotoMode) === 'WATERMARK' ? 'Foto akan diberi watermark tanggal, nama sekolah dan identitas tamu.' : 'Foto asli tanpa watermark; tetap disimpan mengikuti kebijakan penyimpanan sekolah.'}
+        watermarkProcessor={(visitorConfig.allowPhotoModeChoice ? photoCaptureMode : visitorConfig.defaultPhotoMode) === 'WATERMARK' ? async (canvas, capturedAt, isUpload) => {
           const coords = await detectLocationForWatermark();
           const briefIdentity = `Tamu: ${namaTamu || 'Tamu Umum'}${instansiAsal ? ` • Instansi: ${instansiAsal}` : ''}${tujuanBertemu ? ` • Bertemu: ${tujuanBertemu}` : ''}`;
 
@@ -1514,9 +1546,18 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
               coords,
               notes: keperluan ? keperluan.slice(0, 75) : undefined,
             },
-            schoolSettings.documentationWatermark
+            {
+              ...(schoolSettings.documentationWatermark || DEFAULT_DOCUMENTATION_WATERMARK_CONFIG),
+              modules: {
+                ...(schoolSettings.documentationWatermark?.modules || DEFAULT_DOCUMENTATION_WATERMARK_CONFIG.modules),
+                visitors: {
+                  ...(schoolSettings.documentationWatermark?.modules?.visitors || DEFAULT_DOCUMENTATION_WATERMARK_CONFIG.modules.visitors),
+                  enabled: true,
+                },
+              },
+            }
           );
-        }}
+        } : undefined}
       />
     </>
   );

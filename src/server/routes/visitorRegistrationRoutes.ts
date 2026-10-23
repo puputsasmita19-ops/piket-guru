@@ -1,8 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { validateVisitorQrPhoto } from './visitorPhotoValidation.js';
 import { adminDb } from '../firebaseAdmin.js';
+import { DriveStore } from '../services/driveStore.js';
 import { requireAuth } from './authRoutes.js';
 import { normalizeVisitorNames, formatVisitorBadge } from '../../utils/visitorRegistrationUtils.js';
 
@@ -43,12 +44,16 @@ function visitorPayload(data: any, name: string, index: number, names: string[],
   for (const key of ['tujuanRecipientId', 'tujuanUserId', 'tujuanTargetType', 'tujuanDetail', 'keteranganLainnya', 'catatanPetugas']) {
     if (typeof data[key] === 'string' && data[key].trim()) payload[key] = clean(data[key], key === 'catatanPetugas' ? 500 : 300);
   }
-  if (index === 0 && typeof data.fotoUrl === 'string' && (data.fotoUrl.startsWith('/api/drive/') || /^data:image\/(jpeg|png|webp);base64,/.test(data.fotoUrl)) && data.fotoUrl.length <= 500000) payload.fotoUrl = data.fotoUrl;
+  if (index === 0 && typeof data.fotoUrl === 'string' && (data.fotoUrl.startsWith('/api/drive/photo/') || /^data:image\/(jpeg|png|webp);base64,/.test(data.fotoUrl)) && data.fotoUrl.length <= 500000) {
+    payload.fotoUrl = data.fotoUrl;
+    payload.fotoStorageProvider = data.fotoUrl.startsWith('/api/drive/photo/') ? 'google_drive' : 'firestore_base64';
+    if (data.fotoMode === 'ORIGINAL' || data.fotoMode === 'WATERMARK') payload.fotoMode = data.fotoMode;
+  }
   return payload;
 }
 
 /** One counter transaction for all group members prevents duplicate numbers across devices. */
-async function createVisitGroup(input: any, names: string[], actor: string, requestId: string, actorRole: string, pendingId?: string) {
+async function createVisitGroup(input: any, names: string[], actor: string, requestId: string, actorRole: string, pendingId?: string, reviewLease?: string) {
   const date = clean(input.tanggal, 10);
   const ref = adminDb.collection('visitorBadgeCounters').doc(date);
   const firstRef = adminDb.collection('visitors').doc(requestId);
@@ -56,7 +61,7 @@ async function createVisitGroup(input: any, names: string[], actor: string, requ
   return adminDb.runTransaction(async tx => {
     const [counter, first, pending] = await Promise.all([tx.get(ref), tx.get(firstRef), pendingRef ? tx.get(pendingRef) : Promise.resolve(null)]);
     if (first.exists) return { firstId: requestId, firstBadge: String(first.data()?.nomorBadge || ''), count: names.length, alreadyRegistered: true };
-    if (pendingRef && (pending?.data()?.status !== 'PENDING')) throw new Error('Permintaan sudah diproses. Muat ulang daftar.');
+    if (pendingRef && (pending?.data()?.status !== 'PENDING' || pending?.data()?.photoReviewLock !== reviewLease)) throw new Error('Permintaan sudah diproses atau sedang diperiksa petugas lain.');
     const previous = Number(counter.data()?.last || 0);
     if (!Number.isSafeInteger(previous) || previous < 0 || previous > 99999999) throw new Error('Nomor urut badge bermasalah. Hubungi administrator.');
     const next = previous + names.length;
@@ -70,7 +75,7 @@ async function createVisitGroup(input: any, names: string[], actor: string, requ
       tx.create(auditRef, { id: auditRef.id, timestamp: now, userId: clean(input.petugasPiketId), userName: actor, role: actorRole, action: 'CREATE', module: 'VISITORS', status: 'SUCCESS', recordId: id, details: `Check-in tamu ${names[i]}, nomor badge ${badge}` });
     }
     tx.set(ref, { last: next, updatedAt: now }, { merge: true });
-    if (pendingRef) tx.update(pendingRef, { status: 'APPROVED', reviewedAt: now, approvedVisitId: requestId, reviewedBy: actor, fotoUrl: FieldValue.delete() });
+    if (pendingRef) tx.update(pendingRef, { status: 'APPROVED', reviewedAt: now, approvedVisitId: requestId, reviewedBy: actor, fotoUrl: FieldValue.delete(), photoReviewLock: FieldValue.delete(), photoReviewStartedAt: FieldValue.delete() });
     return { firstId: requestId, firstBadge: formatVisitorBadge(date, previous + 1), count: names.length, alreadyRegistered: false };
   });
 }
@@ -86,6 +91,7 @@ visitorRegistrationRouter.post('/register', requireAuth, staffOnly, async (req, 
     const caller = (req as any).callerData || {};
     const actor = clean(caller.fullName) || 'Petugas Sekolah';
     const data = { ...input, petugasPiketId: (req as any).user.uid };
+    // The record receives storage provenance only after the server confirms the submitted URL.
     const result = await createVisitGroup(data, names, actor, input.id, String((req as any).user.role));
     res.json({ success: true, ...result });
   } catch (err: any) { res.status(400).json({ success: false, error: err.message || 'Gagal registrasi tamu.' }); }
@@ -146,30 +152,74 @@ visitorRegistrationRouter.get('/pending', requireAuth, staffOnly, async (_req, r
   } catch { res.status(503).json({ success: false, error: 'Daftar pendaftaran mandiri belum dapat dibaca.' }); }
 });
 
+/** QR photos are stored privately in Drive when that storage is enabled.
+ * A failed upload must not create a visitor record or consume a badge number.
+ */
+async function prepareApprovedQrPhoto(input: Record<string, any>, visitId: string, actorUid: string): Promise<Record<string, any>> {
+  const value = typeof input.fotoUrl === 'string' ? input.fotoUrl : '';
+  if (!value) return { ...input };
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!match || value.length > 500000) throw new Error('Foto QR tidak valid. Minta tamu mengisi kembali atau hubungi Admin.');
+  const config = await DriveStore.getConfig();
+  if (!config.enabled) return { ...input, fotoMode: 'ORIGINAL' };
+  if (config.status !== 'CONNECTED') throw new Error('Penyimpanan Google Drive aktif namun belum terhubung. Hubungi Admin. Pendaftaran tetap menunggu.');
+  const buffer = Buffer.from(match[2], 'base64');
+  if (buffer.length < 100 || buffer.length > 375000) throw new Error('Ukuran foto QR tidak sesuai.');
+  const result = await DriveStore.uploadPhoto({
+    buffer, mimeType: `image/${match[1]}`, module: 'visitors', recordId: visitId,
+    uploadedBy: actorUid,
+    clientPhotoId: `pg-visitor-qr-${createHash('sha256').update(visitId).update(buffer).digest('hex')}`,
+  });
+  if (!result.fileId) throw new Error('Drive tidak mengembalikan ID foto. Pendaftaran belum disetujui.');
+  return { ...input, fotoUrl: `/api/drive/photo/${result.fileId}`, fotoMode: 'ORIGINAL' };
+}
+
 visitorRegistrationRouter.post('/review', requireAuth, staffOnly, async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const { id, decision } = req.body || {};
   if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id) || !['APPROVED', 'REJECTED'].includes(decision)) {
     res.status(400).json({ success: false, error: 'Pilihan verifikasi tidak valid.' }); return;
   }
+  const ref = adminDb.collection('visitorSelfCheckinRequests').doc(id);
+  const lease = randomUUID();
+  let claimed = false;
   try {
-    const ref = adminDb.collection('visitorSelfCheckinRequests').doc(id);
-    const doc = await ref.get();
-    if (!doc.exists || doc.data()?.status !== 'PENDING') throw new Error('Pendaftaran sudah diproses atau tidak ditemukan.');
     const actor = clean((req as any).callerData?.fullName) || 'Petugas Sekolah';
+    const actorUid = String((req as any).user.uid);
     if (decision === 'REJECTED') {
       await adminDb.runTransaction(async tx => {
         const fresh = await tx.get(ref);
-        if (fresh.data()?.status !== 'PENDING') throw new Error('Pendaftaran sudah diproses.');
-        tx.update(ref, { status: 'REJECTED', reviewedBy: actor, reviewedAt: new Date().toISOString(), fotoUrl: FieldValue.delete() });
+        if (fresh.data()?.status !== 'PENDING' || (fresh.data()?.photoReviewLock && Date.now() - Number(fresh.data()?.photoReviewStartedAt || 0) < 120000)) throw new Error('Pendaftaran sudah diproses atau sedang diperiksa.');
+        tx.update(ref, { status: 'REJECTED', reviewedBy: actor, reviewedAt: new Date().toISOString(), fotoUrl: FieldValue.delete(), photoReviewLock: FieldValue.delete(), photoReviewStartedAt: FieldValue.delete() });
       });
       res.json({ success: true }); return;
     }
-    const input = doc.data()!;
+    const input = await adminDb.runTransaction(async tx => {
+      const fresh = await tx.get(ref);
+      if (!fresh.exists || fresh.data()?.status !== 'PENDING') throw new Error('Pendaftaran sudah diproses atau tidak ditemukan.');
+      const oldLock = fresh.data()?.photoReviewLock;
+      if (oldLock && Date.now() - Number(fresh.data()?.photoReviewStartedAt || 0) < 120000) throw new Error('Pendaftaran sedang diproses petugas lain. Coba lagi nanti.');
+      tx.update(ref, { photoReviewLock: lease, photoReviewStartedAt: Date.now() });
+      return fresh.data()!;
+    });
+    claimed = true;
     const names = normalizeVisitorNames(input.namaRombongan, input.namaTamu);
     validateVisit(input, names);
     const visitId = `vis-qr-${id}`;
-    const result = await createVisitGroup({ ...input, petugasPiketId: (req as any).user.uid }, names, actor, visitId, String((req as any).user.role), id);
+    const prepared = await prepareApprovedQrPhoto(input, visitId, actorUid);
+    const result = await createVisitGroup({ ...prepared, petugasPiketId: actorUid }, names, actor, visitId, String((req as any).user.role), id, lease);
     res.json({ success: true, ...result });
-  } catch (err: any) { res.status(409).json({ success: false, error: err.message || 'Verifikasi gagal.' }); }
+  } catch (err: any) {
+    if (claimed) {
+      try {
+        await adminDb.runTransaction(async tx => {
+          const fresh = await tx.get(ref);
+          if (fresh.data()?.status === 'PENDING' && fresh.data()?.photoReviewLock === lease) {
+            tx.update(ref, { photoReviewLock: FieldValue.delete(), photoReviewStartedAt: FieldValue.delete() });
+          }
+        });
+      } catch (releaseError) { console.error('[VISITOR_QR] Could not release approval lock', releaseError); }
+    }
+    res.status(409).json({ success: false, error: err.message || 'Verifikasi gagal. Foto tetap berada di antrean.' });
+  }
 });

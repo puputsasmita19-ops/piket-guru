@@ -89,4 +89,5 @@ export interface PhotoRecapItem {
   briefIdentity: string;
   notes?: string;
   isLegacyUnwatermarked?: boolean;
+  watermarkUnknown?: boolean;
 }

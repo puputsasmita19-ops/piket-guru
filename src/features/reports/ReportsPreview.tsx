@@ -681,11 +681,13 @@ export const ReportsPreview: React.FC = () => {
     visitors.forEach((vis) => {
       const visPhoto = vis.fotoUrl || (vis as any).photoUrl || (vis as any).fotoTamu || (vis as any).foto;
       if (visPhoto && vis.tanggal >= startDate && vis.tanggal <= endDate) {
-        const isLegacy = !isPhotoAlreadyWatermarked(visPhoto);
+        // Explicit capture metadata survives Drive upload; unknown legacy photos are not guessed.
+        const isLegacy = vis.fotoMode === 'WATERMARK' ? false : vis.fotoMode === 'ORIGINAL' ? true : !isPhotoAlreadyWatermarked(visPhoto);
         items.push({
           id: `vis-${vis.id}`,
           sourceModule: 'VISITOR',
           sourceId: vis.id,
+          watermarkUnknown: !vis.fotoMode && !isPhotoAlreadyWatermarked(visPhoto),
           photoUrl: visPhoto,
           tanggalKejadian: vis.tanggal,
           waktuKejadian: vis.jamMasuk ? `${vis.jamMasuk} WIB` : undefined,
@@ -2183,7 +2185,7 @@ export const ReportsPreview: React.FC = () => {
                   {previewPhotoItem.title}
                 </span>
                 {previewPhotoItem.isLegacyUnwatermarked ? (
-                  <Badge variant="warning">Foto Arsip (Non-watermark)</Badge>
+                  <Badge variant="warning">{previewPhotoItem.watermarkUnknown ? 'Foto Arsip (Status watermark belum diverifikasi)' : 'Foto Arsip (Non-watermark)'}</Badge>
                 ) : (
                   <Badge variant="success">Berwatermark Resmi</Badge>
                 )}
