@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
-import { Save, Edit2, ShieldAlert, Volume2, Plus, Trash2 } from '../../components/icons';
+import { Save, ShieldAlert, Volume2, Plus, Trash2, MapPin, Bell, CalendarDays, Megaphone, Phone, ArrowLeft, CheckCircle2 } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import type { SchoolSettings } from '../../types';
 import type { EmergencyType } from '../../types/security.types';
@@ -24,6 +24,15 @@ const labelStyle = 'block text-xs font-semibold text-slate-600 dark:text-slate-3
 
 type Tab = 'command' | 'bell' | 'schedule' | 'emergency' | 'additional' | 'contacts';
 
+const sections: { key: Tab; title: string; description: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key:'command', title:'Lokasi Pusat Komando', description:'Judul layar, ruang posko, titik kumpul dan arahan menuju posko.', icon:MapPin },
+  { key:'bell', title:'Bel Manual', description:'Nama tombol bel dan uji suara hanya di perangkat ini.', icon:Bell },
+  { key:'schedule', title:'Jadwal Bel', description:'Jam WIB, hari, nama sesi, pilihan nada dan status jadwal.', icon:CalendarDays },
+  { key:'emergency', title:'Pesan Siaga Bawaan', description:'Instruksi, checklist dan kontak untuk jenis siaga utama.', icon:ShieldAlert },
+  { key:'additional', title:'Jenis Bencana Tambahan', description:'Tambah atau nonaktifkan jenis kejadian sesuai kondisi sekolah.', icon:Megaphone },
+  { key:'contacts', title:'Kontak & SOP', description:'Nomor rujukan darurat dan langkah prosedur siaga.', icon:Phone },
+];
+
 export type EmergencyEditorRequest = { tab: 'emergency' | 'additional' | 'schedule' | 'bell' | 'command'; type?: EmergencyType; sequence: number };
 export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }: { settings: SchoolSettings; onUpdated: (value: SchoolSettings) => void; focusRequest?: EmergencyEditorRequest | null }) {
   const { currentUser, hasRole } = useAuth();
@@ -36,6 +45,8 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
   const [draft, setDraft] = useState<CommandCenterConfig>(() => normalizeCommandCenterConfig(settings.commandCenterConfig));
   const [original, setOriginal] = useState<CommandCenterConfig>(() => normalizeCommandCenterConfig(settings.commandCenterConfig));
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
+  const dirty = useMemo(() => editing && JSON.stringify(draft) !== JSON.stringify(original), [editing, draft, original]);
+  const selectedSection = sections.find(item => item.key === tab)!;
 
   useEffect(() => {
     if (editing) return;
@@ -81,11 +92,22 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
     setDraft(prev => ({ ...prev, customEmergencies: prev.customEmergencies.map(item => item.id === id ? { ...item, ...patch } : item) }));
   const changePost = (patch: Partial<CommandCenterConfig['commandPost']>) =>
     setDraft(prev => ({ ...prev, commandPost: { ...prev.commandPost, ...patch } }));
-  const beginEdit = () => {
+  const beginEdit = (nextTab: Tab = tab) => {
+    setTab(nextTab);
     const next = normalizeCommandCenterConfig(settings.commandCenterConfig);
     setOriginal(next); setDraft(next); setMessage(null); setEditing(true);
   };
-  const cancel = () => { setDraft(original); setEditing(false); setMessage(null); };
+  const cancel = () => {
+    if (saving || (dirty && !window.confirm('Perubahan yang belum disimpan akan dibuang. Kembali ke daftar pengaturan?'))) return;
+    setDraft(original); setEditing(false); setMessage(null);
+  };
+
+  useEffect(() => {
+    if (!dirty) return;
+    const preventAccidentalExit = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', preventAccidentalExit);
+    return () => window.removeEventListener('beforeunload', preventAccidentalExit);
+  }, [dirty]);
   const save = async () => {
     if (!admin || !currentUser || saving) return;
     const errors = validateCommandCenterConfig(draft);
@@ -102,15 +124,47 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
 
   return <Card>
     <div ref={editorRef} data-command-settings-editor className="scroll-mt-24" />
-    <CardHeader title="Edit Bel Darurat & Pusat Komando" subtitle="Kelola lokasi posko, kategori bencana tambahan, bel, pesan siaga, kontak, dan SOP (khusus Administrator)." />
-    <CardContent className="p-4 sm:p-6 space-y-4">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 max-w-xl">Pengaturan tersimpan realtime di Firebase, termasuk jadwal bel referensi. <strong>Uji suara hanya di perangkat ini</strong>; tombolnya tidak mengirim siaran ke pengguna lain.</p>
-        {admin && !editing && <Button size="sm" variant="outline" leftIcon={<Edit2 className="w-4 h-4" />} onClick={beginEdit}>Edit Pengaturan</Button>}
-      </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Kategori konfigurasi Pusat Komando">
-        {([['command','Pusat Komando'],['bell','Bel Manual'],['schedule','Jadwal Bel'],['emergency','Pesan Darurat'],['additional','Jenis Bencana +'],['contacts','Kontak & SOP']] as [Tab,string][]).map(([key,title]) =>
-          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`shrink-0 min-h-10 px-3 rounded-xl text-xs font-bold border ${tab === key ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border-[var(--theme-primary-border)]' : 'text-slate-500 border-slate-200 dark:border-slate-700'}`}>{title}</button>)}
+    <CardHeader title="Pengaturan Bel & Darurat" subtitle="Pilih bagian yang ingin diatur. Semua perubahan baru berlaku setelah disimpan oleh Admin." />
+    <CardContent className="p-4 sm:p-6 space-y-5">
+      {!editing ? <>
+        {message && <div role={message.error ? 'alert' : 'status'} className={`flex items-center gap-2 rounded-xl p-3 text-sm ${message.error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>{!message.error && <CheckCircle2 className="w-4 h-4 shrink-0"/>}{message.text}</div>}
+        <div className="rounded-xl bg-sky-50/70 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          <strong className="text-slate-800 dark:text-slate-100">Cara mengatur:</strong> pilih satu kategori → ubah isinya → simpan. Pengaturan akan muncul di Pusat Komando setelah tersinkron. <strong>Menyimpan tidak membunyikan sirene.</strong>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-label="Daftar kategori pengaturan Bel dan Darurat" data-emergency-setting-overview>
+          {sections.map(({key,title,description,icon:Icon},index) => <button key={key} type="button" onClick={() => beginEdit(key)} disabled={!admin} className="group text-left rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4 min-h-[128px] flex flex-col gap-3 hover:border-cyan-400 hover:bg-cyan-50/40 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500 transition-colors" aria-label={`Atur ${title}`}>
+            <div className="flex items-center gap-3"><span className="w-10 h-10 shrink-0 grid place-items-center rounded-xl bg-sky-50 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300"><Icon className="w-5 h-5"/></span><span className="min-w-0 text-sm font-bold text-slate-900 dark:text-white">{index+1}. {title}</span></div>
+            <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400 flex-1">{description}</p>
+            <span className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">Lihat & atur →</span>
+          </button>)}
+        </div>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+          <p className="font-bold text-sm text-slate-800 dark:text-white">Ringkasan konfigurasi saat ini</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <p><strong>Posko:</strong> {draft.commandPost.primary || 'Belum diisi'}</p>
+            <p><strong>Jadwal aktif:</strong> {draft.scheduledBells.filter(item => item.isActive).length} sesi</p>
+            <p><strong>Jenis siaga tambahan:</strong> {draft.customEmergencies.filter(item => item.isActive).length} aktif</p>
+          </div>
+        </div>
+      </> : <>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-3 sm:p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <button type="button" onClick={cancel} disabled={saving} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-cyan-700 min-h-10 focus-visible:outline-2 focus-visible:outline-cyan-500"><ArrowLeft className="w-4 h-4"/> Kembali ke kategori</button>
+            <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${dirty ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}>{dirty ? 'Perubahan belum disimpan' : 'Belum ada perubahan'}</span>
+          </div>
+          <div className="flex items-center gap-3"><span className="w-11 h-11 rounded-xl bg-cyan-50 text-cyan-700 dark:bg-slate-700 dark:text-cyan-200 grid place-items-center shrink-0">{React.createElement(selectedSection.icon, { className: "w-5 h-5" })}</span><div className="min-w-0"><h4 className="font-bold text-base text-slate-900 dark:text-white">{selectedSection.title}</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{selectedSection.description}</p></div></div>
+          <div className="sm:hidden"><label htmlFor="emergency-config-section" className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-300">Pindah kategori pengaturan</label><select id="emergency-config-section" value={tab} onChange={e => setTab(e.target.value as Tab)} className={inputStyle}>{sections.map(section => <option key={section.key} value={section.key}>{section.title}</option>)}</select></div>
+          <div className="hidden sm:grid sm:grid-cols-2 xl:grid-cols-3 gap-2" role="tablist" aria-label="Kategori konfigurasi Pusat Komando">
+            {sections.map(({key,title}) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`min-h-11 py-2 px-3 rounded-xl text-xs text-left font-semibold border transition-colors ${tab === key ? 'bg-cyan-50 text-cyan-800 border-cyan-300 dark:bg-cyan-950/40 dark:text-cyan-200 dark:border-cyan-800' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-cyan-300'}`}>{title}</button>)}
+          </div>
+        </div>
+        <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Ubah kolom di bawah. <strong>Uji suara</strong> hanya berbunyi di perangkat ini, sedangkan jadwal bel merupakan referensi, bukan pemicu siaran otomatis.</div>
+      <div className="sticky top-16 sm:top-20 z-20 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-sm p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-emergency-save-bar>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{dirty ? 'Perubahan Anda belum tersimpan di Firebase.' : 'Tidak ada perubahan untuk disimpan.'}</p>
+        <div className="flex gap-2 sm:justify-end">
+          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={cancel} className="flex-1 sm:flex-none">Batal</Button>
+          <Button type="button" size="sm" disabled={saving || !dirty} onClick={save} className="flex-1 sm:flex-none" leftIcon={<Save className="w-4 h-4"/>}>{saving ? 'Menyimpan…' : 'Simpan Perubahan'}</Button>
+        </div>
       </div>
       {tab === 'command' && <div className="space-y-3">
         <label className="block"><span className={labelStyle}>Judul Pusat Komando</span><input disabled={!editing} maxLength={90} className={inputStyle} value={draft.heading} onChange={e => change({ heading: e.target.value })}/></label>
@@ -164,8 +218,8 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
       </div>}
       {tab === 'emergency' && <div className="space-y-4">
         <div className="p-3 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-xl flex gap-2"><ShieldAlert className="w-4 h-4 shrink-0"/> Pengaturan ini hanya mengubah isi kartu, petunjuk operator, dan pesan awal. <strong>Tidak mengirim siaran.</strong> Aktivasi darurat tetap membutuhkan tindakan dan konfirmasi terpisah.</div>
-        <div className="flex gap-2 overflow-x-auto pb-2" aria-label="Pilih jenis siaga untuk diatur">
-          {EMERGENCY_TYPES.map(type => <button key={type} type="button" onClick={() => setSelectedEmergency(type)} aria-pressed={selectedEmergency===type} className={`min-h-11 px-3 shrink-0 rounded-xl text-xs font-semibold border ${selectedEmergency===type ? 'bg-[var(--theme-primary-light)] border-[var(--theme-primary-border)] text-[var(--theme-primary-text)]' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200'}`}>{TYPE_LABELS[type]}</button>)}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" aria-label="Pilih jenis siaga untuk diatur">
+          {EMERGENCY_TYPES.map(type => <button key={type} type="button" onClick={() => setSelectedEmergency(type)} aria-pressed={selectedEmergency===type} className={`min-h-11 px-3 rounded-xl text-xs font-semibold border ${selectedEmergency===type ? 'bg-[var(--theme-primary-light)] border-[var(--theme-primary-border)] text-[var(--theme-primary-text)]' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200'}`}>{TYPE_LABELS[type]}</button>)}
         </div>
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
           <div><h4 className="font-bold text-sm">Pengaturan {TYPE_LABELS[selectedEmergency]}</h4><p className="text-xs text-slate-500">Pratinjau kartu dan informasi kerja operator untuk satu jenis kejadian.</p></div>
@@ -215,11 +269,8 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
         <h4 className="text-sm font-bold">Langkah Prosedur Siaga</h4>
         {draft.protocolSteps.map((step,index) => <label key={index} className="block"><span className={labelStyle}>Langkah {index+1}</span><textarea disabled={!editing} maxLength={280} rows={2} className={inputStyle} value={step} onChange={e => change({ protocolSteps: draft.protocolSteps.map((s,i) => i === index ? e.target.value : s) })}/></label>)}
       </div>}
-      {message && <div role={message.error ? 'alert' : 'status'} className={`p-3 rounded-xl text-xs ${message.error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>{message.text}</div>}
-      {editing && <div className="flex flex-wrap justify-end gap-2 border-t pt-4 border-slate-200 dark:border-slate-700">
-        <Button type="button" variant="outline" size="sm" disabled={saving} onClick={cancel}>Batal Edit</Button>
-        <Button type="button" size="sm" disabled={saving} onClick={save} leftIcon={<Save className="w-4 h-4"/>}>{saving ? 'Menyimpan…' : 'Simpan Semua Pengaturan'}</Button>
-      </div>}
+      {message && <div role={message.error ? 'alert' : 'status'} className={`rounded-xl p-3 text-xs ${message.error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>{message.text}</div>}
+      </>}
     </CardContent>
   </Card>;
 }

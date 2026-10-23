@@ -2125,6 +2125,10 @@ export const SettingsView: React.FC = () => {
       {activeTab === 'bell' && (
         <div className="space-y-6">
           {isAdmin && <CommandCenterSettingsCard settings={settings} onUpdated={setSettings} focusRequest={emergencyEditorRequest} />}
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4 space-y-1">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Pratinjau & Operasional Bel/Darurat</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Bagian di bawah digunakan untuk memutar bel lokal atau menjalankan tindakan operasional. Tombol <strong>Siarkan</strong> dapat mengirim peringatan sungguhan; jangan digunakan untuk mencoba pengaturan.</p>
+          </div>
           <BellEmergencyAutomationCard schoolName={settings.schoolName} config={settings.commandCenterConfig} onConfigureEmergency={isAdmin ? type => openEmergencyEditor('emergency', type) : undefined} onConfigureSchedule={isAdmin ? () => openEmergencyEditor('schedule') : undefined} onConfigureCustom={isAdmin ? () => openEmergencyEditor('additional') : undefined} onConfigureCommandPost={isAdmin ? () => openEmergencyEditor('command') : undefined} />
         </div>
       )}
