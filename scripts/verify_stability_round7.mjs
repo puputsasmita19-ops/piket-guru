@@ -65,7 +65,7 @@ await check('One hundred account-scoped pending items coexist without overwritin
 await check('A stale project queue cannot be removed from the current project', async () => {
   await Storage.enqueueSyncItem({ ...queueItem('old-project', 'a'), projectId: 'old-school' });
   await assert.rejects(Storage.removeSyncItem('old-project', { userId: 'a' }), /bukan milik/);
-  assert.equal((await Storage.getSyncItemsByUser('a')).length, 1);
+  assert.equal((await Storage.getSyncItemsByUser('a')).length, 0, 'old Firebase projects must not leak into this project queue');
 });
 
 function fakeDb() {

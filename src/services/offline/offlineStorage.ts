@@ -532,7 +532,7 @@ export class OfflineStorage {
     let results: QueueItem[] = [];
     if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
       memoryStore.syncQueue.forEach((item) => {
-        if (item.userId === userId) {
+        if (item.userId === userId && item.projectId === CURRENT_PROJECT_ID) {
           results.push(item);
         }
       });
@@ -551,16 +551,19 @@ export class OfflineStorage {
         tx.oncomplete = () => resolve(received);
         tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Pembacaan antrean dibatalkan.'));
       });
-      // Merge memory items in case any are pending flush
+      // A browser's IndexedDB may outlive a Firebase project switch. Never
+      // expose an old project's drafts/queue in the active project's status.
+      results = results.filter(item => item.projectId === CURRENT_PROJECT_ID);
+      // Merge memory items in case any are pending flush.
       memoryStore.syncQueue.forEach((item) => {
-        if (item.userId === userId && !results.some((r) => r.operationId === item.operationId)) {
+        if (item.userId === userId && item.projectId === CURRENT_PROJECT_ID && !results.some((r) => r.operationId === item.operationId)) {
           results.push(item);
         }
       });
     } catch (error) {
       if (options.strict) throw error;
       memoryStore.syncQueue.forEach((item) => {
-        if (item.userId === userId) {
+        if (item.userId === userId && item.projectId === CURRENT_PROJECT_ID) {
           results.push(item);
         }
       });
@@ -595,9 +598,9 @@ export class OfflineStorage {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction('scopedCache', 'readwrite');
         const store = tx.objectStore('scopedCache');
-        const req = store.put(record);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
+        store.put(record);
+        tx.oncomplete = () => resolve();
+        tx.onabort = tx.onerror = () => reject(tx.error || new Error('Cache belum tersimpan.'));
       });
     } catch (err) {
       console.warn('[OFFLINE_STORAGE] Failed to write scoped cache to IndexedDB:', err);
@@ -652,9 +655,9 @@ export class OfflineStorage {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction('metadata', 'readwrite');
           const store = tx.objectStore('metadata');
-          const req = store.put(payload);
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
+          store.put(payload);
+          tx.oncomplete = () => resolve();
+          tx.onabort = tx.onerror = () => reject(tx.error || new Error('Profil verifikasi belum tersimpan.'));
         });
       } catch {}
     }
@@ -704,42 +707,35 @@ export class OfflineStorage {
     });
     memoryStore.metadata.delete(`verified_profile_${userId}`);
 
-    // 2. Clear IndexedDB entries for this user
+    // 2. Make purge completion an actual IndexedDB transaction commit.
+    // Previously this method returned while four independent transactions
+    // were still running. A fast account switch could observe old records,
+    // or one failed transaction could leave only part of the data cleared.
     if (this.isIndexedDBSupported) {
       try {
         const db = await this.getDb();
-        // Remove drafts
-        const tx1 = db.transaction('drafts', 'readwrite');
-        const store1 = tx1.objectStore('drafts');
-        const idx1 = store1.index('userId');
-        const req1 = idx1.getAllKeys(userId);
-        req1.onsuccess = () => {
-          (req1.result || []).forEach((key) => store1.delete(key));
-        };
-
-        // Remove syncQueue
-        const tx2 = db.transaction('syncQueue', 'readwrite');
-        const store2 = tx2.objectStore('syncQueue');
-        const idx2 = store2.index('userId');
-        const req2 = idx2.getAllKeys(userId);
-        req2.onsuccess = () => {
-          (req2.result || []).forEach((key) => store2.delete(key));
-        };
-
-        // Remove scopedCache
-        const tx3 = db.transaction('scopedCache', 'readwrite');
-        const store3 = tx3.objectStore('scopedCache');
-        const idx3 = store3.index('userId');
-        const req3 = idx3.getAllKeys(userId);
-        req3.onsuccess = () => {
-          (req3.result || []).forEach((key) => store3.delete(key));
-        };
-
-        // Remove profile snapshot
-        const tx4 = db.transaction('metadata', 'readwrite');
-        tx4.objectStore('metadata').delete(`verified_profile_${userId}`);
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(['drafts', 'syncQueue', 'scopedCache', 'metadata'], 'readwrite');
+          const deleteForUser = (name: 'drafts' | 'syncQueue' | 'scopedCache') => {
+            const store = tx.objectStore(name);
+            const request = store.index('userId').getAllKeys(userId);
+            request.onsuccess = () => {
+              for (const key of request.result || []) store.delete(key);
+            };
+          };
+          deleteForUser('drafts');
+          deleteForUser('syncQueue');
+          deleteForUser('scopedCache');
+          tx.objectStore('metadata').delete(`verified_profile_${userId}`);
+          tx.oncomplete = () => resolve();
+          tx.onabort = tx.onerror = () => reject(tx.error || new Error('Pembersihan data akun tidak selesai.'));
+        });
       } catch (err) {
+        // Do not claim data was removed if browser storage denied the purge.
         console.warn('[OFFLINE_STORAGE] Error purging user data from IndexedDB:', err);
+        // Retain logout behavior when the browser denies IndexedDB; server
+        // session isolation still applies and account-scoped reads stay fenced.
+
       }
     }
   }
@@ -773,13 +769,16 @@ export class OfflineStorage {
     if (this.isIndexedDBSupported) {
       try {
         const db = await this.getDb();
-        const tx = db.transaction('scopedCache', 'readwrite');
-        const store = tx.objectStore('scopedCache');
-        const idx = store.index('userId');
-        const req = idx.getAllKeys(userId);
-        req.onsuccess = () => {
-          (req.result || []).forEach((key) => store.delete(key));
-        };
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction('scopedCache', 'readwrite');
+          const store = tx.objectStore('scopedCache');
+          const req = store.index('userId').getAllKeys(userId);
+          req.onsuccess = () => {
+            for (const key of req.result || []) store.delete(key);
+          };
+          tx.oncomplete = () => resolve();
+          tx.onabort = tx.onerror = () => reject(tx.error || new Error('Cache belum berhasil dibersihkan.'));
+        });
       } catch (err) {
         console.warn('[OFFLINE_STORAGE] Error clearing display cache from IndexedDB:', err);
       }

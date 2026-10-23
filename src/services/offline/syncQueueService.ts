@@ -62,6 +62,10 @@ export class SyncQueueService {
     return () => listeners.delete(listener);
   }
 
+  // Several widgets can request connectivity at once. Reuse only the
+  // in-flight probe; a completed result must not be cached across reconnects.
+  private static reachabilityInFlight: Promise<boolean> | null = null;
+
   private static notifyListeners(status: SyncQueueStatus): void {
     listeners.forEach((cb) => {
       try {
@@ -76,26 +80,31 @@ export class SyncQueueService {
    * Verified network reachability test (does not rely solely on navigator.onLine)
    */
   public static async isNetworkReachable(): Promise<boolean> {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return false;
-    }
-    if (typeof fetch === 'undefined') {
-      return true;
-    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+    if (typeof fetch === 'undefined') return true;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-    try {
-      const res = await fetch(`/manifest.json?_t=${Date.now()}`, {
-        method: 'HEAD',
-        cache: 'no-store',
-        signal: controller.signal,
+    // Coalesce concurrent requests from the sync banner, queue and forms.
+    if (!this.reachabilityInFlight) {
+      const probe = (async (): Promise<boolean> => {
+        const controller = new AbortController();
+        // Slow mobile networks may exceed 2.5 s while still being connected.
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+        try {
+          const res = await fetch(`/manifest.json?_t=${Date.now()}`, {
+            method: 'HEAD', cache: 'no-store', signal: controller.signal,
+          });
+          return res.ok || res.status === 304;
+        } catch { return false; }
+        finally { clearTimeout(timeoutId); }
+      })();
+      this.reachabilityInFlight = probe;
+      // Every fresh reconnect gets a new probe, rather than a stale "offline"
+      // result. This callback cannot erase a newer request.
+      void probe.then(() => {
+        if (this.reachabilityInFlight === probe) this.reachabilityInFlight = null;
       });
-      clearTimeout(timeoutId);
-      return res.ok || res.status === 304;
-    } catch {
-      return false;
-    } finally { clearTimeout(timeoutId); }
+    }
+    return this.reachabilityInFlight;
   }
 
   /**
