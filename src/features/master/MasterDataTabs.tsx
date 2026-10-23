@@ -1,7 +1,7 @@
 import { normalizeAuditModule } from '../../services/audit/auditEventRegistry';
 import { Phone } from '../../components/icons';
 import { BookOpen } from '../../components/icons';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   GraduationCap,
@@ -54,6 +54,11 @@ export const MasterDataTabs: React.FC = () => {
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<MasterTab>('teachers');
   const [searchQuery, setSearchQuery] = useState('');
+  const recordsScrollRef = useRef<HTMLDivElement>(null);
+  // Changing the filter must not leave the next list scrolled halfway down.
+  useEffect(() => {
+    if (recordsScrollRef.current) recordsScrollRef.current.scrollTop = 0;
+  }, [activeTab, searchQuery]);
   const [isLoading, setIsLoading] = useState(true);
 
   // States for Collections
@@ -635,7 +640,7 @@ export const MasterDataTabs: React.FC = () => {
       {activeTab === 'teachers' && (
         <Card>
           <CardContent className="p-0">
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div ref={recordsScrollRef} role="region" aria-label="Daftar data master" tabIndex={0} className="max-h-[min(62vh,620px)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] divide-y divide-slate-100 dark:divide-slate-800 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--theme-primary)]">
               {teachers
                 .filter((t) => {
                   const q = searchQuery.toLowerCase();
@@ -651,7 +656,7 @@ export const MasterDataTabs: React.FC = () => {
                 .map((t) => {
                   const idInfo = getTeacherDisplayIdentifier(t);
                   return (
-                    <div key={t.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                    <div key={t.id} className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-start gap-3.5">
                         <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
                           {t.fullName.charAt(0)}
@@ -715,11 +720,11 @@ export const MasterDataTabs: React.FC = () => {
       {activeTab === 'staff' && (
         <Card>
           <CardContent className="p-0">
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div ref={recordsScrollRef} role="region" aria-label="Daftar data master" tabIndex={0} className="max-h-[min(62vh,620px)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] divide-y divide-slate-100 dark:divide-slate-800 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--theme-primary)]">
               {staffList
                 .filter((s) => s.fullName.toLowerCase().includes(searchQuery.toLowerCase()))
                 .map((s) => (
-                  <div key={s.id} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <div key={s.id} className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <div className="flex items-start gap-3.5">
                       <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
                         {s.fullName.charAt(0)}
@@ -765,7 +770,7 @@ export const MasterDataTabs: React.FC = () => {
       {activeTab === 'students' && (
         <Card>
           <CardContent className="p-0">
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div ref={recordsScrollRef} role="region" aria-label="Daftar data master" tabIndex={0} className="max-h-[min(62vh,620px)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] divide-y divide-slate-100 dark:divide-slate-800 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--theme-primary)]">
               {students
                 .filter(
                   (st) =>
@@ -778,7 +783,7 @@ export const MasterDataTabs: React.FC = () => {
                 .map((st) => (
                   <div
                     key={st.id}
-                    className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                    className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
                   >
                     <div className="flex items-start gap-3.5">
                       <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
