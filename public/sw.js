@@ -1,5 +1,5 @@
 /**
- * Piket Guru Service Worker - Offline Resilience, Asset Cache & Controlled Updates
+ * Piket Guru Service Worker R47 - Offline Resilience, Asset Cache & Controlled Updates
  *
  * Key guarantees:
  * 1. Cache assets only from same-origin GET requests; never HTML fallback for scripts, CSS, or APIs.
@@ -8,8 +8,8 @@
  * 4. Automatic cleanup of previous build asset caches on activate without touching user drafts or sync queue.
  */
 
-// This value is replaced in dist/sw.js by scripts/stamp_pwa_release.mjs on every build.
-const CACHE_VERSION = 'dev-source';
+// Replaced with a deployment-specific revision by vite.config.ts at build time.
+const CACHE_VERSION = '__PIKET_BUILD_REV__';
 const STATIC_CACHE_NAME = `piketguru-shell-${CACHE_VERSION}`;
 const ASSET_CACHE_NAME = `piketguru-assets-${CACHE_VERSION}`;
 
@@ -67,6 +67,9 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // SW script and build metadata must not be served from the app asset cache.
+  if (url.origin === self.location.origin && (url.pathname === '/sw.js' || url.pathname === '/version.json')) return;
 
   // 1. STRICT NETWORK-ONLY: Never cache or serve HTML fallbacks for API, Firebase, Auth, Tokens
   if (
