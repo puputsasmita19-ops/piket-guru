@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileBarChart2,
   Calendar,
@@ -247,6 +247,13 @@ export const ReportsPreview: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<ReportTab>('attendance');
+  // Remember the most recent data module so returning from photos is predictable.
+  const [lastDataTab, setLastDataTab] = useState<Exclude<ReportTab, 'photoRecap'>>('attendance');
+  const selectDataTab = (tab: Exclude<ReportTab, 'photoRecap'>) => {
+    setLastDataTab(tab);
+    setActiveTab(tab);
+    setSearchQuery('');
+  };
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Print Modals
@@ -256,7 +263,6 @@ export const ReportsPreview: React.FC = () => {
   const [settingsReady, setSettingsReady] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isPhotoRecapPrintOpen, setIsPhotoRecapPrintOpen] = useState<boolean>(false);
-  const tabListRef = useRef<HTMLDivElement>(null);
 
   // Loading and Error tracking
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
@@ -962,7 +968,7 @@ export const ReportsPreview: React.FC = () => {
   return (
     <div data-tour="reports-container" className="space-y-6">
       {/* Header section */}
-      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-header flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <FileBarChart2 className="w-6 h-6 text-[var(--theme-primary)]" />
@@ -971,70 +977,39 @@ export const ReportsPreview: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Pilih periode untuk melihat, mengunduh, atau mencetak laporan.</p>
         </div>
 
-        <div className="page-actions flex flex-wrap items-center gap-2">
-          {/* Tombol Berikon Gambar dengan Label "Rekap Foto" pada Area Tindakan Atas Halaman (Dekat Tombol Cetak) */}
-          <Button
-            variant={activeTab === 'photoRecap' ? 'primary' : 'outline'}
-            size="sm"
-            leftIcon={<ImageIcon className={`w-4 h-4 ${activeTab === 'photoRecap' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />}
-            onClick={() => {
-              setActiveTab('photoRecap');
-            }}
-            className={`font-bold shadow-xs cursor-pointer transition-all ${
-              activeTab === 'photoRecap'
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
-                : 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
-            }`}
-            title="Buka Rekap Foto Dokumentasi Sekolah"
-          >
-            <span className="flex items-center gap-1.5">
-              <span>Rekap Foto</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                  activeTab === 'photoRecap'
-                    ? 'bg-white text-indigo-700'
-                    : 'bg-indigo-600 text-white'
-                }`}
-              >
-                {allPhotoItems.length}
-              </span>
-            </span>
-          </Button>
-
-          {activeTab === 'photoRecap' ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<FileBarChart2 className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
-                onClick={() => setActiveTab('attendance')}
-                className="font-semibold cursor-pointer"
-              >
-                Kembali ke Tabel Laporan
-              </Button>
-
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Printer className="w-4 h-4" />}
-                onClick={() => setIsPhotoRecapPrintOpen(true)}
-                disabled={selectedPhotosList.length === 0}
-                className="font-bold cursor-pointer shadow-sm"
-              >
-                Pratinjau Dokumentasi Foto ({selectedPhotosList.length})
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="primary" size="sm" leftIcon={<Printer className="w-4 h-4"/>}
-                disabled={!dateValidation.isValid || isLoadingData || !!dataLoadError || !settingsReady}
-                onClick={() => { setExportError(''); setIsReportActionsOpen(true); }}>
-                Pratinjau & Ekspor
-              </Button>
-            </>
+        <div className="page-actions flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          {activeTab !== 'photoRecap' && (
+            <Button variant="primary" size="sm" leftIcon={<Printer className="w-4 h-4" />}
+              disabled={!dateValidation.isValid || isLoadingData || !!dataLoadError || !settingsReady}
+              onClick={() => { setExportError(''); setIsReportActionsOpen(true); }}
+              className="w-full sm:w-auto justify-center"
+            >
+              Pratinjau & Ekspor Laporan
+            </Button>
           )}
         </div>
       </div>
+
+      {/* One clear mode switch. Do not duplicate Foto in the report category tabs. */}
+      <section aria-label="Mode tampilan laporan" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] p-2.5 sm:p-3 shadow-xs">
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="Pilih Laporan Data atau Rekap Foto">
+          <button type="button"
+            aria-pressed={activeTab !== 'photoRecap'}
+            onClick={() => selectDataTab(lastDataTab)}
+            className={`min-h-[52px] flex items-center justify-center gap-2 rounded-xl border px-3 py-2 font-bold text-xs sm:text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${activeTab !== 'photoRecap' ? 'bg-[var(--theme-primary-light)] border-[var(--theme-primary-border)] text-slate-900 dark:text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+          ><FileBarChart2 className="w-4 h-4 shrink-0" /> <span>Laporan Data</span></button>
+          <button type="button"
+            aria-pressed={activeTab === 'photoRecap'}
+            onClick={() => { setActiveTab('photoRecap'); setSearchQuery(''); }}
+            className={`min-h-[52px] flex items-center justify-center gap-2 rounded-xl border px-3 py-2 font-bold text-xs sm:text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${activeTab === 'photoRecap' ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-600 text-indigo-800 dark:text-indigo-200' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+          ><ImageIcon className="w-4 h-4 shrink-0" /> <span>Rekap Foto</span><span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-0.5 text-[10px]">{allPhotoItems.length}</span></button>
+        </div>
+        <p className="mt-2 px-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          {activeTab === 'photoRecap'
+            ? 'Mode foto: lihat arsip dokumentasi dan pilih foto untuk pratinjau. Ketuk Laporan Data untuk kembali ke kategori sebelumnya.'
+            : 'Mode data: pilih kategori rekap di bawah untuk melihat tabel dan ringkasan. Rekap Foto tersedia melalui tombol di sebelah.'}
+        </p>
+      </section>
 
       {/* FILTER PERIODE REKAP (DROPDOWN PERIODE LAPORAN) */}
       <Card>
@@ -1066,7 +1041,7 @@ export const ReportsPreview: React.FC = () => {
           </div>
 
           {/* Dynamic Inputs according to selected Period Mode */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 sm:gap-4">
             <div className="flex-1">
               {/* 1. MINGGUAN */}
               {periodMode === 'weekly' && (
@@ -1226,11 +1201,11 @@ export const ReportsPreview: React.FC = () => {
             </div>
 
             {/* Active Range Summary Badge */}
-            <div className="shrink-0 p-3 rounded-xl bg-[var(--theme-primary-light)] border border-[var(--theme-primary-border)] text-xs space-y-1">
+            <div className="w-full lg:w-auto shrink-0 p-3 rounded-xl bg-[var(--theme-primary-light)] border border-[var(--theme-primary-border)] text-xs space-y-1">
               <span className="text-[10px] font-bold text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] uppercase tracking-wide block">
                 Rentang Tanggal Efektif:
               </span>
-              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 font-mono">
+              <div className="font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2 font-mono break-all">
                 <span>{startDate}</span>
                 <span className="text-slate-400">s/d</span>
                 <span>{endDate}</span>
@@ -1263,89 +1238,54 @@ export const ReportsPreview: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Quick Select for Mobile / Compact screens */}
-      <div className="lg:hidden flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <label htmlFor="quick-report-tab-select" className="text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0 flex items-center gap-1.5">
-          <FileBarChart2 className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-          <span>Menu Laporan:</span>
-        </label>
-        <select
-          id="quick-report-tab-select"
-          aria-label="Pilih Tampilan Laporan"
-          value={activeTab}
-          onChange={(e) => {
-            setActiveTab(e.target.value as ReportTab);
-            setSearchQuery('');
-          }}
-          className="w-full max-w-[260px] text-xs font-bold p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--theme-primary)] cursor-pointer"
-        >
-          <option value="attendance">Presensi Guru ({attendanceSummaries.length})</option>
-          <option value="incidents">Insiden Kejadian ({totalIncidents})</option>
-          <option value="dutyBooks">Jurnal Buku Piket ({filteredDutyBooks.length})</option>
-          <option value="studentTardiness">Keterlambatan Siswa ({filteredTardiness.length})</option>
-          <option value="studentPermits">Izin Meninggalkan Sekolah ({filteredPermits.length})</option>
-          <option value="substitutions">Guru Pengganti (Inval) ({filteredSubstitutions.length})</option>
-          <option value="visitors">Buku Tamu Sekolah ({filteredVisitors.length})</option>
-          <option value="photoRecap">Rekap Foto Dokumentasi ({allPhotoItems.length})</option>
-        </select>
-      </div>
-
-      {/* REPORT TABS NAVIGATION (8 TABS TOTAL) */}
-      <div className="relative">
-        <div
-          ref={tabListRef}
-          className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-200 dark:border-[var(--theme-card-border)]"
-        >
-          {[
-            { id: 'attendance', label: 'Presensi Guru', icon: Users, count: attendanceSummaries.length },
-            { id: 'incidents', label: 'Insiden Kejadian', icon: AlertTriangle, count: totalIncidents },
-            { id: 'dutyBooks', label: 'Jurnal Buku Piket', icon: BookOpenCheck, count: filteredDutyBooks.length },
-            { id: 'studentTardiness', label: 'Keterlambatan Siswa', icon: UserX, count: filteredTardiness.length },
-            { id: 'studentPermits', label: 'Izin Meninggalkan Sekolah', icon: FileText, count: filteredPermits.length },
-            { id: 'substitutions', label: 'Guru Pengganti (Inval)', icon: GraduationCap, count: filteredSubstitutions.length },
-            { id: 'visitors', label: 'Buku Tamu Sekolah', icon: Building, count: filteredVisitors.length },
-            { id: 'photoRecap', label: 'Rekap Foto', icon: ImageIcon, count: allPhotoItems.length },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            const isPhoto = tab.id === 'photoRecap';
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id as ReportTab);
-                  setSearchQuery('');
-                }}
-                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                  isActive
-                    ? isPhoto
-                      ? 'border-indigo-600 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 rounded-t-xl font-bold shadow-xs ring-1 ring-indigo-500/30'
-                      : 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] bg-[var(--theme-primary-light)]/50 dark:bg-[var(--theme-primary-light)]/20 rounded-t-xl font-bold'
-                    : isPhoto
-                      ? 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 bg-indigo-50/90 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-bold rounded-t-xl'
-                      : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isPhoto ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
-                <span>{tab.label}</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    isActive
-                      ? isPhoto
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)]'
-                      : isPhoto
-                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
-                        : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
-                  }`}
+      {/* All seven data categories are directly visible: 2 columns on phones, 4 on desktop. */}
+      {activeTab !== 'photoRecap' && (
+        <section aria-label="Kategori Laporan" className="rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-3 sm:p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Pilih Kategori Laporan</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih satu kategori untuk melihat ringkasan dan tabelnya.</p>
+            </div>
+            <span className="text-[11px] font-medium text-slate-500">7 kategori</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2" role="group" aria-label="Daftar kategori rekap laporan">
+            {[
+              { id: 'attendance', label: 'Presensi Guru', icon: Users, count: attendanceSummaries.length },
+              { id: 'incidents', label: 'Insiden Kejadian', icon: AlertTriangle, count: totalIncidents },
+              { id: 'dutyBooks', label: 'Jurnal Buku Piket', icon: BookOpenCheck, count: filteredDutyBooks.length },
+              { id: 'studentTardiness', label: 'Keterlambatan Siswa', icon: UserX, count: filteredTardiness.length },
+              { id: 'studentPermits', label: 'Izin Siswa', icon: FileText, count: filteredPermits.length },
+              { id: 'substitutions', label: 'Guru Pengganti', icon: GraduationCap, count: filteredSubstitutions.length },
+              { id: 'visitors', label: 'Buku Tamu', icon: Building, count: filteredVisitors.length },
+            ].map(tab => {
+              const Icon = tab.icon;
+              const selected = activeTab === tab.id;
+              return (
+                <button key={tab.id} type="button"
+                  aria-pressed={selected}
+                  onClick={() => selectDataTab(tab.id as Exclude<ReportTab, 'photoRecap'>)}
+                  className={`min-w-0 min-h-[60px] rounded-xl border p-2.5 sm:p-3 flex items-center gap-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${selected ? 'bg-[var(--theme-primary-light)] border-[var(--theme-primary-border)] text-slate-900 dark:text-white shadow-xs' : 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="min-w-0 flex-1 text-[11px] sm:text-xs leading-snug font-bold break-words">{tab.label}</span>
+                  <span className={`shrink-0 min-w-[23px] rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${selected ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)]' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}>{tab.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {activeTab !== 'photoRecap' && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-1" role="status" aria-live="polite">
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Menampilkan: {{
+            attendance: 'Presensi Guru', incidents: 'Insiden Kejadian', dutyBooks: 'Jurnal Buku Piket',
+            studentTardiness: 'Keterlambatan Siswa', studentPermits: 'Izin Siswa',
+            substitutions: 'Guru Pengganti', visitors: 'Buku Tamu',
+          }[activeTab]}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">Di HP, tabel lebar dapat digeser ke samping.</p>
         </div>
-      </div>
+      )}
 
       {/* TAB 1: ATTENDANCE SUMMARY */}
       {activeTab === 'attendance' && (
@@ -1989,7 +1929,7 @@ export const ReportsPreview: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 w-full">
                   {[
                     { id: 'ALL', label: 'Semua Modul' },
                     { id: 'ATTENDANCE', label: 'Presensi GPS' },
@@ -2003,7 +1943,7 @@ export const ReportsPreview: React.FC = () => {
                         key={m.id}
                         type="button"
                         onClick={() => setPhotoModuleFilter(m.id as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                        className={`min-h-10 px-2.5 py-2 rounded-xl text-[11px] sm:text-xs font-semibold cursor-pointer transition-colors ${
                           isMActive
                             ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] shadow-xs font-bold'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -2017,8 +1957,8 @@ export const ReportsPreview: React.FC = () => {
               </div>
 
               {/* Action Toolbar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <Button
                     type="button"
                     variant="outline"
@@ -2054,10 +1994,10 @@ export const ReportsPreview: React.FC = () => {
                   type="button"
                   variant="primary"
                   size="sm"
-                  className="font-bold shadow-md text-xs"
+                  className="w-full lg:w-auto justify-center font-bold text-xs"
                   leftIcon={<Printer className="w-3.5 h-3.5" />}
                   onClick={() => setIsPhotoRecapPrintOpen(true)}
-                  disabled={filteredPhotoItems.length === 0}
+                  disabled={selectedPhotosList.length === 0}
                 >
                   Pratinjau / Unduh PDF Foto ({selectedPhotosList.length} Foto)
                 </Button>
