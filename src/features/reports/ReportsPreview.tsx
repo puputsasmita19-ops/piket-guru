@@ -39,6 +39,7 @@ import { PhotoRecapPrintModal } from './PhotoRecapPrintModal';
 import { AuthenticatedImage } from '../../components/common/AuthenticatedImage';
 import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
+import { VisitorService } from '../../services/firebase/visitorService';
 import {
   ReportService,
   TeacherAttendanceSummary,
@@ -266,6 +267,40 @@ export const ReportsPreview: React.FC = () => {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [photoRecapPage, setPhotoRecapPage] = useState<number>(1);
   const [previewPhotoItem, setPreviewPhotoItem] = useState<PhotoRecapItem | null>(null);
+  const [visitorPhotoMoveBusy, setVisitorPhotoMoveBusy] = useState(false);
+  const [visitorPhotoMoveMessage, setVisitorPhotoMoveMessage] = useState('');
+
+  // Photo archive uses its own preview modal (not the Buku Tamu photo dialog).
+  // Only a Base64 visitor photo is eligible for migration; a Drive URL is already stored.
+  const previewVisitor = previewPhotoItem?.sourceModule === 'VISITOR'
+    ? visitors.find(visitor => visitor.id === previewPhotoItem.sourceId) : undefined;
+  const previewVisitorPhoto = previewPhotoItem?.photoUrl.startsWith('/api/drive/photo/')
+    ? previewPhotoItem.photoUrl // Migration just completed; live snapshot may arrive later.
+    : previewVisitor
+      ? (previewVisitor.fotoUrl || (previewVisitor as any).photoUrl || (previewVisitor as any).fotoTamu || (previewVisitor as any).foto || previewPhotoItem?.photoUrl || '')
+      : (previewPhotoItem?.sourceModule === 'VISITOR' ? previewPhotoItem.photoUrl : '');
+  const visitorPhotoOnDrive = previewVisitorPhoto.startsWith('/api/drive/photo/');
+  const visitorPhotoInFirestore = previewVisitorPhoto.startsWith('data:image/');
+
+  const moveVisitorPhotoFromReport = async () => {
+    if (visitorPhotoMoveBusy || !currentUser || currentUser.role !== 'ADMIN' ||
+        previewPhotoItem?.sourceModule !== 'VISITOR' || !visitorPhotoInFirestore) return;
+    const visitorId = previewPhotoItem.sourceId;
+    if (!window.confirm('Kirim foto Buku Tamu ini ke Google Drive sekolah? Foto di Firestore tetap tersedia sampai unggah dan pembaruan data berhasil.')) return;
+    setVisitorPhotoMoveBusy(true);
+    setVisitorPhotoMoveMessage('');
+    try {
+      const updated = await VisitorService.migrateLegacyPhotoToDrive(visitorId, currentUser);
+      setPreviewPhotoItem(previous => previous?.sourceModule === 'VISITOR' && previous.sourceId === visitorId
+        ? { ...previous, photoUrl: updated.fotoUrl || previous.photoUrl }
+        : previous);
+      setVisitorPhotoMoveMessage('Berhasil dikirim ke Google Drive. Lokasi foto pada catatan Buku Tamu sudah diperbarui.');
+    } catch (error) {
+      setVisitorPhotoMoveMessage(error instanceof Error ? error.message : 'Foto belum berhasil dipindahkan. Periksa koneksi Drive.');
+    } finally {
+      setVisitorPhotoMoveBusy(false);
+    }
+  };
 
   // Compute Active Date Range & Period Description based on periodMode
   const { startDate, endDate, periodLabel } = useMemo(() => {
@@ -2166,7 +2201,7 @@ export const ReportsPreview: React.FC = () => {
       {previewPhotoItem && (
         <Modal
           isOpen={previewPhotoItem !== null}
-          onClose={() => setPreviewPhotoItem(null)}
+          onClose={() => { if (!visitorPhotoMoveBusy) { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); } }}
           title="Detail Foto Dokumentasi"
           maxWidth="lg"
         >
@@ -2219,8 +2254,35 @@ export const ReportsPreview: React.FC = () => {
               )}
             </div>
 
+            {previewPhotoItem.sourceModule === 'VISITOR' && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2 text-xs" aria-label="Penyimpanan foto Buku Tamu">
+                <p><strong>Lokasi foto:</strong> {visitorPhotoOnDrive
+                  ? 'Google Drive sekolah · folder visitors'
+                  : visitorPhotoInFirestore
+                    ? 'Firestore (foto Base64, belum dikirim ke Google Drive)'
+                    : 'Sumber foto lama atau tautan eksternal (perlu pemeriksaan)'}
+                </p>
+                {currentUser?.role === 'ADMIN' && visitorPhotoInFirestore && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={visitorPhotoMoveBusy}
+                    onClick={() => void moveVisitorPhotoFromReport()}
+                    leftIcon={<Download className="w-4 h-4" />}
+                  >
+                    {visitorPhotoMoveBusy ? 'Mengirim foto ke Drive…' : 'Kirim Foto Lama ke Google Drive'}
+                  </Button>
+                )}
+                {!visitorPhotoInFirestore && !visitorPhotoOnDrive && (
+                  <p className="text-slate-500 dark:text-slate-400">Foto ini bukan data Base64 yang dapat dimigrasikan otomatis. Periksa sumber foto pada Buku Tamu Digital.</p>
+                )}
+                {visitorPhotoMoveMessage && <p role="status" className={visitorPhotoOnDrive ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>{visitorPhotoMoveMessage}</p>}
+              </div>
+            )}
+
             <div className="flex justify-end pt-2">
-              <Button size="sm" variant="outline" onClick={() => setPreviewPhotoItem(null)}>
+              <Button size="sm" variant="outline" disabled={visitorPhotoMoveBusy} onClick={() => { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); }}>
                 Tutup Pratinjau
               </Button>
             </div>
