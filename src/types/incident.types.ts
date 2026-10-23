@@ -1,4 +1,5 @@
 import { BaseEntityMetadata } from './index';
+import type { PhotoWatermarkReview } from './watermark.types';
 
 export type IncidentSeverity = 'RENDAH' | 'SEDANG' | 'TINGGI' | 'KRITIS';
 export type IncidentStatus = 'BARU' | 'INVESTIGASI' | 'PENANGANAN' | 'SELESAI';
@@ -9,6 +10,7 @@ export interface IncidentPhoto {
   url: string;
   caption?: string;
   uploadedAt: string;
+  watermarkReview?: PhotoWatermarkReview;
 }
 
 export interface IncidentRecord extends BaseEntityMetadata {
@@ -31,6 +33,7 @@ export interface IncidentRecord extends BaseEntityMetadata {
   pelaporName?: string;
   status: IncidentStatus;
   photos?: IncidentPhoto[];
+  fotoWatermarkReview?: PhotoWatermarkReview;
   
   // Resolution metadata
   resolvedAt?: string;

@@ -1,4 +1,5 @@
 import { BaseEntityMetadata } from './index';
+import type { PhotoWatermarkReview } from './watermark.types';
 
 export type VisitorStatus = 'SEDANG_BERKUNJUNG' | 'SELESAI' | 'DITOLAK';
 
@@ -36,6 +37,7 @@ export interface VisitorRecord extends BaseEntityMetadata {
   fotoUrl?: string; // Foto Tamu / Dokumen
   /** Explicit metadata for new photos; absent on legacy records. */
   fotoMode?: 'WATERMARK' | 'ORIGINAL';
+  fotoWatermarkReview?: PhotoWatermarkReview;
   /** Storage of the approved photo, not proof that Drive settings are currently enabled. */
   fotoStorageProvider?: 'google_drive' | 'firestore_base64';
   status: VisitorStatus;

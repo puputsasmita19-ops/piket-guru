@@ -75,6 +75,17 @@ export interface WatermarkPayload {
   alreadyWatermarked?: boolean;
 }
 
+export type WatermarkStatus = 'WATERMARK' | 'ORIGINAL' | 'UNKNOWN';
+
+/** Human visual review. Does not establish image authenticity. */
+export interface PhotoWatermarkReview {
+  status: Exclude<WatermarkStatus, 'UNKNOWN'>;
+  photoKey: string; // compact fingerprint; do not duplicate large Base64 photo data
+  reviewedAt: string;
+  reviewedById: string;
+  reviewedByName: string;
+}
+
 export interface PhotoRecapItem {
   id: string;
   sourceModule: WatermarkModuleType;
@@ -90,4 +101,9 @@ export interface PhotoRecapItem {
   notes?: string;
   isLegacyUnwatermarked?: boolean;
   watermarkUnknown?: boolean;
+  watermarkStatus?: WatermarkStatus;
+  watermarkSource?: 'REVIEW' | 'CAPTURE' | 'UNKNOWN';
+  watermarkReviewedAt?: string;
+  watermarkReviewedBy?: string;
+  sourcePhotoIndex?: number;
 }

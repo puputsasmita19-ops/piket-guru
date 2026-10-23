@@ -50,7 +50,7 @@ ok(service.includes("fotoStorageProvider = photo.provider === 'google_drive'"), 
 ok(form.includes('setSavedPhotoMode') && form.includes("enabled: true"), 'Photo capture explicitly records chosen mode and forces watermark when requested');
 ok(form.includes('allowPhotoModeChoice') && form.includes('photoCaptureMode'), 'Staff mode chooser follows Admin policy');
 ok(ui.includes('Kirim Foto Lama ke Google Drive') && ui.includes('Firestore (foto Base64'), 'Staff can view storage location; admin can migrate');
-ok(reports.includes('watermarkUnknown') && reports.includes('Status watermark belum diverifikasi'), 'Old photos not mislabeled as unwatermarked');
+ok(reports.includes('watermarkUnknown') && reports.includes('getPhotoWatermarkLabel') && fs.readFileSync('src/utils/photoWatermarkStatus.ts', 'utf8').includes('Status watermark belum diverifikasi'), 'Unknown legacy photos are labeled without a false watermark assumption');
 const store = fs.readFileSync('src/server/services/driveStore.ts','utf8');
 ok(store.includes('getOrCreateFolderHierarchy') && store.includes("options.module"), 'Drive uploads follow module folder tree');
 const helper = fs.readFileSync('src/services/drive/photoUploadHelper.ts','utf8');

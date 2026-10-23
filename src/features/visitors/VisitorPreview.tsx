@@ -45,6 +45,7 @@ import { SchoolSettings, UserProfile } from '../../types';
 import { where, limit } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { VisitorService } from '../../services/firebase/visitorService';
+import { resolvePhotoWatermarkStatus, getPhotoWatermarkLabel } from '../../utils/photoWatermarkStatus';
 import { mayEditOwnRecord } from '../../utils/recordOwnership';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -462,8 +463,10 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
 
       {/* Desktop Table View (Hidden on mobile) */}
       <Card className={viewMode === 'list' ? '' : 'hidden'}>
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <CardContent className="p-0 min-w-0">
+          <div className="w-full max-w-full overflow-x-auto overscroll-x-contain" role="region" aria-label="Riwayat kunjungan tamu, geser tabel secara horizontal jika perlu" tabIndex={0}>
+          <table className="w-full min-w-[1440px] table-fixed text-left text-xs">
+            <colgroup><col style={{width:'23%'}} /><col style={{width:'14%'}} /><col style={{width:'12%'}} /><col style={{width:'16%'}} /><col style={{width:'15%'}} /><col style={{width:'7%'}} /><col style={{width:'13%'}} /></colgroup>
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold">
               <tr>
                 <th className="p-4">Badge & Tamu</th>
@@ -479,13 +482,13 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
               {filteredVisitors.length > 0 ? (
                 historyPage.records.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 font-mono font-bold text-blue-700 dark:text-blue-300 text-xs border border-blue-200 dark:border-blue-900 shrink-0">
+                    <td className="p-3 sm:p-4 align-top">
+                      <div className="min-w-0 flex flex-col gap-2">
+                        <div className="self-start px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 font-mono font-bold text-blue-700 dark:text-blue-300 text-[11px] border border-blue-200 dark:border-blue-900 whitespace-nowrap">
                           {item.nomorBadge}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 dark:text-white break-words leading-snug">
                             {item.namaTamu}
                           </div>
                           {Boolean(item.groupSize && item.groupSize > 1) && <p className="text-[10px] font-semibold text-sky-700">Rombongan Â· {item.groupIndex}/{item.groupSize}</p>}
@@ -496,8 +499,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                       </div>
                     </td>
 
-                    <td className="p-4">
-                      <div className="font-semibold text-slate-800 dark:text-slate-200">
+                    <td className="p-3 sm:p-4 align-top">
+                      <div className="font-semibold text-slate-800 dark:text-slate-200 break-words leading-relaxed">
                         {item.instansiAsal}
                       </div>
                       {item.nomorIdentitas && (
@@ -507,29 +510,29 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                       )}
                     </td>
 
-                    <td className="p-4">
+                    <td className="p-3 sm:p-4 align-top">
                       <Badge variant="info" size="sm">
                         {getVisitorCategoryDisplay(item)}
                       </Badge>
                     </td>
 
-                    <td className="p-4 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                    <td className="p-3 sm:p-4 align-top font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                       <div>{formatIndonesianDate(item.tanggal)}</div>
                       <div className="text-[11px] text-slate-500">
                         Masuk: <strong>{item.jamMasuk}</strong> {item.jamKeluar ? `â€¢ Keluar: ${item.jamKeluar}` : ''}
                       </div>
                     </td>
 
-                    <td className="p-4 max-w-xs">
-                      <div className="font-bold text-blue-600 dark:text-blue-400">
+                    <td className="p-3 sm:p-4 align-top">
+                      <div className="font-bold text-blue-600 dark:text-blue-400 break-words leading-relaxed">
                         <MapPin className="w-3.5 h-3.5 mr-1" /> {item.tujuanBertemu}
                       </div>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5" title={item.keperluan}>
+                      <p className="text-[11px] text-slate-500 break-words mt-1 leading-relaxed" title={item.keperluan}>
                         "{item.keperluan}"
                       </p>
                     </td>
 
-                    <td className="p-4">
+                    <td className="p-3 sm:p-4 align-top">
                       <Badge
                         variant={item.status === 'SEDANG_BERKUNJUNG' ? 'warning' : 'success'}
                         size="sm"
@@ -538,8 +541,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
                       </Badge>
                     </td>
 
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="p-3 sm:p-4 align-top text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {/* Edit Button */}
                         {item.fotoUrl && (
                           <button type="button" onClick={() => setPhotoVisitor(item)} title="Lihat Foto Tamu"
@@ -617,6 +620,7 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
               )}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -644,7 +648,8 @@ Tamu saat ini sedang menunggu di ruang tamu / pos piket sekolah. Terima kasih. ð
           {photoVisitor?.fotoUrl && <AuthenticatedImage src={photoVisitor.fotoUrl} alt={`Foto ${photoVisitor.namaTamu}`} className="w-full max-h-[64vh] object-contain rounded-xl" />}
           {photoVisitor?.fotoUrl && <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs space-y-1">
             <p><strong>Penyimpanan:</strong> {photoVisitor.fotoUrl.startsWith('/api/drive/photo/') ? 'Google Drive pribadi Â· folder visitors' : photoVisitor.fotoUrl.startsWith('data:image/') ? 'Firestore (foto Base64; belum tersimpan di Drive)' : 'Tautan foto eksternal / arsip lama'}</p>
-            <p><strong>Watermark:</strong> {photoVisitor.fotoMode === 'WATERMARK' ? 'Berwatermark' : photoVisitor.fotoMode === 'ORIGINAL' ? 'Tanpa watermark' : 'Belum diketahui (foto lama)'}</p>
+            <p><strong>Watermark:</strong> {getPhotoWatermarkLabel(resolvePhotoWatermarkStatus(photoVisitor.fotoUrl, photoVisitor.fotoWatermarkReview, photoVisitor.fotoMode).status)}</p>
+            {!photoVisitor.fotoMode && !photoVisitor.fotoWatermarkReview && <p className="text-slate-500">Foto arsip lama belum memiliki metadata watermark. Admin dapat memverifikasi di menu Laporan & Rekap â†’ Rekap Foto.</p>}
           </div>}
           {currentUser?.role === 'ADMIN' && photoVisitor?.fotoUrl?.startsWith('data:image/') && <button type="button" disabled={photoMigrationBusy} className="min-h-11 px-3 border rounded-xl text-xs font-semibold disabled:opacity-50" onClick={async () => {
             if (!window.confirm('Unggah foto ini ke Google Drive pribadi sekolah? Foto lama tetap aman sampai penyimpanan baru berhasil.')) return;

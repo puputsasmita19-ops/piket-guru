@@ -58,6 +58,9 @@ import {
 } from '../../types';
 import { PhotoRecapItem } from '../../types/watermark.types';
 import { isPhotoAlreadyWatermarked } from '../../services/watermark/watermarkService';
+import { PhotoWatermarkReviewService } from '../../services/firebase/photoWatermarkReviewService';
+import { resolvePhotoWatermarkStatus, getPhotoWatermarkLabel } from '../../utils/photoWatermarkStatus';
+import type { WatermarkStatus } from '../../types/watermark.types';
 import { DutyBookRecord, getDutyBookDisplayStatus } from '../../types/dutyBook.types';
 import { IncidentRecord, getIncidentCategoryDisplay } from '../../types/incident.types';
 import { TeacherRecord, IncidentCategoryRecord } from '../../types/master.types';
@@ -138,11 +141,9 @@ const PhotoCardItem: React.FC<PhotoCardItemProps> = ({
           {getModuleBadge(photo.sourceModule)}
         </label>
 
-        {photo.isLegacyUnwatermarked && (
-          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 text-[9px] font-bold">
-            Foto Arsip
-          </span>
-        )}
+        <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${photo.watermarkStatus === 'WATERMARK' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+          {getPhotoWatermarkLabel(photo.watermarkStatus || 'UNKNOWN')}
+        </span>
       </div>
 
       {/* Image Preview Container (Never distort or crop watermark) */}
@@ -275,6 +276,40 @@ export const ReportsPreview: React.FC = () => {
   const [previewPhotoItem, setPreviewPhotoItem] = useState<PhotoRecapItem | null>(null);
   const [visitorPhotoMoveBusy, setVisitorPhotoMoveBusy] = useState(false);
   const [visitorPhotoMoveMessage, setVisitorPhotoMoveMessage] = useState('');
+  const [watermarkReviewBusy, setWatermarkReviewBusy] = useState(false);
+  const [watermarkReviewMessage, setWatermarkReviewMessage] = useState('');
+  const [watermarkReviewChoice, setWatermarkReviewChoice] = useState<Exclude<WatermarkStatus, 'UNKNOWN'>>('WATERMARK');
+  const [watermarkReviewConfirm, setWatermarkReviewConfirm] = useState(false);
+
+  const openPhotoDetail = (item: PhotoRecapItem) => {
+    setPreviewPhotoItem(item);
+    setWatermarkReviewMessage('');
+    setWatermarkReviewConfirm(false);
+    setWatermarkReviewChoice(item.watermarkStatus === 'ORIGINAL' ? 'ORIGINAL' : 'WATERMARK');
+  };
+
+  const saveWatermarkReview = async () => {
+    if (!currentUser || currentUser.role !== 'ADMIN' || !previewPhotoItem ||
+        !['VISITOR', 'INCIDENT'].includes(previewPhotoItem.sourceModule) || !watermarkReviewConfirm || watermarkReviewBusy) return;
+    const photo = previewPhotoItem;
+    setWatermarkReviewBusy(true);
+    setWatermarkReviewMessage('');
+    try {
+      const review = await PhotoWatermarkReviewService.review(photo.sourceModule as 'VISITOR' | 'INCIDENT',
+        photo.sourceId, photo.photoUrl, watermarkReviewChoice, currentUser, photo.sourcePhotoIndex);
+      setPreviewPhotoItem(prev => prev?.id === photo.id ? {
+        ...prev,
+        watermarkStatus: review.status,
+        watermarkSource: 'REVIEW', watermarkReviewedAt: review.reviewedAt,
+        watermarkReviewedBy: review.reviewedByName,
+        watermarkUnknown: false, isLegacyUnwatermarked: review.status !== 'WATERMARK',
+      } : prev);
+      setWatermarkReviewMessage('Verifikasi visual tersimpan dan tercatat dalam audit. Foto asli tidak diubah.');
+      setWatermarkReviewConfirm(false);
+    } catch (err) {
+      setWatermarkReviewMessage(err instanceof Error ? err.message : 'Verifikasi foto belum berhasil.');
+    } finally { setWatermarkReviewBusy(false); }
+  };
 
   // Photo archive uses its own preview modal (not the Buku Tamu photo dialog).
   // Only a Base64 visitor photo is eligible for migration; a Drive URL is already stored.
@@ -656,9 +691,12 @@ export const ReportsPreview: React.FC = () => {
             if (!pUrl) return;
             const docDate = photo.uploadedAt ? photo.uploadedAt.split('T')[0] : inc.tanggal;
             const docTime = photo.uploadedAt ? photo.uploadedAt.split('T')[1]?.slice(0, 5) : inc.waktu;
-            const isLegacy = !isPhotoAlreadyWatermarked(pUrl);
+            const wm = resolvePhotoWatermarkStatus(pUrl, photo.watermarkReview);
             items.push({
               id: `inc-${inc.id}-${photo.id || pIdx}`,
+              sourcePhotoIndex: pIdx,
+              watermarkStatus: wm.status, watermarkSource: wm.source,
+              watermarkReviewedAt: wm.reviewedAt, watermarkReviewedBy: wm.reviewedBy,
               sourceModule: 'INCIDENT',
               sourceId: inc.id,
               photoUrl: pUrl,
@@ -670,14 +708,17 @@ export const ReportsPreview: React.FC = () => {
               title: `Kejadian: ${inc.kategoriName || inc.kategori}`,
               briefIdentity: `${inc.kategoriName || inc.kategori}${inc.lokasi ? ` • Lokasi: ${inc.lokasi}` : ''}`,
               notes: inc.uraian || (inc.tingkatKeparahan ? `Tingkat: ${inc.tingkatKeparahan}` : undefined),
-              isLegacyUnwatermarked: isLegacy,
+              isLegacyUnwatermarked: wm.status !== 'WATERMARK',
+              watermarkUnknown: wm.status === 'UNKNOWN',
             });
           });
         } else if ((inc as any).fotoUrl || (inc as any).photoUrl || (inc as any).foto || (inc as any).buktiFoto) {
           const pUrl = (inc as any).fotoUrl || (inc as any).photoUrl || (inc as any).foto || (inc as any).buktiFoto;
-          const isLegacy = !isPhotoAlreadyWatermarked(pUrl);
+          const wm = resolvePhotoWatermarkStatus(pUrl, inc.fotoWatermarkReview);
           items.push({
             id: `inc-${inc.id}-legacy`,
+            watermarkStatus: wm.status, watermarkSource: wm.source,
+            watermarkReviewedAt: wm.reviewedAt, watermarkReviewedBy: wm.reviewedBy,
             sourceModule: 'INCIDENT',
             sourceId: inc.id,
             photoUrl: pUrl,
@@ -689,7 +730,8 @@ export const ReportsPreview: React.FC = () => {
             title: `Kejadian: ${inc.kategoriName || inc.kategori}`,
             briefIdentity: `${inc.kategoriName || inc.kategori}${inc.lokasi ? ` • Lokasi: ${inc.lokasi}` : ''}`,
             notes: inc.uraian || (inc.tingkatKeparahan ? `Tingkat: ${inc.tingkatKeparahan}` : undefined),
-            isLegacyUnwatermarked: isLegacy,
+            isLegacyUnwatermarked: wm.status !== 'WATERMARK',
+            watermarkUnknown: wm.status === 'UNKNOWN',
           });
         }
       }
@@ -723,12 +765,14 @@ export const ReportsPreview: React.FC = () => {
       const visPhoto = vis.fotoUrl || (vis as any).photoUrl || (vis as any).fotoTamu || (vis as any).foto;
       if (visPhoto && vis.tanggal >= startDate && vis.tanggal <= endDate) {
         // Explicit capture metadata survives Drive upload; unknown legacy photos are not guessed.
-        const isLegacy = vis.fotoMode === 'WATERMARK' ? false : vis.fotoMode === 'ORIGINAL' ? true : !isPhotoAlreadyWatermarked(visPhoto);
+        const wm = resolvePhotoWatermarkStatus(visPhoto, vis.fotoWatermarkReview, vis.fotoMode);
         items.push({
           id: `vis-${vis.id}`,
           sourceModule: 'VISITOR',
           sourceId: vis.id,
-          watermarkUnknown: !vis.fotoMode && !isPhotoAlreadyWatermarked(visPhoto),
+          watermarkUnknown: wm.status === 'UNKNOWN',
+          watermarkStatus: wm.status, watermarkSource: wm.source,
+          watermarkReviewedAt: wm.reviewedAt, watermarkReviewedBy: wm.reviewedBy,
           photoUrl: visPhoto,
           tanggalKejadian: vis.tanggal,
           waktuKejadian: vis.jamMasuk ? `${vis.jamMasuk} WIB` : undefined,
@@ -738,7 +782,7 @@ export const ReportsPreview: React.FC = () => {
           title: `Buku Tamu: ${vis.namaTamu}`,
           briefIdentity: `Tamu: ${vis.namaTamu}${vis.instansiAsal ? ` • Asal: ${vis.instansiAsal}` : ''}`,
           notes: `Tujuan: ${vis.tujuanBertemu || '-'}${vis.keperluan ? ` (${vis.keperluan})` : ''}`,
-          isLegacyUnwatermarked: isLegacy,
+          isLegacyUnwatermarked: wm.status !== 'WATERMARK',
         });
       }
     });
@@ -2091,7 +2135,7 @@ export const ReportsPreview: React.FC = () => {
                     photo={photo}
                     isSelected={selectedPhotoIds.has(photo.id)}
                     onToggleSelect={handleToggleSelectPhoto}
-                    onPreview={setPreviewPhotoItem}
+                    onPreview={openPhotoDetail}
                   />
                 ))}
               </div>
@@ -2141,7 +2185,7 @@ export const ReportsPreview: React.FC = () => {
       {previewPhotoItem && (
         <Modal
           isOpen={previewPhotoItem !== null}
-          onClose={() => { if (!visitorPhotoMoveBusy) { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); } }}
+          onClose={() => { if (!visitorPhotoMoveBusy && !watermarkReviewBusy) { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); setWatermarkReviewMessage(''); } }}
           title="Detail Foto Dokumentasi"
           maxWidth="lg"
         >
@@ -2155,15 +2199,13 @@ export const ReportsPreview: React.FC = () => {
             </div>
 
             <div className="space-y-2 text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-slate-900 dark:text-white">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="font-bold text-sm text-slate-900 dark:text-white break-words min-w-0">
                   {previewPhotoItem.title}
                 </span>
-                {previewPhotoItem.isLegacyUnwatermarked ? (
-                  <Badge variant="warning">{previewPhotoItem.watermarkUnknown ? 'Foto Arsip (Status watermark belum diverifikasi)' : 'Foto Arsip (Non-watermark)'}</Badge>
-                ) : (
-                  <Badge variant="success">Berwatermark Resmi</Badge>
-                )}
+                <Badge variant={previewPhotoItem.watermarkStatus === 'WATERMARK' ? 'success' : 'warning'}>
+                  {getPhotoWatermarkLabel(previewPhotoItem.watermarkStatus || 'UNKNOWN')}
+                </Badge>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-[11px] text-slate-600 dark:text-slate-300">
@@ -2194,6 +2236,46 @@ export const ReportsPreview: React.FC = () => {
               )}
             </div>
 
+            {['VISITOR', 'INCIDENT'].includes(previewPhotoItem.sourceModule) && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-3 text-xs" aria-label="Verifikasi visual watermark foto">
+                <div className="space-y-1">
+                  <p className="font-bold text-slate-800 dark:text-slate-100">Status watermark</p>
+                  <p>{getPhotoWatermarkLabel(previewPhotoItem.watermarkStatus || 'UNKNOWN')}
+                    {previewPhotoItem.watermarkSource === 'REVIEW' ? ' · Diperiksa secara visual oleh Admin'
+                      : previewPhotoItem.watermarkSource === 'CAPTURE' ? ' · Berdasarkan mode pengambilan foto'
+                      : ' · Belum ada catatan pemeriksaan visual'}</p>
+                  {previewPhotoItem.watermarkReviewedBy && (
+                    <p className="text-slate-500">Diperiksa: {previewPhotoItem.watermarkReviewedBy} · {previewPhotoItem.watermarkReviewedAt ? new Date(previewPhotoItem.watermarkReviewedAt).toLocaleString('id-ID') : '-'}</p>
+                  )}
+                  <p className="text-slate-500">Verifikasi hanya memastikan watermark terlihat atau tidak. Ini bukan pemeriksaan keaslian gambar.</p>
+                </div>
+                {currentUser?.role === 'ADMIN' && (
+                  <div className="space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
+                    <p className="font-semibold">Verifikasi visual oleh Admin</p>
+                    <p className="text-slate-500">Periksa gambar utuh, khususnya panel keterangan di bagian bawah, lalu pilih hasilnya.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 cursor-pointer">
+                        <input type="radio" name="watermark-review-choice" checked={watermarkReviewChoice === 'WATERMARK'} onChange={() => { setWatermarkReviewChoice('WATERMARK'); setWatermarkReviewConfirm(false); }} />
+                        Watermark terlihat
+                      </label>
+                      <label className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 cursor-pointer">
+                        <input type="radio" name="watermark-review-choice" checked={watermarkReviewChoice === 'ORIGINAL'} onChange={() => { setWatermarkReviewChoice('ORIGINAL'); setWatermarkReviewConfirm(false); }} />
+                        Tanpa watermark
+                      </label>
+                    </div>
+                    <label className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                      <input type="checkbox" checked={watermarkReviewConfirm} onChange={event => setWatermarkReviewConfirm(event.target.checked)} className="mt-0.5" />
+                      Saya telah memeriksa foto secara visual, termasuk bagian bawahnya.
+                    </label>
+                    <Button type="button" size="sm" disabled={!watermarkReviewConfirm || watermarkReviewBusy} onClick={() => void saveWatermarkReview()}>
+                      {watermarkReviewBusy ? 'Menyimpan verifikasi…' : 'Simpan Status Watermark'}
+                    </Button>
+                  </div>
+                )}
+                {watermarkReviewMessage && <p role="status" className="text-slate-600 dark:text-slate-300">{watermarkReviewMessage}</p>}
+              </div>
+            )}
+
             {previewPhotoItem.sourceModule === 'VISITOR' && (
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2 text-xs" aria-label="Penyimpanan foto Buku Tamu">
                 <p><strong>Lokasi foto:</strong> {visitorPhotoOnDrive
@@ -2222,7 +2304,7 @@ export const ReportsPreview: React.FC = () => {
             )}
 
             <div className="flex justify-end pt-2">
-              <Button size="sm" variant="outline" disabled={visitorPhotoMoveBusy} onClick={() => { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); }}>
+              <Button size="sm" variant="outline" disabled={visitorPhotoMoveBusy || watermarkReviewBusy} onClick={() => { setPreviewPhotoItem(null); setVisitorPhotoMoveMessage(''); setWatermarkReviewMessage(''); }}>
                 Tutup Pratinjau
               </Button>
             </div>
