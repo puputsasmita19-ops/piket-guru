@@ -38,9 +38,10 @@ test('responsive navigation no sideways scroll',()=>{
  assert(card.includes('grid grid-cols-2 sm:grid-cols-3 gap-2'));
  assert(!card.includes('role="tablist" aria-label="Kategori konfigurasi Pusat Komando">\n        {(['));
 });
-test('sticky save controls available',()=>{
+test('save controls remain available without sticky overlap',()=>{
  assert(card.includes('data-emergency-save-bar'));
- assert(card.includes('sticky top-16 sm:top-20'));
+ assert(!card.includes('sticky top-16 sm:top-20'));
+ assert(card.indexOf('data-emergency-save-bar') > card.indexOf("{tab === 'contacts'"));
 });
 test('firebase save conflict baseline preserved',()=>{
  assert(card.includes('SchoolSettingsService.saveCommandCenterConfig(draft, currentUser.id, original)'));

@@ -62,7 +62,7 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
       const next = normalizeCommandCenterConfig(settings.commandCenterConfig);
       setOriginal(next); setDraft(next); setMessage(null); setEditing(true);
     }
-    const frame = requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    const frame = requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' }));
     return () => cancelAnimationFrame(frame);
     // Sequence is a user click signal; unchanged settings must not reset an active editor.
   }, [focusRequest?.sequence]);
@@ -159,13 +159,6 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
           </div>
         </div>
         <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Ubah kolom di bawah. <strong>Uji suara</strong> hanya berbunyi di perangkat ini, sedangkan jadwal bel merupakan referensi, bukan pemicu siaran otomatis.</div>
-      <div className="sticky top-16 sm:top-20 z-20 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-sm p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-emergency-save-bar>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{dirty ? 'Perubahan Anda belum tersimpan di Firebase.' : 'Tidak ada perubahan untuk disimpan.'}</p>
-        <div className="flex gap-2 sm:justify-end">
-          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={cancel} className="flex-1 sm:flex-none">Batal</Button>
-          <Button type="button" size="sm" disabled={saving || !dirty} onClick={save} className="flex-1 sm:flex-none" leftIcon={<Save className="w-4 h-4"/>}>{saving ? 'Menyimpan…' : 'Simpan Perubahan'}</Button>
-        </div>
-      </div>
       {tab === 'command' && <div className="space-y-3">
         <label className="block"><span className={labelStyle}>Judul Pusat Komando</span><input disabled={!editing} maxLength={90} className={inputStyle} value={draft.heading} onChange={e => change({ heading: e.target.value })}/></label>
         <label className="block"><span className={labelStyle}>Deskripsi halaman</span><textarea disabled={!editing} maxLength={260} rows={3} className={inputStyle} value={draft.description} onChange={e => change({ description: e.target.value })}/></label>
@@ -270,6 +263,20 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
         {draft.protocolSteps.map((step,index) => <label key={index} className="block"><span className={labelStyle}>Langkah {index+1}</span><textarea disabled={!editing} maxLength={280} rows={2} className={inputStyle} value={step} onChange={e => change({ protocolSteps: draft.protocolSteps.map((s,i) => i === index ? e.target.value : s) })}/></label>)}
       </div>}
       {message && <div role={message.error ? 'alert' : 'status'} className={`rounded-xl p-3 text-xs ${message.error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>{message.text}</div>}
+      {/* Keep the action bar in the document flow. Sticky positioning here caused
+          jumps/overlap with the app's own sticky header while scrolling. */}
+      <div
+        data-emergency-save-bar
+        className="relative w-full min-w-0 border-t border-slate-200 dark:border-slate-700 pt-4 sm:pt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+      >
+        <p className="min-w-0 text-xs leading-relaxed text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+          {saving ? 'Menyimpan pengaturan ke Firebase…' : dirty ? 'Perubahan belum disimpan. Periksa formulir sebelum menyimpan.' : 'Tidak ada perubahan untuk disimpan.'}
+        </p>
+        <div className="flex w-full sm:w-auto shrink-0 flex-wrap gap-2 sm:justify-end">
+          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={cancel} className="flex-1 sm:flex-none">Batal</Button>
+          <Button type="button" size="sm" disabled={saving || !dirty} onClick={save} className="flex-1 sm:flex-none" leftIcon={<Save className="w-4 h-4"/>}>{saving ? 'Menyimpan…' : 'Simpan Perubahan'}</Button>
+        </div>
+      </div>
       </>}
     </CardContent>
   </Card>;
