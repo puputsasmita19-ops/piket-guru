@@ -2189,7 +2189,7 @@ export const SettingsView: React.FC = () => {
       {activeTab === 'bell' && (
         <div className="space-y-6">
           {isAdmin && <CommandCenterSettingsCard settings={settings} onUpdated={setSettings} focusRequest={emergencyEditorRequest} />}
-          <BellEmergencyAutomationCard schoolName={settings.schoolName} config={settings.commandCenterConfig} onConfigureEmergency={isAdmin ? type => openEmergencyEditor('emergency', type) : undefined} onConfigureSchedule={isAdmin ? () => openEmergencyEditor('schedule') : undefined} />
+          <BellEmergencyAutomationCard schoolName={settings.schoolName} config={settings.commandCenterConfig} onConfigureEmergency={isAdmin ? type => openEmergencyEditor('emergency', type) : undefined} onConfigureSchedule={isAdmin ? () => openEmergencyEditor('schedule') : undefined} onConfigureCustom={isAdmin ? () => openEmergencyEditor('additional') : undefined} onConfigureCommandPost={isAdmin ? () => openEmergencyEditor('command') : undefined} />
         </div>
       )}
 

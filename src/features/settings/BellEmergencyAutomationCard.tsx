@@ -29,6 +29,8 @@ interface BellEmergencyAutomationCardProps {
   config?: CommandCenterConfig;
   onConfigureEmergency?: (type: EmergencyType) => void;
   onConfigureSchedule?: () => void;
+  onConfigureCustom?: () => void;
+  onConfigureCommandPost?: () => void;
 }
 
 /** Time display is always interpreted in the school's WIB timezone, not device timezone. */
@@ -44,6 +46,8 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
   config,
   onConfigureEmergency,
   onConfigureSchedule,
+  onConfigureCustom,
+  onConfigureCommandPost,
 }) => {
   const { currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('ADMIN');
@@ -58,6 +62,7 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
   // Panic Modal state
   const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
   const [selectedEmergencyType, setSelectedEmergencyType] = useState<EmergencyType>('EARTHQUAKE');
+  const [selectedCustomId, setSelectedCustomId] = useState<string | null>(null);
   const [emergencyTitle, setEmergencyTitle] = useState('');
   const [emergencyMessage, setEmergencyMessage] = useState('');
   const [playAudioAlert, setPlayAudioAlert] = useState(true);
@@ -123,14 +128,30 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
   const openTriggerModal = (type: EmergencyType) => {
     const template = liveConfig.emergencyTemplates[type];
     setSelectedEmergencyType(type);
+    setSelectedCustomId(null);
     setEmergencyTitle(template.title);
     setEmergencyMessage(template.message);
+    setIsPanicModalOpen(true);
+  };
+
+  const openCustomScenario = (id: string) => {
+    const scenario = liveConfig.customEmergencies.find(item => item.id === id && item.isActive);
+    if (!scenario) return;
+    setSelectedCustomId(id);
+    setSelectedEmergencyType('GENERAL'); // Existing backend enum: custom scenario classified as GENERAL.
+    setEmergencyTitle(scenario.title);
+    setEmergencyMessage(scenario.message);
     setIsPanicModalOpen(true);
   };
 
   const handleBroadcastEmergency = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+    if (selectedCustomId && !liveConfig.customEmergencies.some(item => item.id === selectedCustomId && item.isActive)) {
+      setToastMessage('Jenis siaga ini sudah diubah atau dinonaktifkan oleh Admin. Buka kembali panduannya.');
+      setIsPanicModalOpen(false);
+      return;
+    }
     setIsBroadcasting(true);
     try {
       await EmergencyService.triggerEmergency(
@@ -203,6 +224,17 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
         </div>
       )}
 
+      {/* School-specific location, synchronized with Command Center config. */}
+      <section aria-label="Lokasi Pusat Komando" className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 sm:p-4 bg-white dark:bg-[var(--theme-card-bg)] space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-bold">Lokasi Pusat Komando: {liveConfig.commandPost.primary}</h3>
+          {isAdmin && onConfigureCommandPost && <button type="button" onClick={onConfigureCommandPost} className="min-h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">Atur Lokasi</button>}
+        </div>
+        {liveConfig.commandPost.details && <p className="text-xs whitespace-pre-wrap break-words">{liveConfig.commandPost.details}</p>}
+        {liveConfig.commandPost.alternate && <p className="text-xs"><strong>Posko alternatif:</strong> {liveConfig.commandPost.alternate}</p>}
+        {liveConfig.commandPost.assemblyPoint && <p className="text-xs"><strong>Titik kumpul:</strong> {liveConfig.commandPost.assemblyPoint}</p>}
+      </section>
+
       {/* PANIC BUTTONS SECTION: titles, descriptions and operator notes come from Firebase config. */}
       <Card>
         <CardHeader
@@ -227,6 +259,18 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
               </div>;
             })}
           </div>
+          {liveConfig.customEmergencies.filter(item => item.isActive).length > 0 && <div className="space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
+            <h4 className="text-xs font-bold">Bencana / Siaga Tambahan Sekolah</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {liveConfig.customEmergencies.filter(item=>item.isActive).map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col gap-2">
+                <div><h5 className="text-sm font-bold break-words">{item.label}</h5><p className="text-xs text-slate-500 mt-1 break-words">{item.description}</p></div>
+                <div className="mt-auto flex flex-wrap gap-2">
+                  <button type="button" className="min-h-11 rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 px-3 text-xs font-bold" onClick={()=>openCustomScenario(item.id)}>Tinjau Siaga</button>
+                  {isAdmin && onConfigureCustom && <button type="button" className="min-h-11 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs" onClick={onConfigureCustom}>Atur</button>}
+                </div>
+              </div>)}
+            </div>
+          </div>}
           <p className="text-[11px] text-slate-500">Tombol <strong>Atur</strong> membuka editor khusus admin. Mengubah teks dan checklist tidak otomatis membunyikan sirene atau mengirim siaran.</p>
         </CardContent>
       </Card>
@@ -343,9 +387,18 @@ export const BellEmergencyAutomationCard: React.FC<BellEmergencyAutomationCardPr
           </div>
 
           <div className="rounded-xl border border-amber-200 dark:border-amber-800 p-3 bg-amber-50/50 dark:bg-amber-950/30 space-y-2 text-xs">
-            <p className="font-bold text-amber-900 dark:text-amber-100">Checklist operator — {liveConfig.emergencyOptions[selectedEmergencyType].label}</p>
-            <p className="text-amber-900 dark:text-amber-200 leading-relaxed whitespace-pre-wrap break-words">{liveConfig.emergencyOptions[selectedEmergencyType].operatorChecklist}</p>
-            {(() => { const contact = liveConfig.emergencyContacts.find(c => c.id === liveConfig.emergencyOptions[selectedEmergencyType].contactId); return contact ? <p className="text-amber-900 dark:text-amber-200">Kontak rujukan: <strong>{contact.label}</strong> · {contact.number} (tidak dihubungi otomatis)</p> : null; })()}
+            {(() => {
+              const custom = selectedCustomId ? liveConfig.customEmergencies.find(item => item.id === selectedCustomId && item.isActive) : null;
+              const option = custom || liveConfig.emergencyOptions[selectedEmergencyType];
+              const contact = liveConfig.emergencyContacts.find(c => c.id === option.contactId);
+              return <>
+                <p className="font-bold text-amber-900 dark:text-amber-100">Checklist operator — {option.label}</p>
+                <p className="text-amber-900 dark:text-amber-200 leading-relaxed whitespace-pre-wrap break-words">{option.operatorChecklist}</p>
+                {custom && <p className="text-amber-800 dark:text-amber-200">Jenis tambahan menggunakan kategori umum (GENERAL) pada riwayat peringatan.</p>}
+                <p className="text-amber-900 dark:text-amber-200">Posko: <strong>{liveConfig.commandPost.primary}</strong>{liveConfig.commandPost.details ? ` · ${liveConfig.commandPost.details}` : ''}</p>
+                {contact && <p className="text-amber-900 dark:text-amber-200">Kontak rujukan: <strong>{contact.label}</strong> · {contact.number} (tidak dihubungi otomatis)</p>}
+              </>;
+            })()}
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">

@@ -205,7 +205,7 @@ export class SchoolSettingsService {
     });
     void AuditService.log({ userId: uid, userName: userSnap.data()?.fullName || 'Administrator', role: 'ADMIN',
       action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', target: 'Bel Darurat & Pusat Komando',
-      details: 'Admin memperbarui label dan jadwal referensi bel sekolah, template siaga, kontak darurat, SOP serta tampilan Pusat Komando' });
+      details: 'Admin memperbarui lokasi Pusat Komando, jenis siaga sekolah, bel, kontak dan SOP (tanpa menyiarkan darurat)' });
     return this.receipt(expected);
   }
 

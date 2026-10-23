@@ -11,6 +11,26 @@ export interface EmergencyCardOptions {
   contactId: EmergencyContactId;
 }
 export type EmergencyContact = { id: EmergencyContactId; label: string; number: string };
+/** School-specific scenario: uses GENERAL broadcast category for compatibility with existing alert backend. */
+export interface CustomEmergencyScenario {
+  id: string;
+  label: string;
+  description: string;
+  title: string;
+  message: string;
+  operatorChecklist: string;
+  contactId: EmergencyContactId;
+  isActive: boolean;
+}
+/** Display-only location information, not a GPS/geofence configuration. */
+export interface CommandPostLocation {
+  primary: string;
+  details: string;
+  alternate: string;
+  assemblyPoint: string;
+  instructions: string;
+}
+
 
 /** Display configuration and scheduled bell reference; no automatic sound/broadcast mechanism is triggered. */
 export interface CommandCenterConfig {
@@ -20,6 +40,8 @@ export interface CommandCenterConfig {
   emergencyTemplates: Record<EmergencyType, EmergencyTemplate>;
   emergencyOptions: Record<EmergencyType, EmergencyCardOptions>;
   emergencyContacts: EmergencyContact[];
+  customEmergencies: CustomEmergencyScenario[];
+  commandPost: CommandPostLocation;
   protocolSteps: string[];
   scheduledBells: SchoolBellScheduleItem[];
   updatedAt?: string;
@@ -45,6 +67,11 @@ export const DEFAULT_BELL_SCHEDULE: SchoolBellScheduleItem[] = [
 export const DEFAULT_COMMAND_CENTER_CONFIG: CommandCenterConfig = {
   heading: 'Pusat Pengawasan Real-Time & Peta Kampus',
   description: 'Integrasi monitoring pos piket, sebaran guru siaga, lonceng bel sekolah digital, dan panggilan darurat terpadu.',
+  commandPost: {
+    primary: 'Belum ditetapkan', details: '', alternate: '', assemblyPoint: '',
+    instructions: 'Hubungi petugas sekolah untuk memastikan lokasi posko yang aktif.',
+  },
+  customEmergencies: [],
   bellLabels: {
     MASUK: 'Bel Masuk Pagi', GANTI_JAM: 'Bel Ganti Jam Mapel',
     ISTIRAHAT: 'Bel Jam Istirahat', PULANG: 'Bel Pulang Sekolah',
@@ -88,6 +115,25 @@ export function normalizeCommandCenterConfig(raw?: Partial<CommandCenterConfig> 
   return {
     heading: clean(raw?.heading, base.heading, 90),
     description: clean(raw?.description, base.description, 260),
+    commandPost: {
+      primary: clean(raw?.commandPost?.primary, base.commandPost.primary, 90),
+      details: clean(raw?.commandPost?.details, base.commandPost.details, 200),
+      alternate: clean(raw?.commandPost?.alternate, base.commandPost.alternate, 90),
+      assemblyPoint: clean(raw?.commandPost?.assemblyPoint, base.commandPost.assemblyPoint, 120),
+      instructions: clean(raw?.commandPost?.instructions, base.commandPost.instructions, 300),
+    },
+    customEmergencies: (Array.isArray(raw?.customEmergencies) ? raw.customEmergencies : [])
+      .slice(0, 12).filter((item): item is CustomEmergencyScenario => Boolean(item && typeof item === 'object'))
+      .map((item, index) => ({
+        id: clean(item.id, `scenario_${index + 1}`, 64),
+        label: clean(item.label, '', 45),
+        description: clean(item.description, '', 180),
+        title: clean(item.title, '', 80),
+        message: clean(item.message, '', 600),
+        operatorChecklist: clean(item.operatorChecklist, '', 500),
+        contactId: EMERGENCY_CONTACT_IDS.includes(item.contactId) ? item.contactId : 'BPBD',
+        isActive: item.isActive !== false,
+      })),
     bellLabels: Object.fromEntries(SCHOOL_BELL_KINDS.map(k =>
       [k, clean(raw?.bellLabels?.[k], base.bellLabels[k], 45)])) as CommandCenterConfig['bellLabels'],
     emergencyTemplates: Object.fromEntries(EMERGENCY_TYPES.map(t => [t, {
@@ -132,6 +178,25 @@ export function normalizeCommandCenterConfig(raw?: Partial<CommandCenterConfig> 
 export function validateCommandCenterConfig(config: CommandCenterConfig): string[] {
   const errors: string[] = [];
   if (!config.heading.trim() || !config.description.trim()) errors.push('Judul dan deskripsi Pusat Komando wajib diisi.');
+  if (!config.commandPost.primary.trim() || config.commandPost.primary.length > 90) errors.push('Lokasi utama Pusat Komando harus diisi (maksimal 90 karakter).');
+  if (config.commandPost.details.length > 200 || config.commandPost.alternate.length > 90 || config.commandPost.assemblyPoint.length > 120 || config.commandPost.instructions.length > 300) errors.push('Informasi lokasi Pusat Komando terlalu panjang.');
+  if (!Array.isArray(config.customEmergencies) || config.customEmergencies.length > 12) {
+    errors.push('Maksimal 12 jenis bencana tambahan.');
+  } else {
+    const ids = new Set<string>();
+    const labels = new Set<string>(EMERGENCY_TYPES.map(type => config.emergencyOptions[type].label.trim().toLocaleLowerCase('id-ID')));
+    for (const scenario of config.customEmergencies) {
+      if (!/^scenario_[a-zA-Z0-9_-]{1,55}$/.test(scenario.id) || ids.has(scenario.id)) errors.push('ID jenis siaga tambahan tidak valid atau duplikat.');
+      ids.add(scenario.id);
+      const label = scenario.label.trim().toLocaleLowerCase('id-ID');
+      if (!label || label.length > 45 || labels.has(label)) errors.push(`Nama siaga tambahan harus unik dan maksimal 45 karakter: ${scenario.label}.`);
+      labels.add(label);
+      if (!scenario.description.trim() || scenario.description.length > 180) errors.push(`Deskripsi ${scenario.label} harus diisi (maksimal 180 karakter).`);
+      if (!scenario.title.trim() || scenario.title.length > 80 || scenario.message.trim().length < 15 || scenario.message.length > 600) errors.push(`Judul atau pesan ${scenario.label} tidak lengkap.`);
+      if (scenario.operatorChecklist.trim().length < 15 || scenario.operatorChecklist.length > 500) errors.push(`Checklist ${scenario.label} minimal 15 karakter.`);
+      if (!EMERGENCY_CONTACT_IDS.includes(scenario.contactId)) errors.push(`Kontak siaga ${scenario.label} tidak tersedia.`);
+    }
+  }
   for (const kind of SCHOOL_BELL_KINDS) {
     if (!config.bellLabels[kind]?.trim()) errors.push(`Nama bel ${kind} harus diisi.`);
   }

@@ -154,6 +154,27 @@ export const CommandCenterPreview: React.FC = () => {
         </div>
       </div>
 
+      {/* R39: live command post location and available response scenarios. */}
+      <section aria-label="Lokasi dan jenis siaga Pusat Komando" className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-bold"><MapPin className="w-4 h-4 text-[var(--theme-primary)]"/> Lokasi Pusat Komando</div>
+          <p className="font-semibold text-sm break-words">{commandConfig.commandPost.primary}</p>
+          {commandConfig.commandPost.details && <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">{commandConfig.commandPost.details}</p>}
+          {commandConfig.commandPost.alternate && <p className="text-xs"><strong>Posko alternatif:</strong> {commandConfig.commandPost.alternate}</p>}
+          {commandConfig.commandPost.assemblyPoint && <p className="text-xs"><strong>Titik kumpul:</strong> {commandConfig.commandPost.assemblyPoint}</p>}
+          {commandConfig.commandPost.instructions && <p className="text-xs text-slate-500 whitespace-pre-wrap break-words">{commandConfig.commandPost.instructions}</p>}
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] p-4 space-y-2">
+          <h2 className="flex items-center gap-2 text-sm font-bold"><ShieldCheck className="w-4 h-4 text-[var(--theme-primary)]"/> Jenis Bencana & Siaga Tersedia</h2>
+          <div className="flex flex-wrap gap-2">
+            {Object.values(commandConfig.emergencyOptions).map((item, index) => <span key={index} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-2.5 py-1.5 text-xs">{item.label}</span>)}
+            {commandConfig.customEmergencies.filter(item => item.isActive).map(item => <span key={item.id} className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1.5 text-xs">{item.label}</span>)}
+          </div>
+          <p className="text-[11px] text-slate-500">Informasi mengikuti pengaturan Admin secara realtime; menampilkan kategori tidak menyalakan alarm.</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => setIsEmergencyOpen(true)}>Lihat Arahan & Kontak Siaga</Button>
+        </div>
+      </section>
+
       {/* DIGITAL SCHOOL BELL CONTROLLER */}
       <Card>
         <CardHeader

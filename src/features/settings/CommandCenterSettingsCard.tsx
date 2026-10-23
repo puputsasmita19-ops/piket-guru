@@ -22,9 +22,9 @@ const TYPE_LABELS: Record<string, string> = { EARTHQUAKE: 'Gempa Bumi', FIRE: 'K
 const inputStyle = 'w-full min-h-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-[var(--theme-ring)]';
 const labelStyle = 'block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5';
 
-type Tab = 'command' | 'bell' | 'schedule' | 'emergency' | 'contacts';
+type Tab = 'command' | 'bell' | 'schedule' | 'emergency' | 'additional' | 'contacts';
 
-export type EmergencyEditorRequest = { tab: 'emergency' | 'schedule' | 'bell'; type?: EmergencyType; sequence: number };
+export type EmergencyEditorRequest = { tab: 'emergency' | 'additional' | 'schedule' | 'bell' | 'command'; type?: EmergencyType; sequence: number };
 export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }: { settings: SchoolSettings; onUpdated: (value: SchoolSettings) => void; focusRequest?: EmergencyEditorRequest | null }) {
   const { currentUser, hasRole } = useAuth();
   const admin = hasRole('ADMIN');
@@ -69,6 +69,18 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
       }]};
     });
   };
+  const addScenario = () => setDraft(prev => {
+    if (prev.customEmergencies.length >= 12) return prev;
+    const id = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return { ...prev, customEmergencies: [...prev.customEmergencies, {
+      id, label: '', description: '', title: '', message: '', operatorChecklist: '',
+      contactId: 'BPBD', isActive: false,
+    }] };
+  });
+  const updateScenario = (id: string, patch: Partial<CommandCenterConfig['customEmergencies'][number]>) =>
+    setDraft(prev => ({ ...prev, customEmergencies: prev.customEmergencies.map(item => item.id === id ? { ...item, ...patch } : item) }));
+  const changePost = (patch: Partial<CommandCenterConfig['commandPost']>) =>
+    setDraft(prev => ({ ...prev, commandPost: { ...prev.commandPost, ...patch } }));
   const beginEdit = () => {
     const next = normalizeCommandCenterConfig(settings.commandCenterConfig);
     setOriginal(next); setDraft(next); setMessage(null); setEditing(true);
@@ -90,19 +102,30 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
 
   return <Card>
     <div ref={editorRef} data-command-settings-editor className="scroll-mt-24" />
-    <CardHeader title="Edit Bel Darurat & Pusat Komando" subtitle="Edit judul Pusat Komando, bel manual, jadwal bel referensi, pesan darurat, kontak, dan SOP (khusus Administrator)." />
+    <CardHeader title="Edit Bel Darurat & Pusat Komando" subtitle="Kelola lokasi posko, kategori bencana tambahan, bel, pesan siaga, kontak, dan SOP (khusus Administrator)." />
     <CardContent className="p-4 sm:p-6 space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 max-w-xl">Pengaturan tersimpan realtime di Firebase, termasuk jadwal bel referensi. <strong>Uji suara hanya di perangkat ini</strong>; tombolnya tidak mengirim siaran ke pengguna lain.</p>
         {admin && !editing && <Button size="sm" variant="outline" leftIcon={<Edit2 className="w-4 h-4" />} onClick={beginEdit}>Edit Pengaturan</Button>}
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Kategori konfigurasi Pusat Komando">
-        {([['command','Pusat Komando'],['bell','Bel Manual'],['schedule','Jadwal Bel'],['emergency','Pesan Darurat'],['contacts','Kontak & SOP']] as [Tab,string][]).map(([key,title]) =>
+        {([['command','Pusat Komando'],['bell','Bel Manual'],['schedule','Jadwal Bel'],['emergency','Pesan Darurat'],['additional','Jenis Bencana +'],['contacts','Kontak & SOP']] as [Tab,string][]).map(([key,title]) =>
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`shrink-0 min-h-10 px-3 rounded-xl text-xs font-bold border ${tab === key ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border-[var(--theme-primary-border)]' : 'text-slate-500 border-slate-200 dark:border-slate-700'}`}>{title}</button>)}
       </div>
       {tab === 'command' && <div className="space-y-3">
         <label className="block"><span className={labelStyle}>Judul Pusat Komando</span><input disabled={!editing} maxLength={90} className={inputStyle} value={draft.heading} onChange={e => change({ heading: e.target.value })}/></label>
         <label className="block"><span className={labelStyle}>Deskripsi halaman</span><textarea disabled={!editing} maxLength={260} rows={3} className={inputStyle} value={draft.description} onChange={e => change({ description: e.target.value })}/></label>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 sm:p-4 space-y-3">
+          <h4 className="font-bold text-sm">Lokasi Posko / Pusat Komando</h4>
+          <p className="text-xs text-slate-500">Lokasi ini ditampilkan langsung di layar Pusat Komando dan petunjuk operator. Bukan koordinat GPS presensi.</p>
+          <label className="block"><span className={labelStyle}>Lokasi utama / nama ruangan</span><input disabled={!editing} maxLength={90} className={inputStyle} value={draft.commandPost.primary} onChange={e => changePost({primary:e.target.value})} placeholder="Contoh: Ruang Tata Usaha"/></label>
+          <label className="block"><span className={labelStyle}>Petunjuk alamat / lantai</span><textarea disabled={!editing} maxLength={200} rows={2} className={inputStyle} value={draft.commandPost.details} onChange={e => changePost({details:e.target.value})} placeholder="Contoh: Gedung A, lantai dasar"/></label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="block"><span className={labelStyle}>Posko alternatif (opsional)</span><input disabled={!editing} maxLength={90} className={inputStyle} value={draft.commandPost.alternate} onChange={e => changePost({alternate:e.target.value})}/></label>
+            <label className="block"><span className={labelStyle}>Titik kumpul (opsional)</span><input disabled={!editing} maxLength={120} className={inputStyle} value={draft.commandPost.assemblyPoint} onChange={e => changePost({assemblyPoint:e.target.value})}/></label>
+          </div>
+          <label className="block"><span className={labelStyle}>Arahan menuju posko</span><textarea disabled={!editing} maxLength={300} rows={2} className={inputStyle} value={draft.commandPost.instructions} onChange={e => changePost({instructions:e.target.value})}/></label>
+        </div>
       </div>}
       {tab === 'bell' && <div className="space-y-3">
         <p className="text-xs text-slate-500">Edit nama bel manual di Pusat Komando. Jenis suara tetap mengikuti nada bawaan aplikasi.</p>
@@ -156,6 +179,32 @@ export function CommandCenterSettingsCard({ settings, onUpdated, focusRequest }:
           </select></label>
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50/60 dark:bg-slate-900/40 space-y-1" aria-label="Pratinjau tombol siaga"><p className="font-bold text-sm">{draft.emergencyOptions[selectedEmergency].label || 'Nama tombol'}</p><p className="text-xs text-slate-500">{draft.emergencyOptions[selectedEmergency].description || 'Keterangan kartu belum diisi.'}</p></div>
         </div>
+      </div>}
+      {tab === 'additional' && <div className="space-y-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+          Tambahkan jenis bencana sesuai kondisi sekolah, misalnya banjir atau pohon tumbang. Kartu aktif tampil realtime di Pusat Komando dan Bel & Darurat. Menyimpan pengaturan <strong>tidak menyalakan sirene atau mengirim peringatan.</strong>
+          Jenis tambahan menggunakan kategori umum saat siaran, agar kompatibel dengan sistem peringatan yang sudah ada.
+        </div>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs font-semibold">{draft.customEmergencies.length} dari 12 jenis tambahan</p>
+          {admin && editing && <Button type="button" size="sm" variant="outline" disabled={saving || draft.customEmergencies.length >= 12} onClick={addScenario} leftIcon={<Plus className="w-4 h-4"/>}>Tambah Jenis Bencana</Button>}
+        </div>
+        {draft.customEmergencies.map((item, index) => <div key={item.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex gap-2 items-center text-xs font-bold"><input type="checkbox" className="w-4 h-4" disabled={!editing} checked={item.isActive} onChange={e => updateScenario(item.id,{isActive:e.target.checked})}/> {item.isActive ? 'Aktif' : 'Nonaktif'} · Siaga {index+1}</label>
+            {editing && <button type="button" aria-label={`Hapus siaga ${item.label || index + 1}`} className="min-h-10 min-w-10 text-rose-600 border border-rose-200 rounded-lg inline-flex justify-center items-center" onClick={() => change({customEmergencies:draft.customEmergencies.filter(s => s.id !== item.id)})}><Trash2 className="w-4 h-4"/></button>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label><span className={labelStyle}>Nama jenis kejadian</span><input disabled={!editing} maxLength={45} className={inputStyle} value={item.label} onChange={e => updateScenario(item.id,{label:e.target.value})} placeholder="Contoh: Banjir"/></label>
+            <label><span className={labelStyle}>Kontak rujukan</span><select disabled={!editing} className={inputStyle} value={item.contactId} onChange={e => updateScenario(item.id,{contactId:e.target.value as typeof item.contactId})}>{EMERGENCY_CONTACT_IDS.map(id => {const contact=draft.emergencyContacts.find(c=>c.id===id);return <option key={id} value={id}>{contact?.label || id}</option>;})}</select></label>
+          </div>
+          <label className="block"><span className={labelStyle}>Deskripsi singkat untuk kartu</span><input disabled={!editing} maxLength={180} className={inputStyle} value={item.description} onChange={e => updateScenario(item.id,{description:e.target.value})}/></label>
+          <label className="block"><span className={labelStyle}>Judul peringatan</span><input disabled={!editing} maxLength={80} className={inputStyle} value={item.title} onChange={e => updateScenario(item.id,{title:e.target.value})}/></label>
+          <label className="block"><span className={labelStyle}>Pesan siaga (min. 15 karakter)</span><textarea disabled={!editing} maxLength={600} rows={3} className={inputStyle} value={item.message} onChange={e => updateScenario(item.id,{message:e.target.value})}/></label>
+          <label className="block"><span className={labelStyle}>Checklist operator (min. 15 karakter)</span><textarea disabled={!editing} maxLength={500} rows={3} className={inputStyle} value={item.operatorChecklist} onChange={e => updateScenario(item.id,{operatorChecklist:e.target.value})}/></label>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-xs"><strong>Pratinjau:</strong> {item.label || 'Nama kejadian'} · {item.description || 'Deskripsi singkat'} {item.isActive ? '· Ditampilkan' : '· Disembunyikan'}</div>
+        </div>)}
+        {!draft.customEmergencies.length && <p className="text-xs text-slate-500">Belum ada jenis tambahan. Admin dapat menambah sesuai kondisi sekolah.</p>}
       </div>}
       {tab === 'contacts' && <div className="space-y-4">
         <p className="text-xs text-slate-500">Verifikasi nomor telepon dengan pihak sekolah/instansi sebelum digunakan dalam situasi darurat.</p>

@@ -4,6 +4,7 @@ import { Button } from '../../components/common/Button';
 import { SchoolBellService } from '../../services/audio/bellService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import { SchoolSettings } from '../../types';
+import { normalizeCommandCenterConfig } from '../../types/commandCenterConfig.types';
 import {
   Siren,
   PhoneCall,
@@ -27,28 +28,29 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
 }) => {
   const [isPlayingSiren, setIsPlayingSiren] = useState(false);
 
+  const config = normalizeCommandCenterConfig(settings.commandCenterConfig);
   const emergencyContacts = [
     {
-      name: 'Polsek Setempat (Kepolisian)',
-      number: '110',
+      name: config.emergencyContacts[0].label,
+      number: config.emergencyContacts[0].number,
       icon: ShieldAlert,
       color: 'text-blue-600 bg-blue-50 border-blue-200',
     },
     {
-      name: 'Puskesmas / Ambulans Gawat Darurat',
-      number: '119',
+      name: config.emergencyContacts[1].label,
+      number: config.emergencyContacts[1].number,
       icon: Hospital,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
     },
     {
-      name: 'Pemadam Kebakaran (Damkar)',
-      number: '113',
+      name: config.emergencyContacts[2].label,
+      number: config.emergencyContacts[2].number,
       icon: Flame,
       color: 'text-rose-600 bg-rose-50 border-rose-200',
     },
     {
-      name: 'Badan Penanggulangan Bencana (BPBD)',
-      number: '112',
+      name: config.emergencyContacts[3].label,
+      number: config.emergencyContacts[3].number,
       icon: Siren,
       color: 'text-amber-600 bg-amber-50 border-amber-200',
     },
@@ -94,6 +96,31 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
           </Button>
         </div>
 
+        {/* R39: configurable command post and read-only emergency instructions. */}
+        <section className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs">
+          <h4 className="font-bold">Lokasi Pusat Komando</h4>
+          <p className="font-semibold break-words">{config.commandPost.primary}</p>
+          {config.commandPost.details && <p className="whitespace-pre-wrap break-words">{config.commandPost.details}</p>}
+          {config.commandPost.alternate && <p><strong>Alternatif:</strong> {config.commandPost.alternate}</p>}
+          {config.commandPost.assemblyPoint && <p><strong>Titik kumpul:</strong> {config.commandPost.assemblyPoint}</p>}
+          {config.commandPost.instructions && <p className="whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{config.commandPost.instructions}</p>}
+        </section>
+        {config.customEmergencies.filter(item => item.isActive).length > 0 && <section className="space-y-2">
+          <h4 className="text-xs font-bold">Panduan Siaga Tambahan</h4>
+          {config.customEmergencies.filter(item => item.isActive).map(item => {
+            const contact = config.emergencyContacts.find(c => c.id === item.contactId);
+            return <details key={item.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs">
+              <summary className="cursor-pointer min-h-9 flex items-center font-semibold">{item.label}</summary>
+              <div className="space-y-2 mt-2">
+                <p className="text-slate-600 dark:text-slate-300">{item.description}</p>
+                <p><strong>Pesan:</strong> {item.message}</p>
+                <p className="whitespace-pre-wrap"><strong>Checklist:</strong> {item.operatorChecklist}</p>
+                {contact && <p><strong>Kontak:</strong> {contact.label} · {contact.number}</p>}
+              </div>
+            </details>;
+          })}
+        </section>}
+
         {/* EMERGENCY HOTLINES */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -137,10 +164,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
             <span>Protokol Tanggap Darurat Tim Piket Sekolah:</span>
           </span>
           <ol className="list-decimal list-inside text-slate-600 dark:text-slate-400 space-y-1 text-[11px] leading-relaxed">
-            <li>Petugas piket pos gerbang segera amankan akses keluar masuk sekolah.</li>
-            <li>Koordinator piket menghubungi Kepala Sekolah dan instansi darurat terkait.</li>
-            <li>Arahkan seluruh guru dan siswa menuju titik kumpul (*Assembly Point*) lapangan utama.</li>
-            <li>Bawa buku presensi dan log insiden untuk verifikasi kelengkapan personil.</li>
+            {config.protocolSteps.map((step, index) => <li key={index}>{step}</li>)}
           </ol>
         </div>
 
