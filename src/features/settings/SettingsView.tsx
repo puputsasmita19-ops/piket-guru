@@ -77,6 +77,31 @@ import { LessonPeriodSettingsCard } from './LessonPeriodSettingsCard';
 
 type SettingsTab = 'login_appearance' | 'branding' | 'operational_reports' | 'dashboard_info' | 'notifications' | 'school' | 'student_tardy' | 'lesson_periods' | 'lobby_tv' | 'security' | 'bell' | 'snapshots' | 'backup' | 'theme' | 'audit';
 
+/** One source of truth for the desktop navigation grid and compact mobile picker. */
+const SETTINGS_NAV_ITEMS: Array<{
+  id: SettingsTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+}> = [
+  { id: 'school', label: 'Profil & GPS', icon: MapPin },
+  { id: 'branding', label: 'Logo & Kop Surat', icon: ImageIcon, adminOnly: true },
+  { id: 'operational_reports', label: 'Cetak & Buku Tamu', icon: FileText, adminOnly: true },
+  { id: 'login_appearance', label: 'Halaman Login', icon: Palette, adminOnly: true },
+  { id: 'dashboard_info', label: 'Info Dashboard', icon: Layers, adminOnly: true },
+  { id: 'student_tardy', label: 'Keterlambatan Siswa', icon: Clock },
+  { id: 'lesson_periods', label: 'Jam Pelajaran (JP)', icon: Clock },
+  { id: 'lobby_tv', label: 'Pengaturan TV Lobi', icon: Tv },
+  { id: 'security', label: 'Keamanan Siber', icon: ShieldCheck },
+  { id: 'bell', label: 'Bel & Darurat', icon: Bell },
+  { id: 'notifications', label: 'Notifikasi & Pengumuman', icon: Bell, adminOnly: true },
+  { id: 'snapshots', label: 'Snapshot Cloud', icon: Camera },
+  { id: 'backup', label: 'Pemeliharaan & Backup', icon: HardDrive },
+  { id: 'theme', label: 'Tema', icon: Palette },
+  { id: 'audit', label: 'Audit Forensik', icon: History },
+];
+
+
 const ALL_OPERATIONAL_DAYS: DayOfWeek[] = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
 
 type SettingsFeedback = { tone: 'success' | 'error' | 'info'; message: string };
@@ -768,7 +793,7 @@ export const SettingsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="page-header flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="page-header flex flex-col gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <Settings className="w-6 h-6 text-[var(--theme-primary)]" />
@@ -779,131 +804,42 @@ export const SettingsView: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab Switcher (CR-006: Clean layout aligned with adjacent menus, no truncation) */}
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-[var(--theme-surface-subtle)] p-1.5 rounded-2xl overflow-x-auto max-w-full scrollbar-thin">
-          <button
-            onClick={() => setActiveTab('school')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'school'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+        {/* R40: no sideways scrolling. One compact picker on phones, full grid on larger screens. */}
+        <nav aria-label="Bagian Pengaturan Sekolah" className="w-full min-w-0">
+          <label htmlFor="settings-section-select" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300 sm:hidden">
+            Pilih bagian pengaturan
+          </label>
+          <select
+            id="settings-section-select"
+            value={activeTab}
+            onChange={(event) => setActiveTab(event.target.value as SettingsTab)}
+            className="sm:hidden block w-full min-h-12 min-w-0 rounded-xl border border-[var(--theme-primary-border)] bg-white dark:bg-[var(--theme-card-bg)] px-3 py-2 text-sm font-semibold text-slate-800 dark:text-white shadow-sm focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
           >
-            <MapPin className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-            Profil & GPS
-          </button>
-          {isAdmin && <button type="button" onClick={() => setActiveTab('branding')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'branding' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><ImageIcon className="w-3.5 h-3.5"/>Logo & Kop Surat</button>}
-          {isAdmin && <button onClick={() => setActiveTab('operational_reports')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'operational_reports' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><FileText className="w-3.5 h-3.5"/>Cetak & Buku Tamu</button>}
-          {isAdmin && <button type="button" onClick={() => setActiveTab('login_appearance')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'login_appearance' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><Palette className="w-3.5 h-3.5"/>Halaman Login</button>}
-          {isAdmin && <button onClick={() => setActiveTab('dashboard_info')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'dashboard_info' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
-            <Layers className="w-3.5 h-3.5" />Info Dashboard
-          </button>}
-          <button
-            onClick={() => setActiveTab('student_tardy')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'student_tardy'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-rose-500" />
-            Keterlambatan Siswa
-          </button>
-          <button
-            onClick={() => setActiveTab('lesson_periods')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'lesson_periods'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
-            Jam Pelajaran (JP)
-          </button>
-          <button
-            onClick={() => setActiveTab('lobby_tv')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'lobby_tv'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Tv className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
-            Pengaturan TV Lobi
-          </button>
-          <button
-            onClick={() => setActiveTab('security')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'security'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            Keamanan Siber
-          </button>
-          <button
-            onClick={() => setActiveTab('bell')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'bell'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Bell className="w-3.5 h-3.5 text-amber-500" />
-            Bel & Darurat
-          </button>
-          {isAdmin && <button onClick={() => setActiveTab('notifications')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === 'notifications' ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
-            <Bell className="w-3.5 h-3.5" />Notifikasi & Pengumuman
-          </button>}
-          <button
-            onClick={() => setActiveTab('snapshots')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'snapshots'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Camera className="w-3.5 h-3.5 text-indigo-500" />
-            Snapshot Cloud
-          </button>
-          <button
-            onClick={() => setActiveTab('backup')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'backup'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <HardDrive className="w-3.5 h-3.5 text-emerald-500" />
-            Pemeliharaan &amp; Backup
-          </button>
-          <button
-            onClick={() => setActiveTab('theme')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'theme'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Palette className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-            Tema
-          </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-              activeTab === 'audit'
-                ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <History className="w-3.5 h-3.5 text-[var(--theme-primary)]" />
-            Audit Forensik
-          </button>
-        </div>
+            {SETTINGS_NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(item => (
+              <option key={item.id} value={item.id}>{item.label}</option>
+            ))}
+          </select>
+          <div className="hidden sm:grid sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 rounded-2xl bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-2">
+            {SETTINGS_NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(item => {
+              const Icon = item.icon;
+              const selected = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  aria-current={selected ? 'page' : undefined}
+                  className={`flex min-h-12 min-w-0 w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-xs font-semibold leading-snug transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${selected
+                    ? 'border-[var(--theme-primary-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
+                    : 'border-transparent bg-white/50 dark:bg-[var(--theme-card-bg)]/50 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 break-words">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
       </div>
 
       {saveSuccessBanner && (

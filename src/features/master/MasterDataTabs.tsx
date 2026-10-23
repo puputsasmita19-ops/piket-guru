@@ -569,8 +569,8 @@ export const MasterDataTabs: React.FC = () => {
         )}
       </div>
 
-      {/* Tabs Navigation (CR-006: full width, no truncation, aligned tabs) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin border-b border-slate-200 dark:border-slate-800 w-full">
+      {/* R40: all master categories visible without horizontal scrolling on desktop or mobile. */}
+      <nav aria-label="Kategori Master Data" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 w-full min-w-0">
         {[
           { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
           { id: 'subjects', label: 'Mata Pelajaran', icon: BookOpen },
@@ -590,15 +590,17 @@ export const MasterDataTabs: React.FC = () => {
                 setActiveTab(tab.id as MasterTab);
                 setSearchQuery('');
               }}
-              className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 font-semibold text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              type="button"
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex w-full min-w-0 min-h-[52px] items-center justify-start gap-2 rounded-xl border p-2.5 text-left font-semibold text-[11px] sm:text-xs leading-snug transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${
                 isActive
-                  ? 'border-[var(--theme-primary)] text-[var(--theme-primary)] dark:text-[var(--theme-primary-text)] dark:border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/50 rounded-t-xl'
-                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'border-[var(--theme-primary-border)] text-[var(--theme-primary-text)] bg-[var(--theme-primary-light)] shadow-sm'
+                  : 'border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 hover:border-[var(--theme-primary-border)]'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              <span>{tab.label}</span>
-              {tab.count !== undefined && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              <span className="min-w-0 flex-1 break-words">{tab.label}</span>
+              {tab.count !== undefined && <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 isActive ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)]' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
               }`}>
                 {tab.count}
@@ -606,7 +608,7 @@ export const MasterDataTabs: React.FC = () => {
             </button>
           );
         })}
-      </div>
+      </nav>
 
       {/* The timetable owns its own day and search filters. */}
       {activeTab !== 'lessonSchedules' && activeTab !== 'subjects' && <Card>

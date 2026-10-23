@@ -29,10 +29,10 @@ export const UsersPreview: React.FC = () => {
         </div>
 
         {/* Master vs User Switcher */}
-        <div className="page-actions flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+        <div className="page-actions grid grid-cols-2 gap-1.5 w-full sm:w-auto bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
           <button
             onClick={() => setActiveMainTab('users')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg text-xs leading-snug font-bold text-center transition-all cursor-pointer ${
               activeMainTab === 'users'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -42,7 +42,7 @@ export const UsersPreview: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveMainTab('master')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg text-xs leading-snug font-bold text-center transition-all cursor-pointer ${
               activeMainTab === 'master'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
