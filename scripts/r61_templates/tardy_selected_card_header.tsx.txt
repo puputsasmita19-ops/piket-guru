@@ -1,0 +1,88 @@
+                          {/* R61 MOBILE TARDY CARD: identity, status and actions have independent rows */}
+                          <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-2.5">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="block break-words text-sm font-bold leading-snug text-slate-900 dark:text-white">
+                                  {entry.student.nama}
+                                </span>
+                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                  <span>Kelas: <strong>{entry.student.kelas}</strong></span>
+                                  {entry.student.noHpOrangTua && (
+                                    <span className="min-w-0 break-all">Ortu: {entry.student.noHpOrangTua}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                              <span
+                                className={`inline-flex max-w-full min-w-0 items-center break-words whitespace-normal rounded-lg px-2.5 py-1.5 text-[11px] font-semibold leading-snug ${
+                                  calc.minutesLate === null
+                                    ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                    : calc.isLate
+                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                }`}
+                              >
+                                {calc.displayText}
+                              </span>
+                              <span className={`inline-flex shrink-0 items-center rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${
+                                entry.frekuensiBulanIni >= 3
+                                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                              }`}>
+                                Ke-{entry.frekuensiBulanIni}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Full-width touch targets do not compete with a long status badge. */}
+                          <div className="grid min-w-0 grid-cols-3 gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800 sm:flex sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetStudentIdForPhoto(entry.student.id);
+                                setIsCameraOpen(true);
+                              }}
+                              className={`flex min-h-11 min-w-0 items-center justify-center sm:min-w-24 gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                                entry.fotoUrl
+                                  ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                              }`}
+                              title={entry.fotoUrl ? 'Ganti foto dokumentasi siswa' : 'Ambil foto dokumentasi siswa'}
+                              aria-label={`${entry.fotoUrl ? 'Ganti' : 'Ambil'} foto untuk ${entry.student.nama}`}
+                            >
+                              <Camera className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate"><span className="sm:hidden">{entry.fotoUrl ? 'Ada' : 'Foto'}</span><span className="hidden sm:inline">{entry.fotoUrl ? 'Foto Ada' : 'Foto'}</span></span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStudentId(isExpanded ? null : entry.student.id)}
+                              aria-expanded={isExpanded}
+                              aria-controls={isExpanded ? `student-tardy-adjust-${idx}` : undefined}
+                              className={`flex min-h-11 min-w-0 items-center justify-center sm:min-w-24 gap-1 rounded-xl border px-1.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                                entry.isCustomized
+                                  ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                              }`}
+                              title="Sesuaikan jam tiba, alasan, atau pembinaan siswa"
+                              aria-label={`${isExpanded ? 'Tutup' : 'Buka'} penyesuaian untuk ${entry.student.nama}`}
+                            >
+                              <Sliders className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate">{entry.isCustomized ? 'Diubah' : 'Atur'}</span>
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveStudent(entry.student.id)}
+                              className="flex min-h-11 min-w-0 items-center justify-center sm:min-w-24 gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                              aria-label={`Hapus ${entry.student.nama} dari daftar terpilih`}
+                            >
+                              <Trash2 className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate">Hapus</span>
+                            </button>
+                          </div>
+
