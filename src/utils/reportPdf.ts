@@ -141,22 +141,69 @@ export async function createPhotoReportPdf(photos: PhotoRecapItem[], settings: S
     y += f.write('LAMPIRAN DOKUMENTASI BULANAN', f.left + f.width / 2, y + 3, 11, true, 'center') + 4;
     y += f.write(`Periode: ${options.period}`, f.left, y, 9) + 3;
     const final = page === total - 1, signatureSpace = final && config.showSignatures ? 55 : 0;
-    const columns = options.perPage === 4 ? 2 : 1, gap = 4, cw = (f.width - (columns - 1) * gap) / columns, ch = (f.bottom - y - signatureSpace - gap) / 2;
-    if (ch < 28) throw new Error('Ruang foto terlalu sempit. Kurangi margin atau gunakan kertas tegak/lebih besar di pengaturan admin.');
-    for (let i = 0; i < options.perPage && page * options.perPage + i < photos.length; i++) {
-      const photo = photos[page * options.perPage + i], x = f.left + (i % columns) * (cw + gap), top = y + Math.floor(i / columns) * (ch + gap);
+    // R66: dynamically reserve caption height before placing each uncropped image.
+    const pageStart = page * options.perPage;
+    const pageItems = photos.slice(pageStart, pageStart + options.perPage);
+    const columns = options.perPage === 4 && pageItems.length > 1 ? 2 : 1;
+    const rows = Math.ceil(pageItems.length / columns);
+    const gap = 4;
+    const cw = (f.width - (columns - 1) * gap) / columns;
+    const ch = (f.bottom - y - signatureSpace - (rows - 1) * gap) / rows;
+    if (ch < 35) throw new Error('Ruang rekap foto terlalu sempit. Pilih 2 foto per halaman, kurangi margin, atau ubah orientasi kertas.');
+    for (let i = 0; i < pageItems.length; i++) {
+      const photo = pageItems[i];
+      const x = f.left + (i % columns) * (cw + gap);
+      const top = y + Math.floor(i / columns) * (ch + gap);
       options.signal?.throwIfAborted();
       const cache = options.imageCache;
       let data = cache?.get(photo.photoUrl);
-      if (!data) { data = await photoData(photo.photoUrl, options.signal); options.signal?.throwIfAborted(); if (cache) { if (cache.size >= 24) cache.delete(cache.keys().next().value!); cache.set(photo.photoUrl, data); } }
-      const props = doc.getImageProperties(data), maxW = cw - 4, maxH = ch - 23, ratio = Math.min(maxW / props.width, maxH / props.height);
-      doc.setDrawColor(180); doc.setLineWidth(.15); doc.rect(x, top, cw, ch);
-      doc.addImage(data, 'JPEG', x + (cw - props.width * ratio) / 2, top + 2 + (maxH - props.height * ratio) / 2, props.width * ratio, props.height * ratio);
-      const caption = [photo.title, photo.briefIdentity, `Kejadian: ${photo.tanggalKejadian}${photo.waktuKejadian ? ` ${photo.waktuKejadian}` : ''}`, photo.tanggalDokumentasi && photo.tanggalDokumentasi !== photo.tanggalKejadian ? `Dokumentasi: ${photo.tanggalDokumentasi}` : '', photo.petugasName ? `Petugas: ${photo.petugasName}` : ''].filter(Boolean).join('\n');
-      doc.setFont('PiketReport'); doc.setFontSize(7);
-      const lines = doc.splitTextToSize(caption, cw - 4) as string[];
-      if (lines.length > 7) throw new Error('Keterangan foto terlalu panjang untuk tata letak ini. Pilih 2 foto per halaman atau ringkas keterangannya.');
-      doc.text(lines, x + 2, top + ch - 19, { lineHeightFactor: 1.1 });
+      if (!data) {
+        data = await photoData(photo.photoUrl, options.signal);
+        options.signal?.throwIfAborted();
+        if (cache) {
+          if (cache.size >= 24) cache.delete(cache.keys().next().value!);
+          cache.set(photo.photoUrl, data);
+        }
+      }
+      const compact = options.perPage === 4 && columns === 2;
+      const titleSize = compact ? 7.3 : 8.4;
+      const detailSize = compact ? 6.6 : 7.4;
+      const parts: { value: string; size: number; bold: boolean }[] = [
+        { value: photo.title, size: titleSize, bold: true },
+        { value: photo.briefIdentity, size: detailSize, bold: false },
+        { value: `Kejadian: ${photo.tanggalKejadian}${photo.waktuKejadian ? ` ${photo.waktuKejadian}` : ''}`, size: detailSize, bold: false },
+        ...(photo.tanggalDokumentasi && photo.tanggalDokumentasi !== photo.tanggalKejadian ? [{ value: `Dokumentasi: ${photo.tanggalDokumentasi}`, size: detailSize, bold: false }] : []),
+        ...(photo.petugasName ? [{ value: `Petugas: ${photo.petugasName}`, size: detailSize, bold: false }] : []),
+      ].filter(part => part.value.trim());
+      const captionWidth = cw - 7;
+      const segments = parts.map(part => {
+        doc.setFont('PiketReport', part.bold ? 'bold' : 'normal');
+        doc.setFontSize(part.size);
+        const lines = doc.splitTextToSize(text(part.value), captionWidth) as string[];
+        return { ...part, lines, height: lines.length * part.size * PT * 1.24 + .6 };
+      });
+      const captionHeight = segments.reduce((sum, segment) => sum + segment.height, 0);
+      const pad = 3, imageGap = 2.5;
+      const imageBoxHeight = ch - 2 * pad - imageGap - captionHeight;
+      if (imageBoxHeight < 22) {
+        throw new Error('Keterangan foto tidak muat dengan rapi. Pilih 2 foto per halaman atau kurangi margin laporan.');
+      }
+      doc.setDrawColor(208, 216, 225); doc.setLineWidth(.2); doc.setFillColor(255, 255, 255);
+      doc.roundedRect(x, top, cw, ch, 2, 2, 'FD');
+      const props = doc.getImageProperties(data);
+      const scale = Math.min((cw - 2 * pad) / props.width, imageBoxHeight / props.height);
+      const imgW = props.width * scale, imgH = props.height * scale;
+      const imageY = top + pad;
+      doc.addImage(data, 'JPEG', x + (cw - imgW) / 2, imageY + (imageBoxHeight - imgH) / 2, imgW, imgH);
+      doc.setDrawColor(225, 231, 237); doc.setLineWidth(.15);
+      doc.line(x + pad, imageY + imageBoxHeight + imageGap / 2, x + cw - pad, imageY + imageBoxHeight + imageGap / 2);
+      let cursor = imageY + imageBoxHeight + imageGap;
+      for (const segment of segments) {
+        doc.setFont('PiketReport', segment.bold ? 'bold' : 'normal'); doc.setFontSize(segment.size); doc.setTextColor(25, 36, 52);
+        doc.text(segment.lines, x + pad + .25, cursor + segment.size * PT, { lineHeightFactor: 1.24 });
+        cursor += segment.height;
+      }
+      doc.setTextColor(0);
     }
     if (final) f.signatures(f.bottom - signatureSpace, options.date, options.city);
   }
