@@ -31,21 +31,25 @@ export const UsersPreview: React.FC = () => {
         {/* Master vs User Switcher */}
         <div className="page-actions grid grid-cols-2 gap-1.5 w-full sm:w-auto bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
           <button
+            type="button"
             onClick={() => setActiveMainTab('users')}
-            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg text-xs leading-snug font-bold text-center transition-all cursor-pointer ${
+            aria-pressed={activeMainTab === 'users'}
+            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg border text-xs leading-snug font-bold text-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${
               activeMainTab === 'users'
-                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-[var(--theme-primary-border)] bg-white dark:bg-slate-900 text-[var(--theme-primary-text)] shadow-xs'
+                : 'border-slate-300 dark:border-slate-600 bg-white/50 dark:bg-slate-900/30 text-slate-600 dark:text-slate-300 hover:border-[var(--theme-primary-border)] hover:bg-white dark:hover:bg-slate-900'
             }`}
           >
             Akun & Pengguna
           </button>
           <button
+            type="button"
             onClick={() => setActiveMainTab('master')}
-            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg text-xs leading-snug font-bold text-center transition-all cursor-pointer ${
+            aria-pressed={activeMainTab === 'master'}
+            className={`min-h-11 min-w-0 px-2.5 py-2 rounded-lg border text-xs leading-snug font-bold text-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${
               activeMainTab === 'master'
-                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-[var(--theme-primary-border)] bg-white dark:bg-slate-900 text-[var(--theme-primary-text)] shadow-xs'
+                : 'border-slate-300 dark:border-slate-600 bg-white/50 dark:bg-slate-900/30 text-slate-600 dark:text-slate-300 hover:border-[var(--theme-primary-border)] hover:bg-white dark:hover:bg-slate-900'
             }`}
           >
             Master Data & Audit
