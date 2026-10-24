@@ -1,0 +1,20 @@
+{
+  "schema": "R60_SYNTHETIC_V1",
+  "environment": "loopback-mock-only",
+  "teachers": 50,
+  "concurrency": 25,
+  "logicalOperations": 100,
+  "clientRequests": 200,
+  "mockWrites": 100,
+  "httpAttempts": 216,
+  "retries": 16,
+  "failed": 0,
+  "injectedTransient503": 8,
+  "injectedLostAck504": 8,
+  "p95ClientMs": 55.2,
+  "elapsedMs": 221.3,
+  "invariants": {
+    "oneCheckInAndCheckOutPerTeacher": true,
+    "zeroFailedClientActions": true
+  }
+}
