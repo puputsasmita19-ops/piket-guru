@@ -24,6 +24,22 @@ async function request(userId: string, method: 'POST' | 'DELETE', body: object) 
     throw error;
   } finally { clearTimeout(timer); }
 }
+export async function setProfileLoginVisibility(userId: string, expectedAvatarUrl: string, visible: boolean): Promise<boolean> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
+  const token = await user.getIdToken();
+  if (auth.currentUser?.uid !== user.uid) throw new Error('Akun telah berubah.');
+  const res = await fetch(`/api/drive/profile-photo/${encodeURIComponent(userId)}/login-visibility`, {
+    method: 'POST', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ visible, expectedAvatarUrl }),
+  });
+  const data = await res.json();
+  if (auth.currentUser?.uid !== user.uid) throw new Error('Akun telah berubah.');
+  if (!res.ok || !data.success) throw new Error(data.error || 'Pilihan foto login belum berhasil disimpan.');
+  return data.loginAvatarVisible === true;
+}
+
 export const ProfilePhotoService = {
   save: (userId: string, dataUrl: string, requestId: string, expectedAvatarUrl: string | null) => request(userId, 'POST', { dataUrl, requestId, expectedAvatarUrl }),
   remove: (userId: string, expectedAvatarUrl: string | null) => request(userId, 'DELETE', { expectedAvatarUrl }),

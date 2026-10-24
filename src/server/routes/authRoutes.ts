@@ -49,6 +49,7 @@ export function sanitizeUserProfile(u: any): UserProfile {
     email: u.email || '',
     phone: u.phone || '',
     avatarUrl: u.avatarUrl || null,
+    loginAvatarVisible: u.loginAvatarVisible === true,
     isActive: u.isActive === true,
     permissions: u.permissions || [],
     dataSource: u.dataSource || 'PRODUCTION',
@@ -305,6 +306,7 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
           fullName: data.fullName || '',
           role: data.role || 'GURU',
           avatarUrl: data.avatarUrl || null,
+          loginAvatarVisible: data.loginAvatarVisible === true,
           isActive: data.isActive === true,
         };
       })

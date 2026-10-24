@@ -5,10 +5,10 @@ import { UserAvatar } from '../../components/common/UserAvatar';
 import { Camera, Trash2, Maximize, Plus, MinusCircle, RotateCcw } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserProfile } from '../../types';
-import { ProfilePhotoService } from '../../services/profile/profilePhotoService';
+import { ProfilePhotoService, setProfileLoginVisibility } from '../../services/profile/profilePhotoService';
 import { openProfilePhoto, compressProfilePhoto, getProfilePhotoLayout, DEFAULT_PROFILE_PHOTO_FRAME, PROFILE_PHOTO_MAX_ZOOM, type ProfilePhotoFrame } from '../../services/profile/profilePhotoCompression';
 
-export default function ProfilePhotoModal({ user, onClose, onSaved }: { user: UserProfile; onClose: () => void; onSaved: (url: string | null) => void }) {
+export default function ProfilePhotoModal({ user, onClose, onSaved, onVisibilityChanged }: { user: UserProfile; onClose: () => void; onSaved: (url: string | null) => void; onVisibilityChanged?: (visible: boolean) => void }) {
   const { hasRole, currentUser } = useAuth();
   const input = useRef<HTMLInputElement>(null);
   const request = useRef(0);
@@ -20,6 +20,7 @@ export default function ProfilePhotoModal({ user, onClose, onSaved }: { user: Us
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [loginAvatarVisible, setLoginAvatarVisible] = useState(user.loginAvatarVisible === true);
   const admin = hasRole('ADMIN');
   const viewer = useRef(currentUser?.id);
   useEffect(() => () => { ++request.current; }, []);
@@ -53,6 +54,16 @@ export default function ProfilePhotoModal({ user, onClose, onSaved }: { user: Us
     } catch (e: any) { if (id === request.current) setError(e.message || 'Foto belum tersimpan.'); }
     finally { if (id === request.current) setBusy(false); }
   };
+  const changeLoginVisibility = async (visible: boolean) => {
+    if (!admin || busy || !user.avatarUrl) return;
+    setBusy(true); setError('');
+    try {
+      const saved = await setProfileLoginVisibility(user.id, user.avatarUrl, visible);
+      setLoginAvatarVisible(saved);
+      onVisibilityChanged?.(saved);
+    } catch (e: any) { setError(e?.message || 'Pengaturan foto login belum tersimpan.'); }
+    finally { setBusy(false); }
+  };
   if (!admin) return null;
   return <Modal isOpen onClose={() => { if (!busy) onClose(); }} title="Foto profil pengguna" maxWidth="md" footer={<div className="flex gap-2 justify-end"><Button variant="outline" onClick={onClose} disabled={busy}>Batal</Button><Button onClick={() => save()} disabled={!photo || processing} isLoading={busy} loadingText="Memproses…">Simpan foto</Button></div>}>
     <div className="space-y-4 text-sm">
@@ -75,6 +86,13 @@ export default function ProfilePhotoModal({ user, onClose, onSaved }: { user: Us
       </div>}
       <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Pilih foto profil" className="sr-only" disabled={busy || processing} onChange={e => select(e.target.files?.[0])} />
       <div className="flex flex-wrap gap-2 justify-center"><Button variant="outline" leftIcon={<Camera className="w-4 h-4" />} disabled={busy || processing} onClick={() => input.current?.click()}>{processing ? 'Mengompres foto…' : 'Pilih foto'}</Button>{user.avatarUrl && <Button variant="ghost" leftIcon={<Trash2 className="w-4 h-4" />} disabled={busy || processing} onClick={() => setRemoveConfirm(true)}>Hapus dari profil</Button>}</div>
+      {user.avatarUrl && <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
+        <label className="flex items-start gap-3 cursor-pointer text-xs leading-relaxed">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0" checked={loginAvatarVisible} disabled={busy || processing} onChange={e => void changeLoginVisibility(e.target.checked)} />
+          <span><strong>Tampilkan foto akun ini di halaman login</strong><span className="block text-slate-600 dark:text-slate-300 mt-1">Bila diaktifkan, foto dapat dilihat publik tanpa masuk akun. Hanya foto profil yang dipilih, bukan arsip Google Drive lainnya.</span></span>
+        </label>
+        <p className="text-[11px] text-slate-600 dark:text-slate-400" role="status">{loginAvatarVisible ? 'Foto login publik aktif untuk akun ini.' : 'Foto tetap privat dan login menampilkan ikon pengguna.'}</p>
+      </div>}
       {removeConfirm && <div className="p-3 rounded-xl bg-[var(--theme-primary-light)] border border-[var(--theme-primary-border)] text-xs space-y-2"><p>Gunakan inisial kembali? Foto tetap tersimpan sebagai arsip privat di Google Drive.</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => setRemoveConfirm(false)}>Batalkan</Button><Button size="sm" variant="danger" disabled={busy} onClick={() => save(true)}>Ya, gunakan inisial</Button></div></div>}
       <p role="status" className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{photo ? `Siap disimpan: ${photo.edge} × ${photo.edge} px · ${Math.ceil(photo.bytes / 1024)} KB JPEG.` : 'JPG, PNG, atau WebP · sumber maksimal 8 MB.'} Foto dikompres otomatis dan disimpan di Google Drive sekolah.</p>
       {error && <p role="alert" className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-200 text-xs leading-relaxed">{error}</p>}

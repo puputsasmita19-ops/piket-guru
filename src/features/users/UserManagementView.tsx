@@ -2,7 +2,7 @@ import ProfilePhotoModal from './ProfilePhotoModal';
 import { Camera } from '../../components/icons';
 import { UserAvatar } from '../../components/common/UserAvatar';
 import { X } from '../../components/icons';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -38,7 +38,6 @@ import { UserFormModal } from './UserFormModal';
 import { StudentFormModal } from './StudentFormModal';
 import { ResetPinModal } from './ResetPinModal';
 import { ApplyGuruDutyPermissionsModal } from './ApplyGuruDutyPermissionsModal';
-import { BulkPermissionsModal } from './BulkPermissionsModal';
 import { OrphanReservationsModal } from './OrphanReservationsModal';
 import { BulkImportModal } from '../master/BulkImportModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -50,7 +49,6 @@ import { UserProfile, UserRole } from '../../types';
 import { StudentRecord } from '../../types/master.types';
 import { ROLE_LABELS } from '../../config/constants';
 import { formatIndonesianDate } from '../../utils/dateUtils';
-import { buildStablePagination } from '../../utils/paginationUtils';
 
 type UserCategoryTab = 'GURU' | 'SISWA';
 
@@ -77,7 +75,6 @@ export const UserManagementView: React.FC = () => {
   // Pagination states
   const [pageSize, setPageSize] = useState<number>(15); // 10, 15, 20, 50, 0 (Semua)
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   // Modals for User (Guru/Tendik)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -93,7 +90,6 @@ export const UserManagementView: React.FC = () => {
 
   // Modal for Terapkan Hak Akses Piket Guru
   const [isApplyGuruDutyModalOpen, setIsApplyGuruDutyModalOpen] = useState(false);
-  const [isBulkPermissionsOpen, setIsBulkPermissionsOpen] = useState(false);
   const [guruDutyTargetUser, setGuruDutyTargetUser] = useState<UserProfile | null>(null);
 
   // Modal for Orphan LoginId Reservations
@@ -126,7 +122,6 @@ export const UserManagementView: React.FC = () => {
   // Reset page when category, filters, or search changes
   useEffect(() => {
     setCurrentPage(1);
-    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
   }, [activeCategory, searchQuery, roleFilter, statusFilter, studentSearch, classFilter, genderFilter, studentStatusFilter, pageSize]);
 
   // Save User (Guru / Tendik)
@@ -373,16 +368,6 @@ export const UserManagementView: React.FC = () => {
   const startIndex = (validCurrentPage - 1) * effectivePageSize;
   const paginatedUsers = pageSize === 0 ? filteredUsers : filteredUsers.slice(startIndex, startIndex + effectivePageSize);
   const paginatedStudents = pageSize === 0 ? filteredStudents : filteredStudents.slice(startIndex, startIndex + effectivePageSize);
-  const pageSlots = buildStablePagination(validCurrentPage, totalPages);
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(totalPages, page)));
-    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
-  };
-  const changePageSize = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1);
-    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
-  };
 
   return (
     <div data-tour="users-table" className="space-y-6">
@@ -535,7 +520,6 @@ export const UserManagementView: React.FC = () => {
 
                   {isAdmin && (
                     <>
-                      <Button variant="outline" size="sm" leftIcon={<ShieldCheck className="w-4 h-4" />} onClick={() => setIsBulkPermissionsOpen(true)}>Hak Akses Massal</Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -651,7 +635,7 @@ export const UserManagementView: React.FC = () => {
       {/* TABLE WITH SCROLL MODEL & STICKY HEADER */}
       <Card data-tour="users-table">
         <CardContent className="p-0">
-          <div ref={tableScrollRef} role="region" aria-label="Daftar pengguna dan siswa" tabIndex={0} className="overflow-x-auto h-[clamp(320px,60vh,560px)] overflow-y-auto overscroll-contain scrollbar-thin [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]">
+          <div className="overflow-x-auto max-h-[560px] overflow-y-auto scrollbar-thin">
             {isGuru ? (
               <table className="w-full text-left text-xs min-w-[860px]">
                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold shadow-xs">
@@ -979,65 +963,127 @@ export const UserManagementView: React.FC = () => {
             )}
           </div>
 
-          {/* R41: fixed footer size, stable navigation slots and accessible touch targets. */}
-          <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 space-y-3">
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium" role="status" aria-live="polite">
+          {/* ERGONOMIC PAGINATION AND PAGE SIZE BAR */}
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-900/50">
+            {/* Info Items */}
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               {currentDatasetLength > 0 ? (
                 <>
-                  Menampilkan <strong className="text-slate-900 dark:text-white">{startIndex + 1}–{Math.min(startIndex + effectivePageSize, currentDatasetLength)}</strong> dari{' '}
-                  <strong className="text-slate-900 dark:text-white">{currentDatasetLength}</strong> {isGuru ? 'pengguna' : 'siswa'}
-                  {' '}· Halaman {validCurrentPage} dari {totalPages}
+                  Menampilkan{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {startIndex + 1}
+                  </strong>{' '}
+                  -{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {Math.min(startIndex + effectivePageSize, currentDatasetLength)}
+                  </strong>{' '}
+                  dari{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {currentDatasetLength}
+                  </strong>{' '}
+                  {isGuru ? 'pengguna' : 'siswa'} (Hal. {validCurrentPage} dari {totalPages})
                 </>
-              ) : 'Tidak ada data untuk ditampilkan'}
+              ) : (
+                'Tidak ada data untuk ditampilkan'
+              )}
             </div>
-            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                <span id="users-page-size-label">Tampilkan:</span>
-                <div role="group" aria-labelledby="users-page-size-label" className="inline-grid grid-cols-5 gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1">
-                  {[10, 15, 20, 50, 0].map(sz => (
-                    <button key={sz} type="button" aria-pressed={pageSize === sz} onClick={() => changePageSize(sz)}
-                      className={`min-w-10 min-h-10 px-2 rounded-lg text-xs font-semibold tabular-nums transition-colors cursor-pointer ${pageSize === sz
-                        ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+
+            {/* Page Navigation & Page Size Selector */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Page Size Selector */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                <span>Tampilkan:</span>
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-0.5 rounded-lg">
+                  {[10, 15, 20, 50, 0].map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setPageSize(sz)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                        pageSize === sz
+                          ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
                       {sz === 0 ? 'Semua' : sz}
                     </button>
                   ))}
                 </div>
               </div>
-              <nav aria-label="Halaman daftar master pengguna" className="flex items-center gap-1 shrink-0 self-start xl:self-center">
-                <button type="button" disabled={validCurrentPage <= 1} aria-label="Halaman sebelumnya"
-                  onClick={() => goToPage(validCurrentPage - 1)}
-                  className="w-9 sm:w-10 h-10 shrink-0 grid place-items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700">
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                {pageSlots.map((pageNum, slot) => pageNum === null ? (
-                  <span key={`placeholder-${slot}`} aria-hidden="true" className="w-9 sm:w-10 h-10 shrink-0" />
-                ) : (
-                  <button key={pageNum} type="button" aria-label={`Halaman ${pageNum}`}
-                    aria-current={validCurrentPage === pageNum ? 'page' : undefined}
-                    onClick={() => goToPage(pageNum)}
-                    className={`w-9 sm:w-10 h-10 shrink-0 rounded-lg text-xs font-bold tabular-nums transition-colors cursor-pointer ${validCurrentPage === pageNum
-                      ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
-                      : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                    {pageNum}
+
+              {/* Prev & Next Pagination Buttons */}
+              {pageSize !== 0 && totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={validCurrentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-[var(--theme-surface-subtle)] transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
-                ))}
-                <button type="button" disabled={validCurrentPage >= totalPages} aria-label="Halaman berikutnya"
-                  onClick={() => goToPage(validCurrentPage + 1)}
-                  className="w-9 sm:w-10 h-10 shrink-0 grid place-items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700">
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </nav>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }).map((_, idx) => {
+                      const pageNum = idx + 1;
+                      // Display first, last, and window around current
+                      if (
+                        totalPages <= 7 ||
+                        pageNum === 1 ||
+                        pageNum === totalPages ||
+                        Math.abs(pageNum - validCurrentPage) <= 1
+                      ) {
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                              validCurrentPage === pageNum
+                                ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)] shadow-xs'
+                                : 'bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200 dark:border-[var(--theme-card-border)] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)]'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      } else if (
+                        pageNum === validCurrentPage - 2 ||
+                        pageNum === validCurrentPage + 2
+                      ) {
+                        return (
+                          <span key={pageNum} className="text-slate-400 px-1 text-xs">
+                            ...
+                          </span>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={validCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
       {isAdmin && photoUser && <ProfilePhotoModal key={photoUser.id} user={photoUser} onClose={() => setPhotoUser(null)} onSaved={avatarUrl => {
-        setUsers(previous => previous.map(user => user.id === photoUser.id ? { ...user, avatarUrl } : user));
+        setUsers(previous => previous.map(user => user.id === photoUser.id ? { ...user, avatarUrl, loginAvatarVisible: false } : user));
         if (photoUser.id === currentUser?.id) void refreshProfile();
         setFeedbackSuccess(`Foto profil ${photoUser.fullName} berhasil diperbarui.`);
         setTimeout(() => setFeedbackSuccess(null), 5000);
+      }} onVisibilityChanged={visible => {
+        setUsers(previous => previous.map(user => user.id === photoUser.id ? { ...user, loginAvatarVisible: visible } : user));
+        if (photoUser.id === currentUser?.id) void refreshProfile();
       }} />}
 
       {/* USER FORM MODAL */}
@@ -1134,7 +1180,6 @@ export const UserManagementView: React.FC = () => {
       </Modal>
 
       {/* BULK IMPORT MODAL */}
-      <BulkPermissionsModal isOpen={isBulkPermissionsOpen} onClose={() => setIsBulkPermissionsOpen(false)} users={users} actor={isAdmin ? currentUser : null} />
       <BulkImportModal
         isOpen={isBulkImportOpen}
         onClose={() => setIsBulkImportOpen(false)}

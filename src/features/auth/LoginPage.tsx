@@ -1,6 +1,7 @@
 import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
 import { LoginCredit } from './LoginCredit';
+import { LoginAvatar } from './LoginAvatar';
 import { sanitizeLoginAppearance } from '../../types/loginAppearance.types';
 import { AppClock } from '../../components/common/AppClock';
 import { appLogo } from '../../utils/reportBranding';
@@ -719,9 +720,9 @@ export const LoginPage: React.FC = () => {
         {/* R48: Search-first account picker. One compact selected-account card,
             no duplicate selection dropdown. The server still validates PIN/UID. */}
         <section className="space-y-2" aria-label="Pilih akun pengguna">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="login-account-search" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Cari pengguna
+          <div className="flex items-center justify-end min-h-9">
+            <label htmlFor="login-account-search" className="sr-only">
+              {isManualInput || usersList.length === 0 ? 'ID login atau NIP pengguna' : 'Cari nama atau ID pengguna'}
             </label>
             {usersList.length > 0 && (
               <button type="button" onClick={() => {
@@ -729,8 +730,13 @@ export const LoginPage: React.FC = () => {
                 setIsManualInput(v => !v);
                 setIsComboboxOpen(false);
                 setSearchQuery('');
-              }} className="text-[11px] font-semibold text-[var(--theme-primary-text)] hover:underline min-h-10 px-1">
-                {isManualInput ? 'Cari nama' : 'Masukkan ID manual'}
+              }}
+                title={isManualInput ? 'Kembali ke pencarian nama' : 'Masukkan ID pengguna secara manual'}
+                aria-label={isManualInput ? 'Kembali ke pencarian nama' : 'Masukkan ID pengguna secara manual'}
+                aria-pressed={isManualInput}
+                className="w-10 h-9 shrink-0 inline-flex items-center justify-center rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]"
+              >
+                {isManualInput ? <Search className="w-4 h-4" aria-hidden="true"/> : <KeyRound className="w-4 h-4" aria-hidden="true"/>}
               </button>
             )}
           </div>
@@ -793,9 +799,7 @@ export const LoginPage: React.FC = () => {
                         onMouseEnter={() => setHighlightedIndex(idx)}
                         onClick={() => { handleSelectUser(u); setSearchQuery(''); }}
                         className={`w-full min-h-12 flex items-center gap-3 rounded-lg p-2.5 text-left transition-colors ${highlightedIndex === idx ? 'bg-[var(--theme-primary-light)]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                        <span aria-hidden="true" className="w-9 h-9 shrink-0 grid place-items-center rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] text-xs font-bold">
-                          {u.fullName.charAt(0).toUpperCase()}
-                        </span>
+                        <span aria-hidden="true" className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]"><User className="w-4 h-4" /></span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-semibold text-slate-900 dark:text-white break-words">{u.fullName}</span>
                           <span className="block text-[11px] text-slate-500 dark:text-slate-400">{u.loginId || u.nip || u.id} • {ROLE_LABELS[u.role] || u.role}</span>
@@ -808,9 +812,7 @@ export const LoginPage: React.FC = () => {
               )}
               {selectedUser ? (
                 <div className="flex items-center gap-3 rounded-xl border border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/40 px-3 py-2.5" aria-label="Akun terpilih">
-                  <span className="h-10 w-10 shrink-0 grid place-items-center rounded-xl bg-[var(--theme-primary)] text-[var(--theme-primary-contrast)] font-bold text-sm">
-                    {selectedUser.fullName.charAt(0).toUpperCase()}
-                  </span>
+                  <LoginAvatar user={selectedUser} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-bold text-slate-900 dark:text-white truncate">{selectedUser.fullName}</span>
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">ID: {selectedUser.loginId || selectedUser.nip || selectedUser.id}</span>

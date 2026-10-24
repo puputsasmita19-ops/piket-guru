@@ -350,6 +350,6 @@ html body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibil
 }
 @media (max-width: 359px) {
   .app-shell .app-header-inner { padding-inline: 5px !important; }
-  .app-shell .app-clock-mobile { min-width: 68px; font-size: 9.5px; }
+  .app-shell .app-clock-mobile { min-width: 98px; font-size: 9.5px; }
   .app-shell .app-clock-mobile .app-clock-time { font-size: 10px; }
 }

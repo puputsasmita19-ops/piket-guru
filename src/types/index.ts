@@ -39,6 +39,8 @@ export interface UserProfile extends BaseEntityMetadata {
   email: string;
   phone: string;
   avatarUrl?: string | null;
+  /** Admin-approved visibility for the account photo on the PUBLIC login screen. Default false. */
+  loginAvatarVisible?: boolean;
   loginAt?: number;
   isActive: boolean;
   permissions: string[];
@@ -67,15 +69,6 @@ export interface ScheduleItem extends BaseEntityMetadata {
   ruangName: string;
   status: ScheduleStatus;
   keterangan?: string;
-  /** One-day emergency absence/cover override. The recurring source schedule is never edited. */
-  coverageForScheduleId?: string;
-  absentOfficerId?: string;
-  absentOfficerName?: string;
-  absenceReason?: string;
-  coverageUpdatedBy?: string;
-  /** Per-date cancellation marker refers to original weekly/one-time schedule. */
-  cancelForScheduleId?: string;
-  cancellationReason?: string;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
@@ -107,8 +100,6 @@ export interface AttendanceRecord extends BaseEntityMetadata {
     keterangan: string;
   };
   keteranganCheckout?: string;
-  /** Last administrator correction (full change history is in auditLogs). */
-  adminCorrection?: { at: string; byId: string; byName: string; reason: string; before: unknown; after: unknown };
   createdAt?: DateValue;
   updatedAt?: DateValue;
 }
@@ -288,7 +279,6 @@ export type NavigationTab =
   | 'kiosk'
   | 'schedules'
   | 'attendance'
-  | 'attendance-monitor'
   | 'duty-book'
   | 'incidents'
   | 'student-tardiness'

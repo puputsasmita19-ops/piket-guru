@@ -35,7 +35,8 @@ profilePhotoRouter.post('/profile-photo/:userId', requireAuth, requireAdmin, asy
       if (current === avatarUrl) return; // response lost after an earlier successful save
       if (current !== expectedAvatarUrl) throw new Error('PROFILE_CONFLICT');
       changed = true;
-      tx.update(ref, { avatarUrl, updatedAt: new Date().toISOString() });
+      // A new photo needs fresh, explicit approval before appearing publicly.
+      tx.update(ref, { avatarUrl, loginAvatarVisible: false, updatedAt: new Date().toISOString() });
     });
     if (changed) {
       const caller = (req as any).callerData || {};
@@ -67,7 +68,7 @@ profilePhotoRouter.delete('/profile-photo/:userId', requireAuth, requireAdmin, a
       if (current === null) return;
       if (current !== expected) throw new Error('PROFILE_CONFLICT');
       previous = current;
-      tx.update(ref, { avatarUrl: null, updatedAt: new Date().toISOString() });
+      tx.update(ref, { avatarUrl: null, loginAvatarVisible: false, updatedAt: new Date().toISOString() });
     });
     if (previous) {
       await recordServerAuditLog({ userId: (req as any).user.uid, userName: (req as any).callerData?.fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'USERS', status: 'SUCCESS', recordId: uid, target: name, details: 'Menghapus foto profil pengguna dan mengembalikan inisial.' }).catch(() => {});
@@ -89,6 +90,63 @@ profilePhotoRouter.get('/profile-photo/:userId/:fileId', requireAuth, async (req
     if (photo.mimeType !== 'image/jpeg') { res.status(415).end(); return; }
     res.type('image/jpeg');
     photo.stream.on('error', () => { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
+    photo.stream.pipe(res);
+  } catch { if (!res.headersSent) res.status(502).end(); }
+});
+
+
+/**
+ * Public login avatars are OPT-IN per user, controlled only by an administrator.
+ * Private profile photos remain protected by the existing authenticated route.
+ */
+profilePhotoRouter.post('/profile-photo/:userId/login-visibility', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const uid = req.params.userId;
+  const { visible, expectedAvatarUrl } = req.body || {};
+  if (!validUid(uid) || typeof visible !== 'boolean' || typeof expectedAvatarUrl !== 'string' || !/^\/api\/drive\/profile-photo\//.test(expectedAvatarUrl)) {
+    res.status(400).json({ success: false, error: 'Pilihan tampilan foto atau foto referensi tidak valid.' }); return;
+  }
+  if (!adminDb) { res.status(503).json({ success: false, error: 'Database belum tersedia.' }); return; }
+  try {
+    const ref = adminDb.collection('users').doc(uid);
+    let changed = false;
+    await adminDb.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const data = snap.data();
+      if (!snap.exists || data?.isActive !== true) throw new Error('PROFILE_NOT_FOUND');
+      if (data?.avatarUrl !== expectedAvatarUrl) throw new Error('PROFILE_CONFLICT');
+      changed = data?.loginAvatarVisible !== visible;
+      if (changed) tx.update(ref, { loginAvatarVisible: visible, updatedAt: new Date().toISOString() });
+    });
+    if (changed) {
+      await recordServerAuditLog({ userId: (req as any).user.uid, userName: (req as any).callerData?.fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'USERS', status: 'SUCCESS', recordId: uid, details: visible ? 'Mengizinkan foto profil tampil pada halaman login publik.' : 'Menonaktifkan foto profil dari halaman login publik.' }).catch(() => {});
+    }
+    res.json({ success: true, loginAvatarVisible: visible });
+  } catch (e: any) {
+    res.status(e?.message === 'PROFILE_CONFLICT' ? 409 : e?.message === 'PROFILE_NOT_FOUND' ? 404 : 503).json({ success: false, error: e?.message === 'PROFILE_CONFLICT' ? 'Foto berubah. Buka kembali pengaturan foto lalu coba lagi.' : 'Izin foto belum tersimpan.' });
+  }
+});
+
+profilePhotoRouter.get('/login-avatar/:userId/:fileId', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  const uid = req.params.userId, fileId = String(req.params.fileId);
+  if (!validUid(uid) || !/^[A-Za-z0-9_-]+$/.test(fileId)) { res.status(400).end(); return; }
+  if (!adminDb) { res.status(503).end(); return; }
+  try {
+    const snap = await adminDb.collection('users').doc(uid).get();
+    const data = snap.data();
+    // Never serve unapproved, inactive, old or guessed Drive files.
+    if (!snap.exists || data?.isActive !== true || data?.loginAvatarVisible !== true || data?.avatarUrl !== photoPath(uid, fileId)) {
+      res.status(404).end(); return;
+    }
+    const photo = await DriveStore.getPhotoStream(fileId);
+    if (photo.mimeType !== 'image/jpeg' || (photo.size !== undefined && (photo.size < 12 || photo.size > 153600))) {
+      photo.stream.destroy(); res.status(415).end(); return;
+    }
+    res.type('image/jpeg');
+    photo.stream.on('error', () => { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
+    res.on('close', () => { if (!res.writableEnded) photo.stream.destroy(); });
     photo.stream.pipe(res);
   } catch { if (!res.headersSent) res.status(502).end(); }
 });

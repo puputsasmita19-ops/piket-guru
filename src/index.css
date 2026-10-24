@@ -1110,14 +1110,14 @@ button.bg-\[var\(--theme-primary\)\],
 .dark .app-clock { color: #cbd5e1; }
 .app-clock-login { display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 10.5px; margin: 6px -24px 0; white-space: nowrap; }
 .app-clock-login .app-clock-time { padding-left: 9px; border-left: 1px solid var(--theme-card-border); }
-.app-clock-mobile { display: flex; flex-direction: column; justify-content: center; font-size: 10px; min-width: 76px; white-space: nowrap; }
+.app-clock-mobile { display: flex; flex-direction: column; justify-content: center; font-size: 10px; min-width: 100px; white-space: nowrap; }
 .app-clock-mobile .app-clock-time { color: var(--theme-primary-text); font-size: 11.5px; letter-spacing: .01em; }
 .app-clock-time { font-family: ui-monospace, monospace; font-weight: 500; white-space: nowrap; }
 .app-clock-zone { font-family: inherit; font-size: .85em; }
 @media (max-width: 359px) {
   .app-header-inner > .flex { column-gap: 2px; }
   .app-header-actions { gap: 0; }
-  .app-clock-mobile { min-width: 74px; }
+  .app-clock-mobile { min-width: 94px; font-size: 9px; }
   .app-clock-mobile .app-clock-time { font-size: 10.5px; }
 }
 .app-clock-desktop { display: flex; flex-direction: column; align-items: center; font-size: 11px; }
@@ -1126,21 +1126,6 @@ button.bg-\[var\(--theme-primary\)\],
 .attendance-tabs { text-align: center; }
 .guide-blocker { position: fixed; inset: 0; z-index: 9990; background: transparent; }
 .guide-spotlight { position: fixed; z-index: 9991; pointer-events: none; border: 2px solid var(--theme-primary-text); border-radius: 14px; box-shadow: 0 0 0 9999px rgb(15 23 42 / .28); }
-[data-guide-active-target="true"] {
-  position: relative;
-  z-index: 9993 !important;
-  border-radius: 14px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary-text) 58%, white), 0 0 0 8px color-mix(in srgb, var(--theme-primary-light) 72%, transparent) !important;
-  animation: guide-target-pulse 1.35s ease-in-out infinite;
-}
-[data-guide-active-target="true"]::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: inherit;
-  border: 2px dashed color-mix(in srgb, var(--theme-primary-text) 60%, white);
-  pointer-events: none;
-}
 .guide-card { position: fixed; z-index: 9999; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; background: var(--theme-card-bg); color: #0f172a; border: 1px solid var(--theme-card-border); border-radius: 20px; box-shadow: 0 12px 40px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.5; outline: none; animation: guide-appear .18s ease-out; }
 .dark .guide-card { color: #f1f5f9; }
 .guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1156,10 +1141,6 @@ button.bg-\[var\(--theme-primary\)\],
 .guide-heading button { display: flex; align-items: center; justify-content: center; }
 .guide-card button:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
 @keyframes guide-appear { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
-@keyframes guide-target-pulse {
-  0%, 100% { transform: translateZ(0) scale(1); }
-  50% { transform: translateZ(0) scale(1.02); }
-}
 @media (prefers-reduced-motion: reduce) { .guide-card { animation: none; } }
 @media (max-width: 767px) {
   .history-controls { padding: 10px; gap: 8px; border-radius: 14px; }
@@ -1319,38 +1300,16 @@ button.bg-\[var\(--theme-primary\)\],
 @layer components {
   .flash-slide-caption { font-size: 12px; line-height: 1.6; color: #64748b; overflow-wrap: anywhere; margin: 0 0 4px; }
   .dark .flash-slide-caption { color: #b4bac6; }
-  /* Flash Inval follows the same two information groups as TV Lobi.
-     The panel is only a READ-ONLY view of the existing live dashboard records. */
-  .flash-substitution-slide .flash-content { display: flex; flex-direction: column; }
-  .flash-substitution-slide .flash-inval-list { list-style: none; margin: 0; padding: 0; min-width: 0; }
-  .flash-substitution-slide .flash-inval-list > li { padding: 2px 0; min-width: 0; }
-  .flash-inval-panels {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
-    min-width: 0; max-height: min(420px, 52vh); overflow-y: auto;
-    overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px 4px 5px 0;
+  .flash-substitution-slide :is(.flash-item-title, .flash-item-detail, .flash-inval-assignment, .flash-inval-reason, .flash-inval-task, .flash-inval-more) {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
+    white-space: normal; overflow: hidden; overflow-wrap: anywhere; max-width: 100%;
   }
-  .flash-inval-panels:focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: -2px; border-radius: 14px; }
-  .flash-inval-panel {
-    min-width: 0; align-self: start; padding: 12px 14px;
-    border: 1px solid var(--theme-card-border); border-radius: 14px;
-    background: var(--theme-card-bg);
-    overflow-wrap: anywhere;
-  }
-  .flash-inval-cover { background: color-mix(in srgb, var(--theme-primary-light) 35%, var(--theme-card-bg)); }
-  .flash-inval-label { font-size: 11px; line-height: 1.5; font-weight: 750; color: var(--theme-primary-text); }
-  .flash-inval-name { margin-top: 3px; font-size: 15px; line-height: 1.4; font-weight: 750; }
-  .flash-inval-replacement { color: var(--theme-primary-text); }
-  .flash-inval-context, .flash-inval-status { font-size: 12px; line-height: 1.55; margin-top: 3px; color: #64748b; }
-  .flash-inval-detail { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--theme-card-border); }
-  .flash-inval-copy { font-size: 13px; line-height: 1.55; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .flash-inval-more { font-size: 11px; line-height: 1.6; margin-top: 8px; color: var(--theme-primary-text); overflow-wrap: anywhere; }
-  .dark .flash-inval-context, .dark .flash-inval-status { color: #b4bac6; }
-  @media (max-width: 639px) {
-    .flash-inval-panels { grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: min(370px, 46vh); }
-    .flash-inval-panel { padding: 10px 12px; }
-    .flash-inval-name { font-size: 14px; }
-    .flash-inval-copy { font-size: 12px; }
-  }
+  .flash-substitution-slide .flash-item-title { -webkit-line-clamp: 2; font-size: 13px; }
+  .flash-substitution-slide .flash-item-detail { font-size: 12px; }
+  .flash-substitution-slide .flash-inval-assignment { -webkit-line-clamp: 2; font-size: 12px; line-height: 1.5; margin-top: 4px; }
+  .flash-inval-task { font-size: 12px; line-height: 1.6; margin-top: 4px; color: #64748b; }
+  .flash-inval-more { font-size: 11px; line-height: 1.6; margin-top: 2px; color: var(--theme-primary-text); }
+  .dark .flash-inval-task { color: #b4bac6; }
 }
 @layer components {
   .audit-history-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-block:1px solid var(--theme-card-border); }
@@ -1363,74 +1322,6 @@ button.bg-\[var\(--theme-primary\)\],
   @media(max-width:639px) { .audit-history-nav { align-items:flex-start; flex-direction:column; } }
 }
 
-
-/* Tour R22: stable, touch-friendly controls during mobile scrolling. */
-@media (max-width: 767px) {
-  .guide-card { touch-action: pan-y; }
-  .guide-card footer { position: sticky; bottom: -14px; z-index: 1; background: var(--theme-card-bg); padding: 10px 0 4px; flex-shrink: 0; }
-  .guide-card footer > div { flex-shrink: 0; }
-  .guide-card footer button { touch-action: manipulation; }
+@media screen {
+  .flash-inval-reason { font-size:12px; line-height:1.5; margin-top:4px; color:var(--theme-primary-text); -webkit-line-clamp:2; }
 }
-
-/* R24: keep the guided area visible above the mobile coachmark. */
-.guide-target-flag {
-  position: fixed;
-  z-index: 9992;
-  pointer-events: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 175px;
-  padding: 5px 9px;
-  border-radius: 9px;
-  background: var(--theme-primary);
-  color: var(--theme-primary-contrast, #1e293b);
-  box-shadow: 0 2px 10px rgb(0 0 0 / .2);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.25;
-}
-.guide-focus-note {
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--theme-primary-text);
-}
-.guide-missing-note {
-  border: 1px solid var(--theme-card-border);
-  background: var(--theme-surface-subtle);
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-@media (max-width: 767px) {
-  /* Without this room, GPS / selfie / presensi controls near the page bottom cannot scroll above the guide card. */
-  .guide-tour-active .app-content { padding-bottom: calc(22rem + env(safe-area-inset-bottom)) !important; }
-  .guide-card-guided { gap: 6px; padding: 11px 13px; border-radius: 18px; }
-  .guide-card-guided h2 { font-size: 14px; line-height: 1.35; }
-  .guide-card-guided #guide-action { font-size: 12px; line-height: 1.45; }
-  .guide-card-guided .guide-result { padding: 7px 9px; font-size: 11px; line-height: 1.4; }
-  .guide-card-guided footer { bottom: -11px; padding: 7px 0 0; margin-top: 3px; }
-  .guide-card-guided .guide-focus-note { font-size: 10px; }
-}
-
-/* R26: lightweight, opt-in first-use invitation; no full-screen overlay. */
-.guide-welcome-prompt {
-  position: fixed; z-index: 120; right: 20px; bottom: 24px;
-  width: min(360px, calc(100vw - 28px));
-  border: 1px solid var(--theme-card-border); border-radius: 20px;
-  padding: 14px; color: var(--theme-text, #0f172a); background: var(--theme-card-bg);
-  box-shadow: 0 12px 36px rgb(15 23 42 / .17);
-}
-.guide-welcome-heading { display: flex; align-items: flex-start; gap: 10px; }
-.guide-welcome-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: var(--theme-primary-light); color: var(--theme-primary-text); }
-.guide-welcome-heading strong { font-size: 13px; line-height: 1.5; }
-.guide-welcome-heading p { font-size: 11px; margin-top: 3px; line-height: 1.55; color: #64748b; }
-.guide-welcome-dismiss { flex: none; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
-.guide-welcome-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.guide-welcome-actions button { min-height: 44px; border-radius: 12px; padding: 9px 12px; font-size: 12px; font-weight: 750; }
-.guide-welcome-later { color: #64748b; }
-.guide-welcome-start { display: inline-flex; align-items: center; gap: 6px; background: var(--theme-primary); color: var(--theme-primary-contrast, #1e293b); }
-.guide-welcome-caption { font-size: 10px; color: #64748b; line-height: 1.5; margin-top: 10px; }
-@media (max-width: 767px) { .guide-welcome-prompt { left: 14px; right: 14px; bottom: calc(5.7rem + env(safe-area-inset-bottom)); width: auto; padding: 12px; } }
-@media (prefers-reduced-motion: reduce) { .guide-welcome-prompt * { animation: none !important; } }

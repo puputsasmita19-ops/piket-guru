@@ -14,7 +14,7 @@ const subscribe = (fn: () => void) => {
 const options = { timeZone: 'Asia/Jakarta' };
 const full = new Intl.DateTimeFormat('id-ID', { ...options, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const login = new Intl.DateTimeFormat('id-ID', { ...options, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-const compact = new Intl.DateTimeFormat('id-ID', { ...options, weekday: 'short', day: 'numeric', month: 'short' });
+const compact = new Intl.DateTimeFormat('id-ID', { ...options, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const time = new Intl.DateTimeFormat('en-GB', { ...options, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
 export function AppClock({ variant }: { variant: 'login' | 'mobile' | 'desktop' }) {

@@ -17,6 +17,7 @@ export interface UserSummaryItem {
   phone?: string;
   isActive: boolean;
   avatarUrl?: string;
+  loginAvatarVisible?: boolean;
 }
 
 export interface AuthResult {
@@ -104,7 +105,7 @@ class AuthService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'auto' });
+      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'low' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -120,6 +121,7 @@ class AuthService {
           role: u.role,
           isActive: u.isActive !== false,
           avatarUrl: u.avatarUrl,
+          loginAvatarVisible: u.loginAvatarVisible === true,
         }));
         this.usersVerified = true;
         this.usersUpdatedAt = Date.now();
@@ -141,9 +143,7 @@ class AuthService {
   public async getUsersList(options: { forceRefresh?: boolean } = {}): Promise<UserSummaryItem[]> {
     await this.init();
     const age = Date.now() - this.usersUpdatedAt;
-    // Reduce duplicate requests on focus/visibility while keeping the picker fresh.
-    // The backend still validates active status and credentials on every login.
-    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 45000) return this.refreshUsersList();
+    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 15000) return this.refreshUsersList();
     return this.usersList;
   }
 
