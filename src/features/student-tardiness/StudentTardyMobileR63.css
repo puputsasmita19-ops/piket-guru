@@ -1,0 +1,127 @@
+/* R63 — one mobile viewport and one vertical scroller, scoped to Buku Siswa Terlambat.
+   IMPORTANT: never target every .app-dialog or set overflow on <body>. */
+.r63-tardy-dialog,
+.r63-tardy-dialog .app-dialog-body,
+.r63-tardy-dialog .app-dialog-form,
+.r63-tardy-dialog .app-form-fields {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.r63-tardy-dialog .app-dialog-form,
+.r63-tardy-dialog .app-dialog-body {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+}
+.r63-tardy-dialog .app-form-fields {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-anchor: none;
+  overscroll-behavior-x: none;
+  -webkit-overflow-scrolling: touch;
+}
+.r63-tardy-dialog .app-form-fields > *,
+.r63-tardy-dialog .r62-tardy-picker,
+.r63-tardy-dialog .r62-tardy-selected-list,
+.r63-tardy-dialog .r62-tardy-card,
+.r63-tardy-dialog .r62-tardy-card > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+/* Previous nested max-height+overflow made the selected students panel scroll
+   separately from the form; focusing controls could push the whole card aside. */
+.r63-tardy-dialog .r62-tardy-selected-list {
+  max-height: none !important;
+  overflow: visible !important;
+}
+.r63-tardy-dialog .r62-tardy-card {
+  width: 100%;
+  overflow: visible !important;
+}
+.r63-tardy-dialog .r62-tardy-card :is(span, strong, p, label) {
+  overflow-wrap: anywhere;
+}
+.r63-tardy-dialog .r62-tardy-card :is(input, select, textarea),
+.r63-tardy-dialog .app-form-fields :is(input[type="time"], input[type="date"], select, textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.r63-tardy-dialog .r62-tardy-card .grid > div { min-width: 0; }
+.r63-tardy-version {
+  display: inline-block;
+  margin-inline-start: 8px;
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+@media (max-width: 639px) {
+  .r63-tardy-dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100dvh !important;
+    height: 100svh !important;
+    max-height: 100dvh !important;
+    max-height: 100svh !important;
+    border-radius: 0 !important;
+    overflow: hidden;
+  }
+  .r63-tardy-dialog .app-dialog-header {
+    padding: 10px 14px;
+    flex: 0 0 auto;
+  }
+  .r63-tardy-dialog .app-dialog-body {
+    display: flex;
+    padding: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .r63-tardy-dialog .app-dialog-form {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .r63-tardy-dialog .app-form-fields {
+    width: 100%;
+    flex: 1 1 0%;
+    min-height: 0;
+    padding: 12px;
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+    scroll-padding-top: 16px;
+  }
+  .r63-tardy-dialog .app-form-footer {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  }
+  .r63-tardy-dialog .r62-tardy-picker { padding: 10px; }
+  .r63-tardy-dialog .r62-tardy-card { padding: 12px; }
+  .r63-tardy-dialog .r62-tardy-card .r62-tardy-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+  .r63-tardy-dialog .r62-tardy-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+  .r63-tardy-dialog .r62-tardy-card input[type="time"] { width: 100%; }
+}
