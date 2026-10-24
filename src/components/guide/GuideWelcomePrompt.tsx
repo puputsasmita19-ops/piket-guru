@@ -28,7 +28,7 @@ export const GuideWelcomePrompt: React.FC = () => {
           <Play className="w-4 h-4" /> Mulai 3 Langkah
         </button>
       </div>
-      <p className="guide-welcome-caption">Panduan R69 · Muncul sekali pada perangkat ini. Buka kembali melalui ikon ? di header.</p>
+      <p className="guide-welcome-caption">Panduan ini hanya muncul sekali. Anda dapat membukanya kembali melalui ikon bantuan (?) di bagian atas.</p>
     </aside>
   );
 };
