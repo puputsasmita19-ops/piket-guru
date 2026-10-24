@@ -38,6 +38,7 @@ import { UserFormModal } from './UserFormModal';
 import { StudentFormModal } from './StudentFormModal';
 import { ResetPinModal } from './ResetPinModal';
 import { ApplyGuruDutyPermissionsModal } from './ApplyGuruDutyPermissionsModal';
+import { BulkPermissionsModal } from './BulkPermissionsModal';
 import { OrphanReservationsModal } from './OrphanReservationsModal';
 import { BulkImportModal } from '../master/BulkImportModal';
 import { FirestoreService } from '../../services/firebase/firestoreService';
@@ -83,6 +84,7 @@ export const UserManagementView: React.FC = () => {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [photoUser, setPhotoUser] = useState<UserProfile | null>(null);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [isBulkPermissionsOpen, setIsBulkPermissionsOpen] = useState(false);
   const [bulkImportDefaultType, setBulkImportDefaultType] = useState<'USERS_TEACHERS' | 'STUDENTS'>('USERS_TEACHERS');
   const [isResetPinOpen, setIsResetPinOpen] = useState(false);
   const [targetPinUser, setTargetPinUser] = useState<UserProfile | null>(null);
@@ -556,6 +558,17 @@ export const UserManagementView: React.FC = () => {
                         }}
                       >
                         Import (.CSV)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs text-[var(--theme-primary-text)] dark:text-[var(--theme-primary-text)]"
+                        leftIcon={<ShieldCheck className="w-4 h-4" />}
+                        onClick={() => setIsBulkPermissionsOpen(true)}
+                        title="Tambah atau cabut hak akses pada beberapa akun sekaligus (khusus Admin)"
+                        aria-label="Buka Hak Akses Massal untuk beberapa akun"
+                      >
+                        Hak Akses Massal
                       </Button>
                       <Button
                         variant="primary"
@@ -1143,6 +1156,16 @@ export const UserManagementView: React.FC = () => {
         onClose={() => setIsBulkImportOpen(false)}
         defaultType={bulkImportDefaultType}
       />
+
+      {/* R74 — Kelola izin sejumlah akun. Never render for non-Admin. */}
+      {isAdmin && (
+        <BulkPermissionsModal
+          isOpen={isBulkPermissionsOpen}
+          onClose={() => setIsBulkPermissionsOpen(false)}
+          users={users}
+          actor={currentUser}
+        />
+      )}
 
       {/* KELOLA 4 HAK AKSES TAMBAHAN MODAL */}
       <ApplyGuruDutyPermissionsModal
