@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Sparkles, X } from '../icons';
-import { AppUpdateManager } from '../../services/offline/appUpdateManager';
+import { AppUpdateManager, type UpdateStage } from '../../services/offline/appUpdateManager';
+
+type BannerStage = 'idle' | UpdateStage;
 
 export const AppUpdateBanner: React.FC = () => {
   const [hasUpdate, setHasUpdate] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<BannerStage>('idle');
   const [error, setError] = useState('');
+  const updatingRef = useRef(false);
+  const busy = stage !== 'idle';
 
   useEffect(() => {
     AppUpdateManager.init();
@@ -17,55 +21,77 @@ export const AppUpdateBanner: React.FC = () => {
   }, []);
 
   const update = async () => {
-    if (busy) return;
-    setBusy(true);
+    // Ref prevents rapid double-taps before React has re-rendered.
+    if (updatingRef.current) return;
+    updatingRef.current = true;
+    setStage('activating'); // Visible feedback on the same click, even before SW I/O.
     setError('');
+    // Allow the loading state to paint before the service worker is activated.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    let reloadStarted = false;
     try {
-      await AppUpdateManager.applyUpdate();
+      await AppUpdateManager.applyUpdate(setStage);
+      reloadStarted = true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Update gagal. Silakan coba lagi.');
+      setError(reason instanceof Error ? reason.message : 'Pembaruan gagal. Coba lagi.');
     } finally {
-      setBusy(false);
+      if (!reloadStarted) {
+        updatingRef.current = false;
+        setStage('idle');
+      }
     }
   };
 
   if (!hasUpdate || dismissed) return null;
 
+  const status = stage === 'checking' ? 'Memeriksa update…'
+    : stage === 'activating' ? 'Mengaktifkan…'
+    : stage === 'reloading' ? 'Memuat versi baru…'
+    : '';
+
   return (
-    <div className="relative z-40 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white px-2.5 sm:px-4 py-2 shadow-sm animate-fadeIn" role="region" aria-label="Pembaruan aplikasi tersedia">
-      <div className="flex items-center justify-between gap-2 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="w-4 h-4 shrink-0 text-amber-200" aria-hidden="true" />
-          <span className="font-semibold text-xs sm:text-sm min-w-0 truncate">
-            <span className="sm:hidden">Update tersedia</span>
-            <span className="hidden sm:inline">Update Piket Guru tersedia</span>
+    <div
+      className="relative z-40 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-3 py-2 text-white shadow-sm"
+      role="region"
+      aria-label="Pembaruan aplikasi tersedia"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-amber-200" aria-hidden="true" />
+          <span className="min-w-0 truncate text-xs font-semibold sm:text-sm" aria-live="polite">
+            {busy ? (
+              <>{status}</>
+            ) : (
+              <><span className="sm:hidden">Update tersedia</span><span className="hidden sm:inline">Versi baru Piket Guru tersedia</span></>
+            )}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
             onClick={() => { void update(); }}
             disabled={busy}
             aria-busy={busy}
-            className="inline-flex min-h-10 sm:min-h-9 items-center justify-center gap-1.5 rounded-xl bg-white px-2.5 sm:px-3 font-bold text-[11px] sm:text-xs text-indigo-700 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-70 disabled:cursor-wait"
+            aria-label={busy ? status : 'Perbarui aplikasi sekarang'}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-white px-3 text-[11px] font-bold text-indigo-700 transition-colors hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-wait disabled:opacity-90 sm:min-h-9 sm:text-xs"
           >
-            <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${busy ? 'animate-spin' : ''}`} />
-            <span className="sm:hidden">{busy ? 'Memuat…' : 'Perbarui'}</span>
-            <span className="hidden sm:inline">{busy ? 'Memperbarui…' : 'Perbarui sekarang'}</span>
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${busy ? 'animate-spin' : ''}`} />
+            <span className="sm:hidden">{busy ? 'Proses…' : 'Perbarui'}</span>
+            <span className="hidden sm:inline">{busy ? 'Memproses…' : 'Perbarui sekarang'}</span>
           </button>
           <button
             type="button"
             onClick={() => setDismissed(true)}
             disabled={busy}
-            className="inline-flex items-center justify-center min-h-10 min-w-9 sm:min-h-9 rounded-lg hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-white disabled:opacity-60"
+            className="inline-flex min-h-10 min-w-9 items-center justify-center rounded-lg hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50 sm:min-h-9"
             title="Nanti"
             aria-label="Tutup pemberitahuan update"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
-      {error && <p role="alert" className="mt-1.5 text-[11px] sm:text-xs text-white">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-[11px] text-white sm:text-xs">{error}</p>}
     </div>
   );
 };
