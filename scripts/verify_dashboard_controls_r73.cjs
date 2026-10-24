@@ -30,7 +30,7 @@ test('Flash pause remains toggleable', () => assert.match(flash, /onClick=\{togg
 test('Flash respects reduced motion/autoplay flags', () => assert.match(flash, /config\.autoPlay && !reducedMotion && slides\.length > 1/));
 test('Flash detail link remains accessible', () => assert.match(flash, /className="flash-open" onClick=\{slide\.onAction\}/));
 test('Flash swipe interaction retained', () => assert.match(flash, /onPointerUp=\{e => \{/));
-test('Welcome pause is before message not near avatar', () => assert.ok(welcome.indexOf('className="welcome-message-pause"') < welcome.indexOf('className="welcome-message"')));
+test('Welcome pause outside message in hero', () => assert.match(welcome, /heroLayout && control/));
 test('Welcome pause keeps original callback', () => assert.match(welcome, /setPausedAt\(previous => previous === null \? now : null\)/));
 test('Welcome sentence rotation preserved', () => assert.match(welcome, /useWelcomeClock\(config\.mode, config\.intervalSeconds, config\.enabled && pausedAt === null\)/));
 test('Legacy observer positioning removed', () => assert.doesNotMatch(welcome, /ResizeObserver|--welcome-control-top|useLayoutEffect/));
@@ -38,5 +38,5 @@ test('Pill controls are styled', () => assert.match(css, /\.flash-control-group\
 test('Mobile Flash controls center aligned', () => assert.match(css, /\.flash-control-group \{ align-self: center; \}/));
 test('Mobile targets are at least 40px', () => assert.match(css, /\.flash-control \{ flex-basis: 40px; width: 40px; height: 40px; min-height: 40px; \}/));
 test('Focus ring retained', () => assert.match(css, /:is\(\.flash-control, \.flash-open, \.flash-announcements\):focus-visible/));
-test('Welcome mobile button accessible', () => assert.match(css, /\.welcome-message-pause \{ flex-basis: 38px; width: 38px; height: 38px;/));
+test('Welcome mobile button accessible', () => assert.match(css, /\.welcome-message-pause \{ flex-basis: 44px; width: 44px; height: 44px;/));
 console.log(`R73: ${passed} checks passed`);

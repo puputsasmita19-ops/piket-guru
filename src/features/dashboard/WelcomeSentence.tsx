@@ -59,9 +59,10 @@ function TransitionText({ message, animate, duration }: { message: string; anima
   return <span key={display.text} className="welcome-message-text" data-phase={display.phase} data-motion={animate && !reduced ? 'on' : 'off'}>{display.text}</span>;
 }
 
-export const WelcomeSentence = React.memo(function WelcomeSentence({ config: value, className = '' }: {
+export const WelcomeSentence = React.memo(function WelcomeSentence({ config: value, className = '', heroLayout = false }: {
   config?: DashboardWelcomeConfig;
   className?: string;
+  heroLayout?: boolean;
 }) {
   const config = useMemo(() => sanitizeDashboardWelcomeConfig(value), [value]);
   const pool = useMemo(() => getWelcomeMessagePool(config), [config]);
@@ -72,18 +73,22 @@ export const WelcomeSentence = React.memo(function WelcomeSentence({ config: val
   const { message } = getDashboardWelcome(config, pausedAt ?? now);
   const canPause = config.mode === 'interval' && pool.length > 1;
   if (!message) return null;
-  return <p className={`welcome-sentence ${className}`} style={{ '--welcome-exit-ms': `${config.transitionDurationMs * .4}ms`, '--welcome-enter-ms': `${config.transitionDurationMs * .6}ms` } as React.CSSProperties}>
-    {canPause && <button type="button" className="welcome-message-pause" aria-pressed={pausedAt !== null}
-      aria-label={pausedAt === null ? 'Jeda rotasi kalimat' : 'Lanjutkan rotasi kalimat'}
-      title={pausedAt === null ? 'Jeda kalimat' : 'Lanjutkan kalimat'}
-      onClick={() => setPausedAt(previous => previous === null ? now : null)}>
-      <DashboardOutlineControlIcon symbol={pausedAt === null ? 'pause' : 'play'} />
-    </button>}
-    <span className="welcome-message" aria-live="off">
-      {/* CSS-generated hidden copies reserve the tallest line wrap in this pool.
-          They have no accessible text and do not produce repeated visible lines. */}
-      {pool.map(text => <span key={text} className="welcome-message-measure" aria-hidden="true" data-text={text} />)}
-      <TransitionText message={message} animate={config.animationEnabled} duration={config.transitionDurationMs} />
-    </span>
-  </p>;
+  const control = canPause ? <button type="button"
+    className={heroLayout ? 'welcome-message-pause welcome-message-pause-hero' : 'welcome-message-pause'}
+    aria-pressed={pausedAt !== null}
+    aria-label={pausedAt === null ? 'Jeda rotasi kalimat' : 'Lanjutkan rotasi kalimat'}
+    title={pausedAt === null ? 'Jeda kalimat' : 'Lanjutkan kalimat'}
+    onClick={() => setPausedAt(previous => previous === null ? now : null)}>
+    <DashboardOutlineControlIcon symbol={pausedAt === null ? 'pause' : 'play'} />
+  </button> : null;
+  return <>
+    <p className={`welcome-sentence ${className}`} style={{ '--welcome-exit-ms': `${config.transitionDurationMs * .4}ms`, '--welcome-enter-ms': `${config.transitionDurationMs * .6}ms` } as React.CSSProperties}>
+      {!heroLayout && control}
+      <span className="welcome-message" aria-live="off">
+        {pool.map(text => <span key={text} className="welcome-message-measure" aria-hidden="true" data-text={text} />)}
+        <TransitionText message={message} animate={config.animationEnabled} duration={config.transitionDurationMs} />
+      </span>
+    </p>
+    {heroLayout && control}
+  </>;
 });

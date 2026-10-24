@@ -12,6 +12,6 @@ export const DashboardWelcome = React.memo(function DashboardWelcome({ config, u
   return <section className="dashboard-welcome" aria-label="Sapaan dashboard">
     <div><p className="dashboard-eyebrow">{greeting}</p><h1>Halo, {user?.fullName?.trim() || 'selamat datang'}</h1></div>
     <UserAvatar user={user} className="dashboard-avatar" />
-    <WelcomeSentence config={config} className="dashboard-intro" />
+    <WelcomeSentence config={config} className="dashboard-intro" heroLayout />
   </section>;
 });

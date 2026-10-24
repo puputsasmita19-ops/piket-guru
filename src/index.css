@@ -880,11 +880,15 @@ button.bg-\[var\(--theme-primary\)\],
   .app-shell .module-nav-item[aria-current="page"] { box-shadow: none; }
   .app-shell .module-nav-item .module-nav-icon { border-radius: 11px; background: transparent !important; }
   .app-sidebar-scrim { backdrop-filter: none; }
-  .app-content[data-module] .dashboard-welcome { border: 0; border-radius: 0; padding: 0; background: transparent !important; box-shadow: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 16px; row-gap: 4px; }
+  .app-content[data-module] .dashboard-welcome { border: 0; border-radius: 0; padding: 0; background: transparent !important; box-shadow: none; display: grid; grid-template-columns: minmax(0, 1fr) 44px auto; align-items: center; column-gap: 12px; row-gap: 4px; }
+  .dashboard-welcome > div:first-child { grid-column: 1; grid-row: 1; }
+  .dashboard-welcome > .dashboard-avatar { grid-column: 3; grid-row: 1 / span 2; align-self: start; }
+  .dashboard-welcome > .dashboard-intro { grid-column: 1 / 3; grid-row: 2; }
+  .dashboard-welcome > .welcome-message-pause-hero { grid-column: 2; grid-row: 1; align-self: center; justify-self: center; }
   .dashboard-welcome > div { min-width: 0; }
   .dashboard-eyebrow { font-size: 12px; font-weight: 500; color: #64748b; margin-bottom: 4px; }
   .dashboard-welcome h1 { font-size: clamp(18px, 1.8vw, 23px); line-height: 1.4; font-weight: 650; letter-spacing: -.025em; overflow-wrap: anywhere; }
-  .dashboard-intro { grid-column: 1 / -1; margin-top: 2px; font-size: 12px; color: #64748b; line-height: 1.6; overflow-wrap: anywhere; }
+  .dashboard-intro { grid-column: 1 / 3; margin-top: 2px; font-size: 12px; color: #64748b; line-height: 1.6; overflow-wrap: anywhere; }
   .dashboard-avatar { height: 56px; width: 56px; border-radius: 17px; background: var(--theme-primary-light); color: var(--theme-primary-text); font-size: 18px; font-weight: 750; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--theme-primary-border); }
   .dashboard-feature-banner { display: flex; align-items: center; gap: 18px; border: 1px solid var(--theme-card-border); background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary-light) 48%, var(--theme-card-bg)), var(--theme-card-bg)); border-radius: 24px; padding: 22px 24px; }
   .banner-eyebrow { font-size: 9px; font-weight: 750; letter-spacing: .12em; color: var(--theme-primary-text); margin-bottom: 7px; }
@@ -1252,13 +1256,13 @@ button.bg-\[var\(--theme-primary\)\],
 .welcome-message-text { display: block; }
 .welcome-message-text[data-motion="on"][data-phase="exit"] { animation: welcome-rise-out var(--welcome-exit-ms, 240ms) cubic-bezier(.4, 0, .7, .3) both; }
 .welcome-message-text[data-motion="on"][data-phase="enter"] { animation: welcome-down-in var(--welcome-enter-ms, 360ms) cubic-bezier(.16, 1, .3, 1) both; }
-/* One quiet control aligned to the first line, *before* the welcome sentence. */
-.welcome-message-pause { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; margin: -5px 0 0; border: 1px solid var(--theme-card-border); border-radius: 12px; color: #64748b; background: var(--theme-card-bg); cursor: pointer; transition: color .15s ease, background .15s ease; }
+/* R75: standalone hero control lives in its own grid cell, not inside the sentence. */
+.welcome-message-pause { display: inline-flex; flex: 0 0 40px; align-items: center; justify-content: center; width: 40px; height: 40px; min-height: 40px; border: 1px solid var(--theme-card-border); border-radius: 12px; color: #64748b; background: var(--theme-card-bg); cursor: pointer; transition: color .15s ease, background .15s ease; }
 .welcome-message-pause:hover { color: var(--theme-primary-text); background: var(--theme-surface-subtle); }
 .welcome-message-pause[aria-pressed="true"] { color: var(--theme-primary-text); }
 .welcome-message-pause:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
-.welcome-message-pause .dashboard-outline-control-icon { width: 17px; height: 17px; }
-@media (max-width: 639px) { .welcome-message-pause { flex-basis: 38px; width: 38px; height: 38px; min-height: 38px; } }
+.welcome-message-pause .dashboard-outline-control-icon { width: 17px; height: 17px; stroke-width: 1.55; }
+@media (max-width: 639px) { .welcome-message-pause { flex-basis: 44px; width: 44px; height: 44px; min-height: 44px; } }
 @keyframes welcome-rise-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-8px); opacity: 0; } }
 @keyframes welcome-down-in { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .welcome-message-text { animation: none !important; transform: none !important; opacity: 1 !important; } }

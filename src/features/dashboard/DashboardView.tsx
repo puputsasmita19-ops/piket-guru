@@ -11,7 +11,6 @@ import { QuickActions } from './QuickActions';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
-  LayoutDashboard,
   Clock,
   MapPin,
   CheckCircle2,
@@ -64,6 +63,17 @@ import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrent
 import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
 import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
 import { buildSubstitutionFlashSummary } from './substitutionFlashSummary';
+
+/** R75: independent thin outline, unlike filled icon geometry. */
+const ActivityGridOutlineIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" focusable="false" aria-hidden="true">
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="13.5" width="7" height="7" rx="1.6" />
+  </svg>
+);
 
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
@@ -348,11 +358,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const visibleStatistics = statistics.filter(item => hasPermission(item.permission));
   const activitySlide: DashboardFlashSlide = {
     id: 'activity', title: isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis',
-    icon: myTodaySchedule ? Calendar : LayoutDashboard,
+    icon: myTodaySchedule ? Calendar : ActivityGridOutlineIcon,
     // Compact theme-colored icon replaces the oversized tilted book artwork.
     // The panel content, details action and carousel logic remain unchanged.
     illustration: <span className="dashboard-activity-mark" aria-hidden="true">
-      {myTodaySchedule ? <Calendar className="dashboard-activity-mark-glyph" /> : <LayoutDashboard className="dashboard-activity-mark-glyph" />}
+      {myTodaySchedule ? <Calendar className="dashboard-activity-mark-glyph" /> : <ActivityGridOutlineIcon className="dashboard-activity-mark-glyph" />}
     </span>,
     description: myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.',
     items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: showDutyDetails ? toggleDutyDetails : revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body',

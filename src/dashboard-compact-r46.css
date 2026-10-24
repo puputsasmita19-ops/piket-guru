@@ -221,8 +221,8 @@
     transform: none;
   }
   .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark-glyph {
-    width: 29px;
-    height: 29px;
+    width: 24px;
+    height: 24px;
     flex: none;
     transform: none;
   }
@@ -235,7 +235,7 @@
     border-radius: 14px;
   }
   .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark-glyph {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
   }
 }
