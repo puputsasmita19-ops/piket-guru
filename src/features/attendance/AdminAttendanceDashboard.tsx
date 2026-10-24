@@ -13,8 +13,7 @@ import { HistoryControls, HistoryPagination, useHistoryView } from '../../compon
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 import { Activity, Users, CheckCircle2, AlertTriangle, Clock, MapPin, Edit3, Trash2 } from '../../components/icons';
 import { RealtimeMonitorLogo } from '../../components/icons/RealtimeMonitorLogo';
-
-type DailyRow = { id: string; name: string; assignment: string; attendance?: AttendanceRecord };
+import { buildAdminMonitorRows } from '../../utils/adminMonitorRows';
 
 const Metric: React.FC<{ label: string; value: number; description: string; icon: React.ReactNode; tone?: string }> = ({ label, value, description, icon, tone = 'text-slate-700 dark:text-slate-200' }) => <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-[var(--theme-card-bg)] shadow-sm">
   <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span><span className={tone}>{icon}</span></div>
@@ -30,6 +29,9 @@ export const AdminAttendanceDashboard: React.FC = () => {
   const [school, setSchool] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const history = useHistoryPeriod(school);
   const [historyView, setHistoryView] = useHistoryView();
+  // The admin landing view needs today's metrics, not a month of history.
+  // Attach the bounded history listener only when the administrator opens it.
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [userFilter, setUserFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
@@ -66,31 +68,17 @@ export const AdminAttendanceDashboard: React.FC = () => {
 
   useEffect(() => {
     setHistoricalRecords([]); setHistoryError('');
-    if (!admin || history.range.error) return;
+    if (!admin || !historyExpanded || history.range.error) return;
     return FirestoreService.subscribeToCollection<AttendanceRecord>('attendance', setHistoricalRecords,
       error => setHistoryError(error?.message || 'Riwayat belum dapat dimuat.'),
       history.constraints, { cacheKey: `admin-monitor-history:${history.key}` });
-  }, [admin, history.key, history.constraints, history.range.error]);
+  }, [admin, historyExpanded, history.key, history.constraints, history.range.error]);
 
   // Each person is one row even with several shifts; do not count a multi-shift teacher twice.
-  const dailyRows: DailyRow[] = useMemo(() => {
-    const active = schedules.filter(s => isScheduleOnDate(s, today));
-    const rows = new Map<string, DailyRow>();
-    for (const schedule of active) {
-      const key = schedule.petugasId || `name:${schedule.petugasName}`;
-      const matching = todayRecords.find(a => a.userId === schedule.petugasId) ||
-        todayRecords.find(a => a.userName.trim().toLowerCase() === schedule.petugasName.trim().toLowerCase());
-      const previous = rows.get(key);
-      if (previous) previous.assignment += ` · ${schedule.ruangName}`;
-      else rows.set(key, { id: key, name: schedule.petugasName, assignment: schedule.ruangName || 'Piket', attendance: matching });
-    }
-    for (const a of todayRecords) {
-      if (![...rows.values()].some(r => r.attendance?.id === a.id)) {
-        rows.set(`extra:${a.id}`, { id: `extra:${a.id}`, name: a.userName, assignment: 'Presensi tambahan / tanpa jadwal', attendance: a });
-      }
-    }
-    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'id-ID'));
-  }, [schedules, todayRecords, today]);
+  const dailyRows = useMemo(
+    () => buildAdminMonitorRows(schedules, todayRecords, schedule => isScheduleOnDate(schedule, today)),
+    [schedules, todayRecords, today],
+  );
 
   const assignedRows = dailyRows.filter(r => !r.id.startsWith('extra:'));
   const hadir = assignedRows.filter(r => Boolean(r.attendance)).length;
@@ -160,8 +148,15 @@ export const AdminAttendanceDashboard: React.FC = () => {
       </article>)}</div></div> : <p className="p-5 text-sm text-slate-500">Belum ada jurnal piket hari ini.</p>}
     </section>
     <section aria-labelledby="history-title" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-slate-700"><h2 id="history-title" className="font-bold text-slate-900 dark:text-white">Kelola Riwayat Presensi Guru Piket</h2>
-        <p className="text-xs text-slate-500 mt-1">Pilih periode · cari guru · edit atau hapus dengan alasan dan audit.</p></div>
+      <div className="p-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700">
+        <div><h2 id="history-title" className="font-bold text-slate-900 dark:text-white">Kelola Riwayat Presensi Guru Piket</h2>
+          <p className="text-xs text-slate-500 mt-1">Riwayat dimuat saat dibuka untuk menghemat pembacaan Firebase. Edit/hapus tetap memakai audit Admin.</p></div>
+        <button type="button" aria-controls="monitor-history-content" aria-expanded={historyExpanded} onClick={() => setHistoryExpanded(value => !value)}
+          className="min-h-10 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+          {historyExpanded ? 'Tutup Riwayat' : 'Buka Riwayat Presensi'}
+        </button>
+      </div>
+      {historyExpanded && <div id="monitor-history-content">
       <div className="p-3 space-y-3"><HistoryControls history={history} view={historyView} onViewChange={setHistoryView} user={userFilter} onUserChange={setUserFilter} users={historyUsers} />
         <input aria-label="Cari riwayat" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, tanggal, status atau ID…" className="w-full p-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
         {history.range.error && <p role="alert" className="text-xs text-rose-700">{history.range.error}</p>}
@@ -173,6 +168,7 @@ export const AdminAttendanceDashboard: React.FC = () => {
         {page.records.length === 0 && <p className="p-6 text-sm text-slate-500">Tidak ada presensi pada filter/periode ini.</p>}
       </div></div>
       <HistoryPagination {...page} />
+      </div>}
     </section>
     <AdminAttendanceDialog selection={selection} onClose={() => setSelection(null)} onCompleted={setFeedback} />
   </div>;
