@@ -21,7 +21,7 @@ import { useNavigation } from '../../contexts/NavigationContext';
 import { NavigationTab } from '../../types';
 import { Button } from '../common/Button';
 import { PERMISSIONS, PermissionKey } from '../../config/permissions';
-import { clipGuideFocus, getGuideAreas, needsGuideScroll } from './guidePositioning';
+import { clipGuideFocus, getGuideAreas, getGuideCardBudget, getGuideScrollDelta, needsGuideScroll } from './guidePositioning';
 import type { GuideRect } from './guidePositioning';
 
 export interface TourStep {
@@ -227,15 +227,17 @@ export const InteractiveGuideTour: React.FC = () => {
   const [size, setSize] = useState(() => ({
     width: typeof window === 'undefined' ? 375 : window.innerWidth,
     height: typeof window === 'undefined' ? 760 : (window.visualViewport?.height || window.innerHeight),
-    card: 280,
   }));
   const cardRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const step = steps[Math.min(index, steps.length - 1)];
   const mobile = size.width < 768;
-  const bottomNavStep = mobile && step?.id === 'admin-nav';
+  const bottomNavStep = size.width < 1024 && step?.id === 'admin-nav';
   const headerBottom = typeof document !== 'undefined' ? document.querySelector('.app-topbar')?.getBoundingClientRect().bottom || 64 : 64;
-  const areas = getGuideAreas(size.width, size.height, size.card, headerBottom, bottomNavStep);
+  // Reserve a fixed maximum card footprint based on viewport only. Do not use
+  // card.offsetHeight: note visibility changes its size and caused step 2/3 jitter.
+  const cardBudget = getGuideCardBudget(size.width, size.height, bottomNavStep);
+  const areas = getGuideAreas(size.width, size.height, cardBudget, headerBottom, bottomNavStep);
 
   const close = useCallback(() => {
     stopGuideTour();
@@ -254,7 +256,15 @@ export const InteractiveGuideTour: React.FC = () => {
 
   useEffect(() => {
     if (!isGuideTourActive || !step) return;
-    if (activeTab !== step.targetTab) navigateRef.current(step.targetTab);
+    if (activeTab !== step.targetTab) {
+      // The previous view might still be mounted. Do not measure/scroll it while
+      // React changes routes; the effect reruns when the new tab is active.
+      navigateRef.current(step.targetTab);
+      setTargetRect(null);
+      setTargetState('searching');
+      setTargetSelector('');
+      return;
+    }
     setTargetRect(null);
     setTargetState('searching');
     setTargetSelector('');
@@ -264,18 +274,17 @@ export const InteractiveGuideTour: React.FC = () => {
     let tries = 0;
     let scrolledToTarget = false;
     let previousSignature = '';
-    let focusElement: HTMLElement | null = null;
     let highlightedElement: HTMLElement | null = null;
-    let originalScrollMargin = '';
+    // Never change target styles or call scrollIntoView on every route change.
+    // The latter scrolls *every* ancestor, including the entire document.
 
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const width = window.innerWidth;
         const height = window.visualViewport?.height || window.innerHeight;
-        const card = cardRef.current?.offsetHeight || 280;
-        setSize(previous => previous.width === width && previous.height === height && previous.card === card
-          ? previous : { width, height, card });
+        setSize(previous => previous.width === width && previous.height === height
+          ? previous : { width, height });
 
         const header = document.querySelector('.app-topbar')?.getBoundingClientRect().bottom || 64;
         const isMobileNav = step.id === 'admin-nav' && width < 1024;
@@ -294,7 +303,7 @@ export const InteractiveGuideTour: React.FC = () => {
 
         const fixedNavigation = Boolean(element.closest('.app-mobile-nav'));
         const headerTarget = Boolean(element.closest('.app-topbar') || element.closest('header'));
-        const region = getGuideAreas(width, height, card, header, fixedNavigation);
+        const region = getGuideAreas(width, height, getGuideCardBudget(width, height, fixedNavigation), header, fixedNavigation);
         const bounds = element.getBoundingClientRect();
         const rect = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height };
 
@@ -309,12 +318,25 @@ export const InteractiveGuideTour: React.FC = () => {
         const effectiveFocusTop = headerTarget ? 8 : region.focusTop;
         if (!scrolledToTarget && !fixedNavigation && !headerTarget && needsGuideScroll(rect, effectiveFocusTop, region.focusBottom)) {
           scrolledToTarget = true;
-          focusElement = element;
-          originalScrollMargin = element.style.scrollMarginTop;
-          element.style.scrollMarginTop = `${Math.round(effectiveFocusTop + 12)}px`;
-          element.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' });
-          requestAnimationFrame(measure);
-          return;
+          // Scroll just the closest scrolling container (usually main content),
+          // not the sidebar + document + main pane simultaneously.
+          const delta = getGuideScrollDelta(rect, effectiveFocusTop, region.focusBottom);
+          if (Math.abs(delta) >= 2) {
+            let parent = element.parentElement;
+            let scroller: HTMLElement | null = null;
+            while (parent && parent !== document.body && parent !== document.documentElement) {
+              const overflow = getComputedStyle(parent).overflowY;
+              if (/auto|scroll/.test(overflow) && parent.scrollHeight > parent.clientHeight + 2) {
+                scroller = parent;
+                break;
+              }
+              parent = parent.parentElement;
+            }
+            if (scroller) scroller.scrollTop += delta;
+            else window.scrollBy({ top: delta, behavior: 'instant' });
+            requestAnimationFrame(measure);
+            return;
+          }
         }
         const clipped = clipGuideFocus(rect, width, effectiveFocusTop, region.focusBottom);
         const signature = JSON.stringify(clipped);
@@ -340,8 +362,8 @@ export const InteractiveGuideTour: React.FC = () => {
       measure();
     }, 200);
 
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    if (cardRef.current) observer?.observe(cardRef.current);
+    // Do not observe guide card size; changing its contents must not trigger
+    // a new spotlight->height->position->spotlight feedback loop.
     window.addEventListener('resize', measure, { passive: true });
     window.addEventListener('scroll', measure, { passive: true, capture: true });
     window.visualViewport?.addEventListener('resize', measure, { passive: true });
@@ -350,8 +372,6 @@ export const InteractiveGuideTour: React.FC = () => {
     return () => {
       cancelAnimationFrame(frame);
       if (retryTimer) clearInterval(retryTimer);
-      observer?.disconnect();
-      if (focusElement) focusElement.style.scrollMarginTop = originalScrollMargin;
       highlightedElement?.removeAttribute('data-guide-active-target');
       window.removeEventListener('resize', measure);
       window.removeEventListener('scroll', measure, true);
@@ -402,7 +422,7 @@ export const InteractiveGuideTour: React.FC = () => {
       </div>
     </>}
     <section ref={cardRef} role="dialog" aria-modal="true" aria-label="Panduan Interaktif Penggunaan Aplikasi" aria-describedby="guide-action" tabIndex={-1}
-      className="guide-card guide-card-guided" style={{ width, left, top: cardTop, maxHeight: mobile ? Math.min(315, Math.max(200, size.height * .44)) : Math.max(180, size.height - 150) }}>
+      className="guide-card guide-card-guided" style={{ width, left, top: cardTop, maxHeight: cardBudget }}>
       <div className="guide-heading"><span className="guide-progress">{guideTourMode === 'quick' ? 'Panduan Cepat · ' : 'Panduan Lengkap · '}Langkah {index + 1} dari {steps.length}</span><button type="button" onClick={close} aria-label="Tutup Panduan Interaktif"><X className="w-4 h-4" /></button></div>
       <h2>{step.title}</h2>
       <p className="guide-location">{effectiveTargetLabel}</p>

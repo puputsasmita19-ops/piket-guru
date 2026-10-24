@@ -1126,8 +1126,32 @@ button.bg-\[var\(--theme-primary\)\],
 .attendance-tabs { text-align: center; }
 .guide-blocker { position: fixed; inset: 0; z-index: 9990; background: transparent; }
 .guide-spotlight { position: fixed; z-index: 9991; pointer-events: none; border: 2px solid var(--theme-primary-text); border-radius: 14px; box-shadow: 0 0 0 9999px rgb(15 23 42 / .28); }
+/* R72 — fixed, legible pointer label; previously it rendered at the page origin. */
+.guide-target-flag {
+  position: fixed;
+  z-index: 9993;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--theme-card-bg, #fff);
+  color: var(--theme-primary-text, #096a82);
+  border: 1px solid var(--theme-card-border, #dbe4ea);
+  box-shadow: 0 4px 16px rgb(0 0 0 / .12);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.guide-focus-note, .guide-missing-note { font-size: 11px; line-height: 1.4; color: #64748b; }
+.dark .guide-focus-note, .dark .guide-missing-note { color: #cbd5e1; }
+.guide-card-guided { box-sizing: border-box; contain: layout; animation: none !important; }
 .guide-card { position: fixed; z-index: 9999; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; background: var(--theme-card-bg); color: #0f172a; border: 1px solid var(--theme-card-border); border-radius: 20px; box-shadow: 0 12px 40px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.5; outline: none; animation: guide-appear .18s ease-out; }
 .dark .guide-card { color: #f1f5f9; }
+/* Keep navigation actions accessible when the tour description is long. */
+.guide-card-guided footer { position: sticky; bottom: -14px; z-index: 1; background: var(--theme-card-bg); padding-block: 7px 2px; flex-shrink: 0; }
 .guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .guide-progress { color: var(--theme-primary-text); font-size: 11px; }
 .guide-card h2 { font-size: 15px; line-height: 1.4; font-weight: 600; margin: 0; }
