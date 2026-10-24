@@ -583,7 +583,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
         }
         maxWidth="2xl"
       >
-        <DialogForm onSubmit={handleInitiateSubmit} noValidate className="space-y-5" actions={<div className="app-form-actions flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <DialogForm onSubmit={handleInitiateSubmit} noValidate className="w-full min-w-0 max-w-full space-y-5" actions={<div className="app-form-actions flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
             <Button
               type="button"
               variant="outline"
@@ -609,7 +609,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
           {/* BAGIAN 1: PEMILIHAN SISWA (MULTI-SELECT DENGAN PENCARIAN MASTER DATA)      */}
           {/* ========================================================================= */}
           {!editingTardy ? (
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="w-full min-w-0 max-w-full p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-blue-500" />
@@ -621,8 +621,8 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               </div>
 
               {/* Search Autocomplete Input */}
-              <div className="relative">
-                <div className="relative">
+              <div className="relative w-full min-w-0 max-w-full">
+                <div className="relative w-full min-w-0 max-w-full">
                   <input
                     type="text"
                     value={studentSearchTerm}
@@ -633,14 +633,14 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                       if (fieldErrors.students) setFieldErrors((p) => ({ ...p, students: '' }));
                     }}
                     placeholder="Ketik nama, NIS, NISN, atau kelas untuk mencari & menambah siswa..."
-                    className="w-full min-h-[44px] pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="block w-full min-w-0 max-w-full min-h-[44px] pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-base sm:text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
 
                 {/* Dropdown Options */}
                 {isStudentDropdownOpen && filteredStudents.length > 0 && (
-                  <div className="absolute z-40 left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="absolute z-40 left-0 right-0 top-full mt-1.5 w-full min-w-0 max-h-56 overflow-x-hidden overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-800">
                     {filteredStudents.map((std) => {
                       const isAlreadySelected = selectedStudents.some(
                         (s) => s.student.id === std.id
@@ -659,13 +659,13 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                           }`}
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <span className="truncate">{std.nama}</span>
+                            <div className="min-w-0 font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
+                              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{std.nama}</span>
                               <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 shrink-0">
                                 {std.kelas}
                               </span>
                             </div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5 break-words [overflow-wrap:anywhere]">
                               {std.nisn ? `NISN: ${std.nisn}` : std.nis ? `NIS: ${std.nis}` : `ID: ${std.id}`}
                               {std.noHpOrangTua ? ` • WA Ortu: ${std.noHpOrangTua}` : ' • (Tanpa no HP)'}
                             </div>
@@ -689,12 +689,13 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
               {/* Selected Students List (Ringkasan Siswa Terpilih) */}
               {selectedStudents.length > 0 ? (
-                <div className="space-y-2 pt-2">
-                  <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                    Daftar Siswa Terpilih:
+                <div className="w-full min-w-0 max-w-full space-y-2 pt-2">
+                  <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    <span>Daftar Siswa Terpilih:</span>
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-800 dark:bg-sky-950 dark:text-sky-200" data-r65="active">R65</span>
                   </div>
 
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  <div className="w-full min-w-0 max-w-full space-y-3 max-h-80 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
                     {selectedStudents.map((entry, idx) => {
                       const effectiveJam =
                         entry.isCustomized && entry.jamDatang ? entry.jamDatang : sharedJamDatang;
@@ -708,107 +709,100 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                       return (
                         <div
                           key={entry.student.id}
-                          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-xs space-y-2 shadow-xs"
+                          className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-xs space-y-3 shadow-xs"
                         >
-                          {/* Row Header */}
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                                {idx + 1}
-                              </span>
-                              <div className="min-w-0">
-                                <span className="font-bold text-slate-900 dark:text-white truncate block">
-                                  {entry.student.nama}
-                                </span>
-                                <div className="text-[10px] text-slate-500 font-mono">
-                                  Kelas: <strong>{entry.student.kelas}</strong>
-                                  {entry.student.noHpOrangTua && ` • Ortu: ${entry.student.noHpOrangTua}`}
-                                </div>
-                              </div>
+                          {/* R65: identitas, status, dan aksi dipisah agar tidak melebar di HP. */}
+                          <div className="flex w-full min-w-0 max-w-full items-start gap-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="whitespace-normal break-words [overflow-wrap:anywhere] text-sm font-bold leading-snug text-slate-900 dark:text-white">
+                                {entry.student.nama}
+                              </p>
+                              <p className="mt-1 whitespace-normal break-words [overflow-wrap:anywhere] text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                Kelas: <strong>{entry.student.kelas}</strong>
+                                {entry.student.noHpOrangTua && <> · Ortu: {entry.student.noHpOrangTua}</>}
+                              </p>
                             </div>
+                          </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
-                              {/* Status Badge */}
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                                  calc.minutesLate === null
-                                    ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                                    : calc.isLate
-                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                }`}
-                              >
-                                {calc.displayText}
-                              </span>
+                          {/* Status bebas turun baris; frekuensi tidak mendorong tombol keluar kartu. */}
+                          <div className="flex w-full min-w-0 max-w-full flex-wrap items-start gap-2">
+                            <span
+                              className={`min-w-0 flex-[1_1_9rem] whitespace-normal break-words [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-[11px] font-semibold leading-snug ${
+                                calc.minutesLate === null
+                                  ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                  : calc.isLate
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              }`}
+                            >
+                              {calc.displayText}
+                            </span>
+                            <span
+                              className={`shrink-0 rounded-lg px-3 py-2 text-[11px] font-bold tabular-nums ${
+                                entry.frekuensiBulanIni >= 3
+                                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              Ke-{entry.frekuensiBulanIni}
+                            </span>
+                          </div>
 
-                              {/* Frekuensi Badge */}
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                                  entry.frekuensiBulanIni >= 3
-                                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
-                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                }`}
-                              >
-                                Ke-{entry.frekuensiBulanIni}
-                              </span>
-
-                              {/* Foto Khusus Siswa Button */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTargetStudentIdForPhoto(entry.student.id);
-                                  setIsCameraOpen(true);
-                                }}
-                                className={`p-1.5 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
-                                  entry.fotoUrl
-                                    ? 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-200'
-                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                                }`}
-                                title={entry.fotoUrl ? 'Foto siswa terlampir (klik untuk ganti)' : 'Ambil foto dokumentasi khusus siswa ini'}
-                              >
-                                <Camera className="w-3 h-3 text-blue-500" />
-                                <span className="hidden sm:inline">
-                                  {entry.fotoUrl ? 'Foto Ada' : 'Foto'}
-                                </span>
-                              </button>
-
-                              {/* Sesuaikan Button */}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedStudentId(isExpanded ? null : entry.student.id)
-                                }
-                                className={`p-1.5 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
-                                  entry.isCustomized
-                                    ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200'
-                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                                }`}
-                                title="Sesuaikan nilai individual untuk siswa ini"
-                              >
-                                <Sliders className="w-3 h-3" />
-                                <span className="hidden sm:inline">
-                                  {entry.isCustomized ? 'Disesuaikan' : 'Sesuaikan'}
-                                </span>
-                                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                              </button>
-
-                              {/* Delete Button */}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveStudent(entry.student.id)}
-                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer transition-colors"
-                                title="Hapus dari daftar"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          {/* Tiga tombol besar dalam grid, masing-masing punya label yang terlihat. */}
+                          <div className="grid w-full min-w-0 max-w-full grid-cols-3 gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetStudentIdForPhoto(entry.student.id);
+                                setIsCameraOpen(true);
+                              }}
+                              className={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-1.5 py-2 text-[11px] font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 ${
+                                entry.fotoUrl
+                                  ? 'border-blue-300 bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                              }`}
+                              aria-label={entry.fotoUrl ? `Ganti foto ${entry.student.nama}` : `Ambil foto ${entry.student.nama}`}
+                              title={entry.fotoUrl ? 'Ganti foto siswa' : 'Ambil foto siswa'}
+                            >
+                              <Camera className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate">{entry.fotoUrl ? 'Foto Ada' : 'Foto'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStudentId(isExpanded ? null : entry.student.id)}
+                              className={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-1.5 py-2 text-[11px] font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 ${
+                                entry.isCustomized
+                                  ? 'border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                              }`}
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? 'Tutup' : 'Buka'} penyesuaian ${entry.student.nama}`}
+                              title="Sesuaikan nilai individual"
+                            >
+                              <Sliders className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate">Atur</span>
+                              {isExpanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveStudent(entry.student.id)}
+                              className="flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-1.5 py-2 text-[11px] font-bold text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-500 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                              aria-label={`Hapus ${entry.student.nama} dari daftar`}
+                              title="Hapus dari daftar"
+                            >
+                              <Trash2 className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 truncate">Hapus</span>
+                            </button>
                           </div>
 
                           {/* Accordion: Penyesuaian Individual per Siswa */}
                           {isExpanded && (
-                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl animate-in fade-in">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            <div className="w-full min-w-0 max-w-full overflow-hidden pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl animate-in fade-in">
+                              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                                <span className="min-w-0 break-words [overflow-wrap:anywhere] text-[11px] font-bold text-slate-700 dark:text-slate-300">
                                   Penyesuaian Khusus: {entry.student.nama}
                                 </span>
                                 {entry.isCustomized && (
@@ -822,7 +816,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                 )}
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                              <div className="grid min-w-0 grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                                 <div>
                                   <label className="text-[10px] font-bold text-slate-500 block mb-1">
                                     Jam Tiba Individual:
@@ -835,7 +829,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                         jamDatang: e.target.value,
                                       })
                                     }
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-xs font-bold"
+                                    className="w-full min-w-0 max-w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-base sm:text-xs font-bold"
                                   />
                                 </div>
 
@@ -850,7 +844,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                         alasan: e.target.value as TardyReason,
                                       })
                                     }
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                                    className="w-full min-w-0 max-w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-base sm:text-xs font-medium"
                                   >
                                     <option value="BANGUN_KESIANGAN">Bangun Kesiangan</option>
                                     <option value="MACET_LALULINTAS">Macet Lalu Lintas</option>
@@ -872,7 +866,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                         pembinaan: e.target.value as DisciplineAction,
                                       })
                                     }
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                                    className="w-full min-w-0 max-w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-base sm:text-xs font-medium"
                                   >
                                     <option value="LITERASI_PERPUSTAKAAN">Literasi Perpustakaan</option>
                                     <option value="PEMBERSIHAN_LINGKUNGAN">Kebersihan Lingkungan</option>
@@ -936,7 +930,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
           {/* BAGIAN 2: NILAI AWAL BERSAMA (TANGGAL, JAM TIBA, ATURAN & SELISIH)        */}
           {/* ========================================================================= */}
           <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-rose-500" />
                 <span>Nilai Awal Bersama (Berlaku untuk Semua Siswa Terpilih)</span>
