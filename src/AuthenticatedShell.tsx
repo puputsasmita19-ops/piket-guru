@@ -9,7 +9,6 @@ import { DashboardView } from './features/dashboard/DashboardView';
 const CommandCenterPreview = lazy(() => import('./features/command-center/CommandCenterPreview').then((module) => ({ default: module.CommandCenterPreview })));
 const KioskPreview = lazy(() => import('./features/kiosk/KioskPreview').then((module) => ({ default: module.KioskPreview })));
 const SchedulePreview = lazy(() => import('./features/schedules/SchedulePreview').then((module) => ({ default: module.SchedulePreview })));
-const AdminAttendanceDashboard = lazy(() => import('./features/attendance/AdminAttendanceDashboard').then(m => ({ default: m.AdminAttendanceDashboard })));
 const AttendancePreview = lazy(() => import('./features/attendance/AttendancePreview').then((module) => ({ default: module.AttendancePreview })));
 const DutyBookPreview = lazy(() => import('./features/duty-book/DutyBookPreview').then((module) => ({ default: module.DutyBookPreview })));
 const IncidentPreview = lazy(() => import('./features/incidents/IncidentPreview').then((module) => ({ default: module.IncidentPreview })));
@@ -23,6 +22,7 @@ const SettingsPreview = lazy(() => import('./features/settings/SettingsPreview')
 import { PermissionGuard } from './components/auth/PermissionGuard';
 import { PERMISSIONS } from './config/permissions';
 import { useAuth } from './contexts/AuthContext';
+const AdminAttendanceDashboard = lazy(() => import('./features/attendance/AdminAttendanceDashboard').then(m => ({ default: m.AdminAttendanceDashboard })));
 
 
 export default function AuthenticatedShell() {
@@ -66,7 +66,9 @@ export default function AuthenticatedShell() {
           <PermissionGuard permission={PERMISSIONS.ATTENDANCE_VIEW_ALL}>
             <AdminAttendanceDashboard />
           </PermissionGuard>
-        ) : <div role="alert" className="p-6 text-rose-700">Akses monitoring presensi hanya untuk Administrator.</div>;
+        ) : (
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">Hanya Administrator yang dapat membuka Monitoring Piket Realtime.</div>
+        );
       case 'duty-book':
         return (
           <PermissionGuard permission={PERMISSIONS.DUTYBOOK_VIEW}>
