@@ -7,11 +7,11 @@ import { sanitizeDashboardInfoConfig } from '../../types/dashboardInfo.types';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { Modal } from '../../components/common/Modal';
 import { UserAvatar } from '../../components/common/UserAvatar';
-import { FeatureIllustration } from '../../components/common/FeatureIllustration';
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
+  LayoutDashboard,
   Clock,
   MapPin,
   CheckCircle2,
@@ -61,7 +61,7 @@ import { VisitorRecord } from '../../types/visitor.types';
 import { TeacherRecord, StaffRecord } from '../../types/master.types';
 import { DEFAULT_SCHOOL_SETTINGS } from '../../config/constants';
 import { formatIndonesianDate, formatShortIndonesianDate, formatTime, getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
-import { isScheduleMatchingUser, isScheduleOnDate, getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
+import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUtils';
 import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
 import { buildSubstitutionFlashSummary } from './substitutionFlashSummary';
 
@@ -252,10 +252,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
 
-  const myTodaySchedule = getEffectiveSchedulesOnDate(schedules, todayISO).find(isMySchedule);
+  const myTodaySchedule = schedules.find((s) => isScheduleOnDate(s, todayISO) && isMySchedule(s));
   const myAttendance = attendance.find((a) => a.tanggal === todayISO && a.userId === currentUser?.id);
   const myDutyBook = dutyBooks.find((b) => b.tanggal === todayISO && (b.petugasId === currentUser?.id || (teachers.some(t => t.userId === currentUser?.id && t.id === b.petugasId))));
-  const myOtherSchedules = schedules.filter((s) => !s.coverageForScheduleId && isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
+  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;
@@ -348,8 +348,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const visibleStatistics = statistics.filter(item => hasPermission(item.permission));
   const activitySlide: DashboardFlashSlide = {
     id: 'activity', title: isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis',
-    icon: myTodaySchedule ? Calendar : BookOpenCheck,
-    illustration: <FeatureIllustration module={myTodaySchedule ? 'schedules' : 'duty-book'} icon={myTodaySchedule ? Calendar : BookOpenCheck} className="banner-illustration" />,
+    icon: myTodaySchedule ? Calendar : LayoutDashboard,
+    // Compact theme-colored icon replaces the oversized tilted book artwork.
+    // The panel content, details action and carousel logic remain unchanged.
+    illustration: <span className="dashboard-activity-mark" aria-hidden="true">
+      {myTodaySchedule ? <Calendar className="dashboard-activity-mark-glyph" /> : <LayoutDashboard className="dashboard-activity-mark-glyph" />}
+    </span>,
     description: myTodaySchedule ? `${myTodaySchedule.ruangName} · ${myTodaySchedule.jamMulai}–${myTodaySchedule.jamSelesai} WIB` : 'Buka menu favorit dan temukan informasi piket dalam satu tempat.',
     items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: showDutyDetails ? toggleDutyDetails : revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body',
   };
@@ -415,13 +419,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                       </Badge>
 
                     {isAdmin && <div className="flex items-center gap-1 shrink-0">
-                      {announcementConfig.allowPublishedEditing && (currentUser?.role === 'ADMIN' || ann.authorId === currentUser?.id) && <button type="button"
+                      {announcementConfig.allowPublishedEditing && <button type="button"
                         onClick={() => openAnnouncementForm(ann)}
                         aria-label={`Edit pengumuman: ${ann.title}`}
                         className="inline-flex items-center justify-center gap-1.5 min-h-[44px] min-w-[44px] px-2 text-xs font-medium text-current rounded-lg hover:bg-black/5 dark:hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]">
                         <Edit3 className="w-4 h-4" /><span>Edit</span>
                       </button>}
-                      {(currentUser?.role === 'ADMIN' || ann.authorId === currentUser?.id) && <button type="button"
+                      <button type="button"
                         onClick={() => handleDeleteAnnouncement(ann.id)}
                         disabled={!!deletingAnnouncement}
                         aria-label={`Hapus pengumuman: ${ann.title}`}
@@ -429,7 +433,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                         title="Hapus Pengumuman"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>}
+                      </button>
                     </div>}
                   </div>
 

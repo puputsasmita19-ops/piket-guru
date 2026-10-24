@@ -117,14 +117,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'lg:relative lg:top-0 lg:bottom-auto lg:h-auto lg:min-h-[calc(100vh-4rem)] lg:z-0'
         }`}
       >
-        {/* App identity stays recognizable on mobile and desktop. */}
-        <div className="flex items-center gap-2.5 px-3.5 py-3 bg-white dark:bg-[var(--theme-card-bg)] border-b border-slate-100 dark:border-[var(--theme-card-border)] shrink-0">
-          <img src="/icon.svg" alt="Logo Piket Guru" className="h-10 w-10 rounded-xl object-contain bg-white shadow-sm" />
-          <div className="min-w-0 flex-1">
-            <strong className="block text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">PIKET GURU</strong>
-            <span className="block text-[10px] text-slate-500 dark:text-slate-400">Navigasi Sekolah</span>
-          </div>
-        </div>
+        {/* No duplicate logo here: identity is already present in the app header.
+            Keep the navigation controls, menu search, pinning and mobile close action. */}
         {/* Sidebar Controls Header */}
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/70 shrink-0">
           <div className="flex items-center gap-1.5">

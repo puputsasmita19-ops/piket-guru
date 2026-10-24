@@ -201,3 +201,41 @@
     transform: none !important;
   }
 }
+
+/* R49 — compact, modern activity icon (desktop + mobile).
+   Scoped to dashboard activity banner, so other illustrations retain their own style. */
+@media screen {
+  .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark {
+    display: inline-flex;
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    color: var(--theme-primary-text);
+    background: var(--theme-primary-light);
+    border: 1px solid var(--theme-primary-border);
+    border-radius: 17px;
+    box-shadow: 0 2px 6px rgba(24, 42, 64, .04);
+    transform: none;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark-glyph {
+    width: 29px;
+    height: 29px;
+    flex: none;
+    transform: none;
+  }
+}
+@media screen and (max-width: 639px) {
+  .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    border-radius: 14px;
+  }
+  .app-shell .app-content[data-module="dashboard"] .flash-activity .dashboard-activity-mark-glyph {
+    width: 24px;
+    height: 24px;
+  }
+}
