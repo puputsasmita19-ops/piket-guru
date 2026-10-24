@@ -1,0 +1,71 @@
+/* R62 - Buku Siswa Terlambat mobile picker. Scoped to this form only. */
+.app-form-fields.r62-tardy-fields {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+.r62-tardy-fields .r62-tardy-picker,
+.r62-tardy-fields .r62-tardy-search,
+.r62-tardy-fields .r62-tardy-selected-list,
+.r62-tardy-fields .r62-tardy-card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.r62-tardy-fields .r62-tardy-picker,
+.r62-tardy-fields .r62-tardy-selected-list,
+.r62-tardy-fields .r62-tardy-card { overflow-x: hidden; }
+.r62-tardy-fields .r62-tardy-picker :is(input, select, textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.r62-tardy-fields .r62-tardy-card :is(span, strong) { overflow-wrap: anywhere; }
+.r62-tardy-fields .r62-tardy-results {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.r62-tardy-fields .r62-tardy-results > button {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.r62-tardy-fields .r62-tardy-option-meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 639px) {
+  .r62-tardy-fields .r62-tardy-picker { padding: 12px; }
+  /* Mobile results stay inside normal flow; cannot be clipped by modal scroll. */
+  .r62-tardy-fields .r62-tardy-results {
+    position: static;
+    inset: auto;
+    margin-top: 8px;
+    max-height: min(42dvh, 320px);
+  }
+  .r62-tardy-fields .r62-tardy-results > button {
+    min-height: 52px;
+    padding: 11px 12px;
+  }
+  .r62-tardy-fields .r62-tardy-card { padding: 12px; }
+  .r62-tardy-fields .r62-tardy-card button { touch-action: manipulation; }
+  .r62-tardy-fields .r62-tardy-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+  .r62-tardy-fields .r62-tardy-actions > button {
+    min-width: 0;
+    min-height: 44px;
+  }
+  .r62-tardy-fields .r62-tardy-search input { font-size: 16px; }
+}
