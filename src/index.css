@@ -1325,3 +1325,149 @@ button.bg-\[var\(--theme-primary\)\],
 @media screen {
   .flash-inval-reason { font-size:12px; line-height:1.5; margin-top:4px; color:var(--theme-primary-text); -webkit-line-clamp:2; }
 }
+
+/* R69 — Restore missing first-login guide invitation layout.
+   The invitation sits outside normal page flow; it must never push the
+   header, dashboard, or mobile navigation down on a new user's first login. */
+@media screen {
+  .app-shell .guide-welcome-prompt {
+    position: fixed;
+    z-index: 80;
+    box-sizing: border-box;
+    inset-inline: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: 440px;
+    max-height: min(400px, calc(100dvh - 112px - env(safe-area-inset-bottom, 0px)));
+    margin-inline: auto;
+    padding: 14px 15px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--theme-card-border, #dbe4ec);
+    border-radius: 18px;
+    background: var(--theme-card-bg, #fff);
+    color: #1e293b;
+    box-shadow: 0 14px 40px rgb(15 23 42 / .18);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: start;
+    isolation: isolate;
+  }
+  .dark .app-shell .guide-welcome-prompt { color: #e2e8f0; }
+  .app-shell .guide-welcome-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+  }
+  .app-shell .guide-welcome-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: var(--theme-primary-light, #e3f6fb);
+    color: var(--theme-primary-text, #086b84);
+  }
+  .app-shell .guide-welcome-heading strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 750;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .app-shell .guide-welcome-heading p {
+    margin: 3px 0 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .dark .app-shell .guide-welcome-heading p { color: #cbd5e1; }
+  .app-shell .guide-welcome-dismiss {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: -5px -6px 0 0;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+  }
+  .app-shell .guide-welcome-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 14px;
+  }
+  .app-shell .guide-welcome-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 44px;
+    min-width: 82px;
+    padding: 10px 14px;
+    border: 1px solid var(--theme-card-border, #dbe4ec);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .app-shell .guide-welcome-later {
+    background: var(--theme-surface-subtle, #f8fafc);
+    color: var(--theme-primary-text, #086b84);
+  }
+  .app-shell .guide-welcome-start {
+    background: var(--theme-primary, #06abc9);
+    border-color: transparent;
+    color: var(--theme-primary-contrast, #fff);
+  }
+  .app-shell .guide-welcome-dismiss:hover,
+  .app-shell .guide-welcome-later:hover { background: var(--theme-surface-hover, #edf5f8); }
+  .app-shell .guide-welcome-start:hover { background: var(--theme-primary-hover, #0499b6); }
+  .app-shell .guide-welcome-prompt button:focus-visible {
+    outline: 2px solid var(--theme-primary, #06abc9);
+    outline-offset: 2px;
+  }
+  .app-shell .guide-welcome-caption {
+    margin: 10px 0 0;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .dark .app-shell .guide-welcome-caption { color: #aebdd0; }
+  @media (min-width: 1024px) {
+    .app-shell .guide-welcome-prompt {
+      inset-inline: auto 24px;
+      bottom: 24px;
+      width: min(420px, calc(100vw - 48px));
+      max-height: calc(100dvh - 48px);
+      margin: 0;
+    }
+  }
+  @media (max-height: 460px) and (max-width: 1023px) {
+    .app-shell .guide-welcome-prompt {
+      bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+      max-height: calc(100dvh - 96px - env(safe-area-inset-bottom, 0px));
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .app-shell .guide-welcome-prompt { animation: r69-welcome-appear .18s ease-out both; }
+  }
+  @keyframes r69-welcome-appear {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

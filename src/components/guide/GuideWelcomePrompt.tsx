@@ -11,7 +11,7 @@ export const GuideWelcomePrompt: React.FC = () => {
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
 
   return (
-    <aside className="guide-welcome-prompt print:hidden" aria-label="Pengenalan penggunaan Piket Guru">
+    <aside data-ui-version="R69" className="guide-welcome-prompt print:hidden" aria-label="Pengenalan penggunaan Piket Guru">
       <div className="guide-welcome-heading">
         <span className="guide-welcome-icon" aria-hidden="true"><BookOpen className="w-5 h-5" /></span>
         <div className="min-w-0 flex-1">
@@ -28,7 +28,7 @@ export const GuideWelcomePrompt: React.FC = () => {
           <Play className="w-4 h-4" /> Mulai 3 Langkah
         </button>
       </div>
-      <p className="guide-welcome-caption">Muncul sekali pada perangkat ini. Panduan bisa dibuka kembali melalui ikon ? di header.</p>
+      <p className="guide-welcome-caption">Panduan R69 · Muncul sekali pada perangkat ini. Buka kembali melalui ikon ? di header.</p>
     </aside>
   );
 };
