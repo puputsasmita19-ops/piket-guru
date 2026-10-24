@@ -1,0 +1,163 @@
+/* R64: no horizontal scrolling inside the selected-student region.
+   Scope limited to Buku Siswa Terlambat, not other forms and modals. */
+.r64-tardy-picker,
+.r64-tardy-picker *,
+.r64-tardy-selected-list,
+.r64-tardy-card,
+.r64-tardy-card * { box-sizing: border-box; }
+.r64-tardy-picker, .r64-tardy-selected-list, .r64-tardy-card {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.r64-tardy-picker { overflow-x: clip; }
+.r64-tardy-selected-list {
+  overflow-x: clip !important;
+  overflow-y: visible !important;
+  max-height: none !important;
+  scrollbar-width: none;
+}
+.r64-tardy-card {
+  min-width: 0;
+  overflow: hidden !important;
+  padding: 12px;
+  border-radius: 14px;
+}
+.r64-tardy-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  gap: 10px;
+}
+.r64-tardy-identity {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.r64-tardy-index {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 700;
+  font-size: 12px;
+}
+.r64-tardy-person { min-width: 0; width: 100%; }
+.r64-tardy-name {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-overflow: clip;
+}
+.r64-tardy-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+.r64-tardy-meta span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.r64-tardy-status-row {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+.r64-tardy-status {
+  display: block;
+  flex: 1 1 150px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+.r64-tardy-frequency {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: 9px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+.r64-tardy-actions {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid #e2e8f0;
+}
+.r64-tardy-action {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #334155;
+  background: white;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.r64-tardy-action span { min-width: 0; overflow-wrap: anywhere; }
+.r64-tardy-action svg { flex: 0 0 auto; }
+.r64-tardy-action:hover { background: #f8fafc; }
+.r64-tardy-action:focus-visible { outline: 2px solid #0891b2; outline-offset: 2px; }
+.r64-tardy-delete { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+.r64-tardy-version {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #cffafe;
+  color: #155e75;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.dark .r64-tardy-card { background: #0f172a; }
+.dark .r64-tardy-name { color: #f8fafc; }
+.dark .r64-tardy-meta { color: #cbd5e1; }
+.dark .r64-tardy-action { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+.dark .r64-tardy-delete { color: #fecaca; border-color: #7f1d1d; }
+@media (max-width: 639px) {
+  .r64-tardy-picker { padding: 12px !important; }
+  .r64-tardy-card { padding: 11px !important; }
+  .r64-tardy-card .grid > div { min-width: 0; }
+  .r64-tardy-card input, .r64-tardy-card select, .r64-tardy-card textarea { min-width: 0; max-width: 100%; }
+}
