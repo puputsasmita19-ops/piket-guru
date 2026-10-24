@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Pause, Play } from '../../components/icons';
+import { DashboardOutlineControlIcon } from './DashboardOutlineControlIcon';
 import type { DashboardInfoConfig, DashboardInfoPanel } from '../../types/dashboardInfo.types';
 import { announcementPreview } from '../../utils/announcementPreview';
 
@@ -186,11 +186,21 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
       </div>
     </div>
     <div className="flash-controls">
-      <button type="button" className="flash-open" onClick={slide.onAction} aria-expanded={slide.expanded} aria-controls={slide.controls}>{slide.actionLabel}<ChevronRight className="w-3.5 h-3.5 shrink-0" /></button>
-      <div className="flex shrink-0 gap-1">
-        <button type="button" className="flash-control" aria-label="Info sebelumnya" disabled={slides.length < 2} onClick={() => change(-1)}><ChevronLeft className="w-4 h-4" /></button>
-        {config.autoPlay && !reducedMotion && slides.length > 1 && <button type="button" className="flash-control" aria-label={paused ? 'Putar flash info' : 'Jeda flash info'} aria-pressed={paused} onClick={togglePlayback}>{paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}</button>}
-        <button type="button" className="flash-control" aria-label="Info berikutnya" disabled={slides.length < 2} onClick={() => change(1)}><ChevronRight className="w-4 h-4" /></button>
+      <button type="button" className="flash-open" onClick={slide.onAction} aria-expanded={slide.expanded} aria-controls={slide.controls}>
+        {slide.actionLabel}<DashboardOutlineControlIcon symbol="next" className="w-4 h-4 shrink-0" />
+      </button>
+      <div className="flash-control-group" role="group" aria-label="Kontrol Flash Info">
+        <button type="button" className="flash-control" aria-label="Info sebelumnya" disabled={slides.length < 2} onClick={() => change(-1)}>
+          <DashboardOutlineControlIcon symbol="previous" />
+        </button>
+        {config.autoPlay && !reducedMotion && slides.length > 1 && (
+          <button type="button" className="flash-control" aria-label={paused ? 'Putar flash info' : 'Jeda flash info'} aria-pressed={paused} onClick={togglePlayback}>
+            <DashboardOutlineControlIcon symbol={paused ? 'play' : 'pause'} />
+          </button>
+        )}
+        <button type="button" className="flash-control" aria-label="Info berikutnya" disabled={slides.length < 2} onClick={() => change(1)}>
+          <DashboardOutlineControlIcon symbol="next" />
+        </button>
       </div>
     </div>
   </section>;

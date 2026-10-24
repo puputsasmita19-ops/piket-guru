@@ -1054,12 +1054,23 @@ button.bg-\[var\(--theme-primary\)\],
   .flash-activity { display: flex; flex: 1; gap: 16px; align-items: center; }
   .flash-activity h2 { font-size: clamp(18px, 2vw, 24px); line-height: 1.3; letter-spacing: -.02em; }
   .flash-activity-description { font-size: 12px; line-height: 1.7; margin-top: 8px; color: #64748b; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .flash-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid var(--theme-card-border); padding-top: 4px; }
-  .flash-open { display: inline-flex; align-items: center; gap: 3px; min-width: 0; min-height: 44px; text-align: left; font-size: 11px; line-height: 1.4; font-weight: 750; color: var(--theme-primary-text); cursor: pointer; }
-  .flash-control { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; flex: none; border-radius: 11px; cursor: pointer; color: inherit; }
-  .flash-control:hover { background: var(--theme-surface-subtle); }
+  .flash-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; border-top: 1px solid var(--theme-card-border); padding-top: 4px; }
+  .flash-open { display: inline-flex; align-items: center; gap: 5px; min-width: 0; min-height: 40px; text-align: left; font-size: 11px; line-height: 1.4; font-weight: 750; color: var(--theme-primary-text); cursor: pointer; }
+  /* R73: group three outline controls, with one pill rather than heavy independent icons. */
+  .flash-control-group { display: inline-flex; align-items: center; justify-content: center; gap: 2px; flex: none; padding: 2px 4px; border: 1px solid var(--theme-card-border); border-radius: 999px; background: var(--theme-card-bg); }
+  .flash-control { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 999px; cursor: pointer; color: #64748b; transition: color .15s ease, background .15s ease; }
+  .flash-control .dashboard-outline-control-icon { width: 18px; height: 18px; }
+  .flash-control:hover { color: var(--theme-primary-text); background: var(--theme-surface-subtle); }
+  .flash-control[aria-pressed="true"] { color: var(--theme-primary-text); }
   .flash-control:disabled { opacity: .35; cursor: default; }
   :is(.flash-control, .flash-open, .flash-announcements):focus-visible { outline: 2px solid var(--theme-primary-text); outline-offset: 2px; }
+  @media (max-width: 639px) {
+    /* Mobile: text/action above; carousel actions centred below for thumb reach. */
+    .flash-controls { flex-direction: column; align-items: stretch; gap: 2px; padding-block: 6px 2px; }
+    .flash-open { min-height: 32px; }
+    .flash-control-group { align-self: center; }
+    .flash-control { flex-basis: 40px; width: 40px; height: 40px; min-height: 40px; }
+  }
   .dark :is(.flash-page, .flash-item-detail, .flash-empty, .flash-activity-description) { color: #b4bac6; }
   @media (max-width: 639px) {
     .dashboard-flash { padding: 9px 14px; border-radius: 21px; }
@@ -1232,19 +1243,22 @@ button.bg-\[var\(--theme-primary\)\],
 }
 
 /* Local welcome sentence rotation: rise-up exit, then a soft down-in entry. */
-.welcome-sentence { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; min-width: 0; }
-.welcome-message { display: grid; min-width: 0; overflow: hidden; overflow-wrap: anywhere; }
+.welcome-sentence { display: flex; align-items: flex-start; justify-content: flex-start; gap: 8px; min-width: 0; }
+/* The greeting control now belongs beside the sentence, never at the far edge near the avatar. */
+.welcome-message { display: grid; min-width: 0; flex: 1 1 auto; overflow: hidden; overflow-wrap: anywhere; }
 .welcome-message-text, .welcome-message-measure { grid-area: 1 / 1; align-self: start; min-width: 0; }
 .welcome-message-measure { visibility: hidden; pointer-events: none; user-select: none; }
 .welcome-message-measure::before { content: attr(data-text); }
 .welcome-message-text { display: block; }
 .welcome-message-text[data-motion="on"][data-phase="exit"] { animation: welcome-rise-out var(--welcome-exit-ms, 240ms) cubic-bezier(.4, 0, .7, .3) both; }
 .welcome-message-text[data-motion="on"][data-phase="enter"] { animation: welcome-down-in var(--welcome-enter-ms, 360ms) cubic-bezier(.16, 1, .3, 1) both; }
-.welcome-message-pause { align-self: start; margin-top: var(--welcome-control-top, 0px); position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; min-height: 20px; height: 20px; border: 0; border-radius: 8px; color: inherit; background: transparent; cursor: pointer; opacity: .75; }
-.welcome-message-pause::before { content: ''; position: absolute; inset: -12px -8px; }
-.welcome-message-pause .welcome-control-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; }
-.welcome-message-pause:hover { opacity: 1; }
-.welcome-message-pause:focus-visible { opacity: 1; outline: 2px solid var(--theme-primary); outline-offset: 3px; }
+/* One quiet control aligned to the first line, *before* the welcome sentence. */
+.welcome-message-pause { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; margin: -5px 0 0; border: 1px solid var(--theme-card-border); border-radius: 12px; color: #64748b; background: var(--theme-card-bg); cursor: pointer; transition: color .15s ease, background .15s ease; }
+.welcome-message-pause:hover { color: var(--theme-primary-text); background: var(--theme-surface-subtle); }
+.welcome-message-pause[aria-pressed="true"] { color: var(--theme-primary-text); }
+.welcome-message-pause:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
+.welcome-message-pause .dashboard-outline-control-icon { width: 17px; height: 17px; }
+@media (max-width: 639px) { .welcome-message-pause { flex-basis: 38px; width: 38px; height: 38px; min-height: 38px; } }
 @keyframes welcome-rise-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-8px); opacity: 0; } }
 @keyframes welcome-down-in { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .welcome-message-text { animation: none !important; transform: none !important; opacity: 1 !important; } }
