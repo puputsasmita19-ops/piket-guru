@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# R68: private school snapshots and audit exports must stay outside Git/deployments.
+/backups/
+/backup-pre-purge.json
+/artifacts/
+/public/artifacts/

@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rm } from 'node:fs/promises';
 import {defineConfig} from 'vite';
 
 /** Each production build stamps a new cache version into the service worker.
@@ -22,9 +22,22 @@ function stampServiceWorker() {
   };
 }
 
+/** R68: prevent files in public/artifacts from being deployed as unauthenticated assets.
+ * Private archives belong outside the public folder and Git history.
+ */
+function excludePrivateArtifacts() {
+  return {
+    name: 'piket-guru-private-artifacts-guard',
+    apply: 'build' as const,
+    async closeBundle() {
+      await rm(path.resolve(__dirname, 'dist/artifacts'), { recursive: true, force: true });
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), stampServiceWorker()],
+    plugins: [react(), tailwindcss(), stampServiceWorker(), excludePrivateArtifacts()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

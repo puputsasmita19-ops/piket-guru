@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Sparkles, X } from '../icons';
 import { AppUpdateManager, type UpdateStage } from '../../services/offline/appUpdateManager';
+import { ensurePwaUpdateSafe } from '../../services/offline/pwaUpdateSafety'; // R57-PWA-SAFETY-GATE
 
 type BannerStage = 'idle' | UpdateStage;
 
@@ -30,6 +31,8 @@ export const AppUpdateBanner: React.FC = () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     let reloadStarted = false;
     try {
+      // R57-PWA-SAFETY-GATE: preserve drafts/queue before a user-requested PWA reload.
+      await ensurePwaUpdateSafe();
       await AppUpdateManager.applyUpdate(setStage);
       reloadStarted = true;
     } catch (reason) {

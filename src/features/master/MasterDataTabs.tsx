@@ -67,6 +67,8 @@ export const MasterDataTabs: React.FC = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [categories, setCategories] = useState<IncidentCategoryRecord[]>([]);
+  // R56: listener optimizations: inactive master tabs use inexpensive counts, not live document streams.
+  const [masterCounts, setMasterCounts] = useState<Record<string, number>>({});
 
   // Bulk Import state
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -103,36 +105,51 @@ export const MasterDataTabs: React.FC = () => {
     name: string;
   } | null>(null);
 
-  // Initial Load & Realtime subscriptions
+  // Initial Master bootstrap remains unchanged; one lightweight count query per category
+  // replaces opening five complete collection listeners on the default Guru tab.
   useEffect(() => {
+    let alive = true;
     MasterDataService.bootstrapIfEmpty().then(() => {
-      setIsLoading(false);
+      if (alive) setIsLoading(false);
+    }).catch((error) => {
+      console.warn('[R56] Master bootstrap:', error);
+      if (alive) setIsLoading(false);
     });
-
-    const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', (data) => {
-      setTeachers(data);
-    });
-    const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', (data) => {
-      setStaffList(data);
-    });
-    const unsubStudents = FirestoreService.subscribeToCollection<StudentRecord>('students', (data) => {
-      setStudents(data);
-    });
-    const unsubRooms = FirestoreService.subscribeToCollection<RoomRecord>('rooms', (data) => {
-      setRooms(data);
-    });
-    const unsubCats = FirestoreService.subscribeToCollection<IncidentCategoryRecord>('incidentCategories', (data) => {
-      setCategories(data);
-    });
-
-    return () => {
-      unsubTeachers();
-      unsubStaff();
-      unsubStudents();
-      unsubRooms();
-      unsubCats();
-    };
+    const names = ['teachers', 'staff', 'students', 'rooms', 'incidentCategories'] as const;
+    for (const collectionName of names) {
+      FirestoreService.getCollectionCount(collectionName).then(count => {
+        if (alive) setMasterCounts(previous => previous[collectionName] === undefined ? ({ ...previous, [collectionName]: count }) : previous);
+      }).catch(error => {
+        // Unknown is not zero. Keep badge as ellipsis until tab data is opened.
+        console.warn('[R56] Collection count unavailable:', collectionName, error);
+      });
+    }
+    return () => { alive = false; };
   }, []);
+
+  // R56: listener optimizations: only one master collection is live at a time.
+  useEffect(() => {
+    let alive = true;
+    const subscriptions: Array<() => void> = [];
+    const listen = <T,>(collectionName: string, receive: (items: T[]) => void) => {
+      subscriptions.push(FirestoreService.subscribeToCollection<T>(collectionName, items => {
+        if (!alive) return;
+        receive(items);
+        setMasterCounts(previous => ({ ...previous, [collectionName]: items.length }));
+      }));
+    };
+    if (activeTab === 'teachers') listen<TeacherRecord>('teachers', setTeachers);
+    else if (activeTab === 'staff') listen<StaffRecord>('staff', setStaffList);
+    else if (activeTab === 'students') listen<StudentRecord>('students', setStudents);
+    else if (activeTab === 'rooms') listen<RoomRecord>('rooms', setRooms);
+    else if (activeTab === 'categories') listen<IncidentCategoryRecord>('incidentCategories', setCategories);
+    else if (activeTab === 'lessonSchedules') {
+      // LessonSchedulesPanel uses both datasets to populate teacher/student pickers.
+      listen<TeacherRecord>('teachers', setTeachers);
+      listen<StudentRecord>('students', setStudents);
+    }
+    return () => { alive = false; for (const stop of subscriptions) stop(); };
+  }, [activeTab]);
 
   // Modal Openers with custom status support (CR-004)
   const handleOpenAddTeacher = () => {
@@ -577,13 +594,13 @@ export const MasterDataTabs: React.FC = () => {
       {/* R40: all master categories visible without horizontal scrolling on desktop or mobile. */}
       <nav aria-label="Kategori Master Data" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 w-full min-w-0">
         {[
-          { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: teachers.length },
+          { id: 'teachers', label: 'Data Guru', icon: GraduationCap, count: masterCounts.teachers ?? (activeTab === 'teachers' ? teachers.length : undefined) },
           { id: 'subjects', label: 'Mata Pelajaran', icon: BookOpen },
           { id: 'lessonSchedules', label: 'Jadwal Pelajaran', icon: Calendar },
-          { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: staffList.length },
-          { id: 'students', label: 'Data Siswa', icon: Users, count: students.length },
-          { id: 'rooms', label: 'Ruangan & Pos Piket', icon: Building2, count: rooms.length },
-          { id: 'categories', label: 'Kategori Kejadian', icon: Tag, count: categories.length },
+          { id: 'staff', label: 'Tenaga Kependidikan', icon: Briefcase, count: masterCounts.staff ?? (activeTab === 'staff' ? staffList.length : undefined) },
+          { id: 'students', label: 'Data Siswa', icon: Users, count: masterCounts.students ?? (activeTab === 'students' ? students.length : undefined) },
+          { id: 'rooms', label: 'Ruangan & Pos Piket', icon: Building2, count: masterCounts.rooms ?? (activeTab === 'rooms' ? rooms.length : undefined) },
+          { id: 'categories', label: 'Kategori Kejadian', icon: Tag, count: masterCounts.incidentCategories ?? (activeTab === 'categories' ? categories.length : undefined) },
           { id: 'audit', label: 'Audit Log Sistem', icon: History },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -605,10 +622,10 @@ export const MasterDataTabs: React.FC = () => {
             >
               <Icon className="w-4 h-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{tab.label}</span>
-              {tab.count !== undefined && <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              {<span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 isActive ? 'bg-[var(--theme-primary)] text-[var(--theme-primary-contrast,#ffffff)]' : 'bg-slate-100 dark:bg-[var(--theme-surface-subtle)] text-slate-500 dark:text-slate-400'
               }`}>
-                {tab.count}
+                {tab.count ?? '…'}
               </span>}
             </button>
           );

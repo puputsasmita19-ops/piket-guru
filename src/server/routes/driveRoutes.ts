@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from './authRoutes.js';
 import { DriveStore } from '../services/driveStore.js';
 import { adminAuth, adminDb } from '../firebaseAdmin.js';
+import { decodeDrivePhotoUpload, PhotoUploadValidationError } from '../services/photoUploadValidation.js'; // R59_PHOTO_OPTIMIZED
 
 export const driveRouter = Router();
 
@@ -248,27 +249,21 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
     }
   }
 
+  if (clientPhotoId !== undefined && (typeof clientPhotoId !== 'string' || !/^[A-Za-z0-9_-]{5,96}$/.test(clientPhotoId))) {
+    res.status(400).json({ success: false, error: 'ID foto tidak valid.' }); return;
+  }
+  if (recordId !== undefined && (typeof recordId !== 'string' || recordId.length > 160)) {
+    res.status(400).json({ success: false, error: 'ID catatan tidak valid.' }); return;
+  }
+
   console.info('[DRIVE_UPLOAD] started', { module });
 
   try {
-    // Strip Base64 header prefix if present (e.g. data:image/jpeg;base64,...)
-    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
-
-    if (buffer.length === 0) {
-      res.status(400).json({ success: false, error: 'Data biner foto kosong.' });
-      return;
-    }
-
-    // Strict size cap: maximum 10 MB per photo upload
-    if (buffer.length > 10 * 1024 * 1024) {
-      res.status(400).json({ success: false, error: 'Ukuran foto melebihi batas maksimum 10 MB.' });
-      return;
-    }
+    const { buffer, mimeType: safeMimeType } = decodeDrivePhotoUpload(base64, mimeType);
 
     const uploadResult = await DriveStore.uploadPhoto({
       buffer,
-      mimeType: mimeType || 'image/jpeg',
+      mimeType: safeMimeType,
       module,
       clientPhotoId,
       uploadedBy: user.uid,
@@ -290,6 +285,7 @@ driveRouter.post('/upload', requireAuth, async (req: Request, res: Response) => 
       createdAt: uploadResult.createdAt,
     });
   } catch (err: any) {
+    if (err instanceof PhotoUploadValidationError) { res.status(400).json({ success: false, error: err.message }); return; }
     console.error('[DRIVE_UPLOAD] failed', { module, code: err?.code || err?.response?.status || 'UPLOAD_FAILED' });
     res.status(500).json({
       success: false,
@@ -357,6 +353,8 @@ driveRouter.get('/photo/:fileId', async (req: Request, res: Response) => {
     // Private caching for 1 hour to optimize repeated UI preview renders
     res.setHeader('Cache-Control', 'private, max-age=3600, no-transform');
 
+    photoData.stream.on('error', () => { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
+    res.on('close', () => { if (!res.writableEnded) photoData.stream.destroy(); });
     photoData.stream.pipe(res);
   } catch (err: any) {
     console.error(`[DRIVE_ROUTES] Photo proxy error for file ${fileId}:`, err);

@@ -143,8 +143,8 @@ await check('legacy queued edit without batch ID can still update an existing re
   assert.equal(fixture.writes, 2); assert.equal(updated.catatanPetugas, 'Updated from queue');
   assert.equal(updated.fotoUrl, '/api/drive/photo/test-photo-2');
 });
-await check('full batch IDs remain different even when their first eight characters match', async () => {
-  assert.notEqual(service.getBatchRecordId('2026-10-15', 'student', 'batch-abc-1'), service.getBatchRecordId('2026-10-15', 'student', 'batch-abc-2'));
+await check('R68: separate batch IDs resolve to one canonical student/date document', async () => {
+  assert.equal(service.getBatchRecordId('2026-10-15', 'student', 'batch-abc-1'), service.getBatchRecordId('2026-10-15', 'student', 'batch-abc-2'));
 });
 console.log(`${passed} isolated service regressions passed. No Firebase or Google Drive network calls were made.`);
 

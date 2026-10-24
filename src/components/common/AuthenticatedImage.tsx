@@ -21,8 +21,24 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 }) => {
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
   const [hasError, setHasError] = useState(false);
+  // R59_PHOTO_OPTIMIZED: delay private Drive fetch until the preview nears the viewport.
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [visibleDriveSrc, setVisibleDriveSrc] = useState<string>('');
+  const isDrivePhoto = Boolean(src?.startsWith('/api/drive/photo/'));
+  const isVisible = !isDrivePhoto || visibleDriveSrc === src;
   const statusCallback = useRef(onStatusChange);
   statusCallback.current = onStatusChange;
+
+  useEffect(() => {
+    if (!isDrivePhoto || isVisible) return;
+    const target = viewportRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') { setVisibleDriveSrc(src!); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(entry => entry.isIntersecting)) { setVisibleDriveSrc(src!); observer.disconnect(); }
+    }, { rootMargin: '250px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [src, isDrivePhoto, isVisible]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -32,7 +48,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
     setResolvedSrc('');
     statusCallback.current?.(src ? 'loading' : 'error');
 
-    if (!src) {
+    if (!src || !isVisible) {
       setResolvedSrc('');
       return;
     }
@@ -67,12 +83,12 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
       controller.abort();
       if (objectUrl.startsWith('blob:')) URL.revokeObjectURL(objectUrl);
     };
-  }, [src]);
+  }, [src, isVisible]);
 
-  if (hasError || !src || !resolvedSrc) {
+  if (hasError || !src || !isVisible || !resolvedSrc) {
     if (fallbackIcon) return <>{fallbackIcon}</>;
     return (
-      <div className={`flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 ${className || ''}`}>
+      <div ref={viewportRef} className={`flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 ${className || ''}`}>
         <span className="text-[10px] italic p-1">{fallbackText || '-'}</span>
       </div>
     );
@@ -80,6 +96,8 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
   return (
     <img
+      loading={props.loading || 'lazy'}
+      decoding={props.decoding || 'async'}
       src={resolvedSrc}
       alt={alt || ''}
       className={className}

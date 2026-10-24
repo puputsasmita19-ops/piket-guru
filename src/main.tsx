@@ -1,5 +1,6 @@
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { installR60BrowserDiagnostics } from './services/monitoring/r60BrowserDiagnostics'; // R60-CLIENT-DIAGNOSTICS
 import './index.css';
 import './modern-soft.css';
 import './dashboard-compact-r46.css';
@@ -26,6 +27,8 @@ window.addEventListener('error', (event) => {
     event.preventDefault();
   }
 });
+
+installR60BrowserDiagnostics();
 
 createRoot(document.getElementById('root')!).render(<App />);
 

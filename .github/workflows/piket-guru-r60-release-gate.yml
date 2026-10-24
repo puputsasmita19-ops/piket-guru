@@ -5,6 +5,8 @@ on:
     paths:
       - 'src/**'
       - 'scripts/**'
+      - 'vite.config.ts'
+      - '.gitignore'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/piket-guru-r60-release-gate.yml'

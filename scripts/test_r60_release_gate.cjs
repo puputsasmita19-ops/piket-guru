@@ -25,6 +25,8 @@ const fullPaths=[
   'scripts/r60_synthetic_load.cjs',
   'src/features/student-tardiness/StudentTardyFormModal.tsx',
   'scripts/test_r61_mobile_tardy.cjs',
+  'scripts/test_r68_tardy_multidevice.cjs',
+  'scripts/test_r68_privacy.cjs',
 ];
 const write=(name,txt='')=>{const file=path.join(root,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,txt)};
 const mockHost=async(server,env,extraArgs=[])=>{
@@ -50,6 +52,11 @@ const mockHost=async(server,env,extraArgs=[])=>{
  await test('preflight rejects R61 test fixture missing marker',()=>assert.equal(run(gate,args).status,1));
  write('src/features/student-tardiness/StudentTardyFormModal.tsx','{/* R61 MOBILE TARDY CARD */}');
  await test('preflight accepts all required R60 files',()=>{const r=run(gate,args);assert.equal(r.status,0,r.stdout);assert.equal(JSON.parse(r.stdout).releaseReady,false);});
+ await test('R65/R67 active deployed markup satisfies modern mobile layout requirement',()=>{
+  write('src/features/student-tardiness/StudentTardyFormModal.tsx','<span data-r67=\"active\">R67</span>');
+  const r=run(gate,args);assert.equal(r.status,0,r.stdout);
+  write('src/features/student-tardiness/StudentTardyFormModal.tsx','{/* R61 MOBILE TARDY CARD */}');
+ });
  await test('preflight is NOT a build pass',()=>{const r=JSON.parse(run(gate,args).stdout);assert.equal(r.mode,'PREFLIGHT_ONLY');assert.equal(r.releaseReady,false);assert.equal(r.localGatePassed,false);});
  await test('full gate requires node_modules or npm ci',()=>assert.equal(run(gate,['--run','--json']).status,1));
  await test('R61 presence required even if R60 files exist',()=>{fs.rmSync(path.join(root,'scripts/test_r61_mobile_tardy.cjs'));assert.equal(run(gate,args).status,1);write('scripts/test_r61_mobile_tardy.cjs');});

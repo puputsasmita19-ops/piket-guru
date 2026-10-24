@@ -486,7 +486,9 @@ export class DriveStore {
 
     const fileTimestamp = Date.now();
     const randomHex = Math.random().toString(36).substring(2, 7);
-    const fileName = `PG_${options.module.toUpperCase()}_${fileTimestamp}_${randomHex}.jpg`;
+    // R59_PHOTO_OPTIMIZED: keep file extensions in sync with validated MIME.
+    const fileExtension = options.mimeType === 'image/png' ? 'png' : options.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const fileName = `PG_${options.module.toUpperCase()}_${fileTimestamp}_${randomHex}.${fileExtension}`;
 
     // Convert Buffer to Readable Stream
     const stream = new Readable();

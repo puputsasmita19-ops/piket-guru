@@ -8,8 +8,14 @@ import { where } from 'firebase/firestore';
 import { getTodayISODate } from '../../utils/dateUtils';
 
 export class StudentTardyService {
-  public static getBatchRecordId(tanggal: string, studentId: string, batchRequestId: string): string {
-    return `trd-${tanggal}-${encodeURIComponent(studentId)}-${encodeURIComponent(batchRequestId)}`;
+  /**
+   * R68: one canonical Firestore document per student and date. The request ID
+   * still lives in batchRequestId for retry/audit, but must not form the doc ID:
+   * otherwise simultaneous submissions from two devices create two documents.
+   * Keep the third argument for older offline callers and public API stability.
+   */
+  public static getBatchRecordId(tanggal: string, studentId: string, _batchRequestId: string): string {
+    return `trd-${tanggal}-${encodeURIComponent(studentId)}`;
   }
   /**
    * Automatic demo student tardiness seeding is disabled in production to protect data integrity.
@@ -142,17 +148,40 @@ export class StudentTardyService {
   ): Promise<StudentTardyRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
-      const id = data.id && !data.id.startsWith('temp-')
-        ? data.id
-        : `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${crypto.randomUUID()}`;
+      // Batch operations (including offline jobs queued by an older app) must
+      // resolve to the same date+student document, regardless of the old ID.
+      const id = !isEdit && data.batchRequestId && data.studentId && data.tanggal
+        ? this.getBatchRecordId(data.tanggal, data.studentId, data.batchRequestId)
+        : data.id && !data.id.startsWith('temp-')
+          ? data.id
+          : `trd-${data.tanggal || new Date().toISOString().split('T')[0]}-${crypto.randomUUID()}`;
 
       // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', id);
       const isNew = !existingDoc;
       if (existingDoc) assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
-      if (!isEdit && existingDoc && data.batchRequestId && existingDoc.batchRequestId === data.batchRequestId) {
-        return existingDoc;
+      if (!isEdit && existingDoc && data.batchRequestId) {
+        if (existingDoc.batchRequestId === data.batchRequestId &&
+            existingDoc.studentId === data.studentId && existingDoc.tanggal === data.tanggal) {
+          return existingDoc; // identical batch retry: never upload/write again
+        }
+        throw new Error(`Siswa ini sudah memiliki catatan pada tanggal ${data.tanggal} (ID: ${id}).`);
+      }
+      // An offline R67 item may still carry the old batch-specific document ID.
+      // Check already-persisted legacy records before normalizing its ID, so a
+      // retry after upgrade cannot create a second copy of the same incident.
+      if (!isEdit && !existingDoc && data.batchRequestId && data.id && data.id !== id && data.studentId && data.tanggal) {
+        const sameDay = await FirestoreService.getForDates<StudentTardyRecord>('studentTardiness', [data.tanggal]);
+        session.assertActive();
+        const legacy = sameDay.find(record => record.tanggal === data.tanggal && record.studentId === data.studentId);
+        if (legacy) {
+          if (legacy.batchRequestId === data.batchRequestId) {
+            assertRecordOwner(user, legacy as unknown as Record<string, unknown>, 'petugasPiketId');
+            return legacy;
+          }
+          throw new Error(`Siswa ini sudah memiliki catatan pada tanggal ${data.tanggal} (ID: ${legacy.id}).`);
+        }
       }
       if (existingDoc && data.updatedAt && existingDoc.updatedAt && existingDoc.updatedAt !== data.updatedAt) {
         throw new Error(`Konflik pembaruan: Catatan keterlambatan telah diperbarui di server oleh ${existingDoc.updatedBy || 'pengguna lain'}. Buka data terbaru untuk meninjau.`);
@@ -278,17 +307,20 @@ export class StudentTardyService {
         record?: StudentTardyRecord;
         error?: string;
       }> = [];
+      // Index existing records once (legacy records can have noncanonical IDs).
+      // Also updated after each successful write so duplicate items within one
+      // batch are not sent to Drive/Firestore twice.
+      const existingByDayAndStudent = new Map<string, StudentTardyRecord>();
+      for (const record of existingRecords) {
+        if (record.studentId) existingByDayAndStudent.set(`${record.tanggal}\0${record.studentId}`, record);
+      }
 
       for (const item of studentsData) {
         try {
           const itemTanggal = item.tanggal || getTodayISODate();
 
           // Check for duplicate on the same date
-          const duplicate = existingRecords.find(
-            (r) =>
-              r.tanggal === itemTanggal &&
-              r.studentId === item.studentId
-          );
+          const duplicate = existingByDayAndStudent.get(`${itemTanggal}\0${item.studentId}`);
 
           // If duplicate has the exact same batchRequestId, treat as already saved (idempotent retry)
           if (duplicate && duplicate.batchRequestId === batchRequestId) {
@@ -302,8 +334,9 @@ export class StudentTardyService {
             continue;
           }
 
-          // If duplicate exists under another entry ID on the same date, reject duplicate
-          if (duplicate && (!item.id || duplicate.id !== item.id)) {
+          // A different batch is never an edit, even if its supplied ID equals
+          // a preexisting legacy record ID. Editing has its own explicit path.
+          if (duplicate) {
             results.push({
               studentId: item.studentId,
               namaSiswa: item.namaSiswa,
@@ -314,8 +347,9 @@ export class StudentTardyService {
             continue;
           }
 
-          // Generate deterministic document ID based on batchRequestId + studentId for safe retry
-          const deterministicId = item.id || this.getBatchRecordId(itemTanggal, item.studentId, batchRequestId);
+          // The canonical ID is shared by *all* batches for this student/date.
+          // Do not trust old client/offline IDs for newly submitted batches.
+          const deterministicId = this.getBatchRecordId(itemTanggal, item.studentId, batchRequestId);
 
           session.assertActive();
           const savedRecord = await this.saveTardyStudent(
@@ -328,6 +362,7 @@ export class StudentTardyService {
             false
           );
 
+          existingByDayAndStudent.set(`${itemTanggal}\0${item.studentId}`, savedRecord);
           results.push({
             studentId: item.studentId,
             namaSiswa: item.namaSiswa,

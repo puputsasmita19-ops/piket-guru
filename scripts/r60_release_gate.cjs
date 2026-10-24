@@ -38,13 +38,15 @@ const expected=[
   // R61 was applied later, so its form must be present before claiming readiness.
   'src/features/student-tardiness/StudentTardyFormModal.tsx',
   'scripts/test_r61_mobile_tardy.cjs',
+  'scripts/test_r68_tardy_multidevice.cjs',
+  'scripts/test_r68_privacy.cjs',
 ];
 step('package.json',exists(pkgFile),'Harus dijalankan di root repository Piket Guru');
 step('package-lock.json',exists(lock),'Diperlukan untuk npm ci yang reproducible');
 for(const file of expected)step(file,exists(file),'Komponen R60/R61 wajib tersedia pada repository terbaru');
 if (exists('src/features/student-tardiness/StudentTardyFormModal.tsx')) {
   const tardyForm=fs.readFileSync(path.join(root,'src/features/student-tardiness/StudentTardyFormModal.tsx'),'utf8');
-  step('R61 mobile layout installed',tardyForm.includes('R61 MOBILE TARDY CARD'),'Pastikan R61 benar-benar diterapkan, bukan hanya file patcher diekstrak');
+  step('R61+ mobile layout installed',tardyForm.includes('R61 MOBILE TARDY CARD') || /data-r6[5-9]=[\"']active[\"']/.test(tardyForm),'Pastikan R61/R65/R67 benar-benar diterapkan, bukan hanya file patcher diekstrak');
 }
 let scripts={};
 if(exists(pkgFile))try{scripts=JSON.parse(fs.readFileSync(path.join(root,pkgFile),'utf8')).scripts||{};}catch{step('parse package.json',false,'JSON tidak valid')}
@@ -64,6 +66,8 @@ if(running && failures.length===0){
       ['R60 diagnostics','scripts/test_r60_diagnostics.cjs'],
       ['R60 health probe tests','scripts/test_r60_health_probe.cjs'],
       ['R60 log privacy tests','scripts/test_r60_log_summary.cjs'],
+      ['R68 multi-device tardiness tests','scripts/test_r68_tardy_multidevice.cjs'],
+      ['R68 log and artifact privacy tests','scripts/test_r68_privacy.cjs'],
       ['R60 synthetic 50 users','scripts/r60_synthetic_load.cjs'],
     ];
     for(const [name,p] of scriptsToRun)execute(name,process.execPath,[p,...(p.includes('synthetic_load')?['--users','50','--concurrency','25']:[])],70000);

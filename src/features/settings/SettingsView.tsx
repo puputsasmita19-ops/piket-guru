@@ -360,57 +360,30 @@ export const SettingsView: React.FC = () => {
       if (mountedRef.current) setLocationStatus({ tone: 'error', message: 'Pengaturan lokasi belum dapat dibaca dari server. Periksa koneksi atau izin akun, lalu klik Muat Ulang Status. Penyimpanan dinonaktifkan sampai status server dapat dibaca.' });
     });
 
-    const unsubUsers = FirestoreService.subscribeToCollection<UserProfile>('users', (data) => {
-      setUsers(data);
-    });
-
-    const todayISO = new Date().toISOString().split('T')[0];
-
-    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules);
-    const unsubSub = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
-      'substitutions',
-      setSubstitutions,
-      undefined,
-      [where('tanggal', '==', todayISO)]
-    );
-    const unsubTrd = FirestoreService.subscribeToCollection<StudentTardyRecord>(
-      'studentTardiness',
-      setTardiness,
-      undefined,
-      [where('tanggal', '==', todayISO)]
-    );
-    const unsubPmt = FirestoreService.subscribeToCollection<StudentPermitRecord>(
-      'studentPermits',
-      setPermits,
-      undefined,
-      [where('status', '==', 'SEDANG_KELUAR')]
-    );
-    const unsubVis = FirestoreService.subscribeToCollection<VisitorRecord>(
-      'visitors',
-      setVisitors,
-      undefined,
-      [where('status', '==', 'SEDANG_BERKUNJUNG')]
-    );
-    const unsubAnnounce = FirestoreService.subscribeToCollection<AnnouncementRecord>(
-      'announcements',
-      setAnnouncements,
-      undefined,
-      [where('isActive', '==', true)]
-    );
-
     return () => {
       mountedRef.current = false;
       locationRequestRef.current++;
       LocationService.clearCurrentWatcher();
-      unsubUsers();
-      unsubSched();
-      unsubSub();
-      unsubTrd();
-      unsubPmt();
-      unsubVis();
-      unsubAnnounce();
     };
   }, []);
+
+  // R56: listener optimizations: subscribe to operational data only for the tab that uses it.
+  useEffect(() => {
+    if (activeTab === 'security' && isAdmin) {
+      return FirestoreService.subscribeToCollection<UserProfile>('users', setUsers);
+    }
+    if (activeTab !== 'lobby_tv') return;
+    const todayISO = new Date().toISOString().split('T')[0];
+    const stop = [
+      FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules),
+      FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions, undefined, [where('tanggal', '==', todayISO)]),
+      FirestoreService.subscribeToCollection<StudentTardyRecord>('studentTardiness', setTardiness, undefined, [where('tanggal', '==', todayISO)]),
+      FirestoreService.subscribeToCollection<StudentPermitRecord>('studentPermits', setPermits, undefined, [where('status', '==', 'SEDANG_KELUAR')]),
+      FirestoreService.subscribeToCollection<VisitorRecord>('visitors', setVisitors, undefined, [where('status', '==', 'SEDANG_BERKUNJUNG')]),
+      FirestoreService.subscribeToCollection<AnnouncementRecord>('announcements', setAnnouncements, undefined, [where('isActive', '==', true)]),
+    ];
+    return () => { for (const unsubscribe of stop) unsubscribe(); };
+  }, [activeTab, isAdmin]);
 
   // 1. Terapkan jam input utama ke seluruh hari operasional aktif
   const handleApplyCurrentHoursToAllActiveDays = () => {
