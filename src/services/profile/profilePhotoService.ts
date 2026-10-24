@@ -41,7 +41,7 @@ export async function setProfileLoginVisibility(userId: string, expectedAvatarUr
 }
 
 export const ProfilePhotoService = {
-  save: (userId: string, dataUrl: string, requestId: string, expectedAvatarUrl: string | null) => request(userId, 'POST', { dataUrl, requestId, expectedAvatarUrl }),
+  save: (userId: string, dataUrl: string, thumbnailDataUrl: string, requestId: string, expectedAvatarUrl: string | null) => request(userId, 'POST', { dataUrl, thumbnailDataUrl, requestId, expectedAvatarUrl }),
   remove: (userId: string, expectedAvatarUrl: string | null) => request(userId, 'DELETE', { expectedAvatarUrl }),
 };
 

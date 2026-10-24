@@ -48,7 +48,7 @@ export default function ProfilePhotoModal({ user, onClose, onSaved, onVisibility
     setBusy(true); setError('');
     const id = ++request.current;
     try {
-      const result = remove ? await ProfilePhotoService.remove(user.id, user.avatarUrl || null) : await ProfilePhotoService.save(user.id, photo!.dataUrl, requestId, user.avatarUrl || null);
+      const result = remove ? await ProfilePhotoService.remove(user.id, user.avatarUrl || null) : await ProfilePhotoService.save(user.id, photo!.dataUrl, photo!.thumbnailDataUrl, requestId, user.avatarUrl || null);
       if (id !== request.current) return;
       onSaved(result.avatarUrl); onClose();
     } catch (e: any) { if (id === request.current) setError(e.message || 'Foto belum tersimpan.'); }
@@ -67,7 +67,7 @@ export default function ProfilePhotoModal({ user, onClose, onSaved, onVisibility
   if (!admin) return null;
   return <Modal isOpen onClose={() => { if (!busy) onClose(); }} title="Foto profil pengguna" maxWidth="md" footer={<div className="flex gap-2 justify-end"><Button variant="outline" onClick={onClose} disabled={busy}>Batal</Button><Button onClick={() => save()} disabled={!photo || processing} isLoading={busy} loadingText="Memproses…">Simpan foto</Button></div>}>
     <div className="space-y-4 text-sm">
-      <div><h3 className="font-bold">{user.fullName}</h3><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Foto ini tampil di beranda, header, dan profil pengguna.</p></div>
+      <div><h3 className="font-bold">{user.fullName}</h3><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Foto utama tetap berkualitas; thumbnail login 128 × 128 dibuat otomatis dan hanya dipakai jika Admin mengizinkannya.</p></div>
       <div className="flex justify-center">{photo ? <img src={photo.dataUrl} alt="Pratinjau bingkai foto profil" className="w-44 h-44 sm:w-48 sm:h-48 rounded-3xl object-contain bg-white border border-[var(--theme-card-border)]" /> : <UserAvatar user={user} className="w-36 h-36 rounded-3xl text-4xl" />}</div>
       {image && layout && <div className="space-y-2 rounded-2xl p-3 border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)]">
         <div className="grid grid-cols-2 gap-2" role="group" aria-label="Mode bingkai foto">

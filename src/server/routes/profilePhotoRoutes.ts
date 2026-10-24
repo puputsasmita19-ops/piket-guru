@@ -3,24 +3,35 @@ import { createHash } from 'node:crypto';
 import { requireAuth, requireAdmin, recordServerAuditLog } from './authRoutes.js';
 import { adminDb } from '../firebaseAdmin.js';
 import { DriveStore } from '../services/driveStore.js';
-import { validateProfileJpeg } from '../services/profilePhotoValidation.js';
+import { validateProfileJpeg, validateLoginThumbnailJpeg } from '../services/profilePhotoValidation.js';
+import { LOGIN_THUMB_MAX_BYTES } from '../../config/profilePhotoPolicy.js';
 
 export const profilePhotoRouter = Router();
 const photoPath = (uid: string, fileId: string) => `/api/drive/profile-photo/${encodeURIComponent(uid)}/${fileId}`;
 const validUid = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !/[\/\\\x00-\x1f?#]/.test(id);
 profilePhotoRouter.post('/profile-photo/:userId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store');
-  const uid = req.params.userId, { dataUrl, requestId, expectedAvatarUrl } = req.body || {};
+  const uid = req.params.userId, { dataUrl, thumbnailDataUrl, requestId, expectedAvatarUrl } = req.body || {};
   if (!validUid(uid) || typeof requestId !== 'string' || !/^[A-Za-z0-9-]{16,80}$/.test(requestId) || !(expectedAvatarUrl === null || typeof expectedAvatarUrl === 'string')) {
     res.status(400).json({ success: false, error: 'Permintaan foto profil tidak lengkap.' }); return;
   }
   if (!adminDb) { res.status(503).json({ success: false, error: 'Database belum tersedia.' }); return; }
-  let buffer: Buffer;
-  try { buffer = validateProfileJpeg(dataUrl); } catch (e: any) { res.status(400).json({ success: false, error: e.message }); return; }
+  let buffer: Buffer, thumbBuffer: Buffer | null = null;
+  try {
+    buffer = validateProfileJpeg(dataUrl);
+    // Accept older deployed clients during staggered rollout; they keep legacy
+    // behaviour until the next photo change. New clients send a strict thumbnail.
+    if (thumbnailDataUrl !== undefined) thumbBuffer = validateLoginThumbnailJpeg(thumbnailDataUrl);
+  } catch (e: any) { res.status(400).json({ success: false, error: e.message }); return; }
   const ref = adminDb.collection('users').doc(uid);
   try {
     const target = await ref.get();
     if (!target.exists) { res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.' }); return; }
+    // Save thumbnail once at admin upload time, rather than resizing on every
+    // unauthenticated login GET. Distinct idempotency keys prevent collisions.
+    const thumbnailResult = thumbBuffer ? await DriveStore.uploadPhoto({ buffer: thumbBuffer, mimeType: 'image/jpeg', module: 'profilePhotos', recordId: uid,
+      uploadedBy: (req as any).user.uid, contentHash: createHash('sha256').update(thumbBuffer).digest('hex'),
+      clientPhotoId: 'login-thumb-' + createHash('sha256').update(`${uid}:${requestId}`).digest('hex') }) : null;
     const result = await DriveStore.uploadPhoto({ buffer, mimeType: 'image/jpeg', module: 'profilePhotos', recordId: uid,
       uploadedBy: (req as any).user.uid, contentHash: createHash('sha256').update(buffer).digest('hex'),
       clientPhotoId: 'profile-' + createHash('sha256').update(`${uid}:${requestId}`).digest('hex') });
@@ -36,7 +47,7 @@ profilePhotoRouter.post('/profile-photo/:userId', requireAuth, requireAdmin, asy
       if (current !== expectedAvatarUrl) throw new Error('PROFILE_CONFLICT');
       changed = true;
       // A new photo needs fresh, explicit approval before appearing publicly.
-      tx.update(ref, { avatarUrl, loginAvatarVisible: false, updatedAt: new Date().toISOString() });
+      tx.update(ref, { avatarUrl, loginAvatarVisible: false, loginAvatarThumbFileId: thumbnailResult?.fileId || null, updatedAt: new Date().toISOString() });
     });
     if (changed) {
       const caller = (req as any).callerData || {};
@@ -68,7 +79,7 @@ profilePhotoRouter.delete('/profile-photo/:userId', requireAuth, requireAdmin, a
       if (current === null) return;
       if (current !== expected) throw new Error('PROFILE_CONFLICT');
       previous = current;
-      tx.update(ref, { avatarUrl: null, loginAvatarVisible: false, updatedAt: new Date().toISOString() });
+      tx.update(ref, { avatarUrl: null, loginAvatarVisible: false, loginAvatarThumbFileId: null, updatedAt: new Date().toISOString() });
     });
     if (previous) {
       await recordServerAuditLog({ userId: (req as any).user.uid, userName: (req as any).callerData?.fullName || 'Administrator', role: 'ADMIN', action: 'UPDATE', module: 'USERS', status: 'SUCCESS', recordId: uid, target: name, details: 'Menghapus foto profil pengguna dan mengembalikan inisial.' }).catch(() => {});
@@ -140,11 +151,18 @@ profilePhotoRouter.get('/login-avatar/:userId/:fileId', async (req: Request, res
     if (!snap.exists || data?.isActive !== true || data?.loginAvatarVisible !== true || data?.avatarUrl !== photoPath(uid, fileId)) {
       res.status(404).end(); return;
     }
-    const photo = await DriveStore.getPhotoStream(fileId);
-    if (photo.mimeType !== 'image/jpeg' || (photo.size !== undefined && (photo.size < 12 || photo.size > 153600))) {
+    // The endpoint still uses the currently approved *original* file id in
+    // its URL so changing/revoking the photo invalidates old URLs. Only after
+    // the Firestore permission check does it resolve the smaller derivative.
+    const thumbId = data.loginAvatarThumbFileId;
+    const useThumbnail = typeof thumbId === 'string' && /^[A-Za-z0-9_-]+$/.test(thumbId);
+    const photo = await DriveStore.getPhotoStream(useThumbnail ? thumbId : fileId);
+    if (photo.mimeType !== 'image/jpeg' || (photo.size !== undefined && (photo.size < 12 || photo.size > (useThumbnail ? LOGIN_THUMB_MAX_BYTES : 153600)))) {
       photo.stream.destroy(); res.status(415).end(); return;
     }
     res.type('image/jpeg');
+    if (photo.size) res.setHeader('Content-Length', photo.size);
+    res.setHeader('X-Avatar-Variant', useThumbnail ? 'thumbnail' : 'legacy');
     photo.stream.on('error', () => { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
     res.on('close', () => { if (!res.writableEnded) photo.stream.destroy(); });
     photo.stream.pipe(res);

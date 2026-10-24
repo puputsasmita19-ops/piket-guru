@@ -1,4 +1,4 @@
-import { PROFILE_PHOTO_EDGE, PROFILE_PHOTO_TARGET_BYTES, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_SOURCE_MAX_BYTES } from '../../config/profilePhotoPolicy';
+import { PROFILE_PHOTO_EDGE, PROFILE_PHOTO_TARGET_BYTES, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_SOURCE_MAX_BYTES, LOGIN_THUMB_EDGE, LOGIN_THUMB_TARGET_BYTES, LOGIN_THUMB_MAX_BYTES } from '../../config/profilePhotoPolicy';
 
 export type ProfilePhotoFrame = { mode: 'fit' | 'fill'; zoom: number; positionX: number; positionY: number };
 export const DEFAULT_PROFILE_PHOTO_FRAME: ProfilePhotoFrame = { mode: 'fit', zoom: 1, positionX: 0, positionY: 0 };
@@ -47,5 +47,22 @@ export function compressProfilePhoto(img: HTMLImageElement, frame: ProfilePhotoF
     if (bytes <= PROFILE_PHOTO_TARGET_BYTES) break;
   }
   if (bytes > PROFILE_PHOTO_MAX_BYTES) throw new Error('Foto masih terlalu besar. Pilih foto lain.');
-  return { dataUrl, bytes, edge: canvas.width };
+
+  // Generate a separate thumbnail *from the exact approved crop*; avoid uploading
+  // a large private profile photo just to display a 40px image on the login form.
+  const thumb = document.createElement('canvas');
+  thumb.width = thumb.height = LOGIN_THUMB_EDGE;
+  const thumbContext = thumb.getContext('2d');
+  if (!thumbContext) throw new Error('Perangkat belum dapat membuat thumbnail foto.');
+  thumbContext.fillStyle = '#ffffff'; thumbContext.fillRect(0, 0, LOGIN_THUMB_EDGE, LOGIN_THUMB_EDGE);
+  thumbContext.drawImage(canvas, 0, 0, LOGIN_THUMB_EDGE, LOGIN_THUMB_EDGE);
+  let thumbnailDataUrl = '', thumbnailBytes = 0;
+  for (const quality of [.82, .72, .62, .52, .42]) {
+    thumbnailDataUrl = thumb.toDataURL('image/jpeg', quality);
+    const base64 = thumbnailDataUrl.split(',')[1];
+    thumbnailBytes = base64.length * .75 - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+    if (thumbnailBytes <= LOGIN_THUMB_TARGET_BYTES) break;
+  }
+  if (thumbnailBytes > LOGIN_THUMB_MAX_BYTES) throw new Error('Thumbnail terlalu besar. Pilih foto lain.');
+  return { dataUrl, bytes, edge: canvas.width, thumbnailDataUrl, thumbnailBytes };
 }
