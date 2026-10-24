@@ -145,18 +145,34 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
   // Request ID for idempotent retry
   const batchRequestIdRef = useRef<string>('');
+  // R67: synchronous locks close the gap between two quick taps and React's
+  // next render. Never reuse this to assert cross-device deduplication.
+  const submitInFlightRef = useRef(false);
+  const pendingStudentIdsRef = useRef<Set<string>>(new Set());
+  const formSessionRef = useRef(0);
+  const latestTanggalRef = useRef(tanggal);
+  latestTanggalRef.current = tanggal;
 
-  // Load student directory on mount
+  // Load student directory on mount. Never leave a rejected Firebase read
+  // unhandled, and never update state after this form is unmounted.
   useEffect(() => {
-    StudentService.bootstrapIfEmpty().then(() => {
-      StudentService.getAllStudents().then((data) => {
-        setStudentDirectory(data.filter((s) => s.isActive !== false));
+    let active = true;
+    StudentService.bootstrapIfEmpty()
+      .then(() => StudentService.getAllStudents())
+      .then(data => {
+        if (active) setStudentDirectory(data.filter(s => s.isActive !== false));
+      })
+      .catch(() => {
+        if (active) setErrorMessage('Daftar siswa belum berhasil dimuat. Periksa koneksi dan buka kembali formulir.');
       });
-    });
+    return () => { active = false; };
   }, []);
 
   // Initialize or reset form state
   useEffect(() => {
+    // Invalidate late Firebase responses from the previous modal session.
+    formSessionRef.current += 1;
+    pendingStudentIdsRef.current.clear();
     if (isOpen) {
       batchRequestIdRef.current = `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
       setShowSummaryConfirm(false);
@@ -218,31 +234,40 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
   // Add student to multi-select list
   const handleAddStudent = async (std: StudentRecord) => {
-    // Prevent duplicate selection by unique studentId
-    if (selectedStudents.some((entry) => entry.student.id === std.id)) {
-      setErrorMessage(`Siswa "${std.nama}" (${std.kelas}) sudah terpilih dalam daftar.`);
+    // R67: synchronous guard. A second click can arrive before useState rerenders.
+    if (pendingStudentIdsRef.current.has(std.id) || selectedStudents.some((entry) => entry.student.id === std.id)) {
+      setErrorMessage(`Siswa "${std.nama}" (${std.kelas}) sudah terpilih atau sedang diproses.`);
       setIsStudentDropdownOpen(false);
       return;
     }
-
+    pendingStudentIdsRef.current.add(std.id);
+    const session = formSessionRef.current;
     setErrorMessage(null);
     setStudentSearchTerm('');
     setIsStudentDropdownOpen(false);
 
-    // Fetch individual monthly frequency for this student
-    const count = await StudentTardyService.getStudentTardyCountThisMonth(
-      std.id,
-      std.kelas,
-      tanggal
-    );
-
-    const newEntry: SelectedStudentEntry = {
-      student: std,
-      frekuensiBulanIni: count + 1,
-      isCustomized: false,
-    };
-
-    setSelectedStudents((prev) => [...prev, newEntry]);
+    try {
+      const count = await StudentTardyService.getStudentTardyCountThisMonth(std.id, std.kelas, tanggal);
+      if (formSessionRef.current !== session) return;
+      if (latestTanggalRef.current !== tanggal) {
+        setErrorMessage('Tanggal kejadian berubah saat memuat siswa. Silakan pilih ulang agar frekuensinya akurat.');
+        return;
+      }
+      const newEntry: SelectedStudentEntry = {
+        student: std,
+        frekuensiBulanIni: count + 1,
+        isCustomized: false,
+      };
+      // Protect against an existing selection committed by another async path.
+      setSelectedStudents((prev) => prev.some((entry) => entry.student.id === std.id)
+        ? prev : [...prev, newEntry]);
+    } catch {
+      if (formSessionRef.current === session) {
+        setErrorMessage('Gagal membaca frekuensi keterlambatan siswa. Periksa koneksi, lalu pilih siswa kembali.');
+      }
+    } finally {
+      if (formSessionRef.current === session) pendingStudentIdsRef.current.delete(std.id);
+    }
   };
 
   // Re-fetch individual monthly frequency when tanggal changes
@@ -264,8 +289,15 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       })
     ).then((updated) => {
       if (!isCancelled) {
-        setSelectedStudents(updated);
+        // Keep the current selection/customization. A slow query must never
+        // re-add a removed student or overwrite edits made during refresh.
+        const frequencyById = new Map(updated.map(item => [item.student.id, item.frekuensiBulanIni]));
+        setSelectedStudents(prev => prev.map(item => frequencyById.has(item.student.id)
+          ? { ...item, frekuensiBulanIni: frequencyById.get(item.student.id)! }
+          : item));
       }
+    }).catch(() => {
+      if (!isCancelled) setErrorMessage('Frekuensi bulanan belum dapat diperbarui. Coba saat koneksi stabil.');
     });
 
     return () => {
@@ -382,7 +414,8 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
 
   // Execute single save for editing an existing record
   const executeSingleSave = async () => {
-    if (!currentUser || !editingTardy) return;
+    if (!currentUser || !editingTardy || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -445,13 +478,15 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
     } catch (err: any) {
       setErrorMessage(err?.message || 'Gagal menyimpan perubahan.');
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   // Execute batch save for multi-student input
   const executeBatchSave = async () => {
-    if (!currentUser) return;
+    if (!currentUser || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -532,6 +567,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
       } catch (err: any) {
         setErrorMessage(err?.message || 'Gagal menyimpan antrean offline.');
       } finally {
+        submitInFlightRef.current = false;
         setIsSubmitting(false);
       }
       return;
@@ -555,6 +591,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
     } catch (err: any) {
       setErrorMessage(err?.message || 'Gagal menyimpan catatan siswa.');
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -692,7 +729,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 <div className="w-full min-w-0 max-w-full space-y-2 pt-2">
                   <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-slate-600 dark:text-slate-400">
                     <span>Daftar Siswa Terpilih:</span>
-                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-800 dark:bg-sky-950 dark:text-sky-200" data-r65="active">R65</span>
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-800 dark:bg-sky-950 dark:text-sky-200" data-r67="active">R67</span>
                   </div>
 
                   <div className="w-full min-w-0 max-w-full space-y-3 max-h-80 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
