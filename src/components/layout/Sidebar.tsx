@@ -20,7 +20,6 @@ import {
   ChevronRight,
   Pin,
   PinOff,
-  RealtimeMonitorLogo,
 } from '../icons';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -52,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTogglePin,
 }) => {
   const { activeTab, setActiveTab } = useNavigation();
-  const { hasPermission, hasRole } = useAuth();
+  const { hasPermission } = useAuth();
   const [menuSearch, setMenuSearch] = useState('');
   useEffect(() => { if (!isOpen) setMenuSearch(''); }, [isOpen]);
 
@@ -71,14 +70,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const adminMenuItems: MenuItem[] = [
-    { id: 'attendance-monitor', label: 'Monitoring Piket Realtime', icon: RealtimeMonitorLogo, permission: PERMISSIONS.ATTENDANCE_VIEW_ALL },
     { id: 'reports', label: 'Laporan & Rekap', icon: FileBarChart2, permission: PERMISSIONS.REPORTS_VIEW },
     { id: 'users', label: 'Master Pengguna', icon: Users, permission: PERMISSIONS.USERS_VIEW },
     { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
   ];
 
   const searchAliases: Partial<Record<NavigationTab, string>> = {
-    'attendance-monitor': 'dashboard piket realtime riwayat presensi admin koreksi hapus',
     attendance: 'absen hadir masuk pulang lokasi gps', 'duty-book': 'jurnal catatan kegiatan',
     'student-tardiness': 'siswa telat keterlambatan', 'student-permits': 'izin keluar masuk pulang gerbang',
     substitutions: 'inval berhalangan pengganti', visitors: 'tamu pengunjung', kiosk: 'mode layar lobi kiosk',
@@ -86,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const matchesMenu = (item: MenuItem) => hasPermission(item.permission) &&
     `${item.label} ${item.id} ${searchAliases[item.id] || ''}`.toLowerCase().includes(menuSearch.trim().toLowerCase());
   const visibleMainItems = mainMenuItems.filter(matchesMenu);
-  const visibleAdminItems = adminMenuItems.filter(item => (item.id !== 'attendance-monitor' || hasRole('ADMIN')) && matchesMenu(item));
+  const visibleAdminItems = adminMenuItems.filter(matchesMenu);
 
   const handleMenuClick = (tab: NavigationTab) => {
     setActiveTab(tab);
@@ -120,6 +117,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'lg:relative lg:top-0 lg:bottom-auto lg:h-auto lg:min-h-[calc(100vh-4rem)] lg:z-0'
         }`}
       >
+        {/* App identity stays recognizable on mobile and desktop. */}
+        <div className="flex items-center gap-2.5 px-3.5 py-3 bg-white dark:bg-[var(--theme-card-bg)] border-b border-slate-100 dark:border-[var(--theme-card-border)] shrink-0">
+          <img src="/icon.svg" alt="Logo Piket Guru" className="h-10 w-10 rounded-xl object-contain bg-white shadow-sm" />
+          <div className="min-w-0 flex-1">
+            <strong className="block text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">PIKET GURU</strong>
+            <span className="block text-[10px] text-slate-500 dark:text-slate-400">Navigasi Sekolah</span>
+          </div>
+        </div>
         {/* Sidebar Controls Header */}
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-100 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/70 shrink-0">
           <div className="flex items-center gap-1.5">

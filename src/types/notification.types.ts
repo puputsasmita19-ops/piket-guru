@@ -75,9 +75,9 @@ export function buildNotificationFeed(events: NotificationEvent[], announcements
     if (!Number.isFinite(time) || time < oldest || time > now + 60000) continue;
     if (e.scope === 'USER' && e.actorId === user.id && e.module === 'AUTH' && config.sessionEvents && ['LOGIN', 'LOGOUT'].includes(e.action)) {
       result.set(e.id, { id: e.id, title: e.action === 'LOGIN' ? 'Anda berhasil masuk' : 'Anda keluar dari aplikasi', description: 'Riwayat sesi akun Anda.', category: 'SESSION', createdAt: e.createdAt });
-    } else if (e.scope === 'SCHOOL' && e.actorId !== user.id && Object.hasOwn(NOTIFICATION_MODULES, e.module) && config.operationalUpdates && config.modules[e.module as NotificationModule] && mayViewNotificationModule(user, e.module as NotificationModule) && verbs[e.action]) {
+    } else if (e.scope === 'SCHOOL' && Object.hasOwn(NOTIFICATION_MODULES, e.module) && config.operationalUpdates && config.modules[e.module as NotificationModule] && mayViewNotificationModule(user, e.module as NotificationModule) && verbs[e.action]) {
       const module = NOTIFICATION_MODULES[e.module as NotificationModule];
-      result.set(e.id, { id: e.id, title: module.label, description: `${e.actorName} ${verbs[e.action]}.`, category: 'ACTIVITY', createdAt: e.createdAt, tab: module.tab });
+      result.set(e.id, { id: e.id, title: module.label, description: `${e.actorId === user.id ? 'Anda' : e.actorName} ${verbs[e.action]}.`, category: 'ACTIVITY', createdAt: e.createdAt, tab: module.tab });
     }
   }
   if (config.announcements) for (const a of announcements) {

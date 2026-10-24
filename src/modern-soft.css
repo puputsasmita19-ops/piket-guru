@@ -330,3 +330,26 @@ html body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibil
   .app-content .quick-action.shortcut-tile { box-shadow: none !important; border: 1px solid #ccd5df !important; }
   .app-content .quick-action.shortcut-tile .feature-illustration { box-shadow: none !important; }
 }
+
+/* R48 — Header actions stay visible and touchable at narrow mobile widths.
+   Each action remains a separate, accessible control (sync, guide, notifications,
+   appearance and profile); none are replaced with decorative icons. */
+@media screen {
+  .app-shell .app-header-actions[data-r48-actions] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0;
+    align-items: center;
+    overflow: visible;
+  }
+  .app-shell .app-header-actions[data-r48-actions] .header-icon-button {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1;
+  }
+}
+@media (max-width: 359px) {
+  .app-shell .app-header-inner { padding-inline: 5px !important; }
+  .app-shell .app-clock-mobile { min-width: 68px; font-size: 9.5px; }
+  .app-shell .app-clock-mobile .app-clock-time { font-size: 10px; }
+}
