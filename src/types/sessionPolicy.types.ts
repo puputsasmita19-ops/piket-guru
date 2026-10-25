@@ -1,4 +1,13 @@
-export const BACKGROUND_LOGOUT_DELAYS = [0, 15, 30, 60, 300] as const;
+/** Bounded choices for the background-only re-login rule; legacy values stay valid. */
+export const BACKGROUND_LOGOUT_DELAYS = [0, 15, 30, 60, 300, 600, 900, 1800, 3600, 7200] as const;
+
+/** Display-only formatting; persisted policy remains expressed in seconds. */
+export function formatBackgroundLogoutDelay(seconds: number): string {
+  if (seconds === 0) return 'Langsung — wajib login ulang';
+  if (seconds < 60) return `${seconds} detik`;
+  if (seconds < 3600) return `${seconds / 60} menit`;
+  return `${seconds / 3600} jam`;
+}
 export interface DeviceSessionPolicy {
   backgroundLogoutEnabled: boolean;
   backgroundDelaySeconds: number;

@@ -1,0 +1,47 @@
+'use strict';
+// Offline/static + deterministic-clock verification; no Firebase/network access.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+const root = path.resolve(__dirname, '..');
+const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
+const policySource = read('src/types/sessionPolicy.types.ts');
+const uiSource = read('src/features/settings/SessionPolicySettingsCard.tsx');
+const diagnostics = (source,fileName) => ts.createSourceFile(fileName,source,ts.ScriptTarget.Latest,true,fileName.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS).parseDiagnostics;
+const makeExports = (source,fileName,bindings={}) => {
+  const js=ts.transpileModule(source,{fileName, compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+  const exported={};
+  const context=vm.createContext({module:{exports:exported},exports:exported,...bindings});
+  vm.runInContext(js.outputText,context,{filename:fileName});
+  return exported;
+};
+const p=makeExports(policySource,'sessionPolicy.types.ts',{navigator:{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',platform:'Win32',maxTouchPoints:0}});
+let passed=0;
+function test(label,fn) {try{fn();passed++; console.log('PASS',label)}catch(e){console.error('FAIL',label,'\n',e.stack||e.message);process.exitCode=1}}
+test('policy parses in TypeScript',()=>assert.equal(diagnostics(policySource,'sessionPolicy.types.ts').length,0));
+test('settings UI parses as TSX',()=>assert.equal(diagnostics(uiSource,'SessionPolicySettingsCard.tsx').length,0));
+test('all previous delays remain supported',()=>{for(const n of [0,15,30,60,300])assert.equal(p.sanitizeSessionPolicy({backgroundDelaySeconds:n}).backgroundDelaySeconds,n)});
+test('extended delays supported: 10m,15m,30m,1h,2h',()=>{for(const n of [600,900,1800,3600,7200])assert.equal(p.sanitizeSessionPolicy({backgroundDelaySeconds:n}).backgroundDelaySeconds,n)});
+test('delays are finite and maximum is bounded at two hours',()=>{assert.equal(Math.max(...p.BACKGROUND_LOGOUT_DELAYS),7200);assert.deepEqual(Array.from(p.BACKGROUND_LOGOUT_DELAYS),[0,15,30,60,300,600,900,1800,3600,7200])});
+test('invalid delay values continue to normalize to 0',()=>{for(const n of [-1,-20,7201,100000,NaN,null,'1800',Infinity])assert.equal(p.sanitizeSessionPolicy({backgroundDelaySeconds:n}).backgroundDelaySeconds,0)});
+test('existing config default remains unchanged',()=>{const v=p.sanitizeSessionPolicy();assert.equal(v.mobile.backgroundLogoutEnabled,false);assert.equal(v.desktop.backgroundLogoutEnabled,false);assert.equal(v.mobile.backgroundDelaySeconds,0)});
+test('legacy flat values continue to be inherited',()=>{const v=p.sanitizeSessionPolicy({backgroundLogoutEnabled:true,backgroundDelaySeconds:900});assert.equal(v.mobile.backgroundDelaySeconds,900);assert.equal(v.desktop.backgroundDelaySeconds,900)});
+test('mobile and desktop delays are independently preserved',()=>{const v=p.sanitizeSessionPolicy({mobile:{backgroundLogoutEnabled:true,backgroundDelaySeconds:1800},desktop:{backgroundLogoutEnabled:false,backgroundDelaySeconds:3600}});assert.equal(v.mobile.backgroundDelaySeconds,1800);assert.equal(v.desktop.backgroundDelaySeconds,3600);assert.equal(v.desktop.backgroundLogoutEnabled,false)});
+test('invalid mobile setting does not override valid desktop',()=>{const v=p.sanitizeSessionPolicy({mobile:{backgroundDelaySeconds:999999},desktop:{backgroundDelaySeconds:3600}});assert.equal(v.mobile.backgroundDelaySeconds,0);assert.equal(v.desktop.backgroundDelaySeconds,3600)});
+test('0 seconds displays immediate re-login',()=>assert.equal(p.formatBackgroundLogoutDelay(0),'Langsung — wajib login ulang'));
+test('seconds display unchanged',()=>assert.equal(p.formatBackgroundLogoutDelay(30),'30 detik'));
+test('minute labels are correct',()=>{assert.equal(p.formatBackgroundLogoutDelay(600),'10 menit');assert.equal(p.formatBackgroundLogoutDelay(900),'15 menit');assert.equal(p.formatBackgroundLogoutDelay(1800),'30 menit')});
+test('hour labels are correct',()=>{assert.equal(p.formatBackgroundLogoutDelay(3600),'1 jam');assert.equal(p.formatBackgroundLogoutDelay(7200),'2 jam')});
+test('UI uses central supported delay list',()=>assert.match(uiSource,/BACKGROUND_LOGOUT_DELAYS\.map\(seconds\s*=>/));
+test('UI renders friendly hour/minute labels',()=>assert.match(uiSource,/formatBackgroundLogoutDelay\(seconds\)/));
+test('UI marks 30m recommended',()=>assert.match(uiSource,/seconds === 1800 \? ' — direkomendasikan'/));
+test('UI saves numeric seconds, not display text',()=>assert.match(uiSource,/backgroundDelaySeconds: Number\(e\.target\.value\)/));
+test('UI continues to call existing admin-authorized service',()=>assert.match(uiSource,/SchoolSettingsService\.saveSessionPolicy\(draft, currentUser\.id\)/));
+test('UI documents separate inactivity 30m boundary',()=>assert.match(uiSource,/logout inaktivitas terpisah setelah 30 menit/));
+test('UI documents common device-class policy limitations',()=>assert.match(uiSource,/semua pengguna berdasarkan jenis perangkat/));
+test('UI has no direct side effects on logout, storage or Firebase',()=>{assert.doesNotMatch(uiSource,/\b(?:signOut|clearSession|localStorage\.clear|indexedDB\.deleteDatabase)\b/)});
+test('policy module has no direct side effects on logout, storage or Firebase',()=>{assert.doesNotMatch(policySource,/\b(?:signOut|clearSession|localStorage\.clear|indexedDB\.deleteDatabase)\b/)});
+console.log(`R87 Session Delays: ${passed}/23 passed`);
+if(passed!==23)process.exitCode=1;
