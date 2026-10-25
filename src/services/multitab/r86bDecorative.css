@@ -1,0 +1,7 @@
+/* R86-B — only decorative animations, ONLY on a hidden duplicate tab.
+   Never pause progress, loaders, notification, presensi, navigation, or forms. */
+html[data-r86b-visual-quiet="true"] .login-gradient-motion > span,
+html[data-r86b-visual-quiet="true"] .login-credit-track,
+html[data-r86b-visual-quiet="true"] .overflow-name[data-scrolling="true"] .overflow-name-track {
+  animation-play-state: paused !important;
+}
