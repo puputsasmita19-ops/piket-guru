@@ -1,0 +1,38 @@
+{
+  "schema": "piket-r86g-release-evidence-v1",
+  "environment": "production",
+  "candidateCommit": "ISI_SHA_COMMIT_GITHUB_40_HEX",
+  "previewCommit": "ISI_SHA_COMMIT_VERSEL_PREVIEW_YANG_SAMA",
+  "previewDeployment": "REFERENSI_DEPLOYMENT_PREVIEW",
+  "previewTestReport": "artifacts/r86f/results/summary.md dan bukti staging asli",
+  "reviewer": "",
+  "reviewedAt": "",
+  "productionEnvironmentReviewedBy": "",
+  "productionEnvironmentReviewedAt": "",
+  "productionEnvironmentEvidence": "Catatan/screenshot dashboard Vercel Production tanpa secret, disimpan di luar repository",
+  "productionFlags": {
+    "VITE_R86_AUDIT": {"state": "NOT_CHECKED", "evidence": ""},
+    "VITE_R86_TAB_OPT": {"state": "NOT_CHECKED", "evidence": ""},
+    "VITE_R86_LISTENER_AUDIT": {"state": "NOT_CHECKED", "evidence": ""},
+    "VITE_R86_STABILITY_AUDIT": {"state": "NOT_CHECKED", "evidence": ""},
+    "VITE_R86E2_REPORTS_PILOT": {"state": "NOT_CHECKED", "evidence": ""},
+    "VITE_R86E3_COMPARE": {"state": "NOT_CHECKED", "evidence": ""}
+  },
+  "rollback": {
+    "previousStableCommit": "ISI_SHA_40_HEX_VERSI_STABIL_SEBELUMNYA",
+    "previousStableDeployment": "REFERENSI_DEPLOYMENT_STABIL_SEBELUMNYA",
+    "owner": "",
+    "procedureEvidence": "Dokumen/catatan rollback dan akses petugas yang berwenang",
+    "preserveOfflineDrafts": false,
+    "preserveServerData": false
+  },
+  "postDeploySmokeTestPlan": "",
+  "incidentContact": "",
+  "pilotEnabledInProduction": false,
+  "approval": {
+    "decision": "PENDING",
+    "reviewer": "",
+    "approvedAt": "",
+    "evidence": ""
+  }
+}
