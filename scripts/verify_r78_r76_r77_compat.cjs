@@ -24,7 +24,7 @@ for(const p of [typesFile, selectorFile, nameFile, greetingFile]){
 const compiled = ts.transpileModule(read(typesFile),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(specifier=>{
- assert.equal(specifier,'./dashboardWelcome.types');
+ assert.equal(specifier,'./dashboardWelcome.types.js');
  return {sanitizeDashboardWelcomeConfig:()=>({})};
 },mod,mod.exports);
 const {sanitizeNameMarqueeConfig,sanitizeDashboardInfoConfig}=mod.exports;

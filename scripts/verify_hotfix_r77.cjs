@@ -18,7 +18,7 @@ const moduleObject = { exports: {} };
 vm.runInNewContext(result.outputText, {
   module: moduleObject, exports: moduleObject.exports,
   require: (name) => {
-    if (name.endsWith('/dashboardWelcome.types')) {
+    if (name.endsWith('/dashboardWelcome.types.js')) {
       return { sanitizeDashboardWelcomeConfig: () => ({ enabled: true, mode: 'fixed' }) };
     }
     throw Error(`Unexpected import: ${name}`);

@@ -1,4 +1,4 @@
-import { sanitizeDashboardWelcomeConfig, type DashboardWelcomeConfig } from './dashboardWelcome.types';
+import { sanitizeDashboardWelcomeConfig, type DashboardWelcomeConfig } from './dashboardWelcome.types.js';
 
 export const DASHBOARD_INFO_PANELS = {
   announcements: 'Papan Pengumuman & Instruksi Piket',
