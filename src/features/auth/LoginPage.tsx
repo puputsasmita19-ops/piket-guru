@@ -207,6 +207,13 @@ export const LoginPage: React.FC = () => {
     });
   }, [usersList, searchQuery]);
 
+  // Keep the first-open list brief; typing reveals the full filtered result set.
+  // Keyboard navigation must use the same items that are actually rendered.
+  const visibleUsers = useMemo(
+    () => searchQuery.trim() ? filteredUsers : filteredUsers.slice(0, 3),
+    [filteredUsers, searchQuery],
+  );
+
   // Click outside to close combobox and theme picker
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -227,12 +234,12 @@ export const LoginPage: React.FC = () => {
   useEffect(() => {
     if (isComboboxOpen) {
       setHighlightedIndex(0);
-      setTimeout(() => {
+      const timer = window.setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);
-    } else {
-      setSearchQuery('');
+      return () => window.clearTimeout(timer);
     }
+    setSearchQuery('');
   }, [isComboboxOpen]);
 
   // Scroll highlighted item into view
@@ -312,14 +319,14 @@ export const LoginPage: React.FC = () => {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev < filteredUsers.length - 1 ? prev + 1 : 0));
+      setHighlightedIndex((prev) => (prev < visibleUsers.length - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredUsers.length - 1));
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : visibleUsers.length - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filteredUsers.length > 0 && filteredUsers[highlightedIndex]) {
-        handleSelectUser(filteredUsers[highlightedIndex]);
+      if (visibleUsers.length > 0 && visibleUsers[highlightedIndex]) {
+        handleSelectUser(visibleUsers[highlightedIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -741,40 +748,59 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* R48: Search-first account picker. One compact selected-account card,
-            no duplicate selection dropdown. The server still validates PIN/UID. */}
-        <section className="space-y-2" aria-label="Pilih akun pengguna">
-          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+        {/* R81: compact, accessible method switch. Keep the R79 verified-user
+            recovery and the existing UID/PIN authentication unchanged. */}
+        <section className="login-method-panel min-w-0 space-y-2.5" aria-label="Metode masuk">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 min-w-0">
             <label htmlFor="login-account-search" className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-              Pilih akun pengguna
+              Metode masuk
             </label>
-            <div role="group" aria-label="Metode memilih akun" className="inline-flex rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] p-1 gap-1">
-              <button type="button" aria-pressed={!isManualInput} onClick={() => {
-                setIsManualInput(false);
-                setIsComboboxOpen(false);
-                setSearchQuery('');
-                if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
-              }}
-                className={`min-h-9 flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>
-                <Search className="h-3.5 w-3.5" aria-hidden="true" /> Cari Nama
+            <div role="group" aria-label="Pilih metode masuk" className="grid grid-cols-2 w-full sm:w-auto rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-1 gap-1">
+              <button
+                type="button"
+                aria-pressed={!isManualInput}
+                aria-label="Cari Nama"
+                onClick={() => {
+                  // Never submit an invisible manually entered ID after switching modes.
+                  if (isManualInput && !selectedUidRef.current) { setSelectedIdentifier(''); setPin(''); }
+                  setErrorMessage(''); setHasError(false);
+                  setIsManualInput(false);
+                  setIsComboboxOpen(false);
+                  setSearchQuery('');
+                  setHighlightedIndex(0);
+                  if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
+                }}
+                className={`min-h-11 sm:min-h-10 min-w-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput
+                  ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
+                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
+              >
+                <Search className="w-4 h-4 shrink-0" aria-hidden="true" /> Nama
               </button>
-              <button type="button" aria-pressed={isManualInput} onClick={() => {
-                selectionTouchedRef.current = true;
-                setIsManualInput(true);
-                setIsComboboxOpen(false);
-                setSearchQuery('');
-              }}
-                className={`min-h-9 flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>
-                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> ID/NIP
+              <button
+                type="button"
+                aria-pressed={isManualInput}
+                onClick={() => {
+                  selectionTouchedRef.current = true;
+                  setIsManualInput(true);
+                  setIsComboboxOpen(false);
+                  setSearchQuery('');
+                  setHighlightedIndex(0);
+                }}
+                className={`min-h-11 sm:min-h-10 min-w-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput
+                  ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
+                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
+              >
+                <KeyRound className="w-4 h-4 shrink-0" aria-hidden="true" /> ID/NIP
               </button>
             </div>
           </div>
           {isManualInput ? (
-            <div className="space-y-1">
+            <div className="login-account-panel min-w-0 space-y-1.5">
               <input
                 id="login-account-search"
                 type="text"
-                autoComplete="off"
+                autoComplete="username"
+                spellCheck={false}
                 value={selectedIdentifier}
                 onChange={e => {
                   selectionTouchedRef.current = true;
@@ -782,20 +808,21 @@ export const LoginPage: React.FC = () => {
                   setSelectedIdentifier(e.target.value);
                   setPin(''); setErrorMessage(''); setHasError(false);
                 }}
-                placeholder="ID login atau NIP"
-                className="w-full min-h-12 px-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
+                placeholder="Masukkan ID login atau NIP"
+                className="w-full min-w-0 min-h-11 px-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
               />
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Login manual tetap tersedia saat daftar nama tidak dapat diakses.</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan ID terdaftar jika pencarian nama belum tersedia.</p>
             </div>
           ) : (
-            <div ref={comboboxRef} className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-2">
+              <div className="relative min-w-0">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
                 <input
                   id="login-account-search"
                   ref={searchInputRef}
-                  type="search"
+                  type="text"
                   autoComplete="off"
+                  spellCheck={false}
                   value={searchQuery}
                   onFocus={() => { lastListActivityRef.current = Date.now(); setIsComboboxOpen(true); }}
                   onChange={e => {
@@ -805,66 +832,82 @@ export const LoginPage: React.FC = () => {
                     setIsComboboxOpen(true);
                   }}
                   onKeyDown={handleComboboxKeyDown}
-                  placeholder="Ketik nama atau ID guru..."
-                  aria-controls="login-account-results"
+                  placeholder="Cari nama guru atau ID..."
+                  aria-controls={isComboboxOpen ? 'login-account-results' : undefined}
                   aria-expanded={isComboboxOpen}
                   aria-autocomplete="list"
                   role="combobox"
-                  className="w-full min-h-12 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
+                  className={`w-full min-w-0 min-h-11 pl-10 ${searchQuery ? 'pr-11' : 'pr-3'} rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]`}
                 />
+                {searchQuery && (
+                  <button type="button" aria-label="Hapus pencarian nama" title="Hapus pencarian"
+                    onClick={() => { setSearchQuery(''); setHighlightedIndex(0); setIsComboboxOpen(true); searchInputRef.current?.focus(); }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center rounded-lg text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]">
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                )}
               </div>
               {usersList.length === 0 && (
-                <div role={userLookupStatus === 'unavailable' ? 'alert' : 'status'} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-slate-800/60 p-3">
+                <div role={userLookupStatus === 'unavailable' ? 'alert' : 'status'} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5">
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                    {isLoadingUsers || userLookupStatus === 'loading' ? 'Memuat nama pengguna…' : userLookupStatus === 'empty' ? 'Belum ada akun aktif pada daftar pengguna. Hubungi Admin jika seharusnya sudah terdaftar.' : 'Daftar nama belum dapat dimuat. Periksa koneksi atau coba lagi. Login ID/NIP tetap dapat digunakan.'}
+                    {isLoadingUsers || userLookupStatus === 'loading' ? 'Memuat nama pengguna…' : userLookupStatus === 'empty' ? 'Belum ada akun aktif. Hubungi Admin jika seharusnya sudah terdaftar.' : 'Daftar nama belum tersedia. Gunakan ID/NIP atau coba lagi.'}
                   </p>
-                  {!isLoadingUsers && userLookupStatus !== 'loading' && <button type="button" onClick={() => {
-                    setIsLoadingUsers(true);
-                    void refreshLoginUsers(true);
-                  }} disabled={isSubmitting || isGoogleSubmitting} className="min-h-10 shrink-0 rounded-lg border border-[var(--theme-primary-border)] px-3 text-xs font-semibold text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50">Coba Lagi</button>}
+                  {!isLoadingUsers && userLookupStatus !== 'loading' && (
+                    <button type="button" onClick={() => { setIsLoadingUsers(true); void refreshLoginUsers(true); }}
+                      disabled={isSubmitting || isGoogleSubmitting}
+                      className="min-h-10 shrink-0 rounded-lg border border-[var(--theme-primary-border)] px-3 text-xs font-semibold text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50">Coba Lagi</button>
+                  )}
                 </div>
               )}
               {isComboboxOpen && (
-                <div id="login-account-results" role="listbox" aria-label="Hasil pencarian pengguna"
-                  ref={listboxRef} className="max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-1 shadow-sm">
+                <div id="login-account-results" role="listbox" aria-label="Hasil pencarian pengguna" ref={listboxRef}
+                  className="max-h-44 sm:max-h-48 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-1 shadow-sm">
                   {isLoadingUsers ? (
                     <p className="p-3 text-xs text-slate-500">Memuat daftar pengguna...</p>
                   ) : userLookupStatus === 'unavailable' && usersList.length === 0 ? (
-                    <p className="p-3 text-xs text-slate-500">Daftar nama belum dapat diakses. Pilih Coba Lagi atau gunakan ID/NIP.</p>
-                  ) : filteredUsers.length === 0 ? (
-                    <p className="p-3 text-xs text-slate-500">Nama tidak ditemukan. Coba ID login manual.</p>
-                  ) : filteredUsers.map((u, idx) => {
-                    const active = selectedUser?.id === u.id;
-                    return (
-                      <button type="button" key={u.userId || u.id} role="option"
-                        aria-selected={active} data-index={idx}
-                        onMouseEnter={() => setHighlightedIndex(idx)}
-                        onClick={() => { handleSelectUser(u); setSearchQuery(''); }}
-                        className={`w-full min-h-12 flex items-center gap-3 rounded-lg p-2.5 text-left transition-colors ${highlightedIndex === idx ? 'bg-[var(--theme-primary-light)]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                        <span aria-hidden="true" className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]"><User className="w-4 h-4" /></span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-semibold text-slate-900 dark:text-white break-words">{u.fullName}</span>
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{u.loginId || u.nip || u.id} • {ROLE_LABELS[u.role] || u.role}</span>
-                        </span>
-                        {active && <Check className="w-4 h-4 shrink-0 text-[var(--theme-primary-text)]" />}
-                      </button>
-                    );
-                  })}
+                    <p className="p-3 text-xs text-slate-500">Daftar belum tersedia. Coba Lagi atau pilih ID/NIP.</p>
+                  ) : visibleUsers.length === 0 ? (
+                    <p className="p-3 text-xs text-slate-500">Nama tidak ditemukan. Coba gunakan ID/NIP.</p>
+                  ) : (
+                    <>
+                      {visibleUsers.map((u, idx) => {
+                        const active = selectedUser?.id === u.id;
+                        return (
+                          <button type="button" key={u.userId || u.id} role="option"
+                            aria-selected={active} data-index={idx}
+                            onMouseEnter={() => setHighlightedIndex(idx)}
+                            onClick={() => { handleSelectUser(u); setSearchQuery(''); }}
+                            className={`w-full min-h-11 flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)] ${highlightedIndex === idx ? 'bg-[var(--theme-primary-light)]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                            <span aria-hidden="true" className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-lg bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)]"><User className="w-4 h-4" /></span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-xs font-semibold text-slate-900 dark:text-white break-words">{u.fullName}</span>
+                              <span className="block text-[11px] text-slate-500 dark:text-slate-400 break-all">{u.loginId || u.nip || u.id}</span>
+                            </span>
+                            <span className="hidden sm:inline-flex max-w-24 truncate shrink-0 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-1 text-[10px] text-slate-600 dark:text-slate-300">{ROLE_LABELS[u.role] || u.role}</span>
+                            {active && <Check className="w-4 h-4 shrink-0 text-[var(--theme-primary-text)]" aria-hidden="true" />}
+                          </button>
+                        );
+                      })}
+                      {!searchQuery.trim() && filteredUsers.length > visibleUsers.length && (
+                        <p className="px-2 py-1.5 text-[11px] text-slate-500 dark:text-slate-400">Ketik nama untuk melihat hasil lainnya.</p>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
               {selectedUser ? (
-                <div className="flex items-center gap-3 rounded-xl border border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/40 px-3 py-2.5" aria-label="Akun terpilih">
-                  <LoginAvatar user={selectedUser} />
+                <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/40 px-2.5 py-2" aria-label="Akun terpilih">
+                  <LoginAvatar user={selectedUser} compact />
                   <span className="min-w-0 flex-1">
                     <OverflowName name={selectedUser.fullName} config={schoolSettings.publicNameMarquee} className="text-xs font-bold text-slate-900 dark:text-white" />
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">ID: {selectedUser.loginId || selectedUser.nip || selectedUser.id}</span>
                   </span>
-                  <span className="shrink-0 rounded-lg border border-[var(--theme-primary-border)] bg-white dark:bg-[var(--theme-card-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-primary-text)] max-w-[110px] truncate">
+                  <span className="max-w-24 shrink-0 truncate rounded-lg border border-[var(--theme-primary-border)] bg-white dark:bg-[var(--theme-card-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-primary-text)]">
                     {ROLE_LABELS[selectedUser.role] || selectedUser.role}
                   </span>
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Cari dan pilih nama sebelum memasukkan PIN.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih nama akun untuk melanjutkan dengan PIN.</p>
               )}
             </div>
           )}
