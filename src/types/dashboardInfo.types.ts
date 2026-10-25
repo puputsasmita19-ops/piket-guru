@@ -11,9 +11,17 @@ export const DASHBOARD_INFO_PANELS = {
 export type DashboardInfoPanel = keyof typeof DASHBOARD_INFO_PANELS;
 export interface NameMarqueeConfig { enabled: boolean; durationSeconds: number; }
 export function sanitizeNameMarqueeConfig(value?: Partial<NameMarqueeConfig> | null): NameMarqueeConfig {
+  // Existing school documents do not have nameMarquee yet. R76 previously
+  // dereferenced `value.durationSeconds` even when value was undefined/null,
+  // crashing Dashboard and possibly public login/user summary rendering.
+  const requestedDuration = value?.durationSeconds;
+  const durationSeconds = typeof requestedDuration === 'number'
+    && [8, 12, 16, 20, 28].includes(requestedDuration)
+    ? requestedDuration
+    : 16;
   return {
     enabled: value?.enabled !== false,
-    durationSeconds: [8, 12, 16, 20, 28].includes(value?.durationSeconds ?? 16) ? value!.durationSeconds! : 16,
+    durationSeconds,
   };
 }
 export interface DashboardInfoConfig {
