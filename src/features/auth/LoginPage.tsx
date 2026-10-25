@@ -83,6 +83,7 @@ export const LoginPage: React.FC = () => {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const comboboxRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const themePickerRef = useRef<HTMLDivElement>(null);
 
@@ -748,105 +749,142 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* R82: mobile-compact, accessible method switch. Keep the R79 verified-user
-            recovery and the existing UID/PIN authentication unchanged. */}
-        <section className="login-method-panel min-w-0 space-y-2.5" aria-label="Metode masuk">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-            <label htmlFor="login-account-search" className="shrink-0 text-[11px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200">
-              Metode masuk
-            </label>
-            <div role="group" aria-label="Pilih metode masuk" className="ml-auto grid grid-cols-2 w-auto max-w-full shrink-0 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5 gap-0.5">
-              <button
-                type="button"
-                aria-pressed={!isManualInput}
-                aria-label="Cari Nama"
-                onClick={() => {
-                  // Never submit an invisible manually entered ID after switching modes.
-                  if (isManualInput && !selectedUidRef.current) { setSelectedIdentifier(''); setPin(''); }
-                  setErrorMessage(''); setHasError(false);
-                  setIsManualInput(false);
-                  setIsComboboxOpen(false);
-                  setSearchQuery('');
-                  setHighlightedIndex(0);
-                  if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
-                }}
-                className={`min-h-11 sm:min-h-10 w-[79px] sm:w-[88px] min-w-0 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 text-[11px] sm:text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput
-                  ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
-                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
+        {/* R84: explicit two-way toggle inside the search field. Keep account
+            verification, PIN and backend behavior unchanged. */}
+        <section className="login-method-panel min-w-0 space-y-2" aria-label="Metode masuk">
+          <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-2">
+            <div className="relative flex min-w-0 items-stretch rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
+              {/* R84: two explicit choices, unlike R83's cycling button. Both
+                  options remain visible and their pressed state is announced. */}
+              <div
+                role="group"
+                aria-label="Cari menggunakan nama atau ID/NIP"
+                className="grid shrink-0 grid-cols-[60px_70px] sm:grid-cols-[64px_74px] items-stretch gap-0.5 rounded-l-xl border-r border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
               >
-                <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Nama
-              </button>
-              <button
-                type="button"
-                aria-pressed={isManualInput}
-                onClick={() => {
-                  selectionTouchedRef.current = true;
-                  setIsManualInput(true);
-                  setIsComboboxOpen(false);
-                  setSearchQuery('');
-                  setHighlightedIndex(0);
-                }}
-                className={`min-h-11 sm:min-h-10 w-[79px] sm:w-[88px] min-w-0 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 text-[11px] sm:text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput
-                  ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
-                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
-              >
-                <KeyRound className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> ID/NIP
-              </button>
-            </div>
-          </div>
-          {isManualInput ? (
-            <div className="login-account-panel min-w-0 space-y-1.5">
-              <input
-                id="login-account-search"
-                type="text"
-                autoComplete="username"
-                spellCheck={false}
-                value={selectedIdentifier}
-                onChange={e => {
-                  selectionTouchedRef.current = true;
-                  selectedUidRef.current = null;
-                  setSelectedIdentifier(e.target.value);
-                  setPin(''); setErrorMessage(''); setHasError(false);
-                }}
-                placeholder="Masukkan ID login atau NIP"
-                className="w-full min-w-0 min-h-11 px-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
-              />
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan ID terdaftar jika pencarian nama belum tersedia.</p>
-            </div>
-          ) : (
-            <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-2">
-              <div className="relative min-w-0">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
+                <button
+                  type="button"
+                  aria-label="Cari berdasarkan nama"
+                  aria-controls="login-account-search"
+                  aria-pressed={!isManualInput}
+                  disabled={isSubmitting || isGoogleSubmitting}
+                  onClick={() => {
+                    if (isManualInput) {
+                      if (!selectedUidRef.current) {
+                        // Discard a manual ID not verified from the user directory.
+                        setSelectedIdentifier('');
+                        setPin('');
+                      }
+                      setErrorMessage('');
+                      setHasError(false);
+                      setIsManualInput(false);
+                      setIsComboboxOpen(false);
+                      setSearchQuery('');
+                      setHighlightedIndex(0);
+                      if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
+                    }
+                    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+                  }}
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] sm:text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)] shadow-sm'
+                    : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
+                >
+                  <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>Nama</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Masuk dengan ID atau NIP"
+                  aria-controls="login-account-search"
+                  aria-pressed={isManualInput}
+                  disabled={isSubmitting || isGoogleSubmitting}
+                  onClick={() => {
+                    if (!isManualInput) {
+                      selectionTouchedRef.current = true;
+                      setErrorMessage('');
+                      setHasError(false);
+                      setIsManualInput(true);
+                      setIsComboboxOpen(false);
+                      setSearchQuery('');
+                      setHighlightedIndex(0);
+                    }
+                    window.requestAnimationFrame(() => manualInputRef.current?.focus());
+                  }}
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] sm:text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)] shadow-sm'
+                    : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
+                >
+                  <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>ID/NIP</span>
+                </button>
+              </div>
+              {isManualInput ? (
                 <input
                   id="login-account-search"
-                  ref={searchInputRef}
+                  ref={manualInputRef}
                   type="text"
-                  autoComplete="off"
+                  autoComplete="username"
                   spellCheck={false}
-                  value={searchQuery}
-                  onFocus={() => { lastListActivityRef.current = Date.now(); setIsComboboxOpen(true); }}
+                  value={selectedIdentifier}
                   onChange={e => {
-                    lastListActivityRef.current = Date.now();
-                    setSearchQuery(e.target.value);
-                    setHighlightedIndex(0);
-                    setIsComboboxOpen(true);
+                    selectionTouchedRef.current = true;
+                    selectedUidRef.current = null;
+                    setSelectedIdentifier(e.target.value);
+                    setPin('');
+                    setErrorMessage('');
+                    setHasError(false);
                   }}
-                  onKeyDown={handleComboboxKeyDown}
-                  placeholder="Cari nama guru atau ID..."
-                  aria-controls={isComboboxOpen ? 'login-account-results' : undefined}
-                  aria-expanded={isComboboxOpen}
-                  aria-autocomplete="list"
-                  role="combobox"
-                  className={`w-full min-w-0 min-h-11 pl-10 ${searchQuery ? 'pr-11' : 'pr-3'} rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]`}
+                  placeholder="Masukkan ID atau NIP"
+                  aria-label="ID login atau NIP"
+                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-r-xl bg-transparent px-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                 />
-                {searchQuery && (
-                  <button type="button" aria-label="Hapus pencarian nama" title="Hapus pencarian"
-                    onClick={() => { setSearchQuery(''); setHighlightedIndex(0); setIsComboboxOpen(true); searchInputRef.current?.focus(); }}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center rounded-lg text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]">
-                    <X className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                )}
-              </div>
+              ) : (
+                <>
+                  <input
+                    id="login-account-search"
+                    ref={searchInputRef}
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={searchQuery}
+                    onFocus={() => { lastListActivityRef.current = Date.now(); setIsComboboxOpen(true); }}
+                    onChange={e => {
+                      lastListActivityRef.current = Date.now();
+                      setSearchQuery(e.target.value);
+                      setHighlightedIndex(0);
+                      setIsComboboxOpen(true);
+                    }}
+                    onKeyDown={handleComboboxKeyDown}
+                    placeholder="Cari nama atau ID..."
+                    aria-label="Cari nama guru atau ID"
+                    aria-controls={isComboboxOpen ? 'login-account-results' : undefined}
+                    aria-expanded={isComboboxOpen}
+                    aria-autocomplete="list"
+                    role="combobox"
+                    className={`min-h-11 sm:min-h-10 w-full min-w-0 flex-1 bg-transparent pl-3 ${searchQuery ? 'pr-11' : 'pr-3'} text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none`}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      aria-label="Hapus pencarian nama"
+                      title="Hapus pencarian"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setHighlightedIndex(0);
+                        setIsComboboxOpen(true);
+                        searchInputRef.current?.focus();
+                      }}
+                      className="absolute right-0 top-0 flex h-full w-11 shrink-0 items-center justify-center rounded-r-xl text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+            {isManualInput ? (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Masuk dengan ID login atau NIP terdaftar.</p>
+            ) : (
+              <>
               {usersList.length === 0 && (
                 <div role={userLookupStatus === 'unavailable' ? 'alert' : 'status'} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5">
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
@@ -909,8 +947,9 @@ export const LoginPage: React.FC = () => {
               ) : (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih nama akun untuk melanjutkan dengan PIN.</p>
               )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </section>
 
         {/* PIN / Password Field with Eye Toggle & Keypad */}
