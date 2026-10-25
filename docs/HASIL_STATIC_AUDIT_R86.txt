@@ -1,0 +1,21 @@
+R86 • AUDIT SOURCE READ-ONLY
+Repository: /mnt/data/r86-audit
+PRESENT   | Sinkronisasi foreground | src/hooks/useAutomaticSync.ts | PASS jika sinkronisasi menghormati tab tersembunyi
+PRESENT   | Pengaman kiriman lintas tab — Web Locks | src/services/offline/syncQueueService.ts | Jangan hapus lock saat R86
+PRESENT   | Pengaman kiriman lintas tab — IndexedDB lease | src/services/offline/offlineStorage.ts | Pertahankan lease dan pemeriksaan owner
+PRESENT   | Idempotensi kiriman | src/services/offline/syncQueueService.ts | ID operasi harus tetap stabil
+PRESENT   | Penyimpanan perangkat tepercaya | src/services/offline/offlineStorage.ts | Audit risiko kehilangan data memory-only
+PRESENT   | Pembatalan pengiriman saat unmount | src/hooks/useAutomaticSync.ts | Uji agar tidak membatalkan pekerjaan tab lain
+PRESENT   | Aturan sesi background | src/services/auth/backgroundSession.ts | Jangan bypass kebijakan sesi Admin
+PRESENT   | Validasi identitas sesi | src/contexts/AuthContext.tsx | Jangan menyelaraskan kredensial lewat pesan tab
+PRESENT   | Realtime profil | src/contexts/AuthContext.tsx | Listener keamanan jangan dipause sembarangan
+PRESENT   | Realtime dashboard | src/features/dashboard/DashboardView.tsx | Audit biaya bila banyak tab dashboard aktif
+PRESENT   | Realtime notifikasi | src/services/notifications/notificationFeedService.ts | Prioritaskan deduplikasi efek/toast, bukan mematikan sumber
+PRESENT   | Realtime audit | src/services/audit/auditLogFeedService.ts | Uji kebijakan tab pasif untuk Admin
+PRESENT   | Sharing listener dalam satu tab | src/services/firebase/sharedLiveSource.ts | Bukan koordinasi antartab
+PRESENT   | Pengelola pembaruan PWA | src/services/offline/appUpdateManager.ts | Pertahankan pemeriksaan update aman
+NOT FOUND | Guard pembaruan PWA terbaru | src/services/offline/pwaUpdateSafety.ts | HARUS dibandingkan dengan HEAD aktual; bisa belum ada di arsip lama
+NOT FOUND | Koordinasi BroadcastChannel | src/services/tab/tabCoordinator.ts | Direkomendasikan dalam implementasi berikut, belum dalam tahap audit
+Summary: 14/16 presence checks matched, 14/16 files found.
+These checks DO NOT confirm concurrency, data safety, build, or production correctness.
+Requires manual review: Guard pembaruan PWA terbaru; Koordinasi BroadcastChannel
