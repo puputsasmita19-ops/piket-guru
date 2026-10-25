@@ -749,17 +749,17 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* R84: explicit two-way toggle inside the search field. Keep account
-            verification, PIN and backend behavior unchanged. */}
+        {/* R85: right-aligned compact mode toggle above full-width input.
+            Keep R79–R84 identity verification, PIN and backend logic unchanged. */}
         <section className="login-method-panel min-w-0 space-y-2" aria-label="Metode masuk">
           <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-2">
-            <div className="relative flex min-w-0 items-stretch rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
-              {/* R84: two explicit choices, unlike R83's cycling button. Both
-                  options remain visible and their pressed state is announced. */}
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Metode masuk</span>
+              {/* R85: compact right-aligned login method switch. */}
               <div
                 role="group"
                 aria-label="Cari menggunakan nama atau ID/NIP"
-                className="grid shrink-0 grid-cols-[60px_70px] sm:grid-cols-[64px_74px] items-stretch gap-0.5 rounded-l-xl border-r border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
+                className="grid grid-cols-[56px_67px] sm:grid-cols-[60px_72px] shrink-0 items-stretch gap-0.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
               >
                 <button
                   type="button"
@@ -784,8 +784,8 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => searchInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] sm:text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)] shadow-sm'
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-medium sm:font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
                   <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -809,14 +809,16 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => manualInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] sm:text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)] shadow-sm'
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-medium sm:font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
                   <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>ID/NIP</span>
                 </button>
               </div>
+            </div>
+            <div className="relative flex min-w-0 items-stretch rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
               {isManualInput ? (
                 <input
                   id="login-account-search"
@@ -835,7 +837,7 @@ export const LoginPage: React.FC = () => {
                   }}
                   placeholder="Masukkan ID atau NIP"
                   aria-label="ID login atau NIP"
-                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-r-xl bg-transparent px-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                 />
               ) : (
                 <>
