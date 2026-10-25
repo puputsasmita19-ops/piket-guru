@@ -1,0 +1,159 @@
+{
+  "schema": "piket-r86f-evidence-v1",
+  "environment": "preview",
+  "gitCommit": "ISI_SHA_40_HEX_SESUAI_GIT_REV_PARSE_HEAD",
+  "testedAt": "",
+  "reviewer": "",
+  "browser": "",
+  "deployment": "",
+  "workload": "",
+  "automation": {
+    "npmCi": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "lint": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "build": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86a": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86b": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86c": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86d": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86e1": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86e2": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    "r86e3": {
+      "status": "NOT_RUN",
+      "evidence": ""
+    }
+  },
+  "tests": [
+    {
+      "id": "login_nama",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "login_id_nip",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "login_google_admin",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "session_timeout",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "trusted_device",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "shared_device",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "account_switch_tabs",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "presensi_masuk",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "presensi_pulang",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "piket_draft_photo",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "offline_replay",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "offline_multitab",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "report_resume",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "report_busy",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "notification_urgent",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "notification_multitab",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "pwa_update_draft",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "tab_matrix",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "preview_production_flags",
+      "status": "NOT_RUN",
+      "evidence": ""
+    },
+    {
+      "id": "firestore_usage",
+      "status": "NOT_RUN",
+      "evidence": ""
+    }
+  ],
+  "releaseDecision": "PENDING",
+  "approvedBy": "",
+  "approvalAt": "",
+  "approvalNote": "",
+  "pilotEnabledInProduction": false
+}
