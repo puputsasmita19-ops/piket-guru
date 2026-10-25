@@ -288,9 +288,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             Foto akan diberi watermark nama, sekolah, waktu WIB, dan GPS. Tunggu proses GPS selesai sebelum foto diambil.
           </p>
         )}
-        {watermarkProcessor && !prepareCapture && (
+        {watermarkProcessor && !prepareCapture && !subtitle && (
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Foto otomatis dibubuhi watermark panel bawah resmi (nama sekolah, modul, waktu WIB, identitas, dan GPS jika tersedia).
+            Watermark resmi ditambahkan otomatis.
           </p>
         )}
 

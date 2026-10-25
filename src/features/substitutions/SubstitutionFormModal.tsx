@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { SubjectPicker } from '../../components/common/SubjectPicker';
 import { getTeacherSubjects } from '../../types/master.types';
@@ -933,7 +934,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Alasan Berhalangan Hadir (Nilai Awal) *
                 </label>
-                <select
+                <MobileChoiceSelect mobileTitle="Alasan Berhalangan"
                   value={sharedAlasan}
                   onChange={(e) => {
                     const newAlasan = e.target.value as AbsenceReason;
@@ -954,7 +955,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                     <option key={r.code} value={r.code}>{r.icon} {r.label}
                     </option>
                   ))}
-                </select>
+                </MobileChoiceSelect>
               </div>
             </div>
 
@@ -1253,7 +1254,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                     Belum ada data siswa / kelas aktif di sistem.
                                   </div>
                                 ) : (
-                                  <select
+                                  <MobileChoiceSelect mobileTitle="Kelas Penugasan"
                                     required
                                     aria-label={`Kelas ${st.teacher.fullName} ${asgIdx + 1}`}
                                     value={assignment.kelas}
@@ -1270,7 +1271,7 @@ export const SubstitutionFormModal: React.FC<SubstitutionFormModalProps> = ({
                                       <option key={cls} value={cls}>{cls}
                                       </option>
                                     ))}
-                                  </select>
+                                  </MobileChoiceSelect>
                                 )}
 
                                 {/* Peringatan jika kelas terpilih sudah nonaktif / tidak ada di master */}

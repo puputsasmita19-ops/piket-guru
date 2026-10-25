@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import React, { useRef, useState } from 'react';
 import { VISITOR_CATEGORIES, VisitorCategory } from '../../types/visitor.types';
 import { CameraCaptureModal } from '../../components/camera/CameraCaptureModal';
@@ -56,7 +57,7 @@ export function PublicVisitorCheckin({ token }: { token: string }) {
         </div>
         <h2 className="text-sm font-bold text-slate-900 pt-2">Tujuan kunjungan</h2>
         <label className="block space-y-1"><span className="text-sm font-semibold">Instansi / asal *</span><input required minLength={2} maxLength={160} value={instansiAsal} onChange={e => setInstansiAsal(e.target.value)} className="block w-full min-h-11 px-3 border rounded-xl text-sm" /></label>
-        <label className="block space-y-1"><span className="text-sm font-semibold">Kategori tamu *</span><select value={kategori} onChange={e => setKategori(e.target.value as VisitorCategory)} className="block w-full min-h-11 px-3 border rounded-xl text-sm">{VISITOR_CATEGORIES.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label>
+        <label className="block space-y-1"><span className="text-sm font-semibold">Kategori tamu *</span><MobileChoiceSelect mobileTitle="Pilih Kategori Tamu" value={kategori} onChange={e => setKategori(e.target.value as VisitorCategory)} className="block w-full min-h-11 px-3 border rounded-xl text-sm">{VISITOR_CATEGORIES.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}</MobileChoiceSelect></label>
         {kategori === 'LAINNYA' && <label className="block space-y-1"><span className="text-sm font-semibold">Keterangan kategori *</span><input required maxLength={300} value={keteranganLainnya} onChange={e => setKeteranganLainnya(e.target.value)} className="block w-full min-h-11 px-3 border rounded-xl text-sm" /></label>}
         <label className="block space-y-1"><span className="text-sm font-semibold">Nomor WhatsApp (opsional)</span><input type="tel" maxLength={30} value={noHp} onChange={e => setNoHp(e.target.value)} className="block w-full min-h-11 px-3 border rounded-xl text-sm" /></label>
         <label className="block space-y-1"><span className="text-sm font-semibold">Bertemu dengan / unit tujuan *</span><input required minLength={2} maxLength={160} value={tujuanBertemu} onChange={e => setTujuanBertemu(e.target.value)} className="block w-full min-h-11 px-3 border rounded-xl text-sm" /></label>

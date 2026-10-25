@@ -2,6 +2,7 @@ import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
 import { LoginCredit } from './LoginCredit';
 import { LoginAvatar } from './LoginAvatar';
+import { OverflowName } from '../../components/common/OverflowName';
 import { sanitizeLoginAppearance } from '../../types/loginAppearance.types';
 import { AppClock } from '../../components/common/AppClock';
 import { appLogo } from '../../utils/reportBranding';
@@ -814,7 +815,7 @@ export const LoginPage: React.FC = () => {
                 <div className="flex items-center gap-3 rounded-xl border border-[var(--theme-primary-border)] bg-[var(--theme-primary-light)]/40 px-3 py-2.5" aria-label="Akun terpilih">
                   <LoginAvatar user={selectedUser} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-bold text-slate-900 dark:text-white truncate">{selectedUser.fullName}</span>
+                    <OverflowName name={selectedUser.fullName} config={schoolSettings.publicNameMarquee} className="text-xs font-bold text-slate-900 dark:text-white" />
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">ID: {selectedUser.loginId || selectedUser.nip || selectedUser.id}</span>
                   </span>
                   <span className="shrink-0 rounded-lg border border-[var(--theme-primary-border)] bg-white dark:bg-[var(--theme-card-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-primary-text)] max-w-[110px] truncate">
@@ -1088,7 +1089,7 @@ export const LoginPage: React.FC = () => {
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/60 border border-slate-200 dark:border-[var(--theme-card-border)] flex items-center justify-between gap-3 text-xs">
                 <div className="min-w-0">
                   <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Akun Anda</span>
-                  <div className="font-semibold text-slate-900 dark:text-white truncate">{selectedUser.fullName}</div>
+                  <OverflowName name={selectedUser.fullName} config={schoolSettings.publicNameMarquee} className="font-semibold text-slate-900 dark:text-white" />
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                     {selectedUser.loginId ? `ID: ${selectedUser.loginId}` : selectedUser.nip ? `NIP: ${selectedUser.nip}` : ''}
                   </div>

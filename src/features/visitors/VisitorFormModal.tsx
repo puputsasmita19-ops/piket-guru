@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { normalizeVisitorConfig, type VisitorPhotoMode } from '../../types/visitorConfig.types';
 import { useOperationalSchoolSettings } from '../../hooks/useOperationalSchoolSettings';
 import { DialogForm } from '../../components/common/DialogForm';
@@ -1041,7 +1042,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
             </div>
             <p className="rounded-xl bg-white/70 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300" role="status">{photoStorageNotice}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
-              <label className="text-xs font-semibold space-y-1"><span className="block">Mode foto saat pengambilan</span><select value={photoCaptureMode} disabled={!visitorConfig.allowPhotoModeChoice} onChange={e => setPhotoCaptureMode(e.target.value as VisitorPhotoMode)} className="w-full min-h-11 border rounded-xl px-3 bg-white dark:bg-slate-900 dark:border-slate-700"><option value="WATERMARK">Dengan watermark sekolah</option><option value="ORIGINAL">Tanpa watermark (asli)</option></select></label>
+              <label className="text-xs font-semibold space-y-1"><span className="block">Mode foto saat pengambilan</span><MobileChoiceSelect mobileTitle="Mode foto saat pengambilan" value={photoCaptureMode} disabled={!visitorConfig.allowPhotoModeChoice} onChange={e => setPhotoCaptureMode(e.target.value as VisitorPhotoMode)} className="w-full min-h-11 border rounded-xl px-3 bg-white dark:bg-slate-900 dark:border-slate-700"><option value="WATERMARK">Dengan watermark sekolah</option><option value="ORIGINAL">Tanpa watermark (asli)</option></MobileChoiceSelect></label>
               <p className="text-[11px] text-slate-500">{visitorConfig.allowPhotoModeChoice ? 'Pilih sebelum mengambil foto. Mengubah pilihan tidak mengubah foto yang sudah diambil.' : 'Mode foto dikunci oleh Admin.'} {fotoUrl ? `Foto tersimpan: ${savedPhotoMode === 'WATERMARK' ? 'berwatermark' : savedPhotoMode === 'ORIGINAL' ? 'tanpa watermark' : 'mode tidak diketahui (foto lama)'}.` : ''}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -1061,7 +1062,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Kategori Tamu *
                 </label>
-                <select
+                <MobileChoiceSelect mobileTitle="Kategori Tamu"
                   value={kategori}
                   onChange={(e) => {
                     const newCat = e.target.value as VisitorCategory;
@@ -1076,7 +1077,7 @@ export const VisitorFormModal: React.FC<VisitorFormModalProps> = ({
                     <option key={cat.code} value={cat.code}>{cat.icon} {cat.label}
                     </option>
                   ))}
-                </select>
+                </MobileChoiceSelect>
               </div>
 
               <div className="space-y-1">

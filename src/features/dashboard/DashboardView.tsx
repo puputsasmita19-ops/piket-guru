@@ -596,7 +596,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
   return (
     <div className="space-y-6">
-      <DashboardWelcome config={settings.dashboardInfoConfig?.welcome} user={currentUser} />
+      <DashboardWelcome config={flashConfig.welcome} nameMarquee={flashConfig.nameMarquee} user={currentUser} />
 
       <DashboardFlashInfo config={flashConfig} slides={dashboardSlides} onAnnouncements={openAnnouncements} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
 

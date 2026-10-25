@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -100,7 +101,7 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
             <label htmlFor="announcement-priority" className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Tingkat Prioritas
             </label>
-            <select
+            <MobileChoiceSelect mobileTitle="Tingkat Prioritas"
               id="announcement-priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value as AnnouncementPriority)}
@@ -109,14 +110,14 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
               <option value="INFO">Informasi</option>
               <option value="PENTING">Penting</option>
               <option value="DARURAT">Darurat</option>
-            </select>
+            </MobileChoiceSelect>
           </div>
 
           <div className="space-y-1">
             <label htmlFor="announcement-target" className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Sasaran Petugas
             </label>
-            <select
+            <MobileChoiceSelect mobileTitle="Sasaran Pengumuman"
               id="announcement-target"
               value={targetRole}
               onChange={(e) => setTargetRole(e.target.value)}
@@ -126,7 +127,7 @@ export const AnnouncementFormModal: React.FC<AnnouncementFormModalProps> = ({
               <option value="GURU">Guru Piket</option>
               <option value="TENDIK">Tendik / TU</option>
               <option value="SATPAM">Satpam / Gerbang</option>
-            </select>
+            </MobileChoiceSelect>
           </div>
         </div>
 

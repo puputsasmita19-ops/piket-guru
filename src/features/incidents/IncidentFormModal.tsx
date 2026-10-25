@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import { StudentMultiSelect } from '../../components/common/StudentMultiSelect';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -580,7 +581,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Kategori Kejadian *</label>
-              <select
+              <MobileChoiceSelect mobileTitle="Pilih Kategori Kejadian"
                 value={kategori}
                 onChange={(e) => {
                   const newCat = e.target.value;
@@ -598,12 +599,12 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
                   <option key={cat.id} value={cat.code}>{cat.name}
                   </option>
                 ))}
-              </select>
+              </MobileChoiceSelect>
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Tingkat Keparahan</label>
-              <select
+              <MobileChoiceSelect mobileTitle="Pilih Tingkat Keparahan"
                 value={tingkatKeparahan}
                 onChange={(e) => setTingkatKeparahan(e.target.value as IncidentSeverity)}
                 className={`w-full p-2.5 rounded-xl border text-xs font-bold ${
@@ -618,7 +619,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
                 <option value="SEDANG">SEDANG (Standar)</option>
                 <option value="TINGGI">TINGGI (Serius)</option>
                 <option value="KRITIS">KRITIS (Darurat)</option>
-              </select>
+              </MobileChoiceSelect>
             </div>
           </div>
 
@@ -784,7 +785,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Status Kejadian</label>
-              <select
+              <MobileChoiceSelect mobileTitle="Pilih Status Kejadian"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as IncidentStatus)}
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
@@ -793,7 +794,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
                 <option value="INVESTIGASI">INVESTIGASI</option>
                 <option value="PENANGANAN">PENANGANAN</option>
                 <option value="SELESAI">SELESAI</option>
-              </select>
+              </MobileChoiceSelect>
             </div>
           </div>
 
@@ -872,7 +873,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleAddPhoto}
         title="Dokumentasi Laporan Kejadian"
-        subtitle="Foto otomatis diberi watermark panel bawah resmi (kategori kejadian, lokasi, waktu WIB, dan GPS jika tersedia)"
+        subtitle="Foto dilengkapi watermark otomatis."
         watermarkProcessor={async (canvas, capturedAt, isUpload) => {
           const coords = await detectLocationForWatermark();
           const selectedCat = categories.find((c) => c.code === kategori);

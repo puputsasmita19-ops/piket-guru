@@ -9,12 +9,20 @@ export const DASHBOARD_INFO_PANELS = {
   operations: 'Ringkasan Kegiatan Hari Ini',
 } as const;
 export type DashboardInfoPanel = keyof typeof DASHBOARD_INFO_PANELS;
+export interface NameMarqueeConfig { enabled: boolean; durationSeconds: number; }
+export function sanitizeNameMarqueeConfig(value?: Partial<NameMarqueeConfig> | null): NameMarqueeConfig {
+  return {
+    enabled: value?.enabled !== false,
+    durationSeconds: [8, 12, 16, 20, 28].includes(value?.durationSeconds ?? 16) ? value!.durationSeconds! : 16,
+  };
+}
 export interface DashboardInfoConfig {
   enabled: boolean;
   autoPlay: boolean;
   intervalMs: number;
   panels: Record<DashboardInfoPanel, boolean>;
   welcome?: DashboardWelcomeConfig;
+  nameMarquee?: NameMarqueeConfig;
 }
 export const DASHBOARD_INFO_INTERVALS = [2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 15000, 20000, 30000, 45000, 60000];
 export function sanitizeDashboardInfoConfig(value?: Partial<DashboardInfoConfig> | null): DashboardInfoConfig & { welcome: DashboardWelcomeConfig } {
@@ -29,5 +37,6 @@ export function sanitizeDashboardInfoConfig(value?: Partial<DashboardInfoConfig>
         : v.panels?.[key as DashboardInfoPanel] !== false,
     ])) as Record<DashboardInfoPanel, boolean>,
     welcome: sanitizeDashboardWelcomeConfig(v.welcome),
+    nameMarquee: sanitizeNameMarqueeConfig(v.nameMarquee),
   };
 }

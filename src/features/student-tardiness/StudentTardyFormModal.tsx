@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -874,7 +875,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                   <label className="text-[10px] font-bold text-slate-500 block mb-1">
                                     Alasan Individual:
                                   </label>
-                                  <select
+                                  <MobileChoiceSelect mobileTitle="Pilih Alasan Siswa"
                                     value={entry.alasan || sharedAlasan}
                                     onChange={(e) =>
                                       handleUpdateStudentCustomization(entry.student.id, {
@@ -889,14 +890,14 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                     <option value="HUJAN_LEBAT">Hujan Lebat</option>
                                     <option value="MEMBANTU_ORANG_TUA">Membantu Orang Tua</option>
                                     <option value="LAINNYA">Lain-lain</option>
-                                  </select>
+                                  </MobileChoiceSelect>
                                 </div>
 
                                 <div>
                                   <label className="text-[10px] font-bold text-slate-500 block mb-1">
                                     Bentuk Pembinaan:
                                   </label>
-                                  <select
+                                  <MobileChoiceSelect mobileTitle="Pilih Pembinaan Siswa"
                                     value={entry.pembinaan || sharedPembinaan}
                                     onChange={(e) =>
                                       handleUpdateStudentCustomization(entry.student.id, {
@@ -912,7 +913,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                                     <option value="PEMBINAAN_GURU_BK">Konseling Guru BK</option>
                                     <option value="SURAT_PERINGATAN_ORTU">Panggilan Orang Tua</option>
                                     <option value="LAINNYA">Lain-lain</option>
-                                  </select>
+                                  </MobileChoiceSelect>
                                 </div>
                               </div>
                             </div>
@@ -1039,7 +1040,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                 Alasan Keterlambatan Bersama *
               </label>
-              <select
+              <MobileChoiceSelect mobileTitle="Pilih Alasan Keterlambatan"
                 value={sharedAlasan}
                 onChange={(e) => {
                   const a = e.target.value as TardyReason;
@@ -1054,14 +1055,14 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 <option value="HUJAN_LEBAT">Cuaca Buruk / Hujan Lebat</option>
                 <option value="MEMBANTU_ORANG_TUA">Membantu Urusan Orang Tua</option>
                 <option value="LAINNYA">Lain-lain</option>
-              </select>
+              </MobileChoiceSelect>
             </div>
 
             <div>
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                 Bentuk Pembinaan Kedisiplinan Bersama *
               </label>
-              <select
+              <MobileChoiceSelect mobileTitle="Pilih Bentuk Pembinaan"
                 value={sharedPembinaan}
                 onChange={(e) => {
                   const p = e.target.value as DisciplineAction;
@@ -1077,7 +1078,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
                 <option value="PEMBINAAN_GURU_BK">Konseling Khusus Guru Bimbingan Konseling</option>
                 <option value="SURAT_PERINGATAN_ORTU">Penerbitan Surat Panggilan Orang Tua</option>
                 <option value="LAINNYA">Lain-lain</option>
-              </select>
+              </MobileChoiceSelect>
             </div>
           </div>
 
@@ -1392,7 +1393,7 @@ export const StudentTardyFormModal: React.FC<StudentTardyFormModalProps> = ({
             ? `Foto Siswa: ${selectedStudents.find((s) => s.student.id === targetStudentIdForPhoto)?.student.nama || 'Siswa'}`
             : 'Foto Dokumentasi Siswa Terlambat'
         }
-        subtitle="Foto otomatis dibubuhi watermark resmi panel bawah (identitas siswa, kelas, waktu tiba WIB, dan GPS jika ada)"
+        subtitle="Foto dilengkapi watermark otomatis."
         watermarkProcessor={async (canvas, capturedAt, isUpload) => {
           const coords = await detectLocationForWatermark();
           const targetStudent = targetStudentIdForPhoto

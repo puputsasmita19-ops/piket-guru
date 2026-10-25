@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -221,14 +222,14 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Jenis Kelamin *
             </label>
-            <select
+            <MobileChoiceSelect mobileTitle="Pilihan Data Siswa"
               value={jenisKelamin}
               onChange={(e) => setJenisKelamin(e.target.value as 'L' | 'P')}
               className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
             >
               <option value="L">Laki-laki (L)</option>
               <option value="P">Perempuan (P)</option>
-            </select>
+            </MobileChoiceSelect>
           </div>
         </div>
 

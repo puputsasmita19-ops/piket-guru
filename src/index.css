@@ -1513,3 +1513,39 @@ button.bg-\[var\(--theme-primary\)\],
     to { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* R76 — fixed two-column welcome, Pause stays on right below avatar. */
+.app-content[data-module] .dashboard-welcome {
+  grid-template-columns: minmax(0, 1fr) 56px;
+  column-gap: 12px;
+  align-items: start;
+}
+.dashboard-welcome > div:first-child { grid-column: 1; grid-row: 1; min-width: 0; }
+.dashboard-welcome > .dashboard-avatar { grid-column: 2; grid-row: 1; justify-self: end; }
+.dashboard-welcome > .dashboard-intro { grid-column: 1; grid-row: 2; min-width: 0; margin: 0; }
+.dashboard-welcome > .welcome-message-pause-hero { grid-column: 2; grid-row: 2; justify-self: end; align-self: start; }
+.dashboard-welcome h1 { display: flex; align-items: baseline; min-width: 0; max-width: 100%; gap: .25em; }
+.dashboard-hello-prefix { white-space: nowrap; flex: 0 0 auto; }
+.dashboard-user-name { flex: 1 1 auto; }
+@media (max-width: 639px) {
+  .app-content[data-module] .dashboard-welcome { grid-template-columns: minmax(0, 1fr) 48px; }
+  .dashboard-welcome > .welcome-message-pause-hero { width: 40px; min-height: 40px; height: 40px; }
+}
+/* R76 — accessible overflow-only name animation; disabled when reduced motion. */
+.overflow-name { display: block; position: relative; min-width: 0; max-width: 100%; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.overflow-name-track { display: inline-flex; width: max-content; max-width: none; gap: 2rem; align-items: baseline; }
+.overflow-name-copy { flex: none; white-space: nowrap; }
+.overflow-name[data-scrolling="true"] .overflow-name-track { animation: overflow-name-marquee var(--name-scroll-duration, 16s) linear infinite; }
+.overflow-name[data-scrolling="true"]:hover .overflow-name-track,
+.overflow-name[data-scrolling="true"]:focus-within .overflow-name-track { animation-play-state: paused; }
+@keyframes overflow-name-marquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 1rem)); } }
+@media (prefers-reduced-motion: reduce) { .overflow-name[data-scrolling="true"] .overflow-name-track { animation: none; } }
+/* Long names move beneath 'Halo' only when measured width cannot fit beside it. */
+.dashboard-welcome h1[data-stacked="true"] { display: block; }
+.dashboard-welcome h1[data-stacked="true"] .dashboard-hello-prefix { display: block; }
+.dashboard-welcome h1[data-stacked="true"] .dashboard-user-name { margin-top: 2px; }
+
+/* R76: remaining native dropdowns stay readable where a custom picker has not been adopted. */
+@media (max-width: 639px) {
+  .app-dialog-body select { max-width: 100%; min-height: 44px; font-size: 16px; }
+}

@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
@@ -233,7 +234,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Peran Utama (Role RBAC)
             </label>
-            <select
+            <MobileChoiceSelect mobileTitle="Peran Akun"
               value={role}
               onChange={(e) => handleRoleChange(e.target.value as UserRole)}
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold"
@@ -243,7 +244,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               <option value="GURU">{ROLE_LABELS.GURU} (Petugas Piket Utama)</option>
               <option value="TENAGA_KEPENDIDIKAN">{ROLE_LABELS.TENAGA_KEPENDIDIKAN} (Tata Usaha / Pendukung)</option>
               <option value="SATPAM">{ROLE_LABELS.SATPAM} (Keamanan Gerbang)</option>
-            </select>
+            </MobileChoiceSelect>
           </div>
 
           {!editingUser ? (
@@ -266,14 +267,14 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 Status Akun
               </label>
-              <select
+              <MobileChoiceSelect mobileTitle="Status Akun"
                 value={isActive ? 'AKTIF' : 'NONAKTIF'}
                 onChange={(e) => setIsActive(e.target.value === 'AKTIF')}
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold"
               >
                 <option value="AKTIF">Akun Aktif (Dapat Login)</option>
                 <option value="NONAKTIF">Akun Nonaktif (Dibekukan)</option>
-              </select>
+              </MobileChoiceSelect>
             </div>
           )}
         </div>

@@ -36,6 +36,7 @@ export function DashboardInfoSettingsCard({ settings, onSaved }: { settings: Sch
   const change = (patch: Partial<DashboardInfoConfig>) => { setDraft(v => ({ ...v, ...patch })); setDirty(true); setFeedback(''); };
   const changeWelcome = (patch: Partial<DashboardWelcomeConfig>) => change({ welcome: { ...draft.welcome, ...patch } });
   const templates = getWelcomeTemplates(draft.welcome);
+  const marquee = draft.nameMarquee || { enabled: true, durationSeconds: 16 };
   const customTemplates = draft.welcome.templates || [];
   const addTemplate = () => {
     const text = templateText.replace(/\s+/g, ' ').trim();
@@ -91,6 +92,19 @@ export function DashboardInfoSettingsCard({ settings, onSaved }: { settings: Sch
         </details>
         <WelcomePreview config={draft.welcome} />
         <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Tersedia 15 template bawaan dan {customTemplates.length} template tambahan. Mode harian berganti saat tanggal WIB berubah; mode berkala mengikuti jeda yang dipilih. Pengaturan berlaku untuk semua pengguna setelah disimpan. Kalimat tetap tampil saat flash info dinonaktifkan.</p>
+      </section>
+      <section aria-label="Tampilan nama panjang" className="border-t border-[var(--theme-card-border)] pt-4 space-y-3">
+        <h3 className="text-sm font-semibold">Tampilan nama pengguna</h3>
+        <label className="flex min-h-11 items-center justify-between gap-3 text-sm cursor-pointer">
+          <span><strong className="block">Teks berjalan untuk nama panjang</strong><span className="block text-xs text-slate-500">Berlaku untuk dashboard dan kartu akun terpilih di halaman login. Hanya aktif jika nama tidak muat.</span></span>
+          <input type="checkbox" role="switch" aria-label="Aktifkan teks berjalan nama panjang" checked={marquee.enabled} disabled={saving} onChange={e => change({ nameMarquee: { ...marquee, enabled: e.target.checked } })} className="w-5 h-5 shrink-0 accent-[var(--theme-primary)]" />
+        </label>
+        <label className="history-field max-w-xs"><span>Kecepatan teks berjalan</span>
+          <select aria-label="Kecepatan teks berjalan nama panjang" value={marquee.durationSeconds} disabled={saving || !marquee.enabled} onChange={e => change({ nameMarquee: { ...marquee, durationSeconds: Number(e.target.value) } })}>
+            <option value={8}>Cepat (8 detik)</option><option value={12}>Sedang (12 detik)</option><option value={16}>Normal (16 detik)</option><option value={20}>Pelan (20 detik)</option><option value={28}>Sangat pelan (28 detik)</option>
+          </select>
+        </label>
+        <p className="text-xs text-slate-500">Nama tetap utuh untuk pembaca layar. Jika perangkat meminta pengurangan gerakan, nama tidak dianimasikan.</p>
       </section>
       <h3 className="border-t border-[var(--theme-card-border)] pt-5 text-sm font-semibold">Flash info sekolah</h3>
       <label className="flex items-center justify-between gap-4 min-h-[44px] cursor-pointer"><span><span className="block font-semibold text-sm">Tampilkan flash info</span><span className="text-xs text-slate-500 dark:text-slate-400">Tambahkan panel info setelah slide kegiatan, sesuai hak akses pengguna.</span></span><input type="checkbox" role="switch" checked={draft.enabled} disabled={saving} onChange={e => change({ enabled: e.target.checked })} className="w-5 h-5 accent-[var(--theme-primary)] shrink-0" /></label>

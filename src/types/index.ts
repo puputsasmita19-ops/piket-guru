@@ -261,6 +261,8 @@ export interface SchoolSettings {
   notificationConfig?: import('./notification.types').NotificationConfig;
   announcementConfig?: import('./announcement.types').AnnouncementConfig;
   dashboardInfoConfig?: import('./dashboardInfo.types').DashboardInfoConfig;
+  /** Sanitized public-only preference; exposed at login without exposing school settings. */
+  publicNameMarquee?: import('./dashboardInfo.types').NameMarqueeConfig;
   sessionPolicy?: import('./sessionPolicy.types').SessionPolicy;
   documentationWatermark?: import('./watermark.types').DocumentationWatermarkConfig;
   workHours: {

@@ -1,3 +1,4 @@
+import { MobileChoiceSelect } from '../../components/common/MobileChoiceSelect';
 import { DialogForm } from '../../components/common/DialogForm';
 import { Navigation } from '../../components/icons';
 import { Plus } from '../../components/icons';
@@ -1014,7 +1015,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Jenis Izin / Keperluan Meninggalkan Sekolah *
                 </label>
-                <select
+                <MobileChoiceSelect mobileTitle="Jenis Izin Siswa"
                   value={jenisIzin}
                   onChange={(e) => setJenisIzin(e.target.value as StudentPermitType)}
                   className="w-full h-11 px-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -1023,7 +1024,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                     <option key={t.code} value={t.code}>{t.icon} {t.label}
                     </option>
                   ))}
-                </select>
+                </MobileChoiceSelect>
               </div>
 
               {/* Keterangan Tambahan jika LAINNYA */}
@@ -1324,7 +1325,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                                 <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                                   Pendamping Khusus
                                 </label>
-                                <select
+                                <MobileChoiceSelect mobileTitle="Pendamping Khusus"
                                   value={entry.penjemput || penjemputUmum}
                                   onChange={(e) =>
                                     handleUpdateStudentCustom(entry.student.id, {
@@ -1337,7 +1338,7 @@ export const StudentPermitFormModal: React.FC<StudentPermitFormModalProps> = ({
                                   <option value="WALI">Kerabat / Wali</option>
                                   <option value="GURU_PEMBINA">Guru Pembina</option>
                                   <option value="SENDIRI">Pulang Mandiri</option>
-                                </select>
+                                </MobileChoiceSelect>
                               </div>
 
                               <div>

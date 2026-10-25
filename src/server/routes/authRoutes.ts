@@ -1,3 +1,4 @@
+import { sanitizeNameMarqueeConfig } from '../../types/dashboardInfo.types.js';
 import { sanitizeLoginAppearance } from '../../types/loginAppearance.types.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin.js';
@@ -364,6 +365,7 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
     appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
     appCreator: 'Tim Pengembang Sistem Piket',
     loginAppearance: sanitizeLoginAppearance(),
+    publicNameMarquee: { enabled: true, durationSeconds: 16 },
     loginSupportContact: {
       enabled: true,
       adminName: 'Admin Piket Sekolah',
@@ -417,6 +419,7 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
           loginSupportContact: sanitizedContact,
           appCreator: typeof data.appCreator === 'string' ? data.appCreator.trim().slice(0, 120) || DEFAULT_CONFIG.appCreator : DEFAULT_CONFIG.appCreator,
           loginAppearance: sanitizeLoginAppearance(data.loginAppearance),
+          publicNameMarquee: sanitizeNameMarqueeConfig(data.dashboardInfoConfig?.nameMarquee),
         },
         source: 'DATABASE',
         status: 'OPERATIONAL',
