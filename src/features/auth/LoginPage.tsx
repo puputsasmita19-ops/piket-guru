@@ -748,14 +748,14 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* R81: compact, accessible method switch. Keep the R79 verified-user
+        {/* R82: mobile-compact, accessible method switch. Keep the R79 verified-user
             recovery and the existing UID/PIN authentication unchanged. */}
         <section className="login-method-panel min-w-0 space-y-2.5" aria-label="Metode masuk">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 min-w-0">
-            <label htmlFor="login-account-search" className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+            <label htmlFor="login-account-search" className="shrink-0 text-[11px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200">
               Metode masuk
             </label>
-            <div role="group" aria-label="Pilih metode masuk" className="grid grid-cols-2 w-full sm:w-auto rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-1 gap-1">
+            <div role="group" aria-label="Pilih metode masuk" className="ml-auto grid grid-cols-2 w-auto max-w-full shrink-0 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5 gap-0.5">
               <button
                 type="button"
                 aria-pressed={!isManualInput}
@@ -770,11 +770,11 @@ export const LoginPage: React.FC = () => {
                   setHighlightedIndex(0);
                   if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
                 }}
-                className={`min-h-11 sm:min-h-10 min-w-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput
+                className={`min-h-11 sm:min-h-10 w-[79px] sm:w-[88px] min-w-0 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 text-[11px] sm:text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput
                   ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
                   : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
               >
-                <Search className="w-4 h-4 shrink-0" aria-hidden="true" /> Nama
+                <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Nama
               </button>
               <button
                 type="button"
@@ -786,11 +786,11 @@ export const LoginPage: React.FC = () => {
                   setSearchQuery('');
                   setHighlightedIndex(0);
                 }}
-                className={`min-h-11 sm:min-h-10 min-w-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput
+                className={`min-h-11 sm:min-h-10 w-[79px] sm:w-[88px] min-w-0 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 text-[11px] sm:text-xs font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput
                   ? 'border-slate-200/70 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm'
                   : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
               >
-                <KeyRound className="w-4 h-4 shrink-0" aria-hidden="true" /> ID/NIP
+                <KeyRound className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> ID/NIP
               </button>
             </div>
           </div>

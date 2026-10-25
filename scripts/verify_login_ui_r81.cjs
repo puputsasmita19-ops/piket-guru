@@ -14,7 +14,7 @@ function test(name, fn) {list.push({name, fn});}
 function must(name, re) {test(name, () => assert.match(login, re));}
 function never(name, re) {test(name, () => assert.doesNotMatch(login, re));}
 
-must('Compact method switch uses two equal columns', /role="group" aria-label="Pilih metode masuk" className="grid grid-cols-2/);
+must('Compact method switch uses two equal columns', /role="group" aria-label="Pilih metode masuk" className="(?:ml-auto )?grid grid-cols-2/);
 must('Both switches keep visible concise labels', /<Search[^>]*\/> Nama[\s\S]*?<KeyRound[^>]*\/> ID\/NIP/);
 must('Search accessible name is retained', /aria-label="Cari Nama"/);
 must('Method switch is focusable and has pressed state', /aria-pressed=\{!isManualInput\}/);
