@@ -17,7 +17,7 @@ export function OverflowName({ name, config, className = '' }: { name: string; c
   }, [name]);
   const scrolling = settings.enabled && overflow;
   return <span ref={box} className={`overflow-name ${className}`} role="text" aria-label={name} title={name}
-      data-scrolling={scrolling ? 'true' : 'false'} style={{ '--name-scroll-duration': `${settings.durationSeconds}s` } as React.CSSProperties}>
+      data-scrolling={scrolling ? 'true' : 'false'} data-wrap={settings.enabled ? 'false' : 'true'} style={{ '--name-scroll-duration': `${settings.durationSeconds}s` } as React.CSSProperties}>
     <span className="overflow-name-track">
       <span ref={text} className="overflow-name-copy" aria-hidden="true">{name}</span>
       {scrolling && <span className="overflow-name-copy overflow-name-clone" aria-hidden="true">{name}</span>}

@@ -31,7 +31,20 @@ export const DashboardWelcome = React.memo(function DashboardWelcome({ config, n
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     if (observer) observer.observe(heading);
     else window.addEventListener('resize', update);
-    return () => { observer?.disconnect(); if (!observer) window.removeEventListener('resize', update); };
+    // Fonts may finish loading after first paint without resizing the heading.
+    // Measure again so a long teacher name stacks correctly on mobile.
+    let disposed = false;
+    const fonts = document.fonts;
+    if (fonts) {
+      void fonts.ready.then(() => { if (!disposed) update(); });
+      fonts.addEventListener?.('loadingdone', update);
+    }
+    return () => {
+      disposed = true;
+      observer?.disconnect();
+      if (!observer) window.removeEventListener('resize', update);
+      fonts?.removeEventListener?.('loadingdone', update);
+    };
   }, [name]);
   return <section className="dashboard-welcome" aria-label="Sapaan dashboard">
     <div>

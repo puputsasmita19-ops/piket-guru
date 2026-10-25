@@ -1540,6 +1540,17 @@ button.bg-\[var\(--theme-primary\)\],
 .overflow-name[data-scrolling="true"]:focus-within .overflow-name-track { animation-play-state: paused; }
 @keyframes overflow-name-marquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 1rem)); } }
 @media (prefers-reduced-motion: reduce) { .overflow-name[data-scrolling="true"] .overflow-name-track { animation: none; } }
+/* R78: when marquee is turned off, keep long names readable instead of clipping.
+   Respect OS reduced-motion even when the Admin enabled marquee. */
+.overflow-name[data-wrap="true"] { overflow: visible; white-space: normal; }
+.overflow-name[data-wrap="true"] .overflow-name-track { display: block; width: 100%; }
+.overflow-name[data-wrap="true"] .overflow-name-copy { white-space: normal; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .overflow-name { overflow: visible; white-space: normal; }
+  .overflow-name .overflow-name-track { display: block; width: 100%; animation: none !important; }
+  .overflow-name .overflow-name-copy { white-space: normal; overflow-wrap: anywhere; }
+  .overflow-name .overflow-name-clone { display: none; }
+}
 /* Long names move beneath 'Halo' only when measured width cannot fit beside it. */
 .dashboard-welcome h1[data-stacked="true"] { display: block; }
 .dashboard-welcome h1[data-stacked="true"] .dashboard-hello-prefix { display: block; }

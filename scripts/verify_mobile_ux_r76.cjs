@@ -27,9 +27,9 @@ contains('Settings sanitizer persists new preference','src/types/dashboardInfo.t
 contains('Public endpoint only exports safe marquee preference','src/server/routes/authRoutes.ts','publicNameMarquee: sanitizeNameMarqueeConfig(data.dashboardInfoConfig?.nameMarquee)');
 contains('Login selected user gets marquee','src/features/auth/LoginPage.tsx','config={schoolSettings.publicNameMarquee}');
 contains('Mobile choices are buttons','src/components/common/MobileChoiceSelect.tsx','aria-haspopup="dialog"');
-contains('Mobile choices work in nested modal','src/components/common/MobileChoiceSelect.tsx','<Modal isOpen={open}');
+contains('Mobile choices work in nested modal','src/components/common/MobileChoiceSelect.tsx','<Modal isOpen={open && !disabled}');
 contains('Mobile choice minimum touch target','src/components/common/MobileChoiceSelect.tsx','min-h-12');
-contains('Mobile choices preserve form handler','src/components/common/MobileChoiceSelect.tsx','onChange?.({ target: { value } }');
+contains('Mobile choices preserve form handler','src/components/common/MobileChoiceSelect.tsx','onChange?.({ target: { value: selectedValue } }');
 contains('Native select preserved for desktop','src/components/common/MobileChoiceSelect.tsx','hidden sm:block');
 for(const [file,expected] of Object.entries({
   'src/features/incidents/IncidentFormModal.tsx':3,
