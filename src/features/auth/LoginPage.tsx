@@ -57,11 +57,13 @@ export const LoginPage: React.FC = () => {
   const loginBusyRef = useRef(false);
   const mountedRef = useRef(false);
   const usersLoadedRef = useRef(false);
+  const nameLookupRetriesRef = useRef(0);
   const lastListActivityRef = useRef(0);
 
   const [showThemePicker, setShowThemePicker] = useState<boolean>(false);
   const [usersList, setUsersList] = useState<UserSummaryItem[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(true);
+  const [userLookupStatus, setUserLookupStatus] = useState<'loading' | 'ready' | 'empty' | 'unavailable'>('loading');
   const [selectedIdentifier, setSelectedIdentifier] = useState<string>('');
   const [isManualInput, setIsManualInput] = useState<boolean>(false);
   const [pin, setPin] = useState<string>('');
@@ -119,14 +121,19 @@ export const LoginPage: React.FC = () => {
 
   const refreshLoginUsers = useCallback(async (forceRefresh = false) => {
     if (!mountedRef.current || loginBusyRef.current) return;
-    if (!usersLoadedRef.current) setIsLoadingUsers(true);
+    if (!usersLoadedRef.current) { setIsLoadingUsers(true); setUserLookupStatus('loading'); }
     try {
       const users = await authService.getUsersList({ forceRefresh });
       if (!mountedRef.current || loginBusyRef.current) return;
       // A failed request must not erase the remembered UID or pretend the account was deleted.
-      if (authService.getUsersListStatus?.().verified === false) return;
+      if (authService.getUsersListStatus?.().verified === false) {
+        if (!usersLoadedRef.current) setUserLookupStatus('unavailable');
+        return;
+      }
       const active = users.filter(u => u.isActive === true);
       usersLoadedRef.current = true;
+      nameLookupRetriesRef.current = 0;
+      setUserLookupStatus(active.length > 0 ? 'ready' : 'empty');
       setUsersList(active);
       const uid = selectedUidRef.current || (!selectionTouchedRef.current ? LastLoginPreference.read(trustedRef.current) : null);
       if (!uid) {
@@ -142,7 +149,10 @@ export const LoginPage: React.FC = () => {
         setSelectedIdentifier(''); setPin('');
         if (LastLoginPreference.read(trustedRef.current) === uid) LastLoginPreference.forget(false);
       }
-    } catch { /* Manual login stays available while user summaries are unavailable. */ }
+    } catch {
+      if (mountedRef.current && !usersLoadedRef.current) setUserLookupStatus('unavailable');
+      // ID/NIP login remains available even when public user summaries fail.
+    }
     finally { if (mountedRef.current) setIsLoadingUsers(false); }
   }, []);
 
@@ -166,6 +176,19 @@ export const LoginPage: React.FC = () => {
     const timer = window.setInterval(() => { if (!document.hidden && Date.now() - lastListActivityRef.current < 120000) void refreshLoginUsers(); }, 30000);
     return () => window.clearInterval(timer);
   }, [isComboboxOpen, refreshLoginUsers]);
+
+  // Limited automatic recovery from short API/connection outages, without
+  // polling indefinitely or falling back to unverified local account lists.
+  useEffect(() => {
+    if (userLookupStatus !== 'unavailable' || usersList.length > 0 || nameLookupRetriesRef.current >= 2) return;
+    const timer = window.setTimeout(() => {
+      if (!document.hidden && navigator.onLine) {
+        nameLookupRetriesRef.current += 1;
+        void refreshLoginUsers(true);
+      }
+    }, 6500);
+    return () => window.clearTimeout(timer);
+  }, [userLookupStatus, usersList.length, refreshLoginUsers]);
 
   // Filter users by search query (case-insensitive & trimmed)
   const filteredUsers = useMemo(() => {
@@ -721,27 +744,32 @@ export const LoginPage: React.FC = () => {
         {/* R48: Search-first account picker. One compact selected-account card,
             no duplicate selection dropdown. The server still validates PIN/UID. */}
         <section className="space-y-2" aria-label="Pilih akun pengguna">
-          <div className="flex items-center justify-end min-h-9">
-            <label htmlFor="login-account-search" className="sr-only">
-              {isManualInput || usersList.length === 0 ? 'ID login atau NIP pengguna' : 'Cari nama atau ID pengguna'}
+          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+            <label htmlFor="login-account-search" className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+              Pilih akun pengguna
             </label>
-            {usersList.length > 0 && (
-              <button type="button" onClick={() => {
+            <div role="group" aria-label="Metode memilih akun" className="inline-flex rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] p-1 gap-1">
+              <button type="button" aria-pressed={!isManualInput} onClick={() => {
+                setIsManualInput(false);
+                setIsComboboxOpen(false);
+                setSearchQuery('');
+                if (usersList.length === 0 && !isLoadingUsers) void refreshLoginUsers(true);
+              }}
+                className={`min-h-9 flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${!isManualInput ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>
+                <Search className="h-3.5 w-3.5" aria-hidden="true" /> Cari Nama
+              </button>
+              <button type="button" aria-pressed={isManualInput} onClick={() => {
                 selectionTouchedRef.current = true;
-                setIsManualInput(v => !v);
+                setIsManualInput(true);
                 setIsComboboxOpen(false);
                 setSearchQuery('');
               }}
-                title={isManualInput ? 'Kembali ke pencarian nama' : 'Masukkan ID pengguna secara manual'}
-                aria-label={isManualInput ? 'Kembali ke pencarian nama' : 'Masukkan ID pengguna secara manual'}
-                aria-pressed={isManualInput}
-                className="w-10 h-9 shrink-0 inline-flex items-center justify-center rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]"
-              >
-                {isManualInput ? <Search className="w-4 h-4" aria-hidden="true"/> : <KeyRound className="w-4 h-4" aria-hidden="true"/>}
+                className={`min-h-9 flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] ${isManualInput ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>
+                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> ID/NIP
               </button>
-            )}
+            </div>
           </div>
-          {isManualInput || usersList.length === 0 ? (
+          {isManualInput ? (
             <div className="space-y-1">
               <input
                 id="login-account-search"
@@ -757,7 +785,7 @@ export const LoginPage: React.FC = () => {
                 placeholder="ID login atau NIP"
                 className="w-full min-h-12 px-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
               />
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan ID login terdaftar jika pencarian belum tersedia.</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Login manual tetap tersedia saat daftar nama tidak dapat diakses.</p>
             </div>
           ) : (
             <div ref={comboboxRef} className="space-y-2">
@@ -785,11 +813,24 @@ export const LoginPage: React.FC = () => {
                   className="w-full min-h-12 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-primary)]"
                 />
               </div>
+              {usersList.length === 0 && (
+                <div role={userLookupStatus === 'unavailable' ? 'alert' : 'status'} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-slate-800/60 p-3">
+                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                    {isLoadingUsers || userLookupStatus === 'loading' ? 'Memuat nama pengguna…' : userLookupStatus === 'empty' ? 'Belum ada akun aktif pada daftar pengguna. Hubungi Admin jika seharusnya sudah terdaftar.' : 'Daftar nama belum dapat dimuat. Periksa koneksi atau coba lagi. Login ID/NIP tetap dapat digunakan.'}
+                  </p>
+                  {!isLoadingUsers && userLookupStatus !== 'loading' && <button type="button" onClick={() => {
+                    setIsLoadingUsers(true);
+                    void refreshLoginUsers(true);
+                  }} disabled={isSubmitting || isGoogleSubmitting} className="min-h-10 shrink-0 rounded-lg border border-[var(--theme-primary-border)] px-3 text-xs font-semibold text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50">Coba Lagi</button>}
+                </div>
+              )}
               {isComboboxOpen && (
                 <div id="login-account-results" role="listbox" aria-label="Hasil pencarian pengguna"
                   ref={listboxRef} className="max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-1 shadow-sm">
                   {isLoadingUsers ? (
                     <p className="p-3 text-xs text-slate-500">Memuat daftar pengguna...</p>
+                  ) : userLookupStatus === 'unavailable' && usersList.length === 0 ? (
+                    <p className="p-3 text-xs text-slate-500">Daftar nama belum dapat diakses. Pilih Coba Lagi atau gunakan ID/NIP.</p>
                   ) : filteredUsers.length === 0 ? (
                     <p className="p-3 text-xs text-slate-500">Nama tidak ditemukan. Coba ID login manual.</p>
                   ) : filteredUsers.map((u, idx) => {

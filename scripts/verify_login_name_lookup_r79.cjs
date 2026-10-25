@@ -1,0 +1,45 @@
+'use strict';
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+const read = name => fs.readFileSync(name,'utf8');
+const page = read('src/features/auth/LoginPage.tsx');
+const service = read('src/services/auth/authService.ts');
+const route = read('src/server/routes/authRoutes.ts');
+const settings = read('src/features/settings/SettingsView.tsx');
+const card = read('src/features/settings/DashboardInfoSettingsCard.tsx');
+let pass=0;
+const test=(label,fun)=>{fun();pass++;console.log(`PASS ${pass} ${label}`)};
+const must=(text,pattern)=>assert.match(text,pattern);
+const never=(text,pattern)=>assert.doesNotMatch(text,pattern);
+test('Mode cari nama is always available',()=>must(page,/Cari Nama/));
+test('Mode ID/NIP is always available',()=>must(page,/ID\/NIP/));
+test('Mode selector not hidden when summary empty',()=>never(page,/usersList\.length > 0 && \(\s*<button/));
+test('Manual mode only depends on user selection',()=>must(page,/\{isManualInput \? \(/));
+test('Search mode shows loading indication',()=>must(page,/Memuat nama pengguna/));
+test('Search distinguishes valid empty list',()=>must(page,/userLookupStatus === 'empty'/));
+test('Search distinguishes backend outage',()=>must(page,/userLookupStatus === 'unavailable'/));
+test('Search has retry button',()=>must(page,/Coba Lagi<\/button>/));
+test('Retry is disabled during login submit',()=>must(page,/disabled=\{isSubmitting \|\| isGoogleSubmitting\}/));
+test('Search auto-recovery bounded to 2 attempts',()=>must(page,/nameLookupRetriesRef\.current >= 2/));
+test('Search auto-recovery respects offline and hidden',()=>must(page,/!document\.hidden && navigator\.onLine/));
+test('Request failure does not masquerade as valid empty',()=>must(page,/getUsersListStatus\?\.\(\)\.verified === false/));
+test('Search backend still uses existing summary endpoint',()=>must(service,/\/api\/auth\/users-summary/));
+test('Server summary excludes inactive accounts',()=>must(route,/\.filter\(\(u\) => u\.isActive\)/));
+test('No new unauthenticated Firestore reads',()=>never(page,/getDocs\(|onSnapshot\(|firebase\.firestore|collection\(db/));
+test('Manual PIN flow retained',()=>must(page,/PIN Keamanan \(6 Digit\)/));
+test('Login selected account still uses name overflow',()=>must(page,/<OverflowName name=\{selectedUser\.fullName\}/));
+test('R77 safe marquee config retained',()=>must(read('src/types/dashboardInfo.types.ts'),/const requestedDuration = value\?\.durationSeconds/));
+test('Admin settings tab for dashboard',()=>must(settings,/id: 'dashboard_info', label: 'Info Dashboard'/));
+test('Admin settings only shows to admins',()=>must(settings,/activeTab === 'dashboard_info' && isAdmin/));
+test('Name animation preference in admin',()=>must(card,/Teks berjalan untuk nama panjang/));
+test('Admin controls animation speed',()=>must(card,/Kecepatan teks berjalan/));
+test('Homepage selected remembered account preserved',()=>must(page,/LastLoginPreference\.read\(trustedRef\.current\)/));
+test('Revalidation online/focus preserved',()=>must(page,/window\.addEventListener\('focus', visible\)/));
+for(const file of ['src/features/auth/LoginPage.tsx','src/services/auth/authService.ts','src/features/settings/SettingsView.tsx']){
+ test(`${file} TypeScript/TSX syntax`,()=>{
+  const source=ts.createSourceFile(file,read(file),ts.ScriptTarget.Latest,true,file.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+  assert.equal(source.parseDiagnostics.length,0,source.parseDiagnostics.map(x=>ts.flattenDiagnosticMessageText(x.messageText,' ')).join('; '));
+ });
+}
+console.log(`R79: ${pass} checks passed`);
