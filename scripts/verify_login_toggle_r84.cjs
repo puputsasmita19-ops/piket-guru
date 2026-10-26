@@ -41,8 +41,8 @@ check('Both method buttons expose aria-pressed',()=>{
   for (const label of ['Cari berdasarkan nama','Masuk dengan ID atau NIP'])
     assert.ok(buttons.get(label).pressed?.initializer && ts.isJsxExpression(buttons.get(label).pressed.initializer));
 });
-must('Two-column toggle now aligned right above full-width search', /role="group"\s+aria-label="Cari menggunakan nama atau ID\/NIP"\s+className="grid grid-cols-\[56px_67px\] sm:grid-cols-\[60px_72px\]/);
-must('Compact mode control stays inside login section', /<section className="login-method-panel min-w-0 space-y-2"/);
+must('Two-column toggle compact at right inside search row', /role="group"\s+aria-label="Cari menggunakan nama atau ID\/NIP"\s+className="ml-auto mr-0\.5 grid grid-cols-\[52px_62px\] sm:grid-cols-\[62px_72px\]/);
+must('Compact mode control stays inside login section', /<section className="login-method-panel min-w-0"/);
 absent('No old opaque tap-to-cycle icon', /<RefreshCw\s/);
 absent('No obsolete RefreshCw import', /^\s*RefreshCw,/m);
 must('Name control visibly says Nama', /<span>Nama<\/span>/);

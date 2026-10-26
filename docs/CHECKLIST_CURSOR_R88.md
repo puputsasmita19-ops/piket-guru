@@ -1,0 +1,21 @@
+# Checklist eksekusi R88 — Login Search Compact
+
+- [ ] Pastikan GitHub Desktop `Fetch origin` / `Pull origin` dan source lokal terbaru.
+- [ ] Buat checkpoint/commit atau branch untuk rollback.
+- [ ] Periksa apakah `src/features/auth/LoginPage.tsx` lokal masih kompatibel dengan R85. Jika telah dimodifikasi setelah R85, bandingkan diff dan merge, **jangan timpa membabi buta**.
+- [ ] Ekstrak R88 dengan mempertahankan struktur folder `src/`, `scripts/`, `docs/`.
+- [ ] Periksa GitHub Desktop: hanya `LoginPage.tsx` yang berubah dalam kode aplikasi.
+- [ ] Jalankan `npm ci` jika dependency lokal belum ada.
+- [ ] Jalankan `node scripts/verify_r88_login_compact.cjs`.
+- [ ] Jalankan `node scripts/verify_login_toggle_r84.cjs`.
+- [ ] Jalankan `node scripts/verify_r85_login_permit.cjs`.
+- [ ] Jalankan `npm run lint`.
+- [ ] Jalankan `npm run build`.
+- [ ] Bila ada error, STOP; jangan Push sampai diperbaiki.
+- [ ] Preview browser HP 320/360/390/430: field di kiri + switch kecil di kanan, satu baris, tidak overflow.
+- [ ] Desktop 768/1280 serta dark/light mode.
+- [ ] Uji pencarian nama, scroll daftar, nama panjang dan tombol X.
+- [ ] Uji ID/NIP manual + PIN dan pergantian mode.
+- [ ] Uji login Admin Google dan akun guru, retry API gagal, serta perangkat tepercaya.
+- [ ] Periksa tidak ada regresi input PIN atau keypad.
+- [ ] Setelah lulus, Commit dan Push ke branch uji; periksa Preview sebelum produksi.

@@ -749,17 +749,78 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* R85: right-aligned compact mode toggle above full-width input.
-            Keep R79–R84 identity verification, PIN and backend logic unchanged. */}
-        <section className="login-method-panel min-w-0 space-y-2" aria-label="Metode masuk">
-          <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-2">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Metode masuk</span>
-              {/* R85: compact right-aligned login method switch. */}
+        {/* R88: one-row, compact login search with the method toggle on the right.
+            Preserve account verification, ID/NIP fallback, PIN and auth flow. */}
+        <section className="login-method-panel min-w-0" aria-label="Metode masuk">
+          <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-1.5">
+            <div className="relative flex min-w-0 items-center rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
+              {isManualInput ? (
+                <input
+                  id="login-account-search"
+                  ref={manualInputRef}
+                  type="text"
+                  autoComplete="username"
+                  spellCheck={false}
+                  value={selectedIdentifier}
+                  onChange={e => {
+                    selectionTouchedRef.current = true;
+                    selectedUidRef.current = null;
+                    setSelectedIdentifier(e.target.value);
+                    setPin('');
+                    setErrorMessage('');
+                    setHasError(false);
+                  }}
+                  placeholder="ID atau NIP..."
+                  aria-label="ID login atau NIP"
+                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-xl bg-transparent pl-2.5 sm:pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                />
+              ) : (
+                <>
+                  <input
+                    id="login-account-search"
+                    ref={searchInputRef}
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={searchQuery}
+                    onFocus={() => { lastListActivityRef.current = Date.now(); setIsComboboxOpen(true); }}
+                    onChange={e => {
+                      lastListActivityRef.current = Date.now();
+                      setSearchQuery(e.target.value);
+                      setHighlightedIndex(0);
+                      setIsComboboxOpen(true);
+                    }}
+                    onKeyDown={handleComboboxKeyDown}
+                    placeholder="Cari nama..."
+                    aria-label="Cari nama guru atau ID"
+                    aria-controls={isComboboxOpen ? 'login-account-results' : undefined}
+                    aria-expanded={isComboboxOpen}
+                    aria-autocomplete="list"
+                    role="combobox"
+                    className={`min-h-11 sm:min-h-10 w-full min-w-0 flex-1 bg-transparent pl-2.5 sm:pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none`}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      aria-label="Hapus pencarian nama"
+                      title="Hapus pencarian"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setHighlightedIndex(0);
+                        setIsComboboxOpen(true);
+                        searchInputRef.current?.focus();
+                      }}
+                      className="inline-flex min-h-11 sm:min-h-10 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </>
+              )}
               <div
                 role="group"
                 aria-label="Cari menggunakan nama atau ID/NIP"
-                className="grid grid-cols-[56px_67px] sm:grid-cols-[60px_72px] shrink-0 items-stretch gap-0.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
+                className="ml-auto mr-0.5 grid grid-cols-[52px_62px] sm:grid-cols-[62px_72px] shrink-0 items-stretch gap-0.5 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
               >
                 <button
                   type="button"
@@ -784,11 +845,11 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => searchInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-medium sm:font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-md px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
                     ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
-                  <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <Search className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" aria-hidden="true" />
                   <span>Nama</span>
                 </button>
                 <button
@@ -809,79 +870,14 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => manualInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-medium sm:font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
+                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-md px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
                     ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
-                  <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <KeyRound className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" aria-hidden="true" />
                   <span>ID/NIP</span>
                 </button>
               </div>
-            </div>
-            <div className="relative flex min-w-0 items-stretch rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
-              {isManualInput ? (
-                <input
-                  id="login-account-search"
-                  ref={manualInputRef}
-                  type="text"
-                  autoComplete="username"
-                  spellCheck={false}
-                  value={selectedIdentifier}
-                  onChange={e => {
-                    selectionTouchedRef.current = true;
-                    selectedUidRef.current = null;
-                    setSelectedIdentifier(e.target.value);
-                    setPin('');
-                    setErrorMessage('');
-                    setHasError(false);
-                  }}
-                  placeholder="Masukkan ID atau NIP"
-                  aria-label="ID login atau NIP"
-                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
-                />
-              ) : (
-                <>
-                  <input
-                    id="login-account-search"
-                    ref={searchInputRef}
-                    type="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={searchQuery}
-                    onFocus={() => { lastListActivityRef.current = Date.now(); setIsComboboxOpen(true); }}
-                    onChange={e => {
-                      lastListActivityRef.current = Date.now();
-                      setSearchQuery(e.target.value);
-                      setHighlightedIndex(0);
-                      setIsComboboxOpen(true);
-                    }}
-                    onKeyDown={handleComboboxKeyDown}
-                    placeholder="Cari nama atau ID..."
-                    aria-label="Cari nama guru atau ID"
-                    aria-controls={isComboboxOpen ? 'login-account-results' : undefined}
-                    aria-expanded={isComboboxOpen}
-                    aria-autocomplete="list"
-                    role="combobox"
-                    className={`min-h-11 sm:min-h-10 w-full min-w-0 flex-1 bg-transparent pl-3 ${searchQuery ? 'pr-11' : 'pr-3'} text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none`}
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      aria-label="Hapus pencarian nama"
-                      title="Hapus pencarian"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setHighlightedIndex(0);
-                        setIsComboboxOpen(true);
-                        searchInputRef.current?.focus();
-                      }}
-                      className="absolute right-0 top-0 flex h-full w-11 shrink-0 items-center justify-center rounded-r-xl text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
-                    >
-                      <X className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  )}
-                </>
-              )}
             </div>
             {isManualInput ? (
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Masuk dengan ID login atau NIP terdaftar.</p>

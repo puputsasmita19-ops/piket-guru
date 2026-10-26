@@ -15,11 +15,11 @@ for(const p of ['src/features/auth/LoginPage.tsx','src/components/common/MobileC
  test('TSX parse: '+p,()=>{const a=ts.createSourceFile(p,read(p),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);assert.equal(a.parseDiagnostics.length,0,a.parseDiagnostics.map(x=>ts.flattenDiagnosticMessageText(x.messageText,' ')).join(';'));});
  test('TSX transpilation: '+p,()=>{const r=ts.transpileModule(read(p),{fileName:p,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});assert.equal((r.diagnostics||[]).filter(x=>x.category===ts.DiagnosticCategory.Error).length,0);});
 }
-test('Toggle row label and switch aligned on right',()=>assert.match(login,/flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1[\s\S]{0,160}Metode masuk[\s\S]{0,250}role="group"/));
+test('Toggle group aligned at right inside one input row',()=>assert.match(login,/className="ml-auto mr-0\.5 grid grid-cols-\[52px_62px\] sm:grid-cols-\[62px_72px\]/));
 test('One name mode, one manual mode',()=>{assert.equal((login.match(/aria-label="Cari berdasarkan nama"/g)||[]).length,1);assert.equal((login.match(/aria-label="Masuk dengan ID atau NIP"/g)||[]).length,1)});
-test('Toggle comes before full width input',()=>{const row=login.indexOf('aria-label="Cari menggunakan nama atau ID/NIP"'); const field=login.indexOf('className="relative flex min-w-0 items-stretch rounded-xl',row);assert.ok(row>=0 && field>row);});
-test('Mobile controls have 44px touch targets',()=>assert.equal((login.match(/inline-flex min-h-11 sm:min-h-10/g)||[]).length,2));
-test('Segmented group remains compact',()=>assert.match(login,/grid-cols-\[56px_67px\] sm:grid-cols-\[60px_72px\]/));
+test('Input appears before right-side switch in single border control',()=>{const row=login.indexOf('className="relative flex min-w-0 items-center rounded-xl');const field=login.indexOf('id="login-account-search"',row);const group=login.indexOf('aria-label="Cari menggunakan nama atau ID/NIP"',row);assert.ok(row>=0 && field>row && group>field);});
+test('Both method controls keep 44px mobile touch targets',()=>assert.equal((login.match(/className=\{`inline-flex min-h-11 sm:min-h-10/g)||[]).length,2));
+test('Segmented group remains compact',()=>assert.match(login,/grid-cols-\[52px_62px\] sm:grid-cols-\[62px_72px\]/));
 test('Manual input cannot submit invisible unverified ID',()=>assert.match(login,/if \(!selectedUidRef\.current\) \{[\s\S]*?setSelectedIdentifier\(''\);[\s\S]*?setPin\(''\);/));
 test('PIN remains 6 digits',()=>assert.match(login,/maxLength=\{6\}/));
 test('Google login remains',()=>assert.match(login,/loginWithGoogle\(\)/));

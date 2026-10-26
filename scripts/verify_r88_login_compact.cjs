@@ -1,0 +1,48 @@
+'use strict';
+/** R88 — UI-only verification. No network calls, authentication, or Firebase writes. */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+const src = fs.readFileSync(path.resolve(__dirname, '../src/features/auth/LoginPage.tsx'),'utf8');
+const ast = ts.createSourceFile('LoginPage.tsx',src,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const checks=[];
+const check=(label,fn)=>checks.push([label,fn]);
+const has=(label,pattern)=>check(label,()=>assert.match(src,pattern));
+const not=(label,pattern)=>check(label,()=>assert.doesNotMatch(src,pattern));
+check('TSX syntax',()=>assert.equal(ast.parseDiagnostics.length,0,ast.parseDiagnostics.map(x=>ts.flattenDiagnosticMessageText(x.messageText,' ')).join(';')));
+check('TypeScript JSX transpile',()=>{
+ const o=ts.transpileModule(src,{fileName:'LoginPage.tsx',reportDiagnostics:true,compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX}});
+ assert.equal((o.diagnostics||[]).filter(x=>x.category===ts.DiagnosticCategory.Error).length,0);
+});
+has('One line, focus-within search container', /className="relative flex min-w-0 items-center rounded-xl border[^"]*focus-within:ring-2/);
+has('Right-aligned compact mode group', /role="group"\s+aria-label="Cari menggunakan nama atau ID\/NIP"\s+className="ml-auto mr-0\.5 grid grid-cols-\[52px_62px\] sm:grid-cols-\[62px_72px\]/);
+has('Name and ID/NIP are visibly labeled', /<span>Nama<\/span>[\s\S]*?<span>ID\/NIP<\/span>/);
+check('Search is before toggle within single row',()=>{const row=src.indexOf('className="relative flex min-w-0 items-center rounded-xl');const input=src.indexOf('id="login-account-search"',row);const group=src.indexOf('role="group"',row);const next=src.indexOf('{isManualInput ? (\n              <p',row);assert.ok(row>=0&&input>row&&group>input&&next>group);});
+check('Only two primary switch buttons',()=>assert.equal((src.match(/aria-label="(?:Cari berdasarkan nama|Masuk dengan ID atau NIP)"/g)||[]).length,2));
+check('Mobile method buttons retain >=44px height',()=>assert.equal((src.match(/className=\{`inline-flex min-h-11 sm:min-h-10/g)||[]).length,2));
+has('Smaller mobile icon', /<Search className="h-3 w-3 sm:h-3\.5 sm:w-3\.5/);
+has('Smaller mobile toggle typography', /text-\[10px\] sm:text-xs font-medium/);
+check('Mobile input font at least 16px, avoids Safari focus zoom',()=>assert.equal((src.match(/pr-1 text-base sm:text-sm text-slate-900/g)||[]).length,2));
+has('ID input remains controlled', /value=\{selectedIdentifier\}[\s\S]*?setSelectedIdentifier\(e\.target\.value\)/);
+has('Name search remains controlled', /value=\{searchQuery\}[\s\S]*?setSearchQuery\(e\.target\.value\)/);
+has('Name-only search suggestions', /role="combobox"[\s\S]*?\{isManualInput \? \(\s*<p/);
+has('Both inputs remain accessible', /aria-label="ID login atau NIP"[\s\S]*?aria-label="Cari nama guru atau ID"/);
+check('Both inputs retain same switching target',()=>assert.equal((src.match(/id="login-account-search"/g)||[]).length,2));
+has('No hidden manual identifier submitted on mode switch', /if \(!selectedUidRef\.current\) \{[\s\S]*?setSelectedIdentifier\(''\);[\s\S]*?setPin\(''\);/);
+has('Method buttons retain pressed states', /aria-pressed=\{!isManualInput\}[\s\S]*?aria-pressed=\{isManualInput\}/);
+has('Buttons blocked during authentication', /disabled=\{isSubmitting \|\| isGoogleSubmitting\}/);
+has('Search results still keyboard operable', /onKeyDown=\{handleComboboxKeyDown\}/);
+has('Clear search button is inline and accessible', /aria-label="Hapus pencarian nama"[\s\S]*?className="inline-flex min-h-11/);
+has('Retry still accessible', /Coba Lagi<\/button>/);
+has('LoginAvatar remains in selected account', /<LoginAvatar user=\{selectedUser\} compact/);
+has('OverflowName remains in selected account', /<OverflowName name=\{selectedUser\.fullName\}/);
+has('PIN login unchanged', /loginWithPin\(selectedUidRef\.current \|\| selectedIdentifier, pin\)/);
+has('Google login unchanged', /loginWithGoogle\(\)/);
+has('PIN input still six digits', /maxLength=\{6\}/);
+has('Trusted device settings intact', /setTrustedDevice/);
+not('No Firestore in login component', /onSnapshot\(|getFirestore\(|getDocs\(/);
+not('Obsolete separate row removed', /flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1/);
+let success=0;
+for(const [label,fn] of checks){try{fn();success++;console.log('PASS',label)}catch(e){process.exitCode=1;console.error('FAIL',label,e.message)}}
+console.log(`R88 ${success}/${checks.length} checks passed`);
