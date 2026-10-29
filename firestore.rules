@@ -525,7 +525,15 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /auditLogs/{logId} {
       allow read: if isAdmin() || isKepalaSekolah();
-      allow create: if isValidActiveUser();
+      // R89-E: prevent non-Admin users from fabricating ATTENDANCE UPDATE/DELETE
+      // audit events. Other modules and ordinary check-in/out audit stay unchanged.
+      allow create: if isValidActiveUser() && (
+        request.resource.data.get('module', '') != 'ATTENDANCE' ||
+        !(request.resource.data.get('action', '') in ['UPDATE', 'DELETE']) ||
+        (isAdmin() &&
+          request.resource.data.get('userId', '') == request.auth.uid &&
+          request.resource.data.get('role', '') == 'ADMIN')
+      );
       allow update, delete: if false;
     }
 

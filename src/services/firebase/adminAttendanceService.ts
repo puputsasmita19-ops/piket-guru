@@ -1,7 +1,8 @@
-import { doc, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDocsFromServer, limit, query, runTransaction, serverTimestamp, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { AttendanceRecord, AttendanceStatus } from '../../types';
-import { toEpochMs } from '../../utils/dateUtils';
+import { getTodayISODate, toEpochMs } from '../../utils/dateUtils';
+import { validateMissingCheckoutEvidence, type MissingCheckoutEvidence } from '../../utils/missedCheckoutCorrectionPolicy';
 
 /** Admin corrections are online-only and written with an immutable audit record in the same transaction. */
 export interface AttendanceCorrectionInput {
@@ -10,6 +11,7 @@ export interface AttendanceCorrectionInput {
   status: AttendanceStatus;
   keteranganCheckout: string;
   alasan: string;
+  missingCheckoutEvidence?: MissingCheckoutEvidence;
 }
 
 const allowedStatuses: AttendanceStatus[] = ['DALAM_LOKASI', 'DI_LUAR_LOKASI', 'GPS_ERROR', 'AKURASI_RENDAH'];
@@ -62,6 +64,10 @@ export class AdminAttendanceService {
     if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Perubahan hanya dapat dilakukan ketika online.');
     const reason = input.alasan.trim();
     if (reason.length < 10 || reason.length > 500) throw new Error('Alasan wajib diisi (10–500 karakter).');
+    if (input.missingCheckoutEvidence) {
+      if (mode !== 'edit') throw new Error('Checkout terlewat hanya dapat dikoreksi, bukan dihapus.');
+      validateMissingCheckoutEvidence(record, input, input.missingCheckoutEvidence, getTodayISODate());
+    }
     const next = mode === 'edit' ? validateAttendanceCorrection(record, input) : null;
     const ref = doc(db, 'attendance', record.id);
     const logId = `audit-attendance-${crypto.randomUUID()}`;
@@ -77,15 +83,34 @@ export class AdminAttendanceService {
       if (!attendanceSnap.exists()) throw new Error('Presensi sudah dihapus oleh pengguna lain. Muat ulang data.');
       const current = { id: attendanceSnap.id, ...attendanceSnap.data() } as AttendanceRecord;
       if (!versionMatches(current, record)) throw new Error('Data presensi telah berubah dari perangkat lain. Tutup dialog lalu buka kembali data terbaru.');
+      if (input.missingCheckoutEvidence) {
+        validateMissingCheckoutEvidence(current, input, input.missingCheckoutEvidence, getTodayISODate());
+      }
       const before = {
         jamMasuk: current.jamMasuk, jamPulang: current.jamPulang || null,
         status: current.status, keteranganCheckout: current.keteranganCheckout || '',
       };
       const timestamp = new Date().toISOString();
-      const correction = { at: timestamp, byId: uid, byName: actorName, reason, before,
-        after: next ? { jamMasuk: next.jamMasuk, jamPulang: next.jamPulang, status: next.status, keteranganCheckout: next.keteranganCheckout } : null };
+      const evidence = input.missingCheckoutEvidence ? {
+        channel: input.missingCheckoutEvidence.channel,
+        note: input.missingCheckoutEvidence.note.trim(),
+        acknowledged: true,
+      } : null;
+      // A missing-checkout adjustment never overwrites the original check-in or GPS status.
+      const after = next ? {
+        jamMasuk: evidence ? current.jamMasuk : next.jamMasuk,
+        jamPulang: next.jamPulang,
+        status: evidence ? current.status : next.status,
+        keteranganCheckout: next.keteranganCheckout,
+      } : null;
+      const correction = { at: timestamp, byId: uid, byName: actorName, reason, before, after,
+        source: evidence ? 'MISSING_CHECKOUT' : 'GENERAL', evidence };
       if (next) {
-        tx.update(ref, {
+        tx.update(ref, evidence ? {
+          // Preserve recorded check-in timestamp precision, GPS status, selfie and coordinates.
+          jamPulang: next.jamPulang, keteranganCheckout: next.keteranganCheckout,
+          updatedAt: timestamp, adminCorrection: correction,
+        } : {
           jamMasuk: next.jamMasuk, jamPulang: next.jamPulang,
           status: next.status, keteranganCheckout: next.keteranganCheckout,
           updatedAt: timestamp, adminCorrection: correction,
@@ -95,17 +120,35 @@ export class AdminAttendanceService {
       }
       // Atomic audit is committed even for deletion. Never duplicate the selfie/data URL into an audit document.
       tx.set(logRef, {
-        id: logId, timestamp, userId: uid, userName: actorName, role: 'ADMIN',
+        id: logId, timestamp, recordedAt: serverTimestamp(), userId: uid, userName: actorName, role: 'ADMIN',
         action: mode === 'edit' ? 'UPDATE' : 'DELETE', module: 'ATTENDANCE', status: 'SUCCESS', recordId: record.id,
         details: `${mode === 'edit' ? 'Koreksi' : 'Hapus'} riwayat presensi ${current.userName} (${current.tanggal}). Alasan: ${reason}`,
         metadata: {
           attendanceId: record.id, targetUserId: current.userId, targetUserName: current.userName,
           tanggal: current.tanggal, scheduleId: current.scheduleId || null,
-          before, after: correction.after, alasan: reason,
+          before, after: correction.after, alasan: reason, correctionSource: correction.source,
+          missingCheckoutEvidence: evidence,
           photoAttached: Boolean(current.photoUrl),
           gpsEvidence: { latitude: current.latitude, longitude: current.longitude, accuracy: current.accuracy, distance: current.distance },
         },
       });
     });
   }
+}
+
+/** On-demand server audit read scoped to an attendance ID; no cached audit accepted. */
+export async function readAttendanceAuditTrail(attendanceId: string, adminUid: string): Promise<{
+  id: string; timestamp: string; action: string; userName: string; metadata: Record<string, any>;
+}[]> {
+  if (!adminUid || auth.currentUser?.uid !== adminUid) throw new Error('Sesi Admin berubah.');
+  if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Audit perlu koneksi server.');
+  const snapshot = await getDocsFromServer(query(collection(db, 'auditLogs'), where('recordId', '==', attendanceId), limit(100)));
+  if (auth.currentUser?.uid !== adminUid) throw new Error('Sesi Admin berubah.');
+  if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) throw new Error('Riwayat audit belum terverifikasi server.');
+  const entries = snapshot.docs.map(item => ({ id: item.id, ...item.data() }))
+    .filter((item: any) => item.module === 'ATTENDANCE' && (item.action === 'UPDATE' || item.action === 'DELETE'))
+    .map((item: any) => ({ id: item.id as string, timestamp: String(item.timestamp || ''),
+      action: String(item.action || ''), userName: String(item.userName || ''),
+      metadata: (item.metadata || {}) as Record<string, any> }));
+  return entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
