@@ -3,10 +3,12 @@ import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../contexts/AuthContext';
 import { AttendanceRecord, AttendanceStatus } from '../../types';
 import { AdminAttendanceService, isoToWibTime } from '../../services/firebase/adminAttendanceService';
+import { verifyMissingCheckoutCandidate } from '../../services/firebase/missingCheckoutService';
+import { getTodayISODate } from '../../utils/dateUtils';
 import { formatIndonesianDate, formatTime } from '../../utils/dateUtils';
 
 type AttendanceAction = 'edit' | 'delete';
-export type AdminAttendanceSelection = { record: AttendanceRecord; mode: AttendanceAction };
+export type AdminAttendanceSelection = { record: AttendanceRecord; mode: AttendanceAction; source?: 'missing-checkout' };
 
 export const AdminAttendanceDialog: React.FC<{
   selection: AdminAttendanceSelection | null;
@@ -37,6 +39,10 @@ export const AdminAttendanceDialog: React.FC<{
     if (!currentUser || busy || isOffline) return;
     setBusy(true); setError('');
     try {
+      if (selection.source === 'missing-checkout') {
+        // Recheck once more immediately before the audited transaction.
+        await verifyMissingCheckoutCandidate(currentUser.id, record, getTodayISODate());
+      }
       await AdminAttendanceService.change(record, { jamMasuk, jamPulang: jamPulang || null, status, keteranganCheckout: keterangan, alasan: reason }, selection.mode, currentUser.fullName);
       onCompleted(selection.mode === 'delete' ? 'Riwayat presensi berhasil dihapus dan diaudit.' : 'Riwayat presensi berhasil dikoreksi dan diaudit.');
       onClose();

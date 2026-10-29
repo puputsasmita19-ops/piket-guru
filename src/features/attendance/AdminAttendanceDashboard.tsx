@@ -11,6 +11,7 @@ import { isScheduleOnDate } from '../../utils/scheduleUtils';
 import { formatIndonesianDate, formatTime, toEpochMs } from '../../utils/dateUtils';
 import { HistoryControls, HistoryPagination, useHistoryView } from '../../components/common/HistoryControls';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
+import { MissingCheckoutPanel } from './MissingCheckoutPanel';
 import { Activity, Users, CheckCircle2, AlertTriangle, Clock, MapPin, Edit3, Trash2 } from '../../components/icons';
 import { RealtimeMonitorLogo } from '../../components/icons/RealtimeMonitorLogo';
 import { buildAdminMonitorRows } from '../../utils/adminMonitorRows';
@@ -45,6 +46,8 @@ export const AdminAttendanceDashboard: React.FC = () => {
   const [selection, setSelection] = useState<AdminAttendanceSelection | null>(null);
   const [feedback, setFeedback] = useState('');
   const [monitorView, setMonitorView] = useState<'grid' | 'list'>('grid');
+  const [todayStatusFilter, setTodayStatusFilter] = useState<'all' | 'missing' | 'finished'>('all');
+  const [correctionRevision, setCorrectionRevision] = useState(0);
 
   useEffect(() => {
     if (!admin) return;
@@ -80,6 +83,7 @@ export const AdminAttendanceDashboard: React.FC = () => {
     [schedules, todayRecords, today],
   );
 
+  const displayedDailyRows = dailyRows.filter(r => todayStatusFilter === 'all' || (todayStatusFilter === 'missing' ? Boolean(r.attendance && !r.attendance.jamPulang) : Boolean(r.attendance?.jamPulang)));
   const assignedRows = dailyRows.filter(r => !r.id.startsWith('extra:'));
   const hadir = assignedRows.filter(r => Boolean(r.attendance)).length;
   const belumHadir = assignedRows.filter(r => !r.attendance).length;
@@ -120,14 +124,16 @@ export const AdminAttendanceDashboard: React.FC = () => {
       <Metric label="Guru Dijadwalkan" value={assignedRows.length} description="Petugas unik hari ini" icon={<Users className="w-5 h-5" />} />
       <Metric label="Sudah Hadir" value={hadir} description="Dari guru dijadwalkan" icon={<CheckCircle2 className="w-5 h-5" />} tone="text-emerald-700 dark:text-emerald-400" />
       <Metric label="Belum Hadir" value={belumHadir} description="Dari guru dijadwalkan" icon={<Clock className="w-5 h-5" />} tone="text-amber-700 dark:text-amber-400" />
-      <Metric label="Belum Pulang" value={belumPulang} description="Sudah masuk, belum checkout" icon={<AlertTriangle className="w-5 h-5" />} tone="text-orange-700 dark:text-orange-400" />
+      <Metric label="Belum Pulang Hari Ini" value={belumPulang} description="Check-in tercatat, pulang belum" icon={<AlertTriangle className="w-5 h-5" />} tone="text-orange-700 dark:text-orange-400" />
       <Metric label="Selesai Piket" value={selesai} description={`${gpsWarning} presensi berstatus GPS perhatian`} icon={<CheckCircle2 className="w-5 h-5" />} tone="text-sky-700 dark:text-sky-400" />
       <Metric label="Jurnal Piket" value={submittedBooks} description={`${dutyBooks.length} jurnal hari ini, termasuk draf`} icon={<Activity className="w-5 h-5" />} tone="text-violet-700 dark:text-violet-400" />
     </div>
     <section aria-labelledby="status-today" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2"><div><h2 id="status-today" className="font-bold text-slate-900 dark:text-white">Aktivitas Piket Hari Ini</h2><p className="text-xs text-slate-500">Guru berdasarkan jadwal aktif, ditambah presensi tanpa jadwal. {loading && 'Memuat data…'}</p></div><span className="text-[11px] font-semibold text-slate-500">Tampilan {monitorView === 'grid' ? 'grid' : 'list'} · scroll aktif</span></div>
-      {dailyRows.length === 0 ? <div className="p-6 text-sm text-slate-500">{loading ? 'Memuat status piket…' : 'Belum ada jadwal atau presensi hari ini.'}</div> : <div className="max-h-[34rem] overflow-y-auto p-3 pr-2"><div className={monitorView === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-3'}>
-        {dailyRows.map(row => <div key={row.id} className={`rounded-xl p-3 border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/30 ${monitorView === 'list' ? 'flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3' : 'space-y-2'}`}>
+      <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2"><div><h2 id="status-today" className="font-bold text-slate-900 dark:text-white">Aktivitas Piket Hari Ini</h2><p className="text-xs text-slate-500">Guru berdasarkan jadwal aktif, ditambah presensi tanpa jadwal. {loading && 'Memuat data…'}</p></div><div className="flex gap-1.5 flex-wrap items-center"><span className="text-[11px] font-semibold text-slate-500">Hari ini · {monitorView === 'grid' ? 'grid' : 'list'}</span>
+        {([['all','Semua'], ['missing','Belum pulang'], ['finished','Selesai']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={todayStatusFilter === value} onClick={() => setTodayStatusFilter(value)} className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${todayStatusFilter === value ? 'border-sky-500 bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>{label}</button>)}
+      </div></div>
+      {displayedDailyRows.length === 0 ? <div className="p-6 text-sm text-slate-500">{loading ? 'Memuat status piket…' : 'Tidak ada guru pada filter hari ini.'}</div> : <div className="max-h-[34rem] overflow-y-auto p-3 pr-2"><div className={monitorView === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-3'}>
+        {displayedDailyRows.map(row => <div key={row.id} className={`rounded-xl p-3 border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/30 ${monitorView === 'list' ? 'flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3' : 'space-y-2'}`}>
           <div className="min-w-0 space-y-2 flex-1"><div className="flex justify-between items-start gap-2"><div className="font-bold text-sm text-slate-900 dark:text-white min-w-0">{row.name}<p className="font-normal text-[11px] text-slate-500 break-words">{row.assignment}</p></div>
             <span className={`rounded-full px-2 py-1 text-[10px] font-bold whitespace-nowrap ${!row.attendance ? 'bg-amber-100 text-amber-800' : row.attendance.jamPulang ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'}`}>{!row.attendance ? 'Belum hadir' : row.attendance.jamPulang ? 'Selesai' : 'Bertugas'}</span></div>
           <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2 flex-wrap"><Clock className="w-3.5 h-3.5 shrink-0" /> Masuk {row.attendance ? formatTime(row.attendance.jamMasuk) : '—'} · Pulang {row.attendance?.jamPulang ? formatTime(row.attendance.jamPulang) : '—'}</div>
@@ -136,6 +142,7 @@ export const AdminAttendanceDashboard: React.FC = () => {
         </div>)}
       </div></div>}
     </section>
+    <MissingCheckoutPanel today={today} correctionRevision={correctionRevision} onCorrect={record => setSelection({ record, mode: 'edit', source: 'missing-checkout' })} />
     <section aria-labelledby="duty-activity-title" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
       <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2"><div><h2 id="duty-activity-title" className="font-bold text-slate-900 dark:text-white">Jurnal Kegiatan Piket Hari Ini</h2><p className="text-xs text-slate-500">Kegiatan dari Buku Piket Digital diperbarui secara realtime.</p></div>
         {recentDutyBooks.length > 5 && <button type="button" onClick={() => setExpandDutyBooks(v => !v)} className="text-xs font-semibold text-[var(--theme-primary)]">{expandDutyBooks ? 'Tampilkan ringkas' : `Lihat semua (${recentDutyBooks.length})`}</button>}
@@ -170,6 +177,6 @@ export const AdminAttendanceDashboard: React.FC = () => {
       <HistoryPagination {...page} />
       </div>}
     </section>
-    <AdminAttendanceDialog selection={selection} onClose={() => setSelection(null)} onCompleted={setFeedback} />
+    <AdminAttendanceDialog selection={selection} onClose={() => setSelection(null)} onCompleted={message => { setFeedback(message); setCorrectionRevision(value => value + 1); }} />
   </div>;
 };
