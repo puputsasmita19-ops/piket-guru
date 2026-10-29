@@ -326,12 +326,12 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 }
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
               >
-                <option value="slide">Slide Halus (Geser Horizontal)</option>
+                <option value="slide">Geser Lembut (GPU / Transisi Dua Tahap)</option>
                 <option value="fade">Fade (Memudar Halus)</option>
                 <option value="none">Tanpa Animasi (Instan / Hemat Daya)</option>
               </select>
               <p className="text-[10px] text-slate-400">
-                Transisi perpindahan saat slide berganti.
+                Animasi keluar dan masuk yang halus; pengaturan hemat gerak perangkat tetap dihormati.
               </p>
             </div>
 
@@ -352,8 +352,8 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white disabled:opacity-50"
               >
                 <option value={300}>300 milidetik (Cepat)</option>
-                <option value={500}>500 milidetik (Standar / Rekomendasi)</option>
-                <option value={800}>800 milidetik (Lembut & Elegan)</option>
+                <option value={500}>500 milidetik (Responsif)</option>
+                <option value={800}>800 milidetik (Halus / Rekomendasi)</option>
                 <option value={1200}>1.2 detik (Sangat Halus)</option>
               </select>
               <p className="text-[10px] text-slate-400">
@@ -778,7 +778,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 <option value="large">Besar / Jauh (TV 65"+ & Jarak &gt; 5 meter)</option>
               </select>
               <p className="text-[10px] text-slate-400">
-                Huruf mengikuti resolusi layar. Pilih Besar / Jauh untuk teks lebih besar dan lebih sedikit kartu per halaman; semua data tetap bergantian.
+                Ukuran huruf berubah sesuai pilihan. Daftar panjang akan otomatis berganti halaman agar semua informasi tetap terbaca.
               </p>
             </div>
 

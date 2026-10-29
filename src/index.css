@@ -1560,3 +1560,54 @@ button.bg-\[var\(--theme-primary\)\],
 @media (max-width: 639px) {
   .app-dialog-body select { max-width: 100%; min-height: 44px; font-size: 16px; }
 }
+
+
+/* R90-B: GPU-friendly two-phase TV transition + genuinely scalable typography.
+   TV styles are intentionally scoped; dashboard, login, and printed reports unaffected. */
+.tv-kiosk-viewport { container-type: inline-size; }
+.tv-kiosk-stage {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity var(--tv-transition-half, 400ms) ease-in-out,
+              transform var(--tv-transition-half, 400ms) cubic-bezier(.25,.1,.25,1);
+}
+.tv-kiosk-stage[data-motion="slide"][data-phase="exit"] { opacity: 0; transform: translate3d(-14px,0,0); }
+.tv-kiosk-stage[data-motion="slide"][data-phase="enter"] { opacity: 0; transform: translate3d(14px,0,0); transition: none; }
+.tv-kiosk-stage[data-motion="fade"][data-phase="exit"] { opacity: 0; }
+.tv-kiosk-stage[data-motion="fade"][data-phase="enter"] { opacity: 0; transition: none; }
+.tv-kiosk-stage[data-motion="none"] { transition: none; }
+.tv-kiosk-stage[data-phase="exit"] { will-change: opacity, transform; }
+
+/* cqw scales with TV width; density adds a pixel offset compatible with older Chromium. */
+.tv-kiosk-viewport .tv-kiosk-school-name { font-size: 18px; font-size: clamp(19px, calc(1.5cqw + var(--tv-density-offset, 2px)), 40px); line-height: 1.2; }
+.tv-kiosk-viewport .tv-kiosk-date { font-size: 18px; font-size: clamp(15px, calc(1.0cqw + var(--tv-density-offset, 2px)), 26px); }
+.tv-kiosk-viewport header p { font-size: 18px; font-size: clamp(15px, calc(1.0cqw + var(--tv-density-offset, 2px)), 24px); line-height: 1.3; }
+.tv-kiosk-viewport header span { font-size: 18px; font-size: clamp(13px, calc(0.8cqw + var(--tv-density-offset, 2px)), 19px); }
+.tv-kiosk-viewport .tv-kiosk-time { font-size: 30px; font-size: clamp(27px, calc(2.35cqw + var(--tv-density-offset, 2px)), 60px); line-height: 1.1; }
+.tv-kiosk-stage .tv-type-title,
+.tv-kiosk-stage h2:not(.tv-type-hero) { font-size: 24px; font-size: clamp(23px, calc(1.7cqw + var(--tv-density-offset, 2px)), 43px); line-height: 1.22; overflow-wrap: anywhere; }
+.tv-kiosk-stage .tv-type-hero { font-size: 34px; font-size: clamp(31px, calc(2.5cqw + var(--tv-density-offset, 2px)), 58px); line-height: 1.2; overflow-wrap: anywhere; }
+.tv-kiosk-stage .tv-type-name,
+.tv-kiosk-stage h3,
+.tv-kiosk-stage h4 { font-size: 18px; font-size: clamp(20px, calc(1.4cqw + var(--tv-density-offset, 2px)), 33px); line-height: 1.28; overflow-wrap: anywhere; }
+.tv-kiosk-stage .tv-type-body,
+.tv-kiosk-stage p,
+.tv-kiosk-stage strong { font-size: 18px; font-size: clamp(17px, calc(1.15cqw + var(--tv-density-offset, 2px)), 28px); line-height: 1.4; overflow-wrap: anywhere; }
+.tv-kiosk-stage .tv-type-meta,
+.tv-kiosk-stage span:not(.tv-type-body) { font-size: 18px; font-size: clamp(15px, calc(0.96cqw + var(--tv-density-offset, 2px)), 24px); line-height: 1.35; overflow-wrap: anywhere; }
+.tv-kiosk-stage .tv-type-metric { font-size: 48px; font-size: clamp(43px, calc(3.1cqw + var(--tv-density-offset, 2px)), 78px); line-height: 1.06; }
+/* Respect independent ticker font selector (R90-A had hardcoded utility sizes). */
+.tv-kiosk-ticker .tv-type-ticker { font-size: 18px; font-size: clamp(18px, calc(1.28cqw + var(--tv-density-offset, 2px)), 30px); line-height: 1.35; }
+.tv-kiosk-ticker[data-ticker-size="sm"] .tv-type-ticker { font-size: 18px; font-size: clamp(16px, calc(1.1cqw + var(--tv-density-offset, 2px)), 26px); }
+.tv-kiosk-ticker[data-ticker-size="lg"] .tv-type-ticker { font-size: 18px; font-size: clamp(22px, calc(1.55cqw + var(--tv-density-offset, 2px)), 36px); }
+.tv-kiosk-ticker .tv-type-ticker-label { font-size: 18px; font-size: clamp(15px, calc(1.0cqw + var(--tv-density-offset, 2px)), 24px); }
+.tv-kiosk-stage :is(h2,h3,h4,p,span,strong) { text-wrap: pretty; }
+.tv-kiosk-stage .grid { align-items: stretch; }
+.tv-kiosk-stage .grid > :is(div,article) { min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-kiosk-viewport .tv-kiosk-stage,
+  .tv-kiosk-viewport .tv-kiosk-stage[data-phase] {
+    transition: none !important; animation: none !important; transform: none !important; opacity: 1 !important;
+  }
+}
