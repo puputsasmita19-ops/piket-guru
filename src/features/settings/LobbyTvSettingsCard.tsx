@@ -44,6 +44,7 @@ import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { VisitorRecord } from '../../types/visitor.types';
 import { AnnouncementRecord } from '../../types/announcement.types';
 import { PublicKioskDisplay } from '../kiosk/PublicKioskDisplay';
+import { getKioskTheme } from '../kiosk/kioskTheme';
 import { PASTEL_THEMES } from '../../contexts/ThemeContext';
 
 interface LobbyTvSettingsCardProps {
@@ -80,6 +81,8 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
   }, [settings.lobbyTv]);
 
   // Track if current working draft diverges from persisted server configuration
+  const selectedTvPalette = getKioskTheme(draftConfig);
+
   const hasUnsavedChanges = React.useMemo(() => {
     return !areLobbyTvConfigsEqual(draftConfig, settings.lobbyTv);
   }, [draftConfig, settings.lobbyTv]);
@@ -800,7 +803,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 ))}
               </select>
               <p className="text-[10px] text-slate-400">
-                Warna aksen lencana dan identitas digital pos TV.
+                Warna aksen untuk jam, lencana, dan identitas TV. Mode terang/gelap dipilih secara terpisah di bawah.
               </p>
             </div>
 
@@ -823,8 +826,20 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 <option value="light">Mode Terang (Ruangan Terbuka Terang)</option>
               </select>
               <p className="text-[10px] text-slate-400">
-                Mode gelap hemat energi dan bebas silau di lobi sekolah.
+                Mode Terang mengubah latar dan kartu menjadi cerah; Mode Gelap menggunakan latar gelap. Pilihan berlaku pada semua panel TV.
               </p>
+            </div>
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border p-3 flex items-center gap-3"
+              style={{ backgroundColor: selectedTvPalette.background, borderColor: selectedTvPalette.border, color: selectedTvPalette.text }}
+            >
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center font-black shrink-0" style={{ backgroundColor: selectedTvPalette.soft, color: selectedTvPalette.accent }}>TV</span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold">Pratinjau tema: {draftConfig.colorMode === 'light' ? 'Terang' : 'Gelap'} · {PASTEL_THEMES.find(t => t.id === draftConfig.theme)?.name || 'Default'}</p>
+                <p className="text-[11px]" style={{ color: selectedTvPalette.muted }}>Perubahan tampak langsung di pratinjau. Klik Simpan untuk menerapkan ke TV Lobi.</p>
+              </div>
             </div>
           </div>
 

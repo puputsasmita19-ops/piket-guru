@@ -21,6 +21,8 @@ import { Card, CardHeader, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { ContextualHelp } from '../../components/common/Tooltip';
 import { PublicKioskDisplay } from './PublicKioskDisplay';
+import { sanitizeLobbyTvConfig } from '../../types/lobbyTv.types';
+import { getKioskTheme } from './kioskTheme';
 import { where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { ScheduleItem, SchoolSettings } from '../../types';
@@ -45,6 +47,17 @@ export const KioskPreview: React.FC = () => {
 
   const todayISO = useWibToday();
   const previewTime = useMinuteClock();
+  const kioskConfig = sanitizeLobbyTvConfig(settings.lobbyTv);
+  const miniTheme = getKioskTheme(kioskConfig);
+  const miniVars = {
+    '--kiosk-accent': miniTheme.accent,
+    '--kiosk-accent-ink': miniTheme.accentInk,
+    '--kiosk-bg': miniTheme.background,
+    '--kiosk-card': miniTheme.card,
+    '--kiosk-text': miniTheme.text,
+    '--kiosk-muted': miniTheme.muted,
+    '--kiosk-border': miniTheme.border,
+  } as React.CSSProperties;
 
   useEffect(() => {
     // Realtime subscription to authoritative school configuration
@@ -192,47 +205,48 @@ export const KioskPreview: React.FC = () => {
         <CardContent className="p-6">
           <div
             onClick={() => setIsKioskOpen(true)}
-            className="relative w-full min-h-[330px] sm:aspect-[16/9] sm:max-h-[440px] rounded-3xl overflow-hidden bg-slate-950 border-4 border-slate-800 shadow-2xl p-6 flex flex-col justify-between cursor-pointer group hover:border-blue-600/50 transition-colors"
+            className="relative w-full min-h-[330px] sm:aspect-[16/9] sm:max-h-[440px] rounded-3xl overflow-hidden bg-[var(--kiosk-bg)] text-[var(--kiosk-text)] border-4 border-[var(--kiosk-border)] shadow-2xl p-6 flex flex-col justify-between cursor-pointer group hover:border-[var(--kiosk-accent)] transition-colors"
+            style={miniVars} data-kiosk-mode={miniTheme.mode} data-kiosk-theme={kioskConfig.theme}
           >
             {/* Ergonomic Fullscreen Launch Pill (Positioned in Corner, not blocking center) */}
             <div className="absolute bottom-4 right-4 z-20">
-              <div className="px-3.5 py-1.5 rounded-xl bg-blue-600/95 hover:bg-blue-500 text-white font-bold text-xs shadow-xl backdrop-blur-md flex items-center gap-1.5 transition-transform group-hover:scale-105 border border-blue-400/40">
+              <div className="px-3.5 py-1.5 rounded-xl bg-[var(--kiosk-accent)] text-[var(--kiosk-accent-ink)] font-bold text-xs shadow-xl backdrop-blur-md flex items-center gap-1.5 transition-transform group-hover:scale-105 border border-[var(--kiosk-border)]">
                 <Maximize className="w-3.5 h-3.5" /> Buka TV Layar Penuh
               </div>
             </div>
 
             {/* PREVIEW TOP BAR */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-[var(--kiosk-border)] pb-3">
               <div className="flex items-center gap-3">
                 <img src={appLogo(settings)} alt="Logo aplikasi" className="w-11 h-11 rounded-xl bg-white p-1 object-contain"/>
                 <div>
-                  <h5 className="font-bold text-base text-white uppercase">{settings.schoolName}</h5>
+                  <h5 className="font-bold text-base text-[var(--kiosk-text)] uppercase">{settings.schoolName}</h5>
                   <span className="text-[10px] text-emerald-400">● LIVE KIOSK DISPLAY</span>
                 </div>
               </div>
-              <div className="text-right font-mono text-lg text-amber-200 font-bold">
+              <div className="text-right font-mono text-lg text-[var(--kiosk-accent)] font-bold">
                 {formatTime(new Date(previewTime))}
               </div>
             </div>
 
             {/* PREVIEW BODY */}
             <div className="grid grid-cols-3 gap-2 my-5">
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-xs text-slate-300">Guru Piket</span>
-                <div className="text-3xl font-bold text-white mt-1">{getEffectiveSchedulesOnDate(schedules, todayISO).length}</div>
+              <div className="p-3 rounded-xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center">
+                <span className="text-xs text-[var(--kiosk-muted)]">Guru Piket</span>
+                <div className="text-3xl font-bold text-[var(--kiosk-text)] mt-1">{getEffectiveSchedulesOnDate(schedules, todayISO).length}</div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-xs text-slate-300">Guru Inval</span>
-                <div className="text-3xl font-bold text-purple-200 mt-1">{substitutions.length}</div>
+              <div className="p-3 rounded-xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center">
+                <span className="text-xs text-[var(--kiosk-muted)]">Guru Inval</span>
+                <div className="text-3xl font-bold text-[var(--kiosk-accent)] mt-1">{substitutions.length}</div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                <span className="text-xs text-slate-300">Tamu Aktif</span>
-                <div className="text-3xl font-bold text-blue-200 mt-1">{visitors.filter(row => row.status === 'SEDANG_BERKUNJUNG').length}</div>
+              <div className="p-3 rounded-xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center">
+                <span className="text-xs text-[var(--kiosk-muted)]">Tamu Aktif</span>
+                <div className="text-3xl font-bold text-[var(--kiosk-accent)] mt-1">{visitors.filter(row => row.status === 'SEDANG_BERKUNJUNG').length}</div>
               </div>
             </div>
 
             {/* PREVIEW BOTTOM TICKER */}
-            <div className="text-[10px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg truncate border border-slate-800">
+            <div className="text-[10px] text-[var(--kiosk-muted)] bg-[var(--kiosk-card)] px-3 py-1.5 rounded-lg truncate border border-[var(--kiosk-border)]">
               <Megaphone className="w-3.5 h-3.5 mr-1" /> Selamat Datang di {settings.schoolName} • Harap seluruh tamu mengenakan tanda pengenal resmi di pos piket...
             </div>
           </div>
