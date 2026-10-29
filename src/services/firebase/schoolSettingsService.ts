@@ -16,6 +16,7 @@ import { normalizeVisitorConfig, type VisitorConfig } from '../../types/visitorC
 import type { PrintLayoutConfig } from '../../types';
 import { createAuthenticatedSession } from './sessionGuard';
 import { sanitizeSessionPolicy, type SessionPolicy } from '../../types/sessionPolicy.types';
+import { normalizeCheckoutReminderConfig, validateCheckoutReminderConfig, type CheckoutReminderConfig } from '../../types/checkoutReminder.types';
 
 export interface SchoolSettingsSaveResult {
   settings: SchoolSettings;
@@ -148,7 +149,7 @@ export class SchoolSettingsService {
       if (!snap.exists()) throw new Error('Simpan & Kunci Lokasi sekolah terlebih dahulu, lalu simpan perubahan profil.');
       const current = snap.data() as SchoolSettings;
       const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
-        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'sessionPolicy', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance', 'commandCenterConfig'].includes(key) && value !== undefined));
+        !LOCATION_KEYS.includes(key) && !['id', 'updatedAt', 'notificationConfig', 'announcementConfig', 'dashboardInfoConfig', 'sessionPolicy', 'printConfig', 'visitorConfig', 'appLogoUrl', 'letterheadLogoUrl', 'letterheadConfig', 'loginAppearance', 'commandCenterConfig', 'checkoutReminderConfig'].includes(key) && value !== undefined));
       transaction.set(ref, { ...patch, updatedAt: serverTimestamp() }, { merge: true });
       // Profile save always preserves the latest saved coordinates, including another admin's update.
       expected = { ...current, ...patch } as SchoolSettings;
@@ -207,6 +208,44 @@ export class SchoolSettingsService {
       action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', target: 'Bel Darurat & Pusat Komando',
       details: 'Admin memperbarui lokasi Pusat Komando, jenis siaga sekolah, bel, kontak dan SOP (tanpa menyiarkan darurat)' });
     return this.receipt(expected);
+  }
+
+  /** R89-D: dedicated narrow write, never overwrites GPS, shifts, or concurrent unrelated sections. */
+  public static async saveCheckoutReminderConfig(
+    config: CheckoutReminderConfig, userId: string, expectedConfig?: CheckoutReminderConfig,
+  ): Promise<SchoolSettingsSaveResult> {
+    const uid = this.actor(userId);
+    validateCheckoutReminderConfig(config);
+    const userSnap = await getDocFromServer(doc(db, 'users', uid));
+    if (!userSnap.exists() || userSnap.data()?.role !== 'ADMIN' || userSnap.data()?.isActive !== true) {
+      throw new Error('Hanya Administrator aktif yang dapat mengubah Pengingat Presensi.');
+    }
+    const ref = doc(db, 'settings', 'school_config');
+    let expected!: SchoolSettings;
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('Simpan profil sekolah terlebih dahulu.');
+      const current = snap.data() as SchoolSettings;
+      const previous = normalizeCheckoutReminderConfig(current.checkoutReminderConfig);
+      if (expectedConfig && JSON.stringify(previous) !== JSON.stringify(normalizeCheckoutReminderConfig(expectedConfig))) {
+        throw new Error('Pengingat Presensi telah diubah Admin lain. Muat ulang pengaturan sebelum menyimpan.');
+      }
+      const payload: CheckoutReminderConfig = {
+        ...normalizeCheckoutReminderConfig(config), updatedAt: new Date().toISOString(), updatedBy: uid,
+      };
+      transaction.update(ref, { checkoutReminderConfig: payload, updatedAt: serverTimestamp() });
+      expected = { ...current, checkoutReminderConfig: payload };
+    });
+    void AuditService.log({ userId: uid, userName: userSnap.data()?.fullName || 'Administrator', role: 'ADMIN',
+      action: 'UPDATE', module: 'SETTINGS', status: 'SUCCESS', target: 'Pengingat Presensi',
+      details: `Pengingat: ${config.enabled ? 'aktif' : 'nonaktif'}; jeda ${config.delayMinutes} menit; tunda ${config.snoozeMinutes} menit; petunjuk mode bebas ${config.freeModeHintEnabled ? 'aktif' : 'nonaktif'}`,
+    });
+    // Avoid treating an offline cache as proof of successful server readback.
+    try {
+      const verified = await getDocFromServer(ref);
+      if (verified.exists()) return { settings: { ...verified.data(), id: verified.id } as SchoolSettings, confirmed: true };
+    } catch { /* The transaction already committed; do not retry blindly. */ }
+    return { settings: expected, confirmed: false };
   }
 
   public static async saveNotificationSettings(config: NotificationConfig, userId: string): Promise<SchoolSettingsSaveResult> {

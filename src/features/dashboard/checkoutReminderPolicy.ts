@@ -37,6 +37,19 @@ export function classifyCheckoutReminder(input: CheckoutReminderInput): Checkout
 }
 
 export const CHECKOUT_SNOOZE_MINUTES = 20;
-export function snoozeExpiry(nowMs: number): number {
-  return nowMs + CHECKOUT_SNOOZE_MINUTES * 60_000;
+export function snoozeExpiry(nowMs: number, minutes: number = CHECKOUT_SNOOZE_MINUTES): number {
+  return nowMs + minutes * 60_000;
+}
+
+/** Delay is relative to when checkout opens; never creates a backdated or automatic record. */
+export function reminderWindowOpen(checkOutStart: string, nowHHMM: string, delayMinutes: number): boolean {
+  const toMinutes = (value: string): number | null => {
+    if (!/^\d{2}:\d{2}$/.test(value)) return null;
+    const [hours, minutes] = value.split(':').map(Number);
+    return hours < 24 && minutes < 60 ? hours * 60 + minutes : null;
+  };
+  const starts = toMinutes(checkOutStart);
+  const now = toMinutes(nowHHMM);
+  if (starts === null || now === null || !Number.isInteger(delayMinutes) || delayMinutes < 0) return false;
+  return now >= starts + delayMinutes;
 }

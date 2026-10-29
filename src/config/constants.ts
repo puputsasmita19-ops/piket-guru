@@ -108,6 +108,7 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
   schoolLng: 106.816666,
   allowedRadiusMeters: 50,
   attendanceMode: 'TERJADWAL',
+  checkoutReminderConfig: { enabled: true, delayMinutes: 0, snoozeMinutes: 20, freeModeHintEnabled: true },
   reportCity: 'Jakarta',
   principalName: 'Dr. Hj. Siti Rohmah, M.Pd.',
   principalIdType: 'NIP',

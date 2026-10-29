@@ -8,7 +8,8 @@ import { getShiftHoursForDay } from '../../utils/scheduleUtils';
 import { getCurrentDayName, getCurrentTimeHHMM, getTodayISODate } from '../../utils/dateUtils';
 import type { AttendanceRecord, SchoolSettings } from '../../types';
 import { isOperationalRecord } from '../../types';
-import { classifyCheckoutReminder, snoozeExpiry } from './checkoutReminderPolicy';
+import { classifyCheckoutReminder, reminderWindowOpen, snoozeExpiry } from './checkoutReminderPolicy';
+import { normalizeCheckoutReminderConfig } from '../../types/checkoutReminder.types';
 
 interface Props {
   todayISO: string;
@@ -95,6 +96,8 @@ export const SmartCheckoutReminder: React.FC<Props> = ({ todayISO, settings, set
   if (!canView || !settingsReady || !userId) return null;
   const sameIdentity = snapshot?.userId === userId && snapshot?.date === todayISO;
   const record = sameIdentity ? snapshot.record : null;
+  const reminderConfig = normalizeCheckoutReminderConfig(settings.checkoutReminderConfig);
+  if (!reminderConfig.enabled) return null;
   const currentTime = new Date(nowMs);
   const shift = getShiftHoursForDay(getCurrentDayName(currentTime), settings);
   const mode = settings.attendanceMode === 'BEBAS' ? 'BEBAS' : 'TERJADWAL';
@@ -125,11 +128,14 @@ export const SmartCheckoutReminder: React.FC<Props> = ({ todayISO, settings, set
     );
   }
   // A free-mode shift receives only a quiet shortcut, never a timed alarm.
-  const freeModeNudge = mode === 'BEBAS' && status === 'BERTUGAS';
-  if ((status !== 'PERLU_PENGINGAT' && !freeModeNudge) || nowMs < snoozedUntil) return null;
+  const freeModeNudge = reminderConfig.freeModeHintEnabled && mode === 'BEBAS' && status === 'BERTUGAS';
+  const timedReminder = status === 'PERLU_PENGINGAT' && reminderWindowOpen(
+    shift.checkOutStart, getCurrentTimeHHMM(currentTime), reminderConfig.delayMinutes,
+  );
+  if ((!timedReminder && !freeModeNudge) || nowMs < snoozedUntil) return null;
 
   const postpone = () => {
-    const until = snoozeExpiry(Date.now());
+    const until = snoozeExpiry(Date.now(), reminderConfig.snoozeMinutes);
     setSnoozedUntil(until);
     try { localStorage.setItem(key, String(until)); } catch { /* snooze still works in this tab */ }
   };
@@ -156,7 +162,7 @@ export const SmartCheckoutReminder: React.FC<Props> = ({ todayISO, settings, set
             </button>
             <button type="button" onClick={postpone}
               className="inline-flex min-h-10 items-center justify-center rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-white/70 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2">
-              Ingatkan lagi 20 menit
+              Ingatkan lagi {reminderConfig.snoozeMinutes} menit
             </button>
           </div>
         </div>

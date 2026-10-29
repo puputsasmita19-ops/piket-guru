@@ -235,6 +235,7 @@ export interface SchoolSettings {
   schoolLng: number;
   allowedRadiusMeters: number;
   attendanceMode?: 'TERJADWAL' | 'BEBAS';
+  checkoutReminderConfig?: import('./checkoutReminder.types').CheckoutReminderConfig;
   schoolLocationLocked?: boolean;
   schoolLocationSavedAt?: DateValue;
   schoolLocationSavedBy?: string;

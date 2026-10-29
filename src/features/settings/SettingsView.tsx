@@ -5,6 +5,7 @@ import { DashboardInfoSettingsCard } from './DashboardInfoSettingsCard';
 import { SessionPolicySettingsCard } from './SessionPolicySettingsCard';
 import { OperationalReportSettingsCard } from './OperationalReportSettingsCard';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
+import { CheckoutReminderSettingsCard } from './CheckoutReminderSettingsCard';
 import { AnnouncementSettingsCard } from './AnnouncementSettingsCard';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigation } from '../../contexts/NavigationContext';
@@ -823,6 +824,14 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB 1: SCHOOL PROFILE & GEOFENCE */}
+      {activeTab === 'school' && isAdmin && (
+        <div className="flex justify-end">
+          <button type="button" onClick={() => document.getElementById('pengingat-presensi')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="min-h-10 rounded-xl border border-[var(--theme-primary-border)] px-3 py-2 text-xs font-semibold text-[var(--theme-primary-text)] hover:bg-[var(--theme-primary-light)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]">
+            <Bell className="inline h-4 w-4 mr-1" />Pengingat Presensi
+          </button>
+        </div>
+      )}
       {activeTab === 'school' && (
         <form onSubmit={handleSaveSchoolSettings} className="space-y-6">
           <Card>
@@ -2066,6 +2075,9 @@ export const SettingsView: React.FC = () => {
             </CardContent>
           </Card>
         </form>
+      )}
+      {activeTab === 'school' && isAdmin && (
+        <CheckoutReminderSettingsCard settings={settings} settingsReady={settingsReady} onSaved={setSettings} />
       )}
 
       {/* TAB: PENGATURAN KETERLAMBATAN SISWA (ADMIN) */}
