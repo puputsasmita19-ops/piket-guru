@@ -64,6 +64,7 @@ import { BackupService, BackupPayload } from '../../services/backup/backupServic
 import { LocationService } from '../../services/location/locationService';
 import { SchoolSettingsService, schoolLocationDraftFromGps } from '../../services/firebase/schoolSettingsService';
 import { formatTime } from '../../utils/dateUtils';
+import { todayWib } from '../../utils/historyPeriod';
 import { useAuth } from '../../contexts/AuthContext';
 import { SchoolSettings, UserProfile, DayOfWeek, DayShiftDetail, LoginContactType, ScheduleItem } from '../../types';
 import { DEFAULT_LOGIN_SUPPORT_CONTACT, DEFAULT_SCHOOL_SETTINGS, DEFAULT_DAILY_SCHEDULES } from '../../config/constants';
@@ -374,7 +375,7 @@ export const SettingsView: React.FC = () => {
       return FirestoreService.subscribeToCollection<UserProfile>('users', setUsers);
     }
     if (activeTab !== 'lobby_tv') return;
-    const todayISO = new Date().toISOString().split('T')[0];
+    const todayISO = todayWib();
     const stop = [
       FirestoreService.subscribeToCollection<ScheduleItem>('schedules', setSchedules),
       FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>('substitutions', setSubstitutions, undefined, [where('tanggal', '==', todayISO)]),
@@ -756,7 +757,7 @@ export const SettingsView: React.FC = () => {
     if (!currentUser?.id) {
       throw new Error('Sesi tidak valid. Silakan login kembali.');
     }
-    const result = await SchoolSettingsService.saveTvSettings(updatedTvConfig, currentUser.id);
+    const result = await SchoolSettingsService.saveTvSettings(updatedTvConfig, currentUser.id, settings.lobbyTv);
     setSettings(result.settings);
     setSaveSuccessBanner(
       'Pengaturan TV Lobi berhasil disimpan ke server sekolah dan disinkronkan ke seluruh monitor TV aktif.'

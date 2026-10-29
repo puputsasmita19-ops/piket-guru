@@ -119,7 +119,8 @@ export const AttendancePreview: React.FC = () => {
   // Active Tab: Presensi Mandiri vs Rekap Kehadiran
   const [activeTab, setActiveTab] = useState<'presensi' | 'riwayat'>('presensi');
   const [showLocationMap, setShowLocationMap] = useState(() => typeof window === 'undefined' ? true : window.innerWidth >= 640);
-  const history = useHistoryPeriod(settings);
+  // R90: query only today's records when the recap is opened; longer periods are opt-in.
+  const history = useHistoryPeriod(settings, 'today');
   const [historyView, setHistoryView] = useHistoryView();
   const [historyUser, setHistoryUser] = useState('all');
   const [historyError, setHistoryError] = useState('');
@@ -699,7 +700,7 @@ export const AttendancePreview: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Rekap Kehadiran ({attendanceList.length})
+            Rekap Kehadiran
           </button>
         </div>
       </div>
@@ -1160,7 +1161,7 @@ export const AttendancePreview: React.FC = () => {
         <Card>
           <CardHeader
             title="Rekap Riwayat Presensi Guru Piket"
-            subtitle="Pencatatan waktu, jarak geofence GPS, dan verifikasi swafoto"
+            subtitle="Default hari ini (WIB) untuk hemat data. Pilih periode lebih panjang hanya jika diperlukan."
 
           />
           {adminFeedback && <p role="status" className="m-3 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">{adminFeedback}</p>}

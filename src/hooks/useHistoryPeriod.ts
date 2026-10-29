@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { where } from 'firebase/firestore';
 import type { SchoolSettings } from '../types';
-import { getHistoryRange, todayWib, type HistoryPeriodValue } from '../utils/historyPeriod';
+import { getHistoryRange, todayWib, type HistoryPeriodMode, type HistoryPeriodValue } from '../utils/historyPeriod';
 
-export function useHistoryPeriod(settings: SchoolSettings) {
+export function useHistoryPeriod(settings: SchoolSettings, initialMode: HistoryPeriodMode = 'month') {
   const [today, setToday] = useState(todayWib);
-  const [value, setValue] = useState<HistoryPeriodValue>(() => ({ mode: 'month', anchor: '', semester: 'current', from: todayWib(), to: todayWib() }));
+  const [value, setValue] = useState<HistoryPeriodValue>(() => ({ mode: initialMode, anchor: '', semester: 'current', from: todayWib(), to: todayWib() }));
   useEffect(() => { const refresh = () => setToday(todayWib()); const timer = setInterval(refresh, 15000); document.addEventListener('visibilitychange', refresh); return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); }; }, []);
   const range = getHistoryRange(value, today, settings.academicSemester);
   const constraints = useMemo(() => range.error ? [] : range.start === range.end ? [where('tanggal', '==', range.start)] : [where('tanggal', '>=', range.start), where('tanggal', '<=', range.end)], [range.start, range.end, range.error]);

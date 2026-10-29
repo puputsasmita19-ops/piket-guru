@@ -162,7 +162,7 @@ export function sanitizeLobbyTvConfig(raw?: Partial<LobbyTvConfig> | null): Lobb
       : DEFAULT_LOBBY_TV_CONFIG.slideIntervalSec,
     enabledPanels,
     tickerEnabled: raw.tickerEnabled !== false,
-    tickerMessages: cleanedMessages.length > 0 ? cleanedMessages : DEFAULT_LOBBY_TV_CONFIG.tickerMessages,
+    tickerMessages: Array.isArray(raw.tickerMessages) ? cleanedMessages : [...DEFAULT_LOBBY_TV_CONFIG.tickerMessages],
     tickerSpeed: raw.tickerSpeed === 'slow' || raw.tickerSpeed === 'fast' ? raw.tickerSpeed : 'normal',
     tickerFontSize: raw.tickerFontSize === 'sm' || raw.tickerFontSize === 'lg' ? raw.tickerFontSize : 'md',
     tickerMode: raw.tickerMode === 'static' ? 'static' : 'marquee',

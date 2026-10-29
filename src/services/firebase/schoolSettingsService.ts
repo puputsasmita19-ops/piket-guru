@@ -8,7 +8,7 @@ import { sanitizeAnnouncementConfig, type AnnouncementConfig } from '../../types
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import type { SchoolSettings } from '../../types';
-import { LobbyTvConfig, sanitizeLobbyTvConfig } from '../../types/lobbyTv.types';
+import { LobbyTvConfig, sanitizeLobbyTvConfig, areLobbyTvConfigsEqual } from '../../types/lobbyTv.types';
 import { LocationService, type LocationCoordinates } from '../location/locationService';
 import { AuditService } from '../audit/auditService';
 import { normalizeReportPrint } from '../../utils/operationalReport';
@@ -379,7 +379,7 @@ export class SchoolSettingsService {
     return this.receipt(expected);
   }
 
-  public static async saveTvSettings(lobbyTv: LobbyTvConfig, userId: string): Promise<SchoolSettingsSaveResult> {
+  public static async saveTvSettings(lobbyTv: LobbyTvConfig, userId: string, expectedConfig?: LobbyTvConfig): Promise<SchoolSettingsSaveResult> {
     const uid = this.actor(userId);
 
     // Storage-layer access control check: verify user exists and holds active ADMIN role
@@ -402,7 +402,10 @@ export class SchoolSettingsService {
         throw new Error('Konfigurasi sekolah belum diinisialisasi di server. Simpan profil sekolah terlebih dahulu.');
       }
       const current = snap.data() as SchoolSettings;
-      transaction.set(ref, { lobbyTv: sanitizedTv, updatedAt: serverTimestamp() }, { merge: true });
+      if (expectedConfig && !areLobbyTvConfigsEqual(current.lobbyTv, expectedConfig)) {
+        throw new Error('Konfigurasi TV Lobi telah diubah Admin lain. Muat ulang sebelum menyimpan.');
+      }
+      transaction.update(ref, { lobbyTv: sanitizedTv, updatedAt: serverTimestamp() });
       expected = { ...current, lobbyTv: sanitizedTv } as SchoolSettings;
     });
 
