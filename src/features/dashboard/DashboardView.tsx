@@ -1,5 +1,6 @@
 import { useWibToday } from '../../hooks/useWibToday';
 import { DashboardWelcome } from './DashboardWelcome';
+import { SmartCheckoutReminder } from './SmartCheckoutReminder';
 import { DashboardStatistics, type DashboardStatistic } from './DashboardStatistics';
 import { buildDailyStatisticSeries } from './dashboardStatisticSeries';
 import { DashboardFlashInfo, type DashboardFlashSlide } from './DashboardFlashInfo';
@@ -96,6 +97,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [subView, setSubView]);
 
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
+  const [reminderSettingsReady, setReminderSettingsReady] = useState(false);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [staff, setStaff] = useState<StaffRecord[]>([]);
@@ -178,6 +180,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
     const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => {
       setSettings(data || DEFAULT_SCHOOL_SETTINGS);
+      // Do not assume the bundled default is a verified school policy.
+      setReminderSettingsReady(Boolean(data));
     });
 
     const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
@@ -599,6 +603,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       <DashboardWelcome config={flashConfig.welcome} nameMarquee={flashConfig.nameMarquee} user={currentUser} />
 
       <DashboardFlashInfo config={flashConfig} slides={dashboardSlides} onAnnouncements={openAnnouncements} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
+
+      {currentUser?.role === 'GURU' && (
+        <SmartCheckoutReminder
+          key={`${currentUser.id}:${todayISO}`}
+          todayISO={todayISO}
+          settings={settings}
+          settingsReady={reminderSettingsReady}
+          legacyAttendance={myAttendance}
+          onOpenAttendance={() => onNavigateTab('attendance')}
+        />
+      )}
 
       <QuickActions onNavigate={onNavigateTab} />
 
