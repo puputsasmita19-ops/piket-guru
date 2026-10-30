@@ -43,6 +43,10 @@ export interface LobbyTvConfig {
   profileVideoEnabled?: boolean;
   profileVideoAutoplay?: boolean;
   profileVideoDurationSec?: number;
+  /** Pinned player beside informational slides (mutually exclusive with the full video slide). */
+  profileVideoPinned?: boolean;
+  profileVideoPinSide?: 'left' | 'right';
+  profileVideoPinSize?: 'small' | 'medium';
   profileVideoTitle?: string;
   profileVideoSubtitle?: string;
   schoolVision?: string;
@@ -120,6 +124,9 @@ export const DEFAULT_LOBBY_TV_CONFIG: LobbyTvConfig = {
   profileVideoEnabled: true,
   profileVideoAutoplay: true,
   profileVideoDurationSec: 90,
+  profileVideoPinned: false,
+  profileVideoPinSide: 'right',
+  profileVideoPinSize: 'small',
   profileVideoTitle: 'Video Profil Utama Sekolah',
   profileVideoSubtitle: 'Sematan video YouTube agar hemat penyimpanan server sekolah',
   schoolVision: 'Mewujudkan sekolah yang unggul dalam prestasi, berkarakter, dan adaptif terhadap perkembangan zaman.',
@@ -225,6 +232,9 @@ export function sanitizeLobbyTvConfig(raw?: Partial<LobbyTvConfig> | null): Lobb
     customSubtitle: raw.customSubtitle ? stripHtml(raw.customSubtitle) : DEFAULT_LOBBY_TV_CONFIG.customSubtitle,
     profileVideoUrl: profileVideoUrl || DEFAULT_LOBBY_TV_CONFIG.profileVideoUrl,
     profileVideoEnabled: raw.profileVideoEnabled !== false,
+    profileVideoPinned: raw.profileVideoPinned === true,
+    profileVideoPinSide: raw.profileVideoPinSide === 'left' ? 'left' : 'right',
+    profileVideoPinSize: raw.profileVideoPinSize === 'medium' ? 'medium' : 'small',
     profileVideoAutoplay: raw.profileVideoAutoplay !== false,
     profileVideoDurationSec: typeof raw.profileVideoDurationSec === 'number' && Number.isFinite(raw.profileVideoDurationSec)
       ? Math.max(15, Math.min(600, Math.round(raw.profileVideoDurationSec)))
@@ -270,6 +280,9 @@ export function areLobbyTvConfigsEqual(
   if ((cleanA.customSubtitle || '') !== (cleanB.customSubtitle || '')) return false;
   if ((cleanA.profileVideoUrl || '') !== (cleanB.profileVideoUrl || '')) return false;
   if (cleanA.profileVideoEnabled !== cleanB.profileVideoEnabled) return false;
+  if (cleanA.profileVideoPinned !== cleanB.profileVideoPinned) return false;
+  if (cleanA.profileVideoPinSide !== cleanB.profileVideoPinSide) return false;
+  if (cleanA.profileVideoPinSize !== cleanB.profileVideoPinSize) return false;
   if (cleanA.profileVideoAutoplay !== cleanB.profileVideoAutoplay) return false;
   if (cleanA.profileVideoDurationSec !== cleanB.profileVideoDurationSec) return false;
   if ((cleanA.profileVideoTitle || '') !== (cleanB.profileVideoTitle || '')) return false;

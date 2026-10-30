@@ -596,6 +596,10 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 </div>
               </div>
 
+              <p className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                Mode berjalan sekarang menampilkan pesan langsung sejak diaktifkan dan menyambung terus tanpa jeda kosong. Label PENGUMUMAN tidak akan tertimpa teks.
+              </p>
+
               {/* Message List Management */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
@@ -940,11 +944,38 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
               <Monitor className="w-5 h-5 shrink-0 text-[var(--theme-primary)]" />
               <span>
                 <span className="block text-sm font-bold text-slate-900 dark:text-white">Tampilkan Video Profil Sekolah</span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400">Aktif setelah tautan valid disimpan. Slide video muncul setelah panel yang sudah ada.</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">Gunakan sebagai slide tersendiri atau sematan tetap ketika informasi berganti.</span>
               </span>
             </span>
             <input type="checkbox" checked={draftConfig.profileVideoEnabled !== false} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoEnabled: e.target.checked }))} />
           </label>
+          <div className="rounded-2xl border border-sky-200 dark:border-sky-900 bg-sky-50/70 dark:bg-sky-950/25 p-4 space-y-3">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-slate-900 dark:text-white">Sematkan video saat slide informasi berjalan</span>
+                <span className="block text-xs text-slate-600 dark:text-slate-400">Video tetap terlihat pada panel samping saat slide berganti. Slide video penuh otomatis dinonaktifkan agar tidak memutar dua video sekaligus.</span>
+              </span>
+              <input type="checkbox" className="h-4 w-4 shrink-0 accent-sky-600" disabled={draftConfig.profileVideoEnabled === false} checked={Boolean(draftConfig.profileVideoPinned)} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoPinned: e.target.checked }))}/>
+            </label>
+            {draftConfig.profileVideoPinned && draftConfig.profileVideoEnabled !== false && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Posisi video</label>
+                <select value={draftConfig.profileVideoPinSide || 'right'} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoPinSide: e.target.value as 'left' | 'right' }))} className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white">
+                  <option value="right">Kanan (rekomendasi)</option>
+                  <option value="left">Kiri</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Ukuran sematan</label>
+                <select value={draftConfig.profileVideoPinSize || 'small'} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoPinSize: e.target.value as 'small' | 'medium' }))} className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white">
+                  <option value="small">Kompak (hemat ruang)</option>
+                  <option value="medium">Sedang (lebih jelas)</option>
+                </select>
+              </div>
+            </div>}
+            <p className="text-xs text-slate-600 dark:text-slate-400">Pemutar disematkan di samping informasi pada layar TV lebar. Pengaturan autoplay tetap berlaku; browser mungkin membatasi pemutaran otomatis.</p>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">URL video YouTube</label>
             <input
@@ -1006,7 +1037,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 <option value={300}>5 menit</option>
                 <option value={600}>10 menit</option>
               </select>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Durasi video terpisah dari interval slide informasi yang sudah ada. Video dihentikan ketika slide berganti.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Durasi ini berlaku untuk mode slide video penuh. Pada mode sematan, pemutar tidak ikut berganti saat slide informasi berubah.</p>
             </div>
           </div>
         </CardContent>

@@ -1611,3 +1611,28 @@ button.bg-\[var\(--theme-primary\)\],
     transition: none !important; animation: none !important; transform: none !important; opacity: 1 !important;
   }
 }
+
+
+/* R90-E: ticker starts visible, never enters through the label, and loops without a blank pause. */
+.tv-kiosk-ticker { isolation: isolate; }
+.tv-kiosk-ticker .tv-type-ticker-label { position: relative; z-index: 1; white-space: nowrap; }
+.tv-kiosk-ticker-window { position: relative; isolation: isolate; overflow: hidden; min-width: 0; }
+.tv-kiosk-ticker-track { display: flex; align-items: center; width: max-content; max-width: none; animation: tv-kiosk-ticker-continuous var(--tv-ticker-duration, 36s) linear infinite; will-change: transform; }
+.tv-kiosk-ticker-copy { display: block; flex: 0 0 auto; padding-right: 3.5rem; white-space: nowrap; }
+.tv-kiosk-ticker-static { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes tv-kiosk-ticker-continuous { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+/* A genuine side rail prevents the video from covering and colliding with school information. */
+.tv-kiosk-content-layout { min-width: 0; }
+.tv-kiosk-content-layout[data-pinned="true"] { display: grid; grid-template-columns: minmax(0,1fr) var(--tv-pin-width); align-items: start; gap: clamp(12px,1.5vw,24px); --tv-pin-width: clamp(260px,25vw,370px); }
+.tv-kiosk-content-layout[data-pinned="true"][data-pin-size="medium"] { --tv-pin-width: clamp(310px,31vw,480px); }
+.tv-kiosk-content-layout[data-pinned="true"][data-pin-side="left"] .tv-kiosk-pinned-player { order: -1; }
+.tv-kiosk-content-layout .tv-kiosk-stage { min-width: 0; }
+.tv-kiosk-pinned-player { width: 100%; min-width: 0; position: sticky; top: 0; z-index: 5; }
+@media (max-width: 1000px) {
+  .tv-kiosk-content-layout[data-pinned="true"] { display: block; }
+  .tv-kiosk-content-layout[data-pinned="true"] .tv-kiosk-pinned-player { position: fixed; bottom: 84px; right: 12px; width: min(48vw,270px); z-index: 30; }
+  .tv-kiosk-content-layout[data-pinned="true"][data-pin-side="left"] .tv-kiosk-pinned-player { left: 12px; right: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-kiosk-ticker-track { animation: none !important; transform: none !important; will-change: auto; }
+}

@@ -112,6 +112,45 @@ const ProfileVideoSlide: React.FC<{
   );
 };
 
+/** A single YouTube player stays mounted while informational slides rotate. */
+const PinnedProfileVideo = React.memo(function PinnedProfileVideo({
+  videoId, title, autoplay,
+}: { videoId: string; title: string; autoplay: boolean }) {
+  const [playing, setPlaying] = useState(autoplay);
+  const [collapsed, setCollapsed] = useState(false);
+  // A change to Admin's autoplay preference should stop/start the player without waiting for reload.
+  useEffect(() => { setPlaying(autoplay); }, [autoplay]);
+  const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  return (
+    <aside className="tv-kiosk-pinned-player rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-card)] p-3 shadow-lg" aria-label="Video profil sekolah disematkan">
+      <div className="mb-3 flex items-center justify-between gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2 text-[var(--kiosk-text)]">
+          <MonitorPlay aria-hidden="true" className="h-5 w-5 text-[var(--kiosk-accent)] shrink-0" strokeWidth={1.7}/>
+          <strong className="truncate text-sm font-bold" title={title}>{title}</strong>
+        </div>
+        <button type="button" className="shrink-0 rounded-lg bg-[var(--kiosk-inset)] px-2 py-1.5 text-xs text-[var(--kiosk-muted)] hover:bg-[var(--kiosk-hover)]" onClick={() => setCollapsed(current => !current)} aria-expanded={!collapsed} aria-label={collapsed ? 'Tampilkan video sematan' : 'Sembunyikan video sematan'}>
+          {collapsed ? 'Tampilkan' : 'Ciutkan'}
+        </button>
+      </div>
+      {!collapsed && <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+        {playing ? <iframe
+          title={`YouTube - ${title}`}
+          src={makeYouTubeEmbedUrl(videoId, playing)}
+          className="absolute inset-0 w-full h-full border-0"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+          loading="eager"
+        /> : <button type="button" className="absolute inset-0 w-full h-full cursor-pointer group" aria-label="Putar video profil sekolah" onClick={() => setPlaying(true)}>
+          <img src={thumbnail} loading="lazy" alt="Pratinjau video YouTube" className="w-full h-full object-cover opacity-85" />
+          <span className="absolute inset-0 flex items-center justify-center"><span className="rounded-full bg-black/65 text-white p-3 transition-transform group-hover:scale-105"><Play className="w-6 h-6 fill-current" /></span></span>
+        </button>}
+      </div>}
+      {!collapsed && <p className="mt-2 text-xs text-[var(--kiosk-muted)]">Video tetap tampil selama slide berganti. Streaming memakai kuota internet TV.</p>}
+    </aside>
+  );
+});
+
 export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   onClose,
   settings,
@@ -142,7 +181,8 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   const activeVisitors = useMemo(() => visitors.filter(v => v.status === 'SEDANG_BERKUNJUNG'), [visitors]);
   const publicAnnouncements = useMemo(() => announcements.filter(a => a.isActive && (!a.targetRole || a.targetRole === 'SEMUA')), [announcements]);
   const videoId = parseYouTubeVideoId(config.profileVideoUrl);
-  const videoPanelEnabled = Boolean(videoId && config.profileVideoEnabled);
+  const videoPinned = Boolean(videoId && config.profileVideoEnabled && config.profileVideoPinned);
+  const videoPanelEnabled = Boolean(videoId && config.profileVideoEnabled && !config.profileVideoPinned);
   const baseFrames = getKioskFrames(enabledPanels, {
     duty_teachers: todaySchedules.length,
     substitutions: todaySubs.length,
@@ -159,6 +199,8 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   const activePanel = activeFrame.panel;
   const label = `SLIDE ${Math.min(currentSlide + 1, frames.length)} / ${frames.length}${activeFrame.pages > 1 ? ` • BAGIAN ${activeFrame.page + 1}/${activeFrame.pages}` : ''}`;
   const tickerText = kioskTickerText(config);
+  // Duration depends on message length, not a fixed blank gap before first appearance.
+  const tickerDurationSec = Math.max(12, Math.min(140, Math.round(tickerText.length / (config.tickerSpeed === 'slow' ? 6 : config.tickerSpeed === 'fast' ? 16 : 10))));
   const pageStart = (panel: (typeof baseFrames)[number]['panel']) => activeFrame.page * kioskPanelPageSize(panel, config.densityScale);
   const pageEnd = (panel: (typeof baseFrames)[number]['panel']) => pageStart(panel) + kioskPanelPageSize(panel, config.densityScale);
   const kioskTheme = getKioskTheme(config);
@@ -312,7 +354,8 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
 
       {/* MAIN CONTENT AREA: DYNAMIC SLIDES */}
       <main ref={mainRef} className={`tv-kiosk-main relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col justify-start bg-[var(--kiosk-bg)] text-[var(--kiosk-text)] ${densityPadding}`}>
-        <div className="tv-kiosk-stage w-full shrink-0 my-auto" data-motion={config.transition} data-phase={slidePhase}>
+        <div className="tv-kiosk-content-layout w-full my-auto" data-pinned={videoPinned} data-pin-side={config.profileVideoPinSide} data-pin-size={config.profileVideoPinSize}>
+        <div className="tv-kiosk-stage w-full min-w-0" data-motion={config.transition} data-phase={slidePhase}>
         {isPreviewMode && <div role="status" className="mb-3 inline-flex self-start rounded-lg bg-amber-100 border border-amber-300 px-3 py-1.5 text-xs text-amber-800 font-bold">
           PRATINJAU {hasUnsavedChanges ? '· Perubahan belum disimpan' : '· Sesuai pengaturan tersimpan'}
         </div>}
@@ -598,18 +641,25 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
           </section>
         )}
         </div>
+        {videoPinned && videoId && <PinnedProfileVideo
+          key={videoId}
+          videoId={videoId}
+          title={config.profileVideoTitle || 'Video Profil Sekolah'}
+          autoplay={Boolean(config.profileVideoAutoplay)}
+        />}
+        </div>
       </main>
 
-      {/* BOTTOM RUNNING TICKER */}
+      {/* R90-E: seamless scrolling; the first copy begins immediately and the second takes its place. */}
       {config.enabled && config.tickerEnabled && tickerText && <footer data-ticker-size={config.tickerFontSize} className="tv-kiosk-ticker relative z-10 bg-[var(--kiosk-card)] border-t border-[var(--kiosk-border)] px-4 sm:px-8 py-3 flex items-center gap-4">
         <div className="tv-type-ticker-label px-3 py-1 rounded-lg bg-[var(--kiosk-accent)] text-[var(--kiosk-accent-ink)] font-mono font-bold shrink-0 flex items-center gap-1.5">
           <Megaphone className="w-3.5 h-3.5" strokeWidth={1.7} /> PENGUMUMAN
         </div>
-        <div className="flex-1 overflow-hidden whitespace-nowrap">
-          <div className={`tv-type-ticker inline-block font-semibold text-[var(--kiosk-muted)] ${config.tickerMode === 'marquee' ? 'animate-marquee' : ''} ${config.tickerFontSize === 'sm' ? 'text-xs' : config.tickerFontSize === 'lg' ? 'text-lg' : 'text-sm'}`}
-            style={config.tickerMode === 'marquee' ? { animationDuration: config.tickerSpeed === 'slow' ? '65s' : config.tickerSpeed === 'fast' ? '20s' : '40s' } : undefined}>
-            {tickerText}
-          </div>
+        <div className="tv-kiosk-ticker-window flex-1 min-w-0 overflow-hidden" role="marquee" aria-label="Teks pengumuman sekolah">
+          {config.tickerMode === 'marquee' ? <div className="tv-kiosk-ticker-track tv-type-ticker font-semibold text-[var(--kiosk-muted)]" style={{ '--tv-ticker-duration': `${tickerDurationSec}s` } as React.CSSProperties}>
+            <span className="tv-kiosk-ticker-copy">{tickerText}</span>
+            <span className="tv-kiosk-ticker-copy" aria-hidden="true">{tickerText}</span>
+          </div> : <div className="tv-kiosk-ticker-static tv-type-ticker font-semibold text-[var(--kiosk-muted)] truncate" title={tickerText}>{tickerText}</div>}
         </div>
       </footer>}
     </div>

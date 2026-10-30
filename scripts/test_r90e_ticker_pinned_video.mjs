@@ -1,0 +1,60 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+const root = path.resolve(import.meta.dirname, '..');
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const code = read('src/types/lobbyTv.types.ts');
+const compiled = ts.transpileModule(code, {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const m = {exports:{}};
+new Function('module', 'exports', compiled)(m,m.exports);
+const {DEFAULT_LOBBY_TV_CONFIG, sanitizeLobbyTvConfig, areLobbyTvConfigsEqual} = m.exports;
+const checks=[];
+function check(name, fn) {try {fn(); checks.push(name); console.log(`PASS ${checks.length}: ${name}`);} catch(e) {console.error(`FAIL: ${name}`); throw e;}}
+check('pinned disabled by default for R90-D compatibility', () => assert.equal(DEFAULT_LOBBY_TV_CONFIG.profileVideoPinned, false));
+check('pinned default position right', () => assert.equal(DEFAULT_LOBBY_TV_CONFIG.profileVideoPinSide, 'right'));
+check('pinned default size compact', () => assert.equal(DEFAULT_LOBBY_TV_CONFIG.profileVideoPinSize, 'small'));
+check('old TV configuration sanitizes with pin off', () => assert.equal(sanitizeLobbyTvConfig({profileVideoEnabled:true, profileVideoUrl:''}).profileVideoPinned, false));
+check('accepts left and medium choices', () => {const c=sanitizeLobbyTvConfig({profileVideoPinned:true, profileVideoPinSide:'left', profileVideoPinSize:'medium'}); assert.deepEqual([c.profileVideoPinned,c.profileVideoPinSide,c.profileVideoPinSize],[true,'left','medium']);});
+check('rejects unknown side/size',()=> {const c=sanitizeLobbyTvConfig({profileVideoPinSide:'top',profileVideoPinSize:'massive'});assert.deepEqual([c.profileVideoPinSide,c.profileVideoPinSize],['right','small']);});
+check('pinned toggle detected as unsaved', () => assert.equal(areLobbyTvConfigsEqual(DEFAULT_LOBBY_TV_CONFIG,{...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:true}),false));
+check('pinned side changes detected as unsaved', () => assert.equal(areLobbyTvConfigsEqual({...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:true},{...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:true,profileVideoPinSide:'left'}),false));
+check('pinned size changes detected as unsaved', () => assert.equal(areLobbyTvConfigsEqual({...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:true},{...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:true,profileVideoPinSize:'medium'}),false));
+check('legacy configs remain equal to sanitized defaults', () => assert.equal(areLobbyTvConfigsEqual(DEFAULT_LOBBY_TV_CONFIG,{...DEFAULT_LOBBY_TV_CONFIG,profileVideoPinned:undefined,profileVideoPinSize:undefined,profileVideoPinSide:undefined}),true));
+const kiosk=read('src/features/kiosk/PublicKioskDisplay.tsx');
+const css=read('src/index.css');
+const settings=read('src/features/settings/LobbyTvSettingsCard.tsx');
+check('ticker uses two identical copies for seamless loop', () => assert.match(kiosk,/className="tv-kiosk-ticker-copy" aria-hidden="true">\{tickerText\}/));
+check('first ticker copy is announced and second hidden', () => {assert.match(kiosk,/<span className="tv-kiosk-ticker-copy">\{tickerText\}<\/span>/);assert.match(kiosk,/aria-hidden="true">\{tickerText\}/);});
+check('ticker no longer uses old entrance-from-offscreen animation',()=> assert.doesNotMatch(kiosk,/animate-marquee/));
+check('ticker starts at transform zero',()=> assert.match(css,/@keyframes tv-kiosk-ticker-continuous\s*\{ from \{ transform: translate3d\(0,0,0\)/));
+check('ticker loops -50 percent instead of jumping full width',()=> assert.match(css,/to \{ transform: translate3d\(-50%,0,0\)/));
+check('text cannot overlay the label',()=>{assert.match(css,/tv-kiosk-ticker-window\s*\{[^}]*overflow: hidden/);assert.match(css,/tv-kiosk-ticker-copy\s*\{[^}]*white-space: nowrap/);});
+check('ticker speed respects admin preference',()=> assert.match(kiosk,/config\.tickerSpeed === 'slow'/));
+check('ticker static fallback preserved',()=> assert.match(kiosk,/config\.tickerMode === 'marquee'/));
+check('pinned and full-video slide are mutually exclusive',()=> assert.match(kiosk,/const videoPanelEnabled = Boolean\(videoId && config\.profileVideoEnabled && !config\.profileVideoPinned\)/));
+check('pinned video uses validated YouTube ID',()=>assert.match(kiosk,/const videoId = parseYouTubeVideoId\(config\.profileVideoUrl\)/));
+check('stable pinned component is memoized',()=> assert.match(kiosk,/const PinnedProfileVideo = React\.memo/));
+check('pinned component outside slide stage and preserved across slide changes',()=>assert.match(kiosk,/\<\/div\>\s*\{videoPinned && videoId && <PinnedProfileVideo/));
+check('pinned iframe uses safe embed utility',()=>assert.match(kiosk,/src=\{makeYouTubeEmbedUrl\(videoId, playing\)\}/));
+check('pinned player honors manual click and autoplay toggle',()=>{assert.match(kiosk,/setPlaying\(true\)/);assert.match(kiosk,/setPlaying\(autoplay\)/);});
+check('video provides a collapse option',()=> assert.match(kiosk,/setCollapsed\(current => !current\)/));
+check('desktop player reserves a side rail',()=>assert.match(css,/grid-template-columns: minmax\(0,1fr\) var\(--tv-pin-width\)/));
+check('side configurable left/right',()=>assert.match(css,/data-pin-side="left"/));
+check('size configurable',()=>assert.match(css,/data-pin-size="medium"/));
+check('mobile overlay avoids ticker by bottom clearance',()=>assert.match(css,/position: fixed; bottom: 84px/));
+check('respects reduced motion preferences',()=>assert.match(css,/\.tv-kiosk-ticker-track \{ animation: none !important/));
+check('admin form exposes pinned checkbox',()=> assert.match(settings,/Sematkan video saat slide informasi berjalan/));
+check('admin form exposes position choice',()=>assert.match(settings,/Posisi video/));
+check('admin form exposes size choice',()=>assert.match(settings,/Ukuran sematan/));
+check('admin form explains no ticker initial pause',()=>assert.match(settings,/menampilkan pesan langsung sejak diaktifkan/));
+for (const file of ['src/features/kiosk/PublicKioskDisplay.tsx','src/features/settings/LobbyTvSettingsCard.tsx','src/types/lobbyTv.types.ts']){
+  check(`${file}: TypeScript syntax`,()=>{
+    const parsed=ts.transpileModule(read(file),{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}});
+    assert.equal(parsed.diagnostics?.length||0,0);
+  });
+}
+console.log(`\n${checks.length}/${checks.length} R90-E checks PASSED. Real browser + YouTube test still required.`);
