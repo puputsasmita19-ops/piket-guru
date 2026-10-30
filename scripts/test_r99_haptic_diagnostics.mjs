@@ -83,12 +83,12 @@ check('disabled haptic never invokes vibrate', () => {
 check('browser rejecting request never implies tactile success', () => assert.equal(h.vibratePinKey(true, 'test', { vibrate: () => false }), false));
 check('browser throws => graceful no-op', () => assert.equal(h.vibratePinKey(true, 'test', { vibrate: () => { throw Error('blocked'); } }), false));
 check('keypad requests vibration synchronously on touch pointer-down', () => {
-  assert.match(login, /onPointerDown=\{\(event\) => \{ if \(pin\.length < 6\) onPinPointerDown\(event, 'digit'\); \}\}/);
-  assert.match(login, /vibratePinKey\(hapticsEnabled, kind, undefined, hapticStrength\)/);
+  assert.match(login, /onPinPointerDown\(event, 'digit', 'digit-' \+ num\)/);
+  assert.match(login, /vibratePinKey\(hapticPrefsRef\.current\.enabled, kind, undefined, hapticPrefsRef\.current\.strength\)/);
 });
 check('click avoids duplicate pulse following pointer-down', () => {
-  assert.match(login, /const touchedRecently = Date\.now\(\) - pointerFeedbackAtRef\.current < 1500/);
-  assert.match(login, /if \(!touchedRecently\) vibratePinKey/);
+  assert.match(login, /createPinHapticDispatcher/);
+  assert.match(login, /hapticDispatcherRef\.current\?\.click\(kind, key\)/);
 });
 check('PIN still uses real login service and no local auth bypass', () => {
   assert.match(login, /loginWithPin\(selectedUidRef\.current \|\| selectedIdentifier, pin\)/);

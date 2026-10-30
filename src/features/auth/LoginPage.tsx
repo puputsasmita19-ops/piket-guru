@@ -1,6 +1,6 @@
 import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
-import { readPinHapticsEnabled, readPinHapticStrength, savePinHapticsEnabled, savePinHapticStrength, supportsPinHaptics, vibratePinKey, type PinHapticKind, type PinHapticStrength } from './pinHaptics';
+import { readPinHapticsEnabled, readPinHapticStrength, savePinHapticsEnabled, savePinHapticStrength, supportsPinHaptics, vibratePinKey, createPinHapticDispatcher, type PinHapticKind, type PinHapticStrength } from './pinHaptics';
 import { appendPinDigit, normalizePinInput, removeLastPinDigit } from './pinInput';
 import { LoginCredit } from './LoginCredit';
 import { LoginAvatar } from './LoginAvatar';
@@ -34,6 +34,7 @@ import {
   ShieldAlert,
   MessageSquare,
   Smartphone,
+  Settings2,
 } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -77,7 +78,15 @@ export const LoginPage: React.FC = () => {
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readPinHapticsEnabled());
   const [hapticStrength, setHapticStrength] = useState<PinHapticStrength>(() => readPinHapticStrength());
   const [hapticTestMessage, setHapticTestMessage] = useState('');
-  const pointerFeedbackAtRef = useRef(0);
+  const [hapticPanelOpen, setHapticPanelOpen] = useState(false);
+  const hapticPrefsRef = useRef({ enabled: hapticsEnabled, strength: hapticStrength });
+  hapticPrefsRef.current = { enabled: hapticsEnabled, strength: hapticStrength };
+  const hapticDispatcherRef = useRef<ReturnType<typeof createPinHapticDispatcher> | null>(null);
+  if (!hapticDispatcherRef.current) {
+    hapticDispatcherRef.current = createPinHapticDispatcher((kind) =>
+      vibratePinKey(hapticPrefsRef.current.enabled, kind, undefined, hapticPrefsRef.current.strength)
+    );
+  }
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [hasError, setHasError] = useState<boolean>(false);
@@ -118,18 +127,14 @@ export const LoginPage: React.FC = () => {
       : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' as const }
   ), [publicAppearanceReady, schoolSettings.loginAppearance]);
 
-  // A touch pointer starts the physical pulse immediately. The matching click
-  // still handles the PIN digit; it never triggers a second pulse.
-  // Keyboard/screen-reader clicks continue to receive the same feedback.
-  const onPinPointerDown = (event: React.PointerEvent<HTMLButtonElement>, kind: PinHapticKind) => {
-    if (event.pointerType === 'mouse' || event.currentTarget.disabled) return;
-    pointerFeedbackAtRef.current = Date.now();
-    vibratePinKey(hapticsEnabled, kind, undefined, hapticStrength);
+  // Request haptic feedback on the actual touch gesture, then dedupe its click.
+  // If a browser rejects the pointer request, retry when the click arrives.
+  const onPinPointerDown = (event: React.PointerEvent<HTMLButtonElement>, kind: PinHapticKind, key = kind) => {
+    if (event.currentTarget.disabled || loginBusyRef.current || isLoading) return;
+    hapticDispatcherRef.current?.pointerDown(kind, event.pointerType, key);
   };
-  const onPinClickFeedback = (kind: PinHapticKind) => {
-    const touchedRecently = Date.now() - pointerFeedbackAtRef.current < 1500;
-    pointerFeedbackAtRef.current = 0;
-    if (!touchedRecently) vibratePinKey(hapticsEnabled, kind, undefined, hapticStrength);
+  const onPinClickFeedback = (kind: PinHapticKind, key = kind) => {
+    hapticDispatcherRef.current?.click(kind, key);
   };
 
   const togglePinHaptics = () => {
@@ -309,6 +314,7 @@ export const LoginPage: React.FC = () => {
   const handleGoogleLogin = async () => {
     if (isGoogleSubmitting || isSubmitting || isLoading || loginBusyRef.current) return;
     loginBusyRef.current = true; // synchronous guard before React commits the spinner
+    authService.pausePublicDirectoryForLogin();
     setIsGoogleSubmitting(true);
     setIsSubmitting(true);
     setErrorMessage('');
@@ -404,10 +410,12 @@ export const LoginPage: React.FC = () => {
     }
 
     loginBusyRef.current = true; // prevent double requests from rapid taps/Enter before rerender
+    authService.pausePublicDirectoryForLogin();
     setIsSubmitting(true);
     setErrorMessage('');
     setHasError(false);
     try {
+      // Keep server PIN verification and Firebase token validation mandatory.
       const res = await loginWithPin(selectedUidRef.current || selectedIdentifier, pin);
       if (!res.success) {
         const rawErr = (res.error || '').trim();
@@ -1086,8 +1094,9 @@ export const LoginPage: React.FC = () => {
               key={num}
               type="button"
               disabled={isSubmitting || isLoading}
-              onPointerDown={(event) => { if (pin.length < 6) onPinPointerDown(event, 'digit'); }}
-              onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput(num); onPinClickFeedback('digit'); } }}
+              onPointerDown={(event) => { if (pin.length < 6) onPinPointerDown(event, 'digit', 'digit-' + num); }}
+              onPointerCancel={() => hapticDispatcherRef.current?.cancel('digit-' + num)}
+              onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput(num); onPinClickFeedback('digit', 'digit-' + num); } }}
               aria-label={`Angka ${num}`}
               className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-[var(--theme-surface-subtle)] dark:hover:bg-[var(--theme-surface-hover)] active:bg-[var(--theme-primary)] active:text-white text-slate-800 dark:text-white text-base sm:text-lg font-bold transition-all duration-100 flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px]"
             >
@@ -1099,17 +1108,21 @@ export const LoginPage: React.FC = () => {
             type="button"
             disabled={isSubmitting || isLoading || pin.length === 0}
             onPointerDown={(event) => onPinPointerDown(event, 'clear')}
+            onPointerCancel={() => hapticDispatcherRef.current?.cancel('clear')}
+            aria-label="Hapus seluruh PIN"
             onClick={() => { handleClear(); onPinClickFeedback('clear'); }}
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100/60 hover:bg-slate-200/80 dark:bg-[var(--theme-surface-subtle)]/70 dark:hover:bg-[var(--theme-surface-hover)] active:bg-slate-200 dark:active:bg-[var(--theme-surface-hover)] text-slate-500 dark:text-slate-400 text-xs font-semibold transition-all flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] cursor-pointer disabled:opacity-40 min-h-[44px]"
           >
-            HAPUS
+            <X className="w-4 h-4" aria-hidden="true" />
+            <span className="ml-1">Hapus</span>
           </button>
 
           <button
             type="button"
             disabled={isSubmitting || isLoading}
-            onPointerDown={(event) => { if (pin.length < 6) onPinPointerDown(event, 'digit'); }}
-            onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput('0'); onPinClickFeedback('digit'); } }}
+            onPointerDown={(event) => { if (pin.length < 6) onPinPointerDown(event, 'digit', 'digit-0'); }}
+            onPointerCancel={() => hapticDispatcherRef.current?.cancel('digit-0')}
+            onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput('0'); onPinClickFeedback('digit', 'digit-0'); } }}
             aria-label="Angka 0"
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-[var(--theme-surface-subtle)] dark:hover:bg-[var(--theme-surface-hover)] active:bg-[var(--theme-primary)] active:text-white text-slate-800 dark:text-white text-base sm:text-lg font-bold transition-all duration-100 flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px]"
           >
@@ -1120,6 +1133,7 @@ export const LoginPage: React.FC = () => {
             type="button"
             disabled={isSubmitting || isLoading || pin.length === 0}
             onPointerDown={(event) => onPinPointerDown(event, 'delete')}
+            onPointerCancel={() => hapticDispatcherRef.current?.cancel('delete')}
             onClick={() => { handleBackspace(); onPinClickFeedback('delete'); }}
             aria-label="Hapus satu angka"
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100/60 hover:bg-slate-200/80 dark:bg-[var(--theme-surface-subtle)]/70 dark:hover:bg-[var(--theme-surface-hover)] active:bg-slate-200 dark:active:bg-[var(--theme-surface-hover)] text-slate-600 dark:text-slate-300 text-base font-semibold transition-all flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] cursor-pointer disabled:opacity-40 min-h-[44px]"
@@ -1128,8 +1142,24 @@ export const LoginPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Haptic is a local device setting, not an Admin-wide policy. Hardware support varies. */}
-        <div className="login-pin-haptics-panel rounded-xl border border-slate-200/70 dark:border-[var(--theme-card-border)] bg-slate-50/80 dark:bg-[var(--theme-surface-subtle)]/45 px-3 py-2.5 space-y-2">
+        {/* R100: compact icon toolbar. Advanced haptic controls are hidden by default. */}
+        <div className="flex items-center justify-between gap-3 px-1">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">Masukkan 6 digit PIN Anda</span>
+          <button
+            type="button"
+            onClick={() => setHapticPanelOpen((prev) => !prev)}
+            aria-expanded={hapticPanelOpen}
+            aria-controls="login-haptic-settings"
+            aria-label="Pengaturan getaran tombol PIN"
+            title="Pengaturan getaran tombol PIN"
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-surface-subtle)] text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] active:scale-[0.97] transition-transform"
+          >
+            <Settings2 className="w-4 h-4" aria-hidden="true" />
+            <span className="sr-only">Pengaturan getaran</span>
+            <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${hapticsSupported && hapticsEnabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+          </button>
+        </div>
+        {hapticPanelOpen && <div id="login-haptic-settings" className="login-pin-haptics-panel rounded-xl border border-slate-200/70 dark:border-[var(--theme-card-border)] bg-slate-50/80 dark:bg-[var(--theme-surface-subtle)]/45 px-3 py-2.5 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
               <Smartphone className="w-4 h-4" aria-hidden="true" />
@@ -1186,7 +1216,7 @@ export const LoginPage: React.FC = () => {
           <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
             Tersimpan hanya pada HP ini. Dukungan browser tidak menjamin motor getar aktif; mode senyap/hemat daya dapat menonaktifkannya.
           </p>
-        </div>
+        </div>}
 
         {/* Companion Error Message Above Submit Button (Ensures full visibility on mobile viewports) */}
         {errorMessage && (

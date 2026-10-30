@@ -42,6 +42,7 @@ class AuthService {
   private usersList: UserSummaryItem[] = [];
   private initialized = false;
   private usersRequest: Promise<UserSummaryItem[]> | null = null;
+  private usersRequestAbort: AbortController | null = null;
   private currentFirebaseUser: User | null = null;
   private usersVerified = false;
   private usersUpdatedAt = 0;
@@ -92,6 +93,13 @@ class AuthService {
    * Fetches sanitized users list from backend API endpoint (/api/auth/users-summary).
    * Does NOT query Firestore client-side, enforcing zero unauthenticated client access (SEC-06).
    */
+  /** Cancel optional login-directory loading when credential verification starts.
+   * This never cancels PIN verification, token minting, or Firebase authentication.
+   */
+  public pausePublicDirectoryForLogin(): void {
+    this.usersRequestAbort?.abort();
+  }
+
   public async refreshUsersList(): Promise<UserSummaryItem[]> {
     if (this.usersRequest) return this.usersRequest;
     const request = this.fetchUsersList();
@@ -103,6 +111,7 @@ class AuthService {
   private async fetchUsersList(): Promise<UserSummaryItem[]> {
     this.usersVerified = false;
     const controller = new AbortController();
+    this.usersRequestAbort = controller;
     // Public account directory is optional for manual ID/NIP login. Fail fast on bad networks.
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
@@ -138,6 +147,7 @@ class AuthService {
       return [];
     } finally {
       clearTimeout(timeoutId);
+      if (this.usersRequestAbort === controller) this.usersRequestAbort = null;
     }
   }
 

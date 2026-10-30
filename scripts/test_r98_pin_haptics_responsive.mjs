@@ -95,8 +95,8 @@ test('login gate still calls server authentication (not local PIN validation)', 
 test('keypad is visual-feedback-first with optional haptic toggle', () => {
   assert.match(login, /role="switch"/);
   assert.match(login, /Getaran tombol PIN/);
-  assert.match(login, /onPinPointerDown\(event, 'digit'\)/);
-  assert.match(login, /onPinClickFeedback\('digit'\)/);
+  assert.match(login, /onPinPointerDown\(event, 'digit', 'digit-' \+ num\)/);
+  assert.match(login, /onPinClickFeedback\('digit', 'digit-' \+ num\)/);
   assert.match(css, /\.login-pin-pad > button \{/);
   assert.match(css, /touch-action: manipulation/);
 });

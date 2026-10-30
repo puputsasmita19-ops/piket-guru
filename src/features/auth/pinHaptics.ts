@@ -84,3 +84,36 @@ export function vibratePinKey(
     return false;
   }
 }
+
+/**
+ * R100: a single haptic request per completed keypad activation.
+ * The same touch can deliver both pointerdown and click; only skip the click
+ * when its matching pointer request was actually accepted by the browser.
+ * A rejected pointer request is retried on click (another user-activation event).
+ */
+export function createPinHapticDispatcher(
+  vibrate: (kind: PinHapticKind) => boolean,
+  clock: () => number = Date.now
+) {
+  const pendingByKey = new Map<string, { at: number; accepted: boolean }>();
+  return {
+    pointerDown(kind: PinHapticKind, pointerType: string, key = kind) {
+      if (pointerType !== 'touch' && pointerType !== 'pen') return false;
+      const accepted = vibrate(kind);
+      pendingByKey.set(key, { at: clock(), accepted });
+      return accepted;
+    },
+    click(kind: PinHapticKind, key = kind) {
+      const pending = pendingByKey.get(key);
+      pendingByKey.delete(key);
+      const age = pending ? clock() - pending.at : -1;
+      // Never consume a click because of a different button's pointer event.
+      if (pending?.accepted && age >= 0 && age < 650) return true;
+      return vibrate(kind);
+    },
+    cancel(key?: string) {
+      if (key) pendingByKey.delete(key);
+      else pendingByKey.clear();
+    },
+  };
+}
