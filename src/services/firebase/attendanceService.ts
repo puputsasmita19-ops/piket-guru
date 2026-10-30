@@ -145,6 +145,17 @@ export class AttendanceService {
       allowedRadius
     );
 
+    // Re-check the actual submission GPS before photo upload/Firestore write.
+    // The UI badge is only a hint: callers must never persist an out-of-radius,
+    // inaccurate or expired position by skipping the screen's button guards.
+    if (!LocationService.isFreshPosition(coords, 30_000)) {
+      throw new Error('GPS presensi sudah kedaluwarsa atau koordinat tidak valid. Perbarui GPS lalu kirim kembali.');
+    }
+    if (authoritativeGeofence.status !== 'DALAM_LOKASI') {
+      throw new Error(authoritativeGeofence.status === 'AKURASI_RENDAH'
+        ? `Akurasi GPS ±${Math.round(coords.accuracy)}m belum memenuhi batas 50m. Perbarui lokasi lalu coba lagi.`
+        : `Koordinat presensi belum berada dalam radius sekolah (${authoritativeGeofence.distanceMeters}m, batas ${allowedRadius}m).`);
+    }
     const status: AttendanceStatus = authoritativeGeofence.status;
 
     // In BEBAS mode without a schedule, scheduleId is stored as null (never a fake general-duty doc)

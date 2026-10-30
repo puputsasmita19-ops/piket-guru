@@ -67,7 +67,8 @@ export class LocationService {
 
   private static normalizePosition(position: GeolocationPosition): LocationCoordinates {
     const now = Date.now();
-    const posTime = position.timestamp || now;
+    const posTime = Number.isFinite(position.timestamp) && position.timestamp > 0
+      ? position.timestamp : NaN;
     return {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
@@ -87,12 +88,17 @@ export class LocationService {
     maxAgeMs = 30000
   ): boolean {
     if (!position) return false;
-    if (typeof position.latitude !== 'number' || isNaN(position.latitude)) return false;
-    if (typeof position.longitude !== 'number' || isNaN(position.longitude)) return false;
-    if (typeof position.accuracy !== 'number' || isNaN(position.accuracy) || position.accuracy <= 0) return false;
+    // Reject malformed, infinite, out-of-range or undated coordinates, including
+    // entries restored from older sessionStorage keys. A missing timestamp must
+    // never be silently converted to "now" for an attendance decision.
+    if (!Number.isFinite(position.latitude) || Math.abs(position.latitude) > 90) return false;
+    if (!Number.isFinite(position.longitude) || Math.abs(position.longitude) > 180) return false;
+    if (!Number.isFinite(position.accuracy) || position.accuracy <= 0) return false;
+    if (!Number.isFinite(position.timestamp) || position.timestamp <= 0) return false;
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) return false;
     const now = Date.now();
-    const posTime = position.timestamp || now;
-    // Disallow future timestamps (tolerance 5s for slight clock skew)
+    const posTime = position.timestamp;
+    // Future device timestamps are not reliable attendance evidence.
     if (posTime > now + 5000) return false;
     if (now - posTime > maxAgeMs) return false;
     return true;
@@ -162,6 +168,19 @@ export class LocationService {
     schoolLng: number,
     allowedRadiusMeters: number
   ): GeofenceResult {
+    // A malformed school coordinate, radius or GPS accuracy must fail closed,
+    // rather than being mislabelled as a valid position near the school.
+    if (![userLat, userLng, accuracy, schoolLat, schoolLng, allowedRadiusMeters].every(Number.isFinite) ||
+        Math.abs(userLat) > 90 || Math.abs(schoolLat) > 90 ||
+        Math.abs(userLng) > 180 || Math.abs(schoolLng) > 180 ||
+        accuracy <= 0 || allowedRadiusMeters <= 0) {
+      return {
+        distanceMeters: Infinity,
+        isWithinRadius: false,
+        accuracyQuality: 'RENDAH',
+        status: 'GPS_ERROR',
+      };
+    }
     const distanceMeters = this.calculateHaversineDistance(userLat, userLng, schoolLat, schoolLng);
     const isWithinRadius = distanceMeters <= allowedRadiusMeters;
 
@@ -191,8 +210,10 @@ export class LocationService {
   /**
    * Cleans up any running geolocation watcher and timeout timers immediately.
    * Cancels in-flight requests and protects against stale callbacks.
+   * Always settle the interrupted promise by default; otherwise a caller
+   * awaiting the old GPS search may hang indefinitely after navigation.
    */
-  public static clearCurrentWatcher(rejectPending = false): void {
+  public static clearCurrentWatcher(rejectPending = true): void {
     this.currentRequestId++;
     if (this.activeWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
       try {
@@ -359,7 +380,7 @@ export class LocationService {
           }
         );
 
-        this.activeWatchId = navigator.geolocation.watchPosition(
+        const watchId = navigator.geolocation.watchPosition(
           (pos) => {
             if (hasCompleted || requestId !== this.currentRequestId) return;
 
@@ -371,6 +392,7 @@ export class LocationService {
             }
 
             const reading = this.normalizePosition(pos);
+            if (!this.isFreshPosition(reading, maxStaleAgeMs)) return;
 
             if (!bestReading || reading.accuracy < bestReading.accuracy) {
               bestReading = reading;
@@ -418,6 +440,14 @@ export class LocationService {
             timeout: timeoutMs,
           }
         );
+        // Some mock/browser adapters deliver the first watch callback
+        // synchronously. A result may have completed before watchPosition
+        // returns its ID; clear that late ID instead of leaking a watcher.
+        if (hasCompleted || requestId !== this.currentRequestId) {
+          try { navigator.geolocation.clearWatch(watchId); } catch {}
+        } else {
+          this.activeWatchId = watchId;
+        }
       } catch (err: any) {
         finishError(
           new Error(err?.message || 'Terjadi kesalahan saat memulai penelusuran lokasi GPS.')

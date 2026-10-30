@@ -95,6 +95,9 @@ export const AttendancePreview: React.FC = () => {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [coords, setCoords] = useState<LocationCoordinates | null>(null);
   const [geofence, setGeofence] = useState<GeofenceResult | null>(null);
+  // Re-render once when a GPS fix crosses the 15s UI freshness limit.
+  // This is a local timer, not a repeating browser GPS search/network poll.
+  const [gpsExpiryTick, setGpsExpiryTick] = useState(0);
   const gpsRequestRef = React.useRef(0);
   const selfieTargetRef = React.useRef<HTMLDivElement | null>(null);
   const selfieTriggerRef = React.useRef<HTMLButtonElement | null>(null);
@@ -343,6 +346,16 @@ export const AttendancePreview: React.FC = () => {
     }
   }, [todayUserSchedules, selectedScheduleId]);
 
+  useEffect(() => {
+    if (!coords || !LocationService.isFreshPosition(coords, 15_000)) return;
+    const wait = Math.max(1, coords.timestamp + 15_000 - Date.now() + 20);
+    const timer = window.setTimeout(() => setGpsExpiryTick(tick => tick + 1), wait);
+    return () => window.clearTimeout(timer);
+  }, [coords?.timestamp, coords?.latitude, coords?.longitude, gpsExpiryTick]);
+
+  const gpsFixFresh = LocationService.isFreshPosition(coords, 15_000);
+  const gpsConfirmedWithinRadius = gpsFixFresh && !gpsError && geofence?.status === 'DALAM_LOKASI';
+
   // Existing attendance record today for this schedule/user
   const existingAttendanceToday = attendanceList.find(
     (a) => a.tanggal === todayISO && a.userId === currentUser?.id
@@ -373,8 +386,8 @@ export const AttendancePreview: React.FC = () => {
     hasCheckOut: !!existingAttendanceToday?.jamPulang,
     hasPhoto: !!capturedPhoto,
     hasPosition: !!coords,
-    gpsWithinRadius: geofence?.status === 'DALAM_LOKASI',
-    gpsAccuracyOk: !!coords && coords.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS,
+    gpsWithinRadius: gpsConfirmedWithinRadius,
+    gpsAccuracyOk: gpsFixFresh && !!coords && coords.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS,
     gpsHasError: !!gpsError,
     hasSchedulePermission: settings.attendanceMode === 'BEBAS' || isAdmin || todayUserSchedules.length > 0,
     checkOutWindowAllowed: windowCheck.allowed,
@@ -748,7 +761,6 @@ export const AttendancePreview: React.FC = () => {
 
       // 2. GPS Freshness & Geofence verification
       let activeCoords = coords;
-      let activeGeofence = geofence;
 
       if (!activeCoords || !LocationService.isFreshPosition(activeCoords, 30000)) {
         setCheckoutStatus({
@@ -761,15 +773,6 @@ export const AttendancePreview: React.FC = () => {
             desiredAccuracyMeters: 20,
           });
           setCoords(activeCoords);
-          activeGeofence = LocationService.evaluateGeofence(
-            activeCoords.latitude,
-            activeCoords.longitude,
-            activeCoords.accuracy,
-            settings.schoolLat,
-            settings.schoolLng,
-            settings.allowedRadiusMeters
-          );
-          setGeofence(activeGeofence);
         } catch (gpsErr: any) {
           if (slowTxTimerRef.current) clearTimeout(slowTxTimerRef.current);
           setIsCheckingOut(false);
@@ -780,6 +783,14 @@ export const AttendancePreview: React.FC = () => {
           return;
         }
       }
+
+      // Never reuse a screen geofence from a different GPS fix or settings
+      // snapshot. Recompute using the SAME coordinates that will be submitted.
+      const activeGeofence = LocationService.evaluateGeofence(
+        activeCoords.latitude, activeCoords.longitude, activeCoords.accuracy,
+        settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters
+      );
+      setGeofence(activeGeofence);
 
       // Validate accuracy (must be <= 50m)
       if (activeCoords.accuracy > LocationService.MAX_ATTENDANCE_ACCURACY_METERS) {
@@ -793,12 +804,12 @@ export const AttendancePreview: React.FC = () => {
       }
 
       // Validate geofence radius
-      if (activeGeofence && activeGeofence.status === 'DI_LUAR_LOKASI') {
+      if (activeGeofence.status !== 'DALAM_LOKASI') {
         if (slowTxTimerRef.current) clearTimeout(slowTxTimerRef.current);
         setIsCheckingOut(false);
         setCheckoutStatus({
           tone: 'error',
-          message: `Lokasi Anda berada di luar radius sekolah (${activeGeofence.distanceMeters}m dari pusat sekolah, batas: ${settings.allowedRadiusMeters}m). Presensi pulang ditolak.`,
+          message: `GPS belum memenuhi syarat lokasi (${Number.isFinite(activeGeofence.distanceMeters) ? `${activeGeofence.distanceMeters}m` : 'koordinat tidak valid'}, batas radius: ${settings.allowedRadiusMeters}m). Presensi pulang ditolak.`,
         });
         return;
       }
@@ -917,8 +928,8 @@ export const AttendancePreview: React.FC = () => {
                 title={`Formulir Presensi: ${currentUser?.fullName}`}
                 subtitle={`Hari ini: ${formatIndonesianDate(new Date())}`}
                 action={settingsReady && validSchoolLocation ? (
-                  <Badge variant={!gpsError && geofence?.status === 'DALAM_LOKASI' ? 'success' : geofence?.status === 'AKURASI_RENDAH' ? 'warning' : geofence?.status === 'DI_LUAR_LOKASI' ? 'danger' : 'neutral'} icon={<ShieldCheck className="w-3.5 h-3.5" />}>
-                    {!gpsError && geofence?.status === 'DALAM_LOKASI' ? 'Dalam Radius Sekolah' : isLocating && !coords ? 'Memeriksa GPS' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi GPS Rendah' : geofence?.status === 'DI_LUAR_LOKASI' ? 'Di Luar Radius' : 'GPS Belum Terhubung'}
+                  <Badge variant={gpsConfirmedWithinRadius ? 'success' : gpsFixFresh && geofence?.status === 'AKURASI_RENDAH' ? 'warning' : gpsFixFresh && geofence?.status === 'DI_LUAR_LOKASI' ? 'danger' : 'neutral'} icon={<ShieldCheck className="w-3.5 h-3.5" />}>
+                    {gpsConfirmedWithinRadius ? 'Dalam Radius Sekolah' : isLocating && !coords ? 'Memeriksa GPS' : coords && !gpsFixFresh ? 'GPS Kedaluwarsa' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi GPS Rendah' : geofence?.status === 'DI_LUAR_LOKASI' ? 'Di Luar Radius' : 'GPS Belum Terhubung'}
                   </Badge>
                 ) : undefined}
               />
@@ -932,7 +943,7 @@ export const AttendancePreview: React.FC = () => {
                           <MapPin className="w-5 h-5" />
                         </div>
                         <div>
-                          <h4 className="gps-search-title">{!settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : !gpsError && geofence?.status === 'DALAM_LOKASI' ? 'Dalam radius sekolah' : isLocating ? 'Memeriksa lokasi GPS' : coords ? 'Lokasi GPS terbaca' : 'Siapkan lokasi GPS'}</h4>
+                          <h4 className="gps-search-title">{!settingsReady ? 'Menunggu pengaturan sekolah' : !validSchoolLocation ? 'Lokasi sekolah belum valid' : gpsConfirmedWithinRadius ? 'Dalam radius sekolah' : coords && !gpsFixFresh ? 'Perbarui posisi GPS' : isLocating ? 'Memeriksa lokasi GPS' : coords ? 'Lokasi GPS terbaca' : 'Siapkan lokasi GPS'}</h4>
                           <p className="gps-search-caption">
                             {settingsReady && validSchoolLocation
                               ? `${settings.schoolName} · radius ${settings.allowedRadiusMeters} meter`
@@ -969,11 +980,11 @@ export const AttendancePreview: React.FC = () => {
                       <div className="attendance-gps-grid">
                         <div className="attendance-gps-stat">
                           <span className="attendance-gps-label">Jarak Sekolah</span>
-                          <strong className={`attendance-gps-value ${geofence?.status === 'DALAM_LOKASI' ? 'is-good' : 'is-bad'}`}>
+                          <strong className={`attendance-gps-value ${gpsConfirmedWithinRadius ? 'is-good' : 'is-bad'}`}>
                             {geofence?.distanceMeters ?? '-'} m
                           </strong>
                           <span className="attendance-gps-note">
-                            {geofence?.status === 'DALAM_LOKASI' ? 'Dalam radius' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi belum memadai' : 'Di luar radius'}
+                            {!gpsFixFresh ? 'GPS lama — perbarui' : geofence?.status === 'DALAM_LOKASI' ? 'Dalam radius' : geofence?.status === 'AKURASI_RENDAH' ? 'Akurasi belum memadai' : 'Di luar radius'}
                           </span>
                         </div>
 
@@ -1007,7 +1018,7 @@ export const AttendancePreview: React.FC = () => {
                           <strong className="attendance-gps-value attendance-gps-coords text-slate-700 dark:text-slate-200">
                             {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
                           </strong>
-                          <span className="attendance-gps-note">Data GPS terbaru</span>
+                          <span className="attendance-gps-note">{gpsFixFresh ? 'Data GPS terbaru' : 'Pembacaan lama — perbarui GPS'}</span>
                         </div>
                       </div>
                     ) : !isLocating ? (
