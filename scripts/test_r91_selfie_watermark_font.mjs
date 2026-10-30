@@ -65,10 +65,11 @@ await test('async prepare loads body and bold Open Sans', () => {
   assert.match(serviceCode, /fonts\.load\('500 18px "Open Sans"'/);
   assert.match(serviceCode, /fonts\.load\('700 18px "Open Sans"'/);
 });
-await test('font is prepared BEFORE fresh GPS capture', () => {
-  const first = callerCode.indexOf('const watermarkFont = await prepareSelfieWatermarkFont();');
-  const next = callerCode.indexOf('LocationService.ensureFreshPosition', first);
-  assert.ok(first > 0 && next > first);
+await test('R94 font preloads with camera and resolves in parallel with GPS', () => {
+  assert.match(callerCode, /const warmupSelfieCapture = \(\) => \{/);
+  assert.match(callerCode, /void prepareSelfieWatermarkFont\(\)/);
+  assert.match(callerCode, /Promise\.all\(\[/);
+  assert.match(callerCode, /getCaptureGps\(\)/);
   assert.match(callerCode, /stampCheckInSelfie\(canvas, evidence, watermarkFont\)/);
 });
 await test('font resolver returns Open Sans when both weights load', async () => {

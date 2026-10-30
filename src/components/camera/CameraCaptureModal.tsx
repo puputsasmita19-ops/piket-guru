@@ -13,6 +13,8 @@ interface CameraCaptureModalProps {
   subtitle?: string;
   // Called before the shutter, so GPS can be refreshed before the photo is taken (for attendance)
   prepareCapture?: () => Promise<(canvas: HTMLCanvasElement, capturedAt: number) => string>;
+  // Optional non-blocking GPS/font preparation during camera startup.
+  warmupCapture?: () => void;
   // Unified watermark processor for documentation photos (incidents, tardy, visitors)
   watermarkProcessor?: (canvas: HTMLCanvasElement, capturedAt: number, isUpload: boolean) => Promise<string> | string;
 }
@@ -26,6 +28,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   title,
   subtitle,
   prepareCapture,
+  warmupCapture,
   watermarkProcessor,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -117,7 +120,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       // For attendance selfie, default to front camera ('user'). For documentation, default to environment.
       const initialMode = initialFacingMode || (prepareCapture ? 'user' : 'environment');
       setFacingMode(initialMode);
-      startCamera(initialMode);
+      // Start camera and capture prerequisites in parallel. Neither delays preview.
+      warmupCapture?.();
+      void startCamera(initialMode);
     }
     return () => {
       ++generationRef.current;
@@ -292,7 +297,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         )}
         {prepareCapture && (
           <p className="text-xs text-slate-500">
-            Tekan Jepret Foto sekali. GPS disegarkan otomatis dan watermark ditambahkan. Foto akan langsung menjadi draf; pengiriman presensi tetap melalui tombol Kirim Presensi Masuk.
+            Kamera dan GPS disiapkan bersamaan. Tekan Jepret Foto sekali; jika GPS sudah akurat, swafoto langsung diproses dan disimpan sebagai draf.
           </p>
         )}
         {watermarkProcessor && !prepareCapture && !subtitle && (

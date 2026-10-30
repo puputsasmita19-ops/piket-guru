@@ -27,7 +27,16 @@ export const SELFIE_SUBMISSION_WINDOW_MS = 24 * 60 * 60_000;
  * otherwise some mobile browsers silently render a different fallback font. */
 export type SelfieWatermarkFontFamily = 'Open Sans' | 'Arial';
 
-export async function prepareSelfieWatermarkFont(): Promise<SelfieWatermarkFontFamily> {
+let watermarkFontPromise: Promise<SelfieWatermarkFontFamily> | null = null;
+
+// Share an in-flight font preparation started as soon as the selfie camera opens.
+// A resolved fallback is reused for this tab, avoiding repeated 1.3s waits offline.
+export function prepareSelfieWatermarkFont(): Promise<SelfieWatermarkFontFamily> {
+  if (!watermarkFontPromise) watermarkFontPromise = loadSelfieWatermarkFont();
+  return watermarkFontPromise;
+}
+
+async function loadSelfieWatermarkFont(): Promise<SelfieWatermarkFontFamily> {
   if (typeof document === 'undefined' || !document.fonts?.load) return 'Arial';
 
   // A bounded wait keeps capture responsive on slow/offline networks. Always use

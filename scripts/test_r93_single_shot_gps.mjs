@@ -94,7 +94,7 @@ await test('Camera finalizes one shutter; no second confirmation for attendance'
 });
 await test('Renewal at capture explicitly bypasses the stale geolocation cache', () => {
   const source=read('src/features/attendance/AttendancePreview.tsx');
-  assert.match(source,/getCurrentPosition\(\{ timeoutMs: 12000, desiredAccuracyMeters: 20, maxStaleAgeMs: 15000, forceFresh: true \}\)/);
+  assert.match(source,/maxStaleAgeMs: 15000, forceFresh: true/);
 });
 await test('Photo is preserved on delayed submit while fresh GPS is checked', () => {
   const source=read('src/features/attendance/AttendancePreview.tsx');

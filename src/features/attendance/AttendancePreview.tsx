@@ -94,6 +94,8 @@ export const AttendancePreview: React.FC = () => {
   const [coords, setCoords] = useState<LocationCoordinates | null>(null);
   const [geofence, setGeofence] = useState<GeofenceResult | null>(null);
   const gpsRequestRef = React.useRef(0);
+  const warmSelfieGpsRef = React.useRef<Promise<LocationCoordinates> | null>(null);
+  const warmSelfieContextRef = React.useRef('');
   const validSchoolLocation = Number.isFinite(settings.schoolLat) && Math.abs(settings.schoolLat) <= 90 &&
     Number.isFinite(settings.schoolLng) && Math.abs(settings.schoolLng) <= 180 &&
     Number.isFinite(settings.allowedRadiusMeters) && settings.allowedRadiusMeters > 0;
@@ -183,6 +185,8 @@ export const AttendancePreview: React.FC = () => {
     // A photo must never survive an account or school-location change.
     setCapturedSelfie(null);
     pendingSelfieRef.current = null;
+    warmSelfieGpsRef.current = null;
+    warmSelfieContextRef.current = '';
     setIsCameraModalOpen(false);
   }, [currentUser?.id, currentUser?.fullName, currentUser?.loginId, settings.schoolName,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
@@ -323,21 +327,73 @@ export const AttendancePreview: React.FC = () => {
     }
   };
 
+  const selfieContextKey = `${currentUser?.id || ''}|${settings.schoolLat}|${settings.schoolLng}|${settings.allowedRadiusMeters}`;
+
+  // Runs only on camera opening. Does not block the live preview or trigger a
+  // second GPS watcher if the normal page-location search is still running.
+  const warmupSelfieCapture = () => {
+    void prepareSelfieWatermarkFont();
+    if (!settingsReady || !validSchoolLocation || !currentUser) return;
+    if (LocationService.isFreshPosition(coords, 15_000) &&
+        coords!.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS) return;
+    if (isLocating || warmSelfieGpsRef.current) return;
+    const request = LocationService.getCurrentPosition({
+      timeoutMs: 12000, desiredAccuracyMeters: 20, maxStaleAgeMs: 15000, forceFresh: true,
+    });
+    warmSelfieContextRef.current = selfieContextKey;
+    warmSelfieGpsRef.current = request;
+    // Attach a rejection handler immediately: opening/closing a camera must
+    // never leave an unhandled rejection on intermittent mobile GPS failures.
+    void request.catch(() => {});
+  };
+
   const prepareSelfieCapture = async () => {
     pendingSelfieRef.current = null;
     if (!currentUser) throw new Error('Sesi akun tidak ditemukan. Silakan masuk kembali.');
     if (!settingsReady) throw new Error('Pengaturan sekolah belum tersedia. Muat ulang halaman sebelum mengambil foto.');
-    // Resolve the app font before obtaining fresh GPS, so font loading does not
-    // consume the 30-second freshness window of the selfie evidence.
-    const watermarkFont = await prepareSelfieWatermarkFont();
-    const captureCoords = { ...await LocationService.ensureFreshPosition(coords, () =>
-      LocationService.getCurrentPosition({ timeoutMs: 12000, desiredAccuracyMeters: 20, maxStaleAgeMs: 15000, forceFresh: true }), 15000) };
+    if (!validSchoolLocation) throw new Error('Koordinat sekolah belum valid. Hubungi Administrator.');
+
+    // GPS and font readiness are independent. Start/check both together,
+    // rather than adding up network font wait + geolocation wait at shutter.
+    const getCaptureGps = async (): Promise<LocationCoordinates> => {
+      const getNewReading = async () => {
+        const warming = warmSelfieContextRef.current === selfieContextKey ? warmSelfieGpsRef.current : null;
+        if (warming) {
+          // A warmup is the only ongoing selfie GPS search; join it rather than
+          // restarting/cancelling the browser geolocation request.
+          let warmed: LocationCoordinates;
+          try {
+            warmed = await warming;
+          } catch (error) {
+            // Clear the failed warmup so a second shutter press can retry GPS.
+            warmSelfieGpsRef.current = null;
+            throw error;
+          }
+          if (LocationService.isFreshPosition(warmed, 15_000) &&
+              warmed.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS) return warmed;
+        }
+        return LocationService.getCurrentPosition({
+          timeoutMs: 12000, desiredAccuracyMeters: 20, maxStaleAgeMs: 15000, forceFresh: true,
+        });
+      };
+      return LocationService.ensureFreshPosition(coords, getNewReading, 15_000);
+    };
+    const [captureCoordsRaw, watermarkFont] = await Promise.all([
+      getCaptureGps(),
+      prepareSelfieWatermarkFont(),
+    ]);
+    const captureCoords = { ...captureCoordsRaw };
     const captureGeofence = LocationService.evaluateGeofence(
       captureCoords.latitude, captureCoords.longitude, captureCoords.accuracy,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters
     );
     if (captureGeofence.status !== 'DALAM_LOKASI') {
       throw new Error('GPS harus akurat dan berada dalam radius sekolah sebelum swafoto presensi. Perbarui lokasi lalu coba lagi.');
+    }
+    // Only use the prewarmed fix if it is still fresh when the user actually
+    // takes the picture. Do not stamp a cached position as a new GPS reading.
+    if (!LocationService.isFreshPosition(captureCoords, 15_000)) {
+      throw new Error('Sinyal GPS sudah kedaluwarsa. Tekan Jepret Foto sekali lagi untuk pembaruan otomatis.');
     }
     setCoords(captureCoords);
     setGeofence(captureGeofence);
@@ -1257,9 +1313,16 @@ export const AttendancePreview: React.FC = () => {
       {/* CAMERA CAPTURE MODAL */}
       {isCameraModalOpen && <CameraCaptureModal
         isOpen={true}
-        onClose={() => setIsCameraModalOpen(false)}
+        onClose={() => {
+          // Discard the preflight reference when closing. The browser's own
+          // location watcher ends independently and never stamps a photo.
+          warmSelfieGpsRef.current = null;
+          warmSelfieContextRef.current = '';
+          setIsCameraModalOpen(false);
+        }}
         allowFileUpload={false}
         prepareCapture={prepareSelfieCapture}
+        warmupCapture={warmupSelfieCapture}
         onCapture={(dataUrl) => {
           const evidence = pendingSelfieRef.current;
           if (evidence && evidence.dataUrl === dataUrl && evidence.userId === currentUser?.id) {
