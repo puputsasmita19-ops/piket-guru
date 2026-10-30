@@ -5,6 +5,7 @@ import { LastLoginPreference } from '../services/auth/lastLoginPreference';
 import { auth } from '../services/firebase/firebaseAuth';
 import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { validateFirebaseUserProfile } from '../services/auth/authProfileValidator';
+import { createSessionVerificationFlight } from '../services/auth/sessionVerificationFlight';
 import { checkUserPermission, PermissionKey } from '../config/permissions';
 import { preloadAuthenticatedShell } from '../appBootstrap';
 import { BACKGROUND_SESSION_NOTICE, completeBackgroundLogin, hasBackgroundLoginRequirement, markBackgroundLoginRequired, monitorBackgroundSession, requiresBackgroundLogin } from '../services/auth/backgroundSession';
@@ -70,6 +71,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sessionEpochRef = React.useRef<number>(1);
   const manualLoginEpochRef = React.useRef<number | null>(null);
   const logoutInProgressRef = React.useRef(false);
+  // R97: simultaneous refresh/online events share one server verification,
+  // never a cached role or previously successful session decision.
+  const verifyLiveSession = React.useMemo(() => createSessionVerificationFlight(
+    (user: User) => validateFirebaseUserProfile(user, { clearInvalidSession: false }),
+  ), []);
 
   const setTrustedDevice = useCallback((trusted: boolean) => {
     OfflineStorage.setTrustedDevice(trusted);
@@ -195,7 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const epoch = sessionEpochRef.current;
     const user = auth.currentUser;
     try {
-      const valRes = await validateFirebaseUserProfile(user, { clearInvalidSession: false });
+      const valRes = await verifyLiveSession(user);
       if (epoch !== sessionEpochRef.current || auth.currentUser?.uid !== user.uid) return false;
       if (valRes.success && valRes.profile) {
         setCurrentUser(valRes.profile);
@@ -213,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[AUTH_CONTEXT] Online revalidation error:', e);
       return false;
     }
-  }, [execLogout]);
+  }, [execLogout, verifyLiveSession]);
 
   // Network online/offline event listener
   useEffect(() => {
@@ -279,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Otherwise (session restore / page refresh), validate first. Avoid competing
       // with the Firebase profile/token requests for bandwidth on slow phones.
       try {
-        const valRes = await validateFirebaseUserProfile(fbUser, { clearInvalidSession: false });
+        const valRes = await verifyLiveSession(fbUser);
         if (!isMounted || activeEpoch !== sessionEpochRef.current) return;
 
         if (!valRes.success || !valRes.profile) {
@@ -311,7 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       unsubscribe();
     };
-  }, [execLogout]);
+  }, [execLogout, verifyLiveSession]);
 
   useEffect(() => {
     if (!currentUser?.id) return;

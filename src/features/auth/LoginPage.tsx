@@ -37,7 +37,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, DEFAULT_LOGIN_SUPPORT_CONTACT, ROLE_LABELS } from '../../config/constants';
 import { SchoolSettings, LoginContactType } from '../../types';
-import { preloadAuthenticatedShell } from '../../appBootstrap';
 import { useSlowOperation } from '../../hooks/useSlowOperation';
 
 export const LoginPage: React.FC = () => {
@@ -59,6 +58,7 @@ export const LoginPage: React.FC = () => {
   const usersLoadedRef = useRef(false);
   const nameLookupRetriesRef = useRef(0);
   const lastListActivityRef = useRef(0);
+  const lastDirectoryAttemptAtRef = useRef(0);
 
   const [showThemePicker, setShowThemePicker] = useState<boolean>(false);
   const [usersList, setUsersList] = useState<UserSummaryItem[]>([]);
@@ -122,6 +122,11 @@ export const LoginPage: React.FC = () => {
 
   const refreshLoginUsers = useCallback(async (forceRefresh = false) => {
     if (!mountedRef.current || loginBusyRef.current) return;
+    // R97: focus/visibility/combobox events often fire together on mobile.
+    // Avoid repeated public directory reads while retaining explicit refresh.
+    const now = Date.now();
+    if (!forceRefresh && now - lastDirectoryAttemptAtRef.current < 45_000) return;
+    lastDirectoryAttemptAtRef.current = now;
     if (!usersLoadedRef.current) { setIsLoadingUsers(true); setUserLookupStatus('loading'); }
     try {
       const users = await authService.getUsersList({ forceRefresh });
@@ -575,7 +580,6 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      onFocusCapture={() => preloadAuthenticatedShell()}
       className="login-page min-h-screen min-h-[100dvh] flex flex-col justify-start sm:justify-center items-center px-3 py-4 sm:p-6 selection:text-white transition-colors duration-200 relative overflow-x-hidden overflow-y-auto"
       style={{
         backgroundColor: 'var(--theme-bg-app)',

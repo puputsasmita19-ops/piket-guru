@@ -285,7 +285,11 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
   }
 
   try {
-    const snap = await adminDb.collection('users').get();
+    // R97: Fetch only fields required by the public selector, not full user documents.
+    const snap = await adminDb.collection('users')
+      .where('isActive', '==', true)
+      .select('loginId', 'nip', 'nuptk', 'fullName', 'role', 'avatarUrl', 'loginAvatarVisible', 'isActive')
+      .get();
     if (snap.empty) {
       res.json({
         success: true,
@@ -306,7 +310,12 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
           nuptk: data.nuptk || '',
           fullName: data.fullName || '',
           role: data.role || 'GURU',
-          avatarUrl: data.avatarUrl || null,
+          // LoginAvatar accepts only public-approved profile-photo references.
+          // Never send raw base64 photos or hidden profile images in public summaries.
+          avatarUrl: data.loginAvatarVisible === true && typeof data.avatarUrl === 'string'
+            && /^\/api\/drive\/profile-photo\//.test(data.avatarUrl)
+            ? data.avatarUrl
+            : null,
           loginAvatarVisible: data.loginAvatarVisible === true,
           isActive: data.isActive === true,
         };

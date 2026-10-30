@@ -103,7 +103,8 @@ class AuthService {
   private async fetchUsersList(): Promise<UserSummaryItem[]> {
     this.usersVerified = false;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    // Public account directory is optional for manual ID/NIP login. Fail fast on bad networks.
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'low' });
       if (!res.ok) {
@@ -143,7 +144,7 @@ class AuthService {
   public async getUsersList(options: { forceRefresh?: boolean } = {}): Promise<UserSummaryItem[]> {
     await this.init();
     const age = Date.now() - this.usersUpdatedAt;
-    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 15000) return this.refreshUsersList();
+    if (options.forceRefresh || !this.usersVerified || age < 0 || age >= 45000) return this.refreshUsersList();
     return this.usersList;
   }
 
