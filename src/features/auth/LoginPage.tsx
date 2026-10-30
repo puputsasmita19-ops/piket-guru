@@ -1,4 +1,5 @@
 import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
+import { readPublicLoginBrand, storePublicLoginBrand, validSchoolDisplayName } from './publicLoginBrand';
 import { LoginBackdrop } from './LoginBackdrop';
 import { appendPinDigit, normalizePinInput, removeLastPinDigit } from './pinInput';
 import { loginClockNow, recordLoginDuration } from './loginPerformance';
@@ -94,16 +95,12 @@ export const LoginPage: React.FC = () => {
 
   // Dynamic School & App Branding Settings
   const [publicAppearanceReady, setPublicAppearanceReady] = useState(false);
+  // R103: never render the legacy sample school name (or an unverified full
+  // school_config cache) while the public branding endpoint loads.
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => {
-    try {
-      const cached = localStorage.getItem('piket_guru_school_config');
-      if (cached) {
-        return { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(cached) };
-      }
-    } catch {
-      // fallback
-    }
-    return DEFAULT_SCHOOL_SETTINGS;
+    let verifiedBrand = null;
+    try { verifiedBrand = typeof window !== 'undefined' ? readPublicLoginBrand(window.localStorage) : null; } catch {}
+    return { ...DEFAULT_SCHOOL_SETTINGS, ...verifiedBrand };
   });
 
   const loginBackdropConfig = useMemo(() => (
@@ -120,27 +117,42 @@ export const LoginPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // R102: on mobile prioritize the small public account directory over decorative
-  // branding. Show cached/default branding immediately; hydrate it after first paint.
+  // R103: fetch the current public school identity immediately, without the
+  // former 1.5-second branding delay. The account directory keeps its own
+  // priority; neither request waits for the other or for login verification.
   useEffect(() => {
-    if (publicAppearanceReady) return;
     const controller = new AbortController();
     let alive = true;
-    const timer = window.setTimeout(() => {
-      void fetch('/api/auth/public-config', { priority: 'low', signal: controller.signal })
-        .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-        .then((data) => {
-          if (!alive) return;
-          if (data.success && data.config) {
-            setSchoolSettings((prev) => ({ ...prev, ...data.config, loginAppearance: sanitizeLoginAppearance(data.config.loginAppearance) }));
-            setPublicAppearanceReady(true);
-            try { localStorage.setItem('piket_guru_school_config', JSON.stringify(data.config)); } catch {}
-          }
-        })
-        .catch((err) => { if (err?.name !== 'AbortError') console.warn('Could not fetch public config:', err); });
-    }, userLookupStatus === 'loading' ? 1500 : 0);
-    return () => { alive = false; window.clearTimeout(timer); controller.abort(); };
-  }, [userLookupStatus, publicAppearanceReady]);
+    void fetch('/api/auth/public-config', { priority: 'low', cache: 'no-store', signal: controller.signal })
+      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then((data) => {
+        if (!alive) return;
+        if (data?.success && data?.source === 'DATABASE' && data.config) {
+          const schoolName = validSchoolDisplayName(data.config.schoolName);
+          setSchoolSettings((prev) => ({
+            ...prev,
+            ...data.config,
+            schoolName,
+            loginAppearance: sanitizeLoginAppearance(data.config.loginAppearance),
+          }));
+          try { storePublicLoginBrand(window.localStorage, { ...data.config, schoolName }); } catch {}
+        } else if (data?.status === 'SETUP') {
+          // A school still being configured must not show stale local identity.
+          setSchoolSettings((prev) => ({ ...prev, schoolName: '', address: '' }));
+          try { window.localStorage.removeItem('piket_guru_public_login_brand_v1'); } catch {}
+        }
+        // DEGRADED/network errors keep the last *verified* public label, if any.
+        // No example school identity is used as a fallback.
+        setPublicAppearanceReady(true);
+      })
+      .catch((err) => {
+        if (err?.name !== 'AbortError') {
+          setPublicAppearanceReady(true);
+          console.warn('Could not fetch public school identity:', err);
+        }
+      });
+    return () => { alive = false; controller.abort(); };
+  }, []);
 
   const refreshLoginUsers = useCallback(async (forceRefresh = false) => {
     if (!mountedRef.current || loginBusyRef.current) return;
@@ -584,7 +596,7 @@ export const LoginPage: React.FC = () => {
         const clean = rawTarget.replace(/[^0-9+]/g, '');
         actionUrl = `tel:${clean}`;
       } else if (type === 'email') {
-        const subject = `Bantuan Login Sistem Piket - ${schoolSettings.schoolName || DEFAULT_SCHOOL_SETTINGS.schoolName}`;
+        const subject = `Bantuan Login Sistem Piket - ${validSchoolDisplayName(schoolSettings.schoolName) || 'Sekolah'}`;
         actionUrl = `mailto:${rawTarget}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullMessage)}`;
       }
     }
@@ -770,7 +782,7 @@ export const LoginPage: React.FC = () => {
               {schoolSettings.appSubtitle || APP_SUBTITLE}
             </p>
             <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
-              {schoolSettings.schoolName || DEFAULT_SCHOOL_SETTINGS.schoolName}
+              {validSchoolDisplayName(schoolSettings.schoolName) || (publicAppearanceReady ? 'Identitas sekolah belum tersedia' : 'Memuat identitas sekolah…')}
             </p>
 
             <AppClock variant="login"/>
@@ -1261,7 +1273,7 @@ export const LoginPage: React.FC = () => {
             {/* School Profile Card */}
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[var(--theme-surface-subtle)]/60 border border-slate-200 dark:border-[var(--theme-card-border)] space-y-1.5 text-xs">
               <div className="font-bold text-slate-900 dark:text-white text-sm">
-                {schoolSettings.schoolName || DEFAULT_SCHOOL_SETTINGS.schoolName}
+                {validSchoolDisplayName(schoolSettings.schoolName) || 'Sekolah'}
               </div>
               <p className="text-slate-500 dark:text-slate-400 leading-snug">
                 {schoolSettings.address || DEFAULT_SCHOOL_SETTINGS.address}

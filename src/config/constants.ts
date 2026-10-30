@@ -94,12 +94,12 @@ export const DEFAULT_DAILY_SCHEDULES: Record<DayOfWeek, {
 };
 
 export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
-  schoolName: 'SMA Negeri 1 Prestasi Bangsa',
-  npsn: '20109988',
-  address: 'Jl. Pendidikan No. 45, Kompleks Edukasi, Jakarta',
-  phone: '021-78901234',
-  email: 'info@sman1prestasibangsa.sch.id',
-  website: 'www.sman1prestasibangsa.sch.id',
+  schoolName: '',
+  npsn: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
   appName: 'PIKET GURU',
   appSubtitle: 'Jadwal & Buku Piket Digital Sekolah',
   appCreator: 'Tim Pengembang Sistem Piket',

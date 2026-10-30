@@ -8,6 +8,7 @@ import { hashPinAdaptive } from '../crypto/adaptiveHash.js';
 import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
 import { UserProfile } from '../../types/index.js';
 import firebaseConfig from '../../../firebase-applet-config.json' with { type: 'json' };
+import { validSchoolDisplayName } from '../../features/auth/publicLoginBrand.js';
 
 export const authRouter = Router();
 
@@ -383,13 +384,15 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
  * Reads strictly via Admin SDK without exposing internal school_config document publicly.
  */
 authRouter.get('/public-config', async (req: Request, res: Response) => {
+  // Fallback must not impersonate a real school when Firestore is unavailable.
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const DEFAULT_CONFIG = {
-    schoolName: 'SMK dr. SOEBANDI',
-    npsn: '20109988',
-    address: 'Jl. Pendidikan No. 45, Kompleks Edukasi, Jakarta',
-    phone: '081234567890',
-    email: 'info@smkdrsoebandi.sch.id',
-    website: 'smkdrsoebandi.sch.id',
+    schoolName: '',
+    npsn: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
     logoUrl: '',
     appLogoUrl: '/icon.svg',
     appName: 'PIKET GURU',
@@ -436,7 +439,7 @@ authRouter.get('/public-config', async (req: Request, res: Response) => {
       res.json({
         success: true,
         config: {
-          schoolName: data.schoolName || DEFAULT_CONFIG.schoolName,
+          schoolName: validSchoolDisplayName(data.schoolName),
           npsn: data.npsn || DEFAULT_CONFIG.npsn,
           address: data.address || DEFAULT_CONFIG.address,
           phone: data.phone || DEFAULT_CONFIG.phone,

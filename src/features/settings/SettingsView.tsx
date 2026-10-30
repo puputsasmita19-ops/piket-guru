@@ -143,9 +143,9 @@ export const SettingsView: React.FC = () => {
   const [schoolName, setSchoolName] = useState(DEFAULT_SCHOOL_SETTINGS.schoolName);
   const [npsn, setNpsn] = useState(DEFAULT_SCHOOL_SETTINGS.npsn);
   const [address, setAddress] = useState(DEFAULT_SCHOOL_SETTINGS.address);
-  const [phone, setPhone] = useState(DEFAULT_SCHOOL_SETTINGS.phone || '021-78901234');
-  const [email, setEmail] = useState(DEFAULT_SCHOOL_SETTINGS.email || 'info@sman1prestasibangsa.sch.id');
-  const [website, setWebsite] = useState(DEFAULT_SCHOOL_SETTINGS.website || 'www.sman1prestasibangsa.sch.id');
+  const [phone, setPhone] = useState(DEFAULT_SCHOOL_SETTINGS.phone || '');
+  const [email, setEmail] = useState(DEFAULT_SCHOOL_SETTINGS.email || '');
+  const [website, setWebsite] = useState(DEFAULT_SCHOOL_SETTINGS.website || '');
   const [appName, setAppName] = useState(DEFAULT_SCHOOL_SETTINGS.appName || 'PIKET GURU');
   const [appSubtitle, setAppSubtitle] = useState(
     DEFAULT_SCHOOL_SETTINGS.appSubtitle || 'Jadwal & Buku Piket Digital Sekolah'

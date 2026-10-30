@@ -481,7 +481,7 @@ export async function generateSampleWatermarkPreview(
 
   const samplePayload: WatermarkPayload = {
     module: 'STUDENT_TARDY',
-    schoolName: schoolName || 'SMA Negeri 1 Prestasi Bangsa',
+    schoolName: schoolName || 'Sekolah',
     officerName: 'Budi Santoso, S.Pd. (Petugas Piket)',
     documentationTime: Date.now(),
     eventDate: new Date().toISOString().split('T')[0],
