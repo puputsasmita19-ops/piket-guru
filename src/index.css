@@ -1197,6 +1197,37 @@ button.bg-\[var\(--theme-primary\)\],
   .history-pagination > div { max-width: 100%; flex-wrap: wrap; }
 }
 
+
+/* R101 — Search/ID switch is a single rounded control on light and dark themes.
+   Clip the internal tab backgrounds to the shared parent so mobile dark-mode
+   does not show square corners, double borders, or an overflowing focus ring. */
+.login-page .login-account-combobox {
+  background-clip: padding-box;
+  isolation: isolate;
+}
+.login-page .login-account-input {
+  min-width: 0;
+  outline-offset: -2px;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
+}
+.login-page .login-account-switch {
+  min-width: max-content;
+  background-clip: padding-box;
+}
+.login-page .login-account-switch > button { white-space: nowrap; }
+.login-page .login-account-results { background-clip: padding-box; }
+.dark .login-page .login-account-combobox {
+  background-color: var(--theme-input-bg, #172334);
+  border-color: var(--theme-card-border, #334155);
+}
+.dark .login-page .login-account-switch { background-color: var(--theme-surface-subtle, #233247); }
+@media (max-width: 375px) {
+  .login-page .login-account-switch { grid-template-columns: 48px 56px; }
+  .login-page .login-account-input { padding-left: 10px; }
+}
+
 /* Login: compact layout, decorative motion and an accessible moving credit. */
 .login-page { isolation: isolate; justify-content: flex-start; padding-block: clamp(8px, 3vh, 28px); }
 .login-card { z-index: 1; }

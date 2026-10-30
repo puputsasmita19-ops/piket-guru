@@ -2,6 +2,7 @@ import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
 import { readPinHapticsEnabled, readPinHapticStrength, savePinHapticsEnabled, savePinHapticStrength, supportsPinHaptics, vibratePinKey, createPinHapticDispatcher, type PinHapticKind, type PinHapticStrength } from './pinHaptics';
 import { appendPinDigit, normalizePinInput, removeLastPinDigit } from './pinInput';
+import { loginClockNow, recordLoginDuration } from './loginPerformance';
 import { LoginCredit } from './LoginCredit';
 import { LoginAvatar } from './LoginAvatar';
 import { OverflowName } from '../../components/common/OverflowName';
@@ -153,6 +154,14 @@ export const LoginPage: React.FC = () => {
       ? 'Perintah getaran diterima browser. Jika belum terasa, pilih Kuat dan periksa setelan getar/Mode Senyap HP.'
       : 'Permintaan getaran tidak berhasil. Periksa dukungan browser atau pengaturan getaran HP.');
   };
+
+  // R101: complete one-time legacy cache hygiene after the first paint, not
+  // while the user is waiting for PIN verification. authenticateWithPin still
+  // awaits init() as a safe fallback if someone submits immediately.
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void authService.init(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     fetch('/api/auth/public-config', { priority: 'low' })
@@ -410,6 +419,7 @@ export const LoginPage: React.FC = () => {
     }
 
     loginBusyRef.current = true; // prevent double requests from rapid taps/Enter before rerender
+    const loginStarted = loginClockNow();
     authService.pausePublicDirectoryForLogin();
     setIsSubmitting(true);
     setErrorMessage('');
@@ -486,6 +496,7 @@ export const LoginPage: React.FC = () => {
       setErrorMessage('Tidak dapat terhubung ke server. Periksa koneksi internet Anda lalu coba lagi.');
       setHasError(false);
     } finally {
+      recordLoginDuration('pin-end-to-end', loginStarted);
       loginBusyRef.current = false;
       setIsSubmitting(false);
     }
@@ -638,7 +649,7 @@ export const LoginPage: React.FC = () => {
         backgroundColor: 'var(--theme-bg-app)',
       }}
     >
-      <div className="login-backdrop-host" aria-hidden="true"><StableLoginBackdrop config={loginBackdropConfig} /></div>
+      <div className="login-backdrop-host" aria-hidden="true"><StableLoginBackdrop config={loginBackdropConfig} paused={isSubmitting || isGoogleSubmitting} /></div>
       {/* Main App Card */}
       <div className="login-card relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
         {/* Integrated Theme Settings Button & Popover */}
@@ -810,7 +821,7 @@ export const LoginPage: React.FC = () => {
             Preserve account verification, ID/NIP fallback, PIN and auth flow. */}
         <section className="login-method-panel min-w-0" aria-label="Metode masuk">
           <div ref={comboboxRef} className="login-account-panel min-w-0 space-y-1.5">
-            <div className="relative flex min-w-0 items-center rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] transition-colors focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-ring)]">
+            <div className="login-account-combobox relative flex min-w-0 items-stretch overflow-hidden rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-input-bg)] focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--theme-ring)] transition-[border-color,box-shadow] duration-150">
               {isManualInput ? (
                 <input
                   id="login-account-search"
@@ -829,7 +840,7 @@ export const LoginPage: React.FC = () => {
                   }}
                   placeholder="ID atau NIP..."
                   aria-label="ID login atau NIP"
-                  className="min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-xl bg-transparent pl-2.5 sm:pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                  className="login-account-input min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-l-xl border-0 bg-transparent pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-0"
                 />
               ) : (
                 <>
@@ -854,7 +865,7 @@ export const LoginPage: React.FC = () => {
                     aria-expanded={isComboboxOpen}
                     aria-autocomplete="list"
                     role="combobox"
-                    className={`min-h-11 sm:min-h-10 w-full min-w-0 flex-1 bg-transparent pl-2.5 sm:pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none`}
+                    className="login-account-input min-h-11 sm:min-h-10 w-full min-w-0 flex-1 rounded-l-xl border-0 bg-transparent pl-3 pr-1 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-0"
                   />
                   {searchQuery && (
                     <button
@@ -867,7 +878,7 @@ export const LoginPage: React.FC = () => {
                         setIsComboboxOpen(true);
                         searchInputRef.current?.focus();
                       }}
-                      className="inline-flex min-h-11 sm:min-h-10 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
+                      className="inline-flex min-h-11 sm:min-h-10 w-9 shrink-0 items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[var(--theme-primary)]"
                     >
                       <X className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -877,7 +888,7 @@ export const LoginPage: React.FC = () => {
               <div
                 role="group"
                 aria-label="Cari menggunakan nama atau ID/NIP"
-                className="ml-auto mr-0.5 grid grid-cols-[52px_62px] sm:grid-cols-[62px_72px] shrink-0 items-stretch gap-0.5 rounded-lg border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-100/80 dark:bg-[var(--theme-surface-subtle)] p-0.5"
+                className="login-account-switch ml-auto grid grid-cols-[52px_62px] sm:grid-cols-[62px_72px] shrink-0 items-stretch gap-1 rounded-r-[10px] border-l border-slate-200/80 dark:border-[var(--theme-card-border)] bg-slate-100/90 dark:bg-[var(--theme-surface-subtle)] p-1"
               >
                 <button
                   type="button"
@@ -902,8 +913,8 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => searchInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-md px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
+                  className={`inline-flex min-h-9 sm:min-h-8 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-lg px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${!isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-900 dark:text-[var(--theme-primary-text)] shadow-sm'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
                   <Search className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" aria-hidden="true" />
@@ -927,8 +938,8 @@ export const LoginPage: React.FC = () => {
                     }
                     window.requestAnimationFrame(() => manualInputRef.current?.focus());
                   }}
-                  className={`inline-flex min-h-11 sm:min-h-10 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-md px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
-                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-[var(--theme-primary-text)] ring-1 ring-[var(--theme-primary-border)]'
+                  className={`inline-flex min-h-9 sm:min-h-8 min-w-0 items-center justify-center gap-0.5 sm:gap-1 rounded-lg px-0.5 text-[10px] sm:text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)] disabled:opacity-50 ${isManualInput
+                    ? 'bg-white dark:bg-[var(--theme-card-bg)] text-slate-900 dark:text-[var(--theme-primary-text)] shadow-sm'
                     : 'text-slate-500 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/60'}`}
                 >
                   <KeyRound className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" aria-hidden="true" />
@@ -954,7 +965,7 @@ export const LoginPage: React.FC = () => {
               )}
               {isComboboxOpen && (
                 <div id="login-account-results" role="listbox" aria-label="Hasil pencarian pengguna" ref={listboxRef}
-                  className="max-h-44 sm:max-h-48 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-1 shadow-sm">
+                  className="login-account-results max-h-44 sm:max-h-48 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-card-bg)] p-1 shadow-sm">
                   {isLoadingUsers ? (
                     <p className="p-3 text-xs text-slate-500">Memuat daftar pengguna...</p>
                   ) : userLookupStatus === 'unavailable' && usersList.length === 0 ? (

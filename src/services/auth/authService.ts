@@ -2,6 +2,7 @@ import { UserProfile } from '../../types';
 import { auth } from '../firebase/firebaseAuth';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { OfflineStorage } from '../offline/offlineStorage';
+import { loginClockNow, recordLoginDuration } from '../../features/auth/loginPerformance';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 
@@ -174,6 +175,7 @@ class AuthService {
 
     try {
       const trimmedId = (identifier || '').trim();
+      const apiStarted = loginClockNow();
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         priority: 'high',
@@ -188,6 +190,7 @@ class AuthService {
       });
 
       const data = await response.json();
+      recordLoginDuration('pin-api', apiStarted);
       if (!isCurrent()) return cancelled();
 
       if (!response.ok || !data.success) {
@@ -214,7 +217,9 @@ class AuthService {
       }
 
       try {
+        const firebaseStarted = loginClockNow();
         const userCredential = await signInWithCustomToken(auth, data.customToken);
+        recordLoginDuration('firebase-signin', firebaseStarted);
         if (!isCurrent()) {
           if (auth.currentUser === userCredential.user) await signOut(auth);
           return cancelled();
