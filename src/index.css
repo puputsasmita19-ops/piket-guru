@@ -1660,3 +1660,12 @@ button.bg-\[var\(--theme-primary\)\],
   .login-pin-pad > button { transition: none !important; }
   .login-pin-pad > button:not(:disabled):active { transform: none; }
 }
+
+/* R99 — compact, accessible per-device vibration controls; no layout shift. */
+.login-pin-haptics-panel { min-width: 0; }
+.login-pin-haptic-strength { appearance: auto; max-width: 100%; }
+.login-pin-haptic-test { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .login-pin-haptic-test { transition: none !important; }
+  .login-pin-haptic-test:active { transform: none !important; }
+}

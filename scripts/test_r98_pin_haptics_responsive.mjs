@@ -81,7 +81,7 @@ test('haptic pulse short and non-blocking on supported device', () => {
   assert.equal(haptic.vibratePinKey(true, 'delete', vib), true);
   assert.equal(haptic.vibratePinKey(true, 'clear', vib), true);
   assert.equal(events.length, 3);
-  assert.ok(events.every((n) => n > 0 && n < 20));
+  assert.ok(events.every((n) => n >= 16 && n <= 120));
 });
 test('disabled haptic never vibrates', () => {
   events.length = 0;
@@ -95,7 +95,8 @@ test('login gate still calls server authentication (not local PIN validation)', 
 test('keypad is visual-feedback-first with optional haptic toggle', () => {
   assert.match(login, /role="switch"/);
   assert.match(login, /Getaran tombol PIN/);
-  assert.match(login, /vibratePinKey\(hapticsEnabled/);
+  assert.match(login, /onPinPointerDown\(event, 'digit'\)/);
+  assert.match(login, /onPinClickFeedback\('digit'\)/);
   assert.match(css, /\.login-pin-pad > button \{/);
   assert.match(css, /touch-action: manipulation/);
 });
