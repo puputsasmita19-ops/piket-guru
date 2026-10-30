@@ -39,6 +39,12 @@ export interface LobbyTvConfig {
   showConnectionStatus: boolean;
   allowSound: boolean;
   customSubtitle?: string;
+  profileVideoUrl?: string;
+  profileVideoTitle?: string;
+  profileVideoSubtitle?: string;
+  schoolVision?: string;
+  schoolMissions?: string[];
+  schoolRules?: string[];
 }
 
 export const ALL_TV_PANELS: { id: TvPanelId; label: string; description: string }[] = [
@@ -107,6 +113,21 @@ export const DEFAULT_LOBBY_TV_CONFIG: LobbyTvConfig = {
   showConnectionStatus: true,
   allowSound: false,
   customSubtitle: 'Pusat Informasi & Pemantauan Operasional Sekolah Terpadu',
+  profileVideoUrl: '',
+  profileVideoTitle: 'Video Profil Utama Sekolah',
+  profileVideoSubtitle: 'Sematan video YouTube agar hemat penyimpanan server sekolah',
+  schoolVision: 'Mewujudkan sekolah yang unggul dalam prestasi, berkarakter, dan adaptif terhadap perkembangan zaman.',
+  schoolMissions: [
+    'Menumbuhkan budaya disiplin, santun, dan bertanggung jawab.',
+    'Meningkatkan mutu pembelajaran dan layanan pendidikan secara berkelanjutan.',
+    'Mengembangkan literasi digital, kolaborasi, dan kepedulian warga sekolah.',
+  ],
+  schoolRules: [
+    'Gunakan seragam lengkap dan atribut sesuai ketentuan sekolah.',
+    'Datang tepat waktu dan mengikuti pembelajaran dengan tertib.',
+    'Menjaga kebersihan, keamanan, dan kenyamanan lingkungan sekolah.',
+    'Tamu wajib melapor ke petugas piket dan mengenakan badge pengunjung.',
+  ],
 };
 
 /**
@@ -123,6 +144,15 @@ export function stripHtml(input: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .trim();
+}
+
+
+function normalizeTextLines(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => (typeof entry === 'string' ? stripHtml(entry) : ''))
+    .filter(Boolean)
+    .slice(0, limit);
 }
 
 /**
@@ -148,6 +178,12 @@ export function sanitizeLobbyTvConfig(raw?: Partial<LobbyTvConfig> | null): Lobb
   const cleanedMessages = rawMessages
     .map((m) => (typeof m === 'string' ? stripHtml(m) : ''))
     .filter((m) => m.length > 0);
+  const cleanedMissions = normalizeTextLines(raw.schoolMissions, 8);
+  const cleanedRules = normalizeTextLines(raw.schoolRules, 10);
+  const profileVideoUrl = typeof raw.profileVideoUrl === 'string' ? stripHtml(raw.profileVideoUrl) : '';
+  const profileVideoTitle = typeof raw.profileVideoTitle === 'string' ? stripHtml(raw.profileVideoTitle) : '';
+  const profileVideoSubtitle = typeof raw.profileVideoSubtitle === 'string' ? stripHtml(raw.profileVideoSubtitle) : '';
+  const schoolVision = typeof raw.schoolVision === 'string' ? stripHtml(raw.schoolVision) : '';
 
   return {
     enabled: raw.enabled !== false,
@@ -181,6 +217,12 @@ export function sanitizeLobbyTvConfig(raw?: Partial<LobbyTvConfig> | null): Lobb
     showConnectionStatus: raw.showConnectionStatus !== false,
     allowSound: Boolean(raw.allowSound),
     customSubtitle: raw.customSubtitle ? stripHtml(raw.customSubtitle) : DEFAULT_LOBBY_TV_CONFIG.customSubtitle,
+    profileVideoUrl: profileVideoUrl || DEFAULT_LOBBY_TV_CONFIG.profileVideoUrl,
+    profileVideoTitle: profileVideoTitle || DEFAULT_LOBBY_TV_CONFIG.profileVideoTitle,
+    profileVideoSubtitle: profileVideoSubtitle || DEFAULT_LOBBY_TV_CONFIG.profileVideoSubtitle,
+    schoolVision: schoolVision || DEFAULT_LOBBY_TV_CONFIG.schoolVision,
+    schoolMissions: cleanedMissions.length ? cleanedMissions : [...(DEFAULT_LOBBY_TV_CONFIG.schoolMissions || [])],
+    schoolRules: cleanedRules.length ? cleanedRules : [...(DEFAULT_LOBBY_TV_CONFIG.schoolRules || [])],
   };
 }
 
@@ -215,6 +257,20 @@ export function areLobbyTvConfigsEqual(
   if (cleanA.showConnectionStatus !== cleanB.showConnectionStatus) return false;
   if (cleanA.allowSound !== cleanB.allowSound) return false;
   if ((cleanA.customSubtitle || '') !== (cleanB.customSubtitle || '')) return false;
+  if ((cleanA.profileVideoUrl || '') !== (cleanB.profileVideoUrl || '')) return false;
+  if ((cleanA.profileVideoTitle || '') !== (cleanB.profileVideoTitle || '')) return false;
+  if ((cleanA.profileVideoSubtitle || '') !== (cleanB.profileVideoSubtitle || '')) return false;
+  if ((cleanA.schoolVision || '') !== (cleanB.schoolVision || '')) return false;
+
+  if ((cleanA.schoolMissions || []).length !== (cleanB.schoolMissions || []).length) return false;
+  for (let i = 0; i < (cleanA.schoolMissions || []).length; i++) {
+    if (cleanA.schoolMissions?.[i] !== cleanB.schoolMissions?.[i]) return false;
+  }
+
+  if ((cleanA.schoolRules || []).length !== (cleanB.schoolRules || []).length) return false;
+  for (let i = 0; i < (cleanA.schoolRules || []).length; i++) {
+    if (cleanA.schoolRules?.[i] !== cleanB.schoolRules?.[i]) return false;
+  }
 
   // Compare enabledPanels respecting array length and exact order
   if (cleanA.enabledPanels.length !== cleanB.enabledPanels.length) return false;

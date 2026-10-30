@@ -200,6 +200,16 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
     }
   };
 
+  const parseMultilineText = (value: string, limit: number) =>
+    value
+      .split(/\r?\n/)
+      .map((line) => stripHtml(line))
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, limit);
+
+  const toMultilineText = (lines?: string[]) => (Array.isArray(lines) ? lines.join('\n') : '');
+
   const getPanelIcon = (panelId: TvPanelId) => {
     switch (panelId) {
       case 'duty_teachers':
@@ -860,6 +870,114 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
               placeholder="Pusat Informasi & Pemantauan Operasional Sekolah Terpadu"
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
             />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <div className="rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] p-4 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Sematan Video Profil Sekolah</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan tautan YouTube saja agar TV Lobi tidak menyimpan file video di server sekolah.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">URL Video YouTube:</label>
+                <input
+                  type="url"
+                  value={draftConfig.profileVideoUrl || ''}
+                  onChange={(e) =>
+                    setDraftConfig((prev) => ({
+                      ...prev,
+                      profileVideoUrl: e.target.value.trim(),
+                    }))
+                  }
+                  placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Judul kartu video:</label>
+                  <input
+                    type="text"
+                    value={draftConfig.profileVideoTitle || ''}
+                    onChange={(e) =>
+                      setDraftConfig((prev) => ({
+                        ...prev,
+                        profileVideoTitle: stripHtml(e.target.value),
+                      }))
+                    }
+                    placeholder="Video Profil Utama Sekolah"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Subjudul / keterangan video:</label>
+                  <input
+                    type="text"
+                    value={draftConfig.profileVideoSubtitle || ''}
+                    onChange={(e) =>
+                      setDraftConfig((prev) => ({
+                        ...prev,
+                        profileVideoSubtitle: stripHtml(e.target.value),
+                      }))
+                    }
+                    placeholder="Profil singkat, live audio, atau keterangan lain"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] p-4 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Konten Profil Sekolah pada TV Lobi</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur visi, misi, dan tata tertib ringkas yang akan tampil pada layout TV seperti contoh dashboard lobi.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Visi Sekolah:</label>
+                <textarea
+                  rows={3}
+                  value={draftConfig.schoolVision || ''}
+                  onChange={(e) =>
+                    setDraftConfig((prev) => ({
+                      ...prev,
+                      schoolVision: stripHtml(e.target.value),
+                    }))
+                  }
+                  placeholder="Tuliskan visi utama sekolah"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Misi Sekolah (1 baris = 1 poin, maks. 8):</label>
+                <textarea
+                  rows={5}
+                  value={toMultilineText(draftConfig.schoolMissions)}
+                  onChange={(e) =>
+                    setDraftConfig((prev) => ({
+                      ...prev,
+                      schoolMissions: parseMultilineText(e.target.value, 8),
+                    }))
+                  }
+                  placeholder="1. Membudayakan disiplin...\n2. Mengembangkan literasi digital..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Tata Tertib / Imbauan Singkat (1 baris = 1 poin, maks. 10):</label>
+                <textarea
+                  rows={5}
+                  value={toMultilineText(draftConfig.schoolRules)}
+                  onChange={(e) =>
+                    setDraftConfig((prev) => ({
+                      ...prev,
+                      schoolRules: parseMultilineText(e.target.value, 10),
+                    }))
+                  }
+                  placeholder="Gunakan seragam lengkap...\nTamu wajib melapor ke guru piket..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Toggle Switches: Identitas, Indikator Koneksi, Bel Audio */}

@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { appLogo } from '../../utils/reportBranding';
 import { getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import { sanitizeLobbyTvConfig } from '../../types/lobbyTv.types';
-import { getKioskPanels, getKioskFrames, kioskPanelPageSize, kioskTickerText, kioskSlideIntervalMs } from './kioskPresentation';
+import { kioskSlideIntervalMs, kioskTickerText } from './kioskPresentation';
 import { getKioskTheme } from './kioskTheme';
 import { AnnouncementRecord } from '../../types/announcement.types';
 import {
   ShieldCheck,
   UserCheck,
-  UserX,
   Radio,
   Maximize,
   Minimize,
@@ -16,14 +15,17 @@ import {
   Volume2,
   VolumeX,
   Sparkles,
-  GraduationCap,
+  Video,
+  Building2,
+  BookOpenCheck,
+  Clock3,
 } from 'lucide-react';
 import { ScheduleItem, SchoolSettings } from '../../types';
 import { TeacherSubstitutionRecord } from '../../types/substitution.types';
 import { StudentTardyRecord } from '../../types/studentTardy.types';
 import { StudentPermitRecord } from '../../types/studentPermit.types';
 import { VisitorRecord } from '../../types/visitor.types';
-import { getCurrentDayName, getTodayISODate } from '../../utils/dateUtils';
+import { getTodayISODate } from '../../utils/dateUtils';
 import { SchoolBellService } from '../../services/audio/bellService';
 
 interface PublicKioskDisplayProps {
@@ -39,31 +41,120 @@ interface PublicKioskDisplayProps {
   hasUnsavedChanges?: boolean;
 }
 
-/** Isolate the one-second clock update so large carousel lists do not re-render every second. */
 const KioskClock = React.memo(function KioskClock({
-  timezone, showSeconds, showDate, timeFormat,
+  timezone,
+  showSeconds,
+  showDate,
+  timeFormat,
 }: Pick<ReturnType<typeof sanitizeLobbyTvConfig>, 'timezone' | 'showSeconds' | 'showDate' | 'timeFormat'>) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const timeFormatter = useMemo(() => new Intl.DateTimeFormat('id-ID', {
-    timeZone: timezone, hour: '2-digit', minute: '2-digit',
-    second: showSeconds ? '2-digit' : undefined, hour12: timeFormat === '12h',
-  }), [timezone, showSeconds, timeFormat]);
-  const dateFormatter = useMemo(() => new Intl.DateTimeFormat('id-ID', {
-    timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  }), [timezone]);
-  const clock = timeFormatter.format(now);
-  const date = showDate ? dateFormatter.format(now) : '';
-  return <div className="text-right tv-kiosk-clock">
-    {showDate && <div className="tv-kiosk-date font-semibold text-[var(--kiosk-muted)]">{date}</div>}
-    <div className="tv-kiosk-time font-mono font-black tracking-wider text-[var(--kiosk-accent)]">{clock}</div>
-  </div>;
+  const timeFormatter = useMemo(
+    () => new Intl.DateTimeFormat('id-ID', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: showSeconds ? '2-digit' : undefined,
+      hour12: timeFormat === '12h',
+    }),
+    [timezone, showSeconds, timeFormat]
+  );
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('id-ID', {
+        timeZone: timezone,
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }),
+    [timezone]
+  );
+  return (
+    <div className="text-right tv-kiosk-clock">
+      {showDate && <div className="tv-kiosk-date text-[11px] sm:text-xs uppercase tracking-[0.14em] font-semibold text-[var(--kiosk-muted)]">{dateFormatter.format(now)}</div>}
+      <div className="tv-kiosk-time font-mono font-black tracking-[0.15em] text-[var(--kiosk-accent)] text-2xl sm:text-4xl lg:text-5xl">{timeFormatter.format(now)}</div>
+    </div>
+  );
 });
 
-type SlidePhase = 'idle' | 'exit' | 'enter';
+const chunk = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+  const pages: T[][] = [];
+  for (let index = 0; index < items.length; index += size) pages.push(items.slice(index, index + size));
+  return pages.length ? pages : [[]];
+};
+
+const toLines = (value?: string[]) => (Array.isArray(value) ? value.filter(Boolean) : []);
+
+function getYouTubeEmbedUrl(rawUrl?: string, autoplay = true, muted = true): string {
+  if (!rawUrl) return '';
+  try {
+    const url = new URL(rawUrl.trim());
+    let videoId = '';
+    if (url.hostname.includes('youtu.be')) {
+      videoId = url.pathname.replace('/', '').split('/')[0];
+    } else if (url.hostname.includes('youtube.com')) {
+      if (url.pathname.startsWith('/embed/')) videoId = url.pathname.split('/embed/')[1]?.split('/')[0] || '';
+      else if (url.pathname.startsWith('/shorts/')) videoId = url.pathname.split('/shorts/')[1]?.split('/')[0] || '';
+      else videoId = url.searchParams.get('v') || '';
+    }
+    if (!videoId) return '';
+    const params = new URLSearchParams({
+      rel: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      controls: '1',
+      autoplay: autoplay ? '1' : '0',
+      mute: muted ? '1' : '0',
+      loop: '1',
+      playlist: videoId,
+    });
+    return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+  } catch {
+    return '';
+  }
+}
+
+function infoCardClass(config: ReturnType<typeof sanitizeLobbyTvConfig>): string {
+  const rounded = config.densityScale === 'large' ? 'rounded-[30px]' : 'rounded-[26px]';
+  return `${rounded} border border-[var(--kiosk-border)] bg-[var(--kiosk-card)] shadow-[0_12px_36px_rgba(2,8,23,0.18)]`;
+}
+
+function densityClass(config: ReturnType<typeof sanitizeLobbyTvConfig>, target: 'title' | 'body' | 'small' | 'metric' | 'hero') {
+  const size = config.densityScale;
+  switch (target) {
+    case 'hero':
+      return size === 'large' ? 'text-4xl xl:text-5xl' : size === 'compact' ? 'text-2xl xl:text-3xl' : 'text-3xl xl:text-4xl';
+    case 'metric':
+      return size === 'large' ? 'text-4xl xl:text-5xl' : size === 'compact' ? 'text-2xl xl:text-3xl' : 'text-3xl xl:text-4xl';
+    case 'title':
+      return size === 'large' ? 'text-xl xl:text-2xl' : size === 'compact' ? 'text-base xl:text-lg' : 'text-lg xl:text-xl';
+    case 'body':
+      return size === 'large' ? 'text-base xl:text-lg' : size === 'compact' ? 'text-xs xl:text-sm' : 'text-sm xl:text-base';
+    default:
+      return size === 'large' ? 'text-sm xl:text-base' : size === 'compact' ? 'text-[11px] xl:text-xs' : 'text-xs xl:text-sm';
+  }
+}
+
+function SectionHeader({ icon, title, badge, config }: { icon: React.ReactNode; title: string; badge?: string; config: ReturnType<typeof sanitizeLobbyTvConfig> }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 shrink-0 rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] flex items-center justify-center text-[var(--kiosk-accent)]">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h3 className={`font-black tracking-tight text-[var(--kiosk-text)] ${densityClass(config, 'title')}`}>{title}</h3>
+        </div>
+      </div>
+      {badge && <span className="shrink-0 rounded-full px-3 py-1 text-[10px] sm:text-xs font-bold border border-[var(--kiosk-border)] bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)]">{badge}</span>}
+    </div>
+  );
+}
 
 export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   onClose,
@@ -77,36 +168,16 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   isPreviewMode = false,
   hasUnsavedChanges = false,
 }) => {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [slidePhase, setSlidePhase] = useState<SlidePhase>('idle');
   const [todayISO, setTodayISO] = useState(getTodayISODate);
-  const mainRef = useRef<HTMLElement>(null);
+  const [rotationTick, setRotationTick] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const mainRef = useRef<HTMLElement>(null);
+
   const config = useMemo(() => sanitizeLobbyTvConfig(settings.lobbyTv), [settings.lobbyTv]);
-  const enabledPanels = getKioskPanels(config);
-  const todayName = getCurrentDayName();
-  const todaySchedules = useMemo(() => getEffectiveSchedulesOnDate(schedules, todayISO), [schedules, todayISO]);
-  const todaySubs = useMemo(() => substitutions.filter(s => s.tanggal === todayISO), [substitutions, todayISO]);
-  const todayTardy = useMemo(() => tardiness.filter(t => t.tanggal === todayISO), [tardiness, todayISO]);
-  const activePermits = useMemo(() => permits.filter(p => p.tanggal === todayISO && p.status === 'SEDANG_KELUAR'), [permits, todayISO]);
-  const activeVisitors = useMemo(() => visitors.filter(v => v.status === 'SEDANG_BERKUNJUNG'), [visitors]);
-  const publicAnnouncements = useMemo(() => announcements.filter(a => a.isActive && (!a.targetRole || a.targetRole === 'SEMUA')), [announcements]);
-  const frames = getKioskFrames(enabledPanels, {
-    duty_teachers: todaySchedules.length,
-    substitutions: todaySubs.length,
-    visitors: activeVisitors.length,
-    announcements: publicAnnouncements.length,
-  }, config.densityScale);
-  const frameKey = frames.map(f => `${f.panel}:${f.pages}`).join('|');
-  const activeFrame = frames[Math.min(currentSlide, frames.length - 1)] ?? { panel: enabledPanels[0], page: 0, pages: 1 };
-  const activePanel = activeFrame.panel;
-  const label = `SLIDE ${Math.min(currentSlide + 1, frames.length)} / ${frames.length}${activeFrame.pages > 1 ? ` • BAGIAN ${activeFrame.page + 1}/${activeFrame.pages}` : ''}`;
-  const tickerText = kioskTickerText(config);
-  const pageStart = (panel: typeof activePanel) => activeFrame.page * kioskPanelPageSize(panel, config.densityScale);
-  const pageEnd = (panel: typeof activePanel) => pageStart(panel) + kioskPanelPageSize(panel, config.densityScale);
   const kioskTheme = getKioskTheme(config);
+  const tickerText = kioskTickerText(config);
   const themeAccent = kioskTheme.accent;
   const kioskVars = {
     '--kiosk-accent': kioskTheme.accent,
@@ -123,65 +194,155 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
     '--kiosk-border': kioskTheme.border,
     '--kiosk-hover': kioskTheme.hover,
     '--kiosk-soft': kioskTheme.soft,
-    '--tv-transition-half': `${Math.max(70, Math.round(config.transitionDurationMs / 2))}ms`,
-    '--tv-density-offset': config.densityScale === 'large' ? '8px' : config.densityScale === 'compact' ? '-2px' : '2px',
   } as React.CSSProperties;
-  const densityPadding = config.densityScale === 'compact' ? 'p-4 sm:p-5' : config.densityScale === 'large' ? 'p-7 sm:p-12' : 'p-5 sm:p-8';
 
+  const todaySchedules = useMemo(() => getEffectiveSchedulesOnDate(schedules, todayISO), [schedules, todayISO]);
+  const todaySubs = useMemo(() => substitutions.filter((s) => s.tanggal === todayISO), [substitutions, todayISO]);
+  const todayTardy = useMemo(() => tardiness.filter((t) => t.tanggal === todayISO), [tardiness, todayISO]);
+  const activePermits = useMemo(() => permits.filter((p) => p.tanggal === todayISO && p.status === 'SEDANG_KELUAR'), [permits, todayISO]);
+  const activeVisitors = useMemo(() => visitors.filter((v) => v.status === 'SEDANG_BERKUNJUNG'), [visitors]);
+  const publicAnnouncements = useMemo(() => announcements.filter((a) => a.isActive && (!a.targetRole || a.targetRole === 'SEMUA')), [announcements]);
+  const missionLines = useMemo(() => toLines(config.schoolMissions), [config.schoolMissions]);
+  const ruleLines = useMemo(() => toLines(config.schoolRules), [config.schoolRules]);
+  const embedVideoUrl = useMemo(() => getYouTubeEmbedUrl(config.profileVideoUrl, true, !config.allowSound || isMuted), [config.profileVideoUrl, config.allowSound, isMuted]);
+  const densityOuterPadding = config.densityScale === 'large' ? 'p-4 sm:p-6 lg:p-7' : config.densityScale === 'compact' ? 'p-3 sm:p-4 lg:p-5' : 'p-4 sm:p-5 lg:p-6';
 
-  // Navigator network status is an indicator, not a guarantee of Firestore sync.
+  const teacherPages = useMemo(() => chunk(todaySchedules, config.densityScale === 'large' ? 3 : config.densityScale === 'compact' ? 4 : 4), [todaySchedules, config.densityScale]);
+  const visitorPages = useMemo(() => chunk(activeVisitors, config.densityScale === 'large' ? 2 : 3), [activeVisitors, config.densityScale]);
+  const announcementPages = useMemo(() => chunk(publicAnnouncements, config.densityScale === 'large' ? 3 : 4), [publicAnnouncements, config.densityScale]);
+  const substitutionPages = useMemo(() => chunk(todaySubs, config.densityScale === 'large' ? 2 : 3), [todaySubs, config.densityScale]);
+  const rulesPages = useMemo(() => chunk(ruleLines, config.densityScale === 'large' ? 4 : 5), [ruleLines, config.densityScale]);
+
+  const infoSections = useMemo(() => {
+    const sections: Array<{ key: string; title: string; badge: string; render: () => React.ReactNode }> = [];
+    if (config.enabledPanels.includes('discipline')) {
+      sections.push({
+        key: 'discipline',
+        title: 'Ringkasan Kedisiplinan',
+        badge: 'Live',
+        render: () => (
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3 text-center">
+              <div className={`font-black text-[var(--kiosk-danger)] font-mono ${densityClass(config, 'metric')}`}>{todayTardy.length}</div>
+              <p className={`mt-1 font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>Siswa terlambat</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3 text-center">
+              <div className={`font-black text-[var(--kiosk-warning)] font-mono ${densityClass(config, 'metric')}`}>{activePermits.length}</div>
+              <p className={`mt-1 font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>Izin keluar</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3 text-center">
+              <div className={`font-black text-[var(--kiosk-success)] font-mono ${densityClass(config, 'metric')}`}>{todaySchedules.length}</div>
+              <p className={`mt-1 font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>Pos siaga</p>
+            </div>
+          </div>
+        ),
+      });
+    }
+    if (config.enabledPanels.includes('substitutions')) {
+      sections.push({
+        key: 'substitutions',
+        title: 'Guru Berhalangan & Pengganti',
+        badge: todaySubs.length ? `${todaySubs.length} data` : 'Nihil',
+        render: () => {
+          const page = substitutionPages[rotationTick % substitutionPages.length] || [];
+          return page.length ? (
+            <div className="mt-4 space-y-3">
+              {page.map((sub) => (
+                <div key={sub.id} className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className={`font-black text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>{sub.guruBerhalanganName || 'Guru tidak diketahui'}</p>
+                      <p className={`text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>{sub.mapel} • {sub.kelas}</p>
+                    </div>
+                    <span className="rounded-full px-2 py-1 text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/20">{sub.alasan?.replaceAll('_', ' ') || 'Berhalangan'}</span>
+                  </div>
+                  <p className={`font-semibold text-[var(--kiosk-success)] ${densityClass(config, 'body')}`}>Pengganti: {sub.guruPenggantiName || 'Dalam koordinasi tim piket'}</p>
+                </div>
+              ))}
+            </div>
+          ) : <p className={`mt-4 rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4 text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Tidak ada guru berhalangan hari ini.</p>;
+        },
+      });
+    }
+    sections.push({
+      key: 'rules',
+      title: 'Tata Tertib & Imbauan',
+      badge: ruleLines.length ? `${ruleLines.length} poin` : 'Default',
+      render: () => {
+        const page = rulesPages[rotationTick % rulesPages.length] || [];
+        return (
+          <div className="mt-4 space-y-3">
+            {(page.length ? page : ['Belum ada tata tertib khusus yang disetel.']).map((rule, index) => (
+              <div key={`${rule}-${index}`} className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] px-3 py-2.5 flex items-start gap-3">
+                <div className="w-7 h-7 rounded-xl shrink-0 flex items-center justify-center bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] font-black text-xs">{index + 1 + (rotationTick % rulesPages.length) * (config.densityScale === 'large' ? 4 : 5)}</div>
+                <p className={`font-semibold text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>{rule}</p>
+              </div>
+            ))}
+          </div>
+        );
+      },
+    });
+    if (config.enabledPanels.includes('announcements')) {
+      sections.push({
+        key: 'announcements',
+        title: 'Pengumuman Sekolah',
+        badge: publicAnnouncements.length ? `${publicAnnouncements.length} aktif` : 'Belum ada',
+        render: () => {
+          const page = announcementPages[rotationTick % announcementPages.length] || [];
+          return page.length ? (
+            <div className="mt-4 space-y-3">
+              {page.map((item) => (
+                <article key={item.id} className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full px-2 py-1 text-[10px] font-bold bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] border border-[var(--kiosk-border)]">{item.priority}</span>
+                  </div>
+                  <h4 className={`font-black text-[var(--kiosk-text)] leading-tight ${densityClass(config, 'body')}`}>{item.title}</h4>
+                  <p className={`text-[var(--kiosk-muted)] line-clamp-3 ${densityClass(config, 'small')}`}>{item.content}</p>
+                </article>
+              ))}
+            </div>
+          ) : <p className={`mt-4 rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4 text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Belum ada pengumuman publik aktif.</p>;
+        },
+      });
+    }
+    return sections;
+  }, [config, todayTardy.length, activePermits.length, todaySchedules.length, todaySubs, ruleLines, rulesPages, publicAnnouncements, announcementPages, substitutionPages, rotationTick]);
+
+  const currentTeacherPage = teacherPages[rotationTick % teacherPages.length] || [];
+  const currentVisitorPage = visitorPages[rotationTick % visitorPages.length] || [];
+  const currentInfoSection = infoSections[rotationTick % infoSections.length] || infoSections[0];
+
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
-    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }, []);
 
-  // Updating the day once per minute avoids 1Hz re-renders and keeps an unattended TV current after midnight.
   useEffect(() => {
     const refreshDay = () => setTodayISO(getTodayISODate());
     const timer = window.setInterval(refreshDay, 60_000);
     document.addEventListener('visibilitychange', refreshDay);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshDay); };
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshDay);
+    };
   }, []);
 
-  // A transition exits first, switches content while invisible, then gently enters.
-  // Timers are cancelled on changes/unmount; reduced-motion users see an immediate switch.
-  useEffect(() => { setCurrentSlide(0); setSlidePhase('idle'); }, [frameKey]);
   useEffect(() => {
-    if (!config.enabled || frames.length <= 1 || slidePhase !== 'idle') return;
-    const timer = window.setTimeout(() => {
-      if (config.transition === 'none' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        setCurrentSlide(index => (index + 1) % frames.length);
-      } else {
-        setSlidePhase('exit');
-      }
-    }, kioskSlideIntervalMs(config));
+    if (!config.enabled) return;
+    const timer = window.setTimeout(() => setRotationTick((prev) => prev + 1), kioskSlideIntervalMs(config));
     return () => window.clearTimeout(timer);
-  }, [config.enabled, config.transition, config.slideIntervalSec, frames.length, frameKey, currentSlide, slidePhase]);
+  }, [config, rotationTick]);
 
   useEffect(() => {
-    if (slidePhase !== 'exit') return;
-    const timer = window.setTimeout(() => {
-      setCurrentSlide(index => (index + 1) % frames.length);
-      setSlidePhase('enter');
-    }, Math.max(70, Math.round(config.transitionDurationMs / 2)));
-    return () => window.clearTimeout(timer);
-  }, [slidePhase, frames.length, config.transitionDurationMs]);
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [rotationTick]);
 
-  useEffect(() => {
-    if (slidePhase !== 'enter') return;
-    let secondFrame = 0;
-    const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => setSlidePhase('idle'));
-    });
-    return () => { window.cancelAnimationFrame(firstFrame); window.cancelAnimationFrame(secondFrame); };
-  }, [slidePhase]);
-
-  useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [currentSlide]);
-
-  // Fullscreen toggle handler
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -193,344 +354,226 @@ export const PublicKioskDisplay: React.FC<PublicKioskDisplayProps> = ({
   };
 
   return (
-    <div className={`tv-kiosk-viewport fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden font-sans bg-[var(--kiosk-bg)] text-[var(--kiosk-text)]`}
-      style={kioskVars} data-kiosk-mode={kioskTheme.mode} data-kiosk-theme={config.theme} data-tv-density={config.densityScale}>
-      {/* BACKGROUND AMBIENT GLOW */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-10" style={{ background: themeAccent }} />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-10" style={{ background: themeAccent }} />
+    <div className="tv-kiosk-viewport fixed inset-0 z-50 flex flex-col select-none overflow-hidden font-sans bg-[var(--kiosk-bg)] text-[var(--kiosk-text)]" style={kioskVars} data-kiosk-mode={kioskTheme.mode} data-kiosk-theme={config.theme} data-tv-density={config.densityScale}>
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-16 left-[10%] h-72 w-72 rounded-full blur-3xl opacity-10" style={{ background: themeAccent }} />
+        <div className="absolute bottom-0 right-[8%] h-80 w-80 rounded-full blur-3xl opacity-10" style={{ background: themeAccent }} />
+      </div>
 
-      {/* TOP BAR: SCHOOL HEADER & LIVE CLOCK */}
-      <header className={`relative z-10 px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-between flex-wrap gap-3 border-b border-[var(--kiosk-border)] bg-[var(--kiosk-card)]`}>
-        <div className="flex items-center min-w-0 gap-4">
-          {config.showSchoolIdentity && <div className="w-12 h-12 rounded-2xl bg-white p-1.5 flex items-center justify-center shadow-lg shadow-cyan-500/10 border border-white/10">
-            <img src={appLogo(settings)} alt="Logo aplikasi" className="w-full h-full object-contain rounded-xl" />
-          </div>}
-          <div>
-            <div className="flex items-center gap-2.5">
-              {config.showSchoolIdentity && <h1 className={`tv-kiosk-school-name font-black tracking-tight uppercase text-[var(--kiosk-text)] max-w-[52vw] line-clamp-2 break-words`}>
-                {settings.schoolName}
-              </h1>}
-              {config.showConnectionStatus && <span className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold flex items-center gap-1.5 ${isOnline ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' : 'bg-rose-500/20 text-rose-500 border-rose-500/30'}`}>
-                <Radio className="w-3 h-3" /> {isOnline ? 'Jaringan terhubung' : 'Offline'}
-              </span>}
+      <header className="relative z-10 p-3 sm:p-4 lg:p-5">
+        <div className={`${infoCardClass(config)} px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-5`}>
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              {config.showSchoolIdentity && (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[22px] bg-white/95 p-2 border border-white/30 shadow-lg shrink-0">
+                  <img src={appLogo(settings)} alt="Logo sekolah" className="w-full h-full object-contain" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[var(--kiosk-border)] bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] text-[10px] sm:text-xs font-black tracking-[0.16em] uppercase">Commercial Smart Signage • Lobby Display</div>
+                <h1 className={`mt-2 font-black leading-[0.95] tracking-tight max-w-[56rem] ${densityClass(config, 'hero')}`}>{settings.schoolName}</h1>
+                <p className={`mt-2 font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>{config.customSubtitle}</p>
+              </div>
             </div>
-            <p className={`text-xs font-medium text-[var(--kiosk-muted)]`}>
-              {config.customSubtitle}
-            </p>
-          </div>
-        </div>
 
-        {/* RIGHT SIDE CLOCK & KIOSK CONTROLS */}
-        <div className="flex items-center gap-6">
-          <KioskClock timezone={config.timezone} showDate={config.showDate}
-            showSeconds={config.showSeconds} timeFormat={config.timeFormat} />
+            <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-5 xl:justify-end">
+              <div className="flex flex-wrap items-center gap-2 md:max-w-[28rem] xl:justify-end">
+                <div className="rounded-2xl border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] px-4 py-3 min-w-[13rem]">
+                  <div className="flex items-center gap-2 text-[var(--kiosk-accent)] font-black uppercase tracking-wide text-[11px] sm:text-xs"><Video className="w-4 h-4" /> Sistem Informasi Real-Time</div>
+                </div>
+                {config.showConnectionStatus && (
+                  <div className={`rounded-2xl border px-4 py-3 min-w-[12rem] ${isOnline ? 'bg-emerald-500/14 text-emerald-300 border-emerald-500/20' : 'bg-rose-500/14 text-rose-300 border-rose-500/20'}`}>
+                    <div className="flex items-center gap-2 font-black uppercase tracking-wide text-[11px] sm:text-xs"><Radio className="w-4 h-4" /> Status: {isOnline ? 'Online' : 'Offline'}</div>
+                  </div>
+                )}
+                <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 text-amber-200 px-4 py-3 min-w-[11rem]">
+                  <div className="font-black uppercase tracking-wide text-[11px] sm:text-xs">Ringkasan Hari Ini</div>
+                  <div className="text-sm sm:text-base font-bold mt-0.5">Guru: {todaySchedules.length} • Tamu: {activeVisitors.length}</div>
+                </div>
+              </div>
 
-          <div className="flex items-center gap-2">
-            {config.allowSound && <button
-              onClick={() => {
-                if (isMuted) SchoolBellService.playPeriodChangeBell(); // Only after an explicit user gesture.
-                setIsMuted(previous => !previous);
-              }}
-              className="p-2.5 rounded-xl bg-[var(--kiosk-inset)] hover:bg-[var(--kiosk-hover)] text-[var(--kiosk-muted)] transition-colors cursor-pointer"
-              title={isMuted ? 'Uji suara TV (bel sekali)' : 'Matikan indikator suara TV'}
-            >
-              {isMuted ? <VolumeX className="w-4 h-4 text-[var(--kiosk-danger)]" /> : <Volume2 className="w-4 h-4 text-[var(--kiosk-success)]" />}
-            </button>}
-            <button
-              onClick={toggleFullscreen}
-              className="p-2.5 rounded-xl bg-[var(--kiosk-inset)] hover:bg-[var(--kiosk-hover)] text-[var(--kiosk-muted)] transition-colors cursor-pointer"
-              title="Layar Penuh"
-            >
-              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white transition-colors cursor-pointer"
-              title="Keluar Mode TV"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              <div className="flex items-center gap-3 self-end">
+                <KioskClock timezone={config.timezone} showDate={config.showDate} showSeconds={config.showSeconds} timeFormat={config.timeFormat} />
+                <div className="flex items-center gap-2">
+                  {config.allowSound && (
+                    <button
+                      onClick={() => {
+                        if (isMuted) SchoolBellService.playPeriodChangeBell();
+                        setIsMuted((previous) => !previous);
+                      }}
+                      className="p-3 rounded-2xl bg-[var(--kiosk-inset)] hover:bg-[var(--kiosk-hover)] border border-[var(--kiosk-border)] text-[var(--kiosk-muted)] transition-colors"
+                      title={isMuted ? 'Uji suara TV (bel sekali)' : 'Matikan indikator suara TV'}
+                    >
+                      {isMuted ? <VolumeX className="w-5 h-5 text-[var(--kiosk-danger)]" /> : <Volume2 className="w-5 h-5 text-[var(--kiosk-success)]" />}
+                    </button>
+                  )}
+                  <button onClick={toggleFullscreen} className="p-3 rounded-2xl bg-[var(--kiosk-inset)] hover:bg-[var(--kiosk-hover)] border border-[var(--kiosk-border)] text-[var(--kiosk-muted)] transition-colors" title="Layar penuh">
+                    {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                  </button>
+                  <button onClick={onClose} className="p-3 rounded-2xl bg-rose-600/90 hover:bg-rose-600 text-white transition-colors" title="Keluar mode TV">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+          {(isPreviewMode || hasUnsavedChanges) && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {isPreviewMode && <span className="rounded-full px-3 py-1 text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">Pratinjau draf lokal</span>}
+              {hasUnsavedChanges && <span className="rounded-full px-3 py-1 text-xs font-bold bg-sky-100 text-sky-800 border border-sky-300">Ada perubahan yang belum disimpan</span>}
+            </div>
+          )}
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA: DYNAMIC SLIDES */}
-      <main ref={mainRef} className={`tv-kiosk-main relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col justify-start bg-[var(--kiosk-bg)] text-[var(--kiosk-text)] ${densityPadding}`}>
-        <div className="tv-kiosk-stage w-full shrink-0 my-auto" data-motion={config.transition} data-phase={slidePhase}>
-        {isPreviewMode && <div role="status" className="mb-3 inline-flex self-start rounded-lg bg-amber-100 border border-amber-300 px-3 py-1.5 text-xs text-amber-800 font-bold">
-          PRATINJAU {hasUnsavedChanges ? '· Perubahan belum disimpan' : '· Sesuai pengaturan tersimpan'}
-        </div>}
-        {!config.enabled && <div className="p-8 text-center rounded-2xl bg-[var(--kiosk-card)] text-[var(--kiosk-text)] border border-[var(--kiosk-border)]"><h2 className="tv-type-title text-xl font-bold">TV Lobi dinonaktifkan oleh Administrator</h2><p className="mt-2 text-sm text-[var(--kiosk-muted)]">Aktifkan kembali dari Pengaturan Sekolah → Pengaturan TV Lobi.</p></div>}
-        {/* SLIDE 0: GURU PIKET BERTUGAS HARI INI */}
-        {config.enabled && activePanel === 'duty_teachers' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[var(--kiosk-border)] pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[var(--kiosk-accent)] text-[var(--kiosk-accent-ink)] flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5" />
+      <main ref={mainRef} className={`relative z-10 flex-1 min-h-0 overflow-y-auto ${densityOuterPadding}`}>
+        {!config.enabled ? (
+          <div className={`${infoCardClass(config)} p-8 text-center`}>
+            <h2 className={`font-black ${densityClass(config, 'hero')}`}>TV Lobi dinonaktifkan oleh Administrator</h2>
+            <p className={`mt-3 text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Aktifkan kembali dari Pengaturan Sekolah → Pengaturan TV Lobi.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5 auto-rows-fr">
+            <section className={`xl:col-span-7 ${infoCardClass(config)} ${densityOuterPadding} flex flex-col gap-4 min-h-[28rem]`}>
+              <SectionHeader icon={<Video className="w-5 h-5" />} title={config.profileVideoTitle || 'Video Profil Utama Sekolah'} badge="YouTube Embed" config={config} />
+              <p className={`text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>{config.profileVideoSubtitle || 'Sematkan tautan YouTube resmi sekolah agar tidak membebani penyimpanan server.'}</p>
+              {embedVideoUrl ? (
+                <div className="relative flex-1 min-h-[18rem] lg:min-h-[24rem] rounded-[24px] overflow-hidden border border-[var(--kiosk-border)] bg-black/20">
+                  <iframe
+                    title={config.profileVideoTitle || 'Video profil sekolah'}
+                    src={embedVideoUrl}
+                    className="absolute inset-0 w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                    loading="lazy"
+                  />
                 </div>
-                <div>
-                  <h2 className="tv-type-title text-xl font-bold text-[var(--kiosk-text)]">
-                    GURU & PETUGAS PIKET BERTUGAS HARI INI
-                  </h2>
-                  <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">
-                    Hari {todayName} • Terbagi pada pos-pos strategis kampus
-                  </p>
-                </div>
-              </div>
-              <span className="tv-type-meta text-xs font-mono font-bold text-[var(--kiosk-accent)] bg-[var(--kiosk-soft)] px-3 py-1 rounded-xl border border-[var(--kiosk-border)]">
-                {label}
-              </span>
-            </div>
-
-            <div className={`grid grid-cols-1 md:grid-cols-2 ${config.densityScale === 'large' ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-4`}>
-              {todaySchedules.length > 0 ? (
-                todaySchedules.slice(pageStart('duty_teachers'), pageEnd('duty_teachers')).map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-2xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] flex items-center gap-4 hover:border-[var(--kiosk-accent)] transition-all"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] font-bold text-lg flex items-center justify-center border border-[var(--kiosk-border)] shrink-0">
-                      {pageStart('duty_teachers') + idx + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="tv-type-name font-bold text-base text-[var(--kiosk-text)] break-words">
-                        {item.petugasName}
-                      </div>
-                      <div className="tv-type-meta text-xs text-[var(--kiosk-accent)] font-medium truncate">
-                        📍 {item.ruangName}
-                      </div>
-                      <div className="tv-type-meta text-[11px] font-mono text-[var(--kiosk-muted)] mt-1">
-                        ⏰ {item.jamMulai} - {item.jamSelesai} WIB
-                      </div>
-                    </div>
-                  </div>
-                ))
               ) : (
-                <div className="col-span-3 p-12 text-center text-[var(--kiosk-subtle)] font-medium">
-                  Belum ada jadwal guru piket yang diatur untuk hari ini.
+                <div className="flex-1 min-h-[18rem] lg:min-h-[24rem] rounded-[24px] border border-dashed border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] flex flex-col items-center justify-center text-center px-6">
+                  <MonitorPlaceholder config={config} />
                 </div>
               )}
-            </div>
-          </div>
-        )}
+            </section>
 
-        {/* SLIDE 1: GURU BERHALANGAN & GURU INVAL PENGGANTI */}
-        {config.enabled && activePanel === 'substitutions' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[var(--kiosk-border)] pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center">
-                  <UserX className="w-5 h-5" />
+            {config.enabledPanels.includes('school_identity') && (<section className={`xl:col-span-5 ${infoCardClass(config)} ${densityOuterPadding} min-h-[20rem]`}>
+              <SectionHeader icon={<Building2 className="w-5 h-5" />} title="Profil, Visi & Misi Sekolah" badge="Identitas" config={config} />
+              <div className="mt-4 grid grid-cols-1 gap-3 xl:gap-4">
+                <div className="rounded-[24px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4">
+                  <p className={`uppercase tracking-[0.16em] font-black text-[var(--kiosk-accent)] ${densityClass(config, 'small')}`}>Visi Utama Sekolah</p>
+                  <p className={`mt-2 font-bold italic leading-snug text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>“{config.schoolVision || 'Belum ada visi sekolah yang diatur.'}”</p>
                 </div>
-                <div>
-                  <h2 className="tv-type-title text-xl font-bold text-[var(--kiosk-text)]">
-                    GURU BERHALANGAN & ALOKASI GURU INVAL (PENGGANTI)
-                  </h2>
-                  <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">
-                    Informasi kelas pengganti agar proses pembelajaran siswa tetap optimal
-                  </p>
+                <div className="rounded-[24px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4">
+                  <p className={`uppercase tracking-[0.16em] font-black text-[var(--kiosk-accent)] ${densityClass(config, 'small')}`}>Misi Sekolah</p>
+                  <div className="mt-3 space-y-2.5">
+                    {missionLines.length ? missionLines.slice(0, 5).map((line, index) => (
+                      <div key={`${line}-${index}`} className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-xl shrink-0 flex items-center justify-center bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] font-black text-xs">{index + 1}</div>
+                        <p className={`font-semibold leading-snug text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>{line}</p>
+                      </div>
+                    )) : <p className={`text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Belum ada misi sekolah yang diatur.</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-[22px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4">
+                    <p className={`text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>NPSN</p>
+                    <p className={`font-black mt-1 ${densityClass(config, 'body')}`}>{settings.npsn || '-'}</p>
+                  </div>
+                  <div className="rounded-[22px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4">
+                    <p className={`text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>Kontak</p>
+                    <p className={`font-black mt-1 break-words ${densityClass(config, 'body')}`}>{settings.phone || settings.email || '-'}</p>
+                  </div>
                 </div>
               </div>
-              <span className="tv-type-meta text-xs font-mono font-bold text-[var(--kiosk-accent)] bg-[var(--kiosk-soft)] px-3 py-1 rounded-xl border border-[var(--kiosk-border)]">
-                {label}
-              </span>
-            </div>
+            </section>)}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {todaySubs.length > 0 ? (
-                todaySubs.slice(pageStart('substitutions'), pageEnd('substitutions')).map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="p-4 rounded-2xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] flex flex-col justify-between gap-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-xs font-bold text-[var(--kiosk-danger)] block">
-                          Guru Berhalangan: {sub.guruBerhalanganName}
-                        </span>
-                        <div className="tv-type-body text-sm font-semibold text-[var(--kiosk-text)]">
-                          {sub.mataPelajaran} • {sub.kelas} ({sub.jamPelajaran})
-                        </div>
+            {config.enabledPanels.includes('visitors') && (<section className={`xl:col-span-7 ${infoCardClass(config)} ${densityOuterPadding} min-h-[14rem]`}>
+              <SectionHeader icon={<UserCheck className="w-5 h-5" />} title="Buku Tamu Lobi" badge={`Hari ini: ${activeVisitors.length} registrasi`} config={config} />
+              <div className="mt-4 grid grid-cols-1 xl:grid-cols-[220px_minmax(0,1fr)] gap-4 items-start">
+                <div className="rounded-[24px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-4 text-center">
+                  <div className={`font-black font-mono text-[var(--kiosk-success)] ${densityClass(config, 'metric')}`}>{activeVisitors.length}</div>
+                  <p className={`mt-2 font-semibold text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>Tamu aktif berada di sekolah</p>
+                  <p className={`mt-1 text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>Menggunakan data registrasi yang sedang berlangsung</p>
+                </div>
+                <div className="space-y-3">
+                  {currentVisitorPage.length ? currentVisitorPage.map((visitor) => (
+                    <div key={visitor.id} className="rounded-[22px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] px-4 py-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className={`font-black text-[var(--kiosk-text)] ${densityClass(config, 'body')}`}>{visitor.namaTamu}</p>
+                        <p className={`text-[var(--kiosk-muted)] break-words ${densityClass(config, 'small')}`}>{visitor.instansiAsal || 'Umum'} • Bertemu: {visitor.tujuanBertemu || '-'}</p>
                       </div>
-                      <span className="px-2.5 py-1 rounded-lg bg-[var(--kiosk-inset)] text-[10px] font-bold text-[var(--kiosk-muted)]">
-                        {sub.alasan.replace('_', ' ')}
-                      </span>
+                      <div className="text-right shrink-0">
+                        <span className="rounded-full px-2.5 py-1 text-[10px] font-bold border border-[var(--kiosk-border)] bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)]">{visitor.nomorBadge || 'Badge'}</span>
+                        <p className={`mt-2 text-[var(--kiosk-success)] font-bold ${densityClass(config, 'small')}`}>{visitor.jamMasuk || '-'}</p>
+                      </div>
                     </div>
+                  )) : (
+                    <div className="rounded-[22px] border border-dashed border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-5 text-center">
+                      <p className={`font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Belum ada registrasi tamu yang aktif hari ini.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>)}
 
-                    <div className="p-3 rounded-xl bg-[var(--kiosk-inset)] border border-[var(--kiosk-border)] tv-type-body">
-                      <span className="tv-type-body text-[var(--kiosk-muted)] block font-medium">Guru Pengganti / Inval:</span>
-                      <div className="tv-type-name font-bold text-[var(--kiosk-success)] text-sm mt-0.5 break-words">
-                        🧑‍🏫 {sub.guruPenggantiName || 'Dalam Koordinasi Tim Piket'}
-                      </div>
+            {config.enabledPanels.includes('duty_teachers') && (<section className={`xl:col-span-2 ${infoCardClass(config)} ${densityOuterPadding} min-h-[14rem]`}>
+              <SectionHeader icon={<ShieldCheck className="w-5 h-5" />} title="Guru Piket" badge={todaySchedules.length ? `${todaySchedules.length} petugas` : 'Belum ada'} config={config} />
+              <div className="mt-4 space-y-3">
+                {currentTeacherPage.length ? currentTeacherPage.map((schedule) => (
+                  <div key={schedule.id} className="rounded-[22px] border border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-3">
+                    <p className={`font-black text-[var(--kiosk-text)] leading-tight ${densityClass(config, 'body')}`}>{schedule.petugasName}</p>
+                    <p className={`mt-1 text-[var(--kiosk-muted)] ${densityClass(config, 'small')}`}>{schedule.petugasRole || 'Guru Piket'} • {schedule.ruangName || 'Pos Piket'}</p>
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold bg-[var(--kiosk-soft)] text-[var(--kiosk-accent)] border border-[var(--kiosk-border)]">
+                      <Clock3 className="w-3 h-3" /> {schedule.jamMulai} – {schedule.jamSelesai}
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="col-span-2 p-12 text-center text-[var(--kiosk-subtle)] font-medium">
-                  Seluruh guru mata pelajaran hadir lengkap pada hari ini.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* SLIDE 2: DAFTAR TAMU & PENGUNJUNG KAMPUS */}
-        {config.enabled && activePanel === 'visitors' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[var(--kiosk-border)] pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="tv-type-title text-xl font-bold text-[var(--kiosk-text)]">
-                    BUKU TAMU & KUNJUNGAN RESMI SEKOLAH
-                  </h2>
-                  <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">
-                    Daftar tamu dinas, orang tua siswa, dan mitra yang sedang berkunjung
-                  </p>
-                </div>
-              </div>
-              <span className="tv-type-meta text-xs font-mono font-bold text-[var(--kiosk-accent)] bg-[var(--kiosk-soft)] px-3 py-1 rounded-xl border border-[var(--kiosk-border)]">
-                {label}
-              </span>
-            </div>
-
-            <div className={`grid grid-cols-1 md:grid-cols-2 ${config.densityScale === 'large' ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-4`}>
-              {activeVisitors.length > 0 ? (
-                activeVisitors.slice(pageStart('visitors'), pageEnd('visitors')).map((vis) => (
-                  <div
-                    key={vis.id}
-                    className="p-4 rounded-2xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] flex flex-col justify-between gap-2"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="tv-type-meta text-xs font-mono font-bold text-[var(--kiosk-accent)] bg-[var(--kiosk-soft)] px-2 py-0.5 rounded">
-                          {vis.nomorBadge}
-                        </span>
-                        <span className="tv-type-meta text-[10px] text-[var(--kiosk-success)] font-semibold">
-                          Tiba: {vis.jamMasuk} WIB
-                        </span>
-                      </div>
-                      <h4 className="tv-type-name font-bold text-sm text-[var(--kiosk-text)] mt-1.5 break-words">{vis.namaTamu}</h4>
-                      <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">{vis.instansiAsal}</p>
-                    </div>
-
-                    <div className="pt-2 border-t border-[var(--kiosk-border)] text-[11px] text-[var(--kiosk-muted)]">
-                      Bertemu: <strong className="text-[var(--kiosk-text)]">{vis.tujuanBertemu}</strong>
-                    </div>
+                )) : (
+                  <div className="rounded-[22px] border border-dashed border-[var(--kiosk-border)] bg-[var(--kiosk-inset)] p-5 text-center">
+                    <p className={`font-semibold text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Belum ada guru piket terjadwal hari ini.</p>
                   </div>
-                ))
-              ) : (
-                <div className="col-span-3 p-12 text-center text-[var(--kiosk-subtle)] font-medium">
-                  Tidak ada tamu yang sedang aktif berada di area sekolah saat ini.
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </section>)}
+
+            <section className={`xl:col-span-3 ${infoCardClass(config)} ${densityOuterPadding} min-h-[14rem]`}>
+              <SectionHeader icon={<BookOpenCheck className="w-5 h-5" />} title={currentInfoSection?.title || 'Informasi Sekolah'} badge={currentInfoSection?.badge || 'Info'} config={config} />
+              {currentInfoSection?.render()}
+            </section>
           </div>
         )}
-
-        {/* SLIDE 3: KEDISIPLINAN & REKAP KAMPUS HARI INI */}
-        {config.enabled && activePanel === 'discipline' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[var(--kiosk-border)] pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="tv-type-title text-xl font-bold text-[var(--kiosk-text)]">
-                    RINGKASAN KEDISIPLINAN & KETERTIBAN KAMPUS
-                  </h2>
-                  <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">
-                    Statistik kedatangan siswa, izin keluar gerbang, dan pembinaan karakter
-                  </p>
-                </div>
-              </div>
-              <span className="tv-type-meta text-xs font-mono font-bold text-[var(--kiosk-accent)] bg-[var(--kiosk-soft)] px-3 py-1 rounded-xl border border-[var(--kiosk-border)]">
-                {label}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <div className="p-6 rounded-3xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center space-y-2">
-                <span className="tv-type-body text-xs text-[var(--kiosk-muted)] uppercase font-bold tracking-wider">
-                  Siswa Terlambat Hari Ini
-                </span>
-                <div className="tv-type-metric text-4xl font-black text-[var(--kiosk-danger)] font-mono">
-                  {todayTardy.length}
-                </div>
-                <p className="tv-type-meta text-[11px] text-[var(--kiosk-subtle)]">Menjalani Pembinaan Piket</p>
-              </div>
-
-              <div className="p-6 rounded-3xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center space-y-2">
-                <span className="tv-type-body text-xs text-[var(--kiosk-muted)] uppercase font-bold tracking-wider">
-                  Siswa Izin di Luar (Gate Pass)
-                </span>
-                <div className="tv-type-metric text-4xl font-black text-[var(--kiosk-warning)] font-mono">
-                  {activePermits.length}
-                </div>
-                <p className="tv-type-meta text-[11px] text-[var(--kiosk-subtle)]">Dispensasi & Surat Resmi</p>
-              </div>
-
-              <div className="p-6 rounded-3xl bg-[var(--kiosk-card)] border border-[var(--kiosk-border)] text-center space-y-2">
-                <span className="tv-type-body text-xs text-[var(--kiosk-muted)] uppercase font-bold tracking-wider">
-                  Pos Piket Siaga Aktif
-                </span>
-                <div className="tv-type-metric text-4xl font-black text-[var(--kiosk-success)] font-mono">
-                  {todaySchedules.length}
-                </div>
-                <p className="tv-type-meta text-[11px] text-[var(--kiosk-subtle)]">Pos piket terjadwal</p>
-              </div>
-            </div>
-          </div>
-        )}
-        {config.enabled && activePanel === 'announcements' && (
-          <section className="space-y-5" aria-label="Pengumuman dan agenda sekolah">
-            <div className="flex items-center justify-between gap-4 border-b border-[var(--kiosk-border)] pb-3">
-              <h2 className="tv-type-title text-xl font-bold flex items-center gap-3"><Sparkles className="w-6 h-6 text-[var(--kiosk-accent)]" /> PENGUMUMAN & AGENDA SEKOLAH</h2>
-              <span className="tv-type-meta text-xs font-bold text-[var(--kiosk-accent)]">{label}</span>
-            </div>
-            {publicAnnouncements.length ?
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {publicAnnouncements.slice(pageStart('announcements'), pageEnd('announcements')).map(a => (
-                  <article key={a.id} className="bg-[var(--kiosk-card)] text-[var(--kiosk-text)] border border-[var(--kiosk-border)] p-5 rounded-2xl">
-                    <span className="tv-type-meta text-[11px] text-[var(--kiosk-accent)] font-bold">{a.priority}</span>
-                    <h3 className="tv-type-name text-lg font-semibold mt-1 break-words">{a.title}</h3>
-                    <p className="tv-type-body text-sm text-[var(--kiosk-muted)] whitespace-pre-line line-clamp-5 mt-2 break-words">{a.content}</p>
-                  </article>
-                ))}
-              </div> : <p className="rounded-xl p-8 bg-[var(--kiosk-card)] text-[var(--kiosk-muted)] text-center">Belum ada pengumuman publik yang aktif.</p>}
-          </section>
-        )}
-        {config.enabled && activePanel === 'school_identity' && (
-          <section className="space-y-6 text-center" aria-label="Identitas sekolah">
-            <div className="w-24 h-24 mx-auto rounded-2xl bg-white p-3"><img src={appLogo(settings)} alt="Logo sekolah" className="w-full h-full object-contain" /></div>
-            <h2 className="tv-type-hero font-black">{settings.schoolName}</h2>
-            <p className="tv-type-body text-sm text-[var(--kiosk-muted)]">{config.customSubtitle}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left max-w-3xl mx-auto">
-              <div className="rounded-2xl bg-[var(--kiosk-card)] text-[var(--kiosk-text)] p-5"><span className="tv-type-body block text-xs text-[var(--kiosk-muted)]">NPSN</span><strong>{settings.npsn || '-'}</strong></div>
-              <div className="rounded-2xl bg-[var(--kiosk-card)] text-[var(--kiosk-text)] p-5"><span className="tv-type-body block text-xs text-[var(--kiosk-muted)]">Alamat Sekolah</span><strong>{settings.address || '-'}</strong></div>
-            </div>
-            <p className="tv-type-body text-xs text-[var(--kiosk-muted)]">{label}</p>
-          </section>
-        )}
-        </div>
       </main>
 
-      {/* BOTTOM RUNNING TICKER */}
-      {config.enabled && config.tickerEnabled && tickerText && <footer data-ticker-size={config.tickerFontSize} className="tv-kiosk-ticker relative z-10 bg-[var(--kiosk-card)] border-t border-[var(--kiosk-border)] px-4 sm:px-8 py-3 flex items-center gap-4">
-        <div className="tv-type-ticker-label px-3 py-1 rounded-lg bg-[var(--kiosk-accent)] text-[var(--kiosk-accent-ink)] font-mono font-bold shrink-0 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5" /> PENGUMUMAN
-        </div>
-        <div className="flex-1 overflow-hidden whitespace-nowrap">
-          <div className={`tv-type-ticker inline-block font-semibold text-[var(--kiosk-muted)] ${config.tickerMode === 'marquee' ? 'animate-marquee' : ''} ${config.tickerFontSize === 'sm' ? 'text-xs' : config.tickerFontSize === 'lg' ? 'text-lg' : 'text-sm'}`}
-            style={config.tickerMode === 'marquee' ? { animationDuration: config.tickerSpeed === 'slow' ? '65s' : config.tickerSpeed === 'fast' ? '20s' : '40s' } : undefined}>
-            {tickerText}
+      {config.enabled && config.tickerEnabled && tickerText && (
+        <footer data-ticker-size={config.tickerFontSize} className="tv-kiosk-ticker relative z-10 bg-[var(--kiosk-card)] border-t border-[var(--kiosk-border)] px-4 sm:px-6 py-3 flex items-center gap-4">
+          <div className="tv-type-ticker-label px-3 py-1 rounded-xl bg-[var(--kiosk-accent)] text-[var(--kiosk-accent-ink)] font-mono font-bold shrink-0 flex items-center gap-1.5 text-xs sm:text-sm">
+            <Sparkles className="w-3.5 h-3.5" /> PENGUMUMAN
           </div>
-        </div>
-      </footer>}
+          <div className="flex-1 overflow-hidden whitespace-nowrap">
+            <div
+              className={`tv-type-ticker inline-block font-semibold text-[var(--kiosk-muted)] ${config.tickerMode === 'marquee' ? 'animate-marquee' : ''} ${config.tickerFontSize === 'sm' ? 'text-xs' : config.tickerFontSize === 'lg' ? 'text-lg' : 'text-sm'}`}
+              style={config.tickerMode === 'marquee' ? { animationDuration: config.tickerSpeed === 'slow' ? '65s' : config.tickerSpeed === 'fast' ? '20s' : '40s' } : undefined}
+            >
+              {tickerText}
+            </div>
+          </div>
+        </footer>
+      )}
     </div>
   );
 };
+
+function MonitorPlaceholder({ config }: { config: ReturnType<typeof sanitizeLobbyTvConfig> }) {
+  return (
+    <>
+      <div className="w-20 h-20 rounded-full bg-[var(--kiosk-soft)] flex items-center justify-center text-[var(--kiosk-accent)]">
+        <Video className="w-10 h-10" />
+      </div>
+      <h3 className={`mt-4 font-black text-[var(--kiosk-text)] ${densityClass(config, 'title')}`}>Sematkan Link Video Profil YouTube</h3>
+      <p className={`mt-2 max-w-xl text-[var(--kiosk-muted)] ${densityClass(config, 'body')}`}>Belum ada tautan video profil sekolah. Tambahkan URL YouTube pada Pengaturan TV Lobi agar video tampil di layar tanpa mengunggah file ke server sekolah.</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2 text-[10px] sm:text-xs font-bold text-[var(--kiosk-accent)]">
+        <span className="rounded-full px-3 py-1 border border-[var(--kiosk-border)] bg-[var(--kiosk-soft)]">Mendukung youtube.com</span>
+        <span className="rounded-full px-3 py-1 border border-[var(--kiosk-border)] bg-[var(--kiosk-soft)]">Mendukung youtu.be</span>
+      </div>
+    </>
+  );
+}
