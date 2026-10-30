@@ -108,7 +108,6 @@ export const AttendancePreview: React.FC = () => {
   // but ONLY after browser location permission was already granted.
   // The warm fix never authorizes attendance; official school coordinates and
   // freshness/accuracy still must be validated before any next step.
-  const earlyGpsFixRef = React.useRef<Promise<LocationCoordinates> | null>(null);
   const settingsReadyRef = React.useRef(false);
   settingsReadyRef.current = settingsReady;
   const warmSelfieGpsRef = React.useRef<Promise<LocationCoordinates> | null>(null);
@@ -163,17 +162,17 @@ export const AttendancePreview: React.FC = () => {
       void perms.query({ name: 'geolocation' }).then((permission) => {
         if (!active || settingsReadyRef.current || document.hidden || permission.state !== 'granted') return;
         // GPS searching is allowed early only when location access was already granted.
-        // Reuse the same promise once settings arrive, instead of canceling a search.
+        // The shared R104-B engine lets the attendance UI attach as soon as the
+        // school config arrives, receiving progress without canceling warmup.
         const request = LocationService.getCurrentPosition({
           timeoutMs: 8500,
           desiredAccuracyMeters: 20,
           maxStaleAgeMs: 15000,
         });
-        earlyGpsFixRef.current = request;
-        void request.catch(() => {}); // failure is handled by normal acquisition fallback
+        void request.catch(() => {}); // normal acquisition handles a failed prewarm
       }).catch(() => {});
     }
-    return () => { active = false; earlyGpsFixRef.current = null; };
+    return () => { active = false; };
   }, []);
 
   // 1. Load Settings & Master Rosters (strictly once on mount, no coords dependency)
@@ -261,25 +260,10 @@ export const AttendancePreview: React.FC = () => {
           ));
         },
       });
-      // Use the already granted GPS fix acquired during settings hydration.
-      // A stale/error result falls through to the normal GPS service; never trust
-      // a previous fix as a new submission or bypass geofence validation.
-      const earlyFix = !isManual ? earlyGpsFixRef.current : null;
-      earlyGpsFixRef.current = null;
-      let position: LocationCoordinates;
-      if (earlyFix) {
-        try {
-          const candidate = await earlyFix;
-          position = LocationService.isFreshPosition(candidate, 15000) &&
-            candidate.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS
-            ? candidate
-            : await acquirePosition();
-        } catch {
-          position = await acquirePosition();
-        }
-      } else {
-        position = await acquirePosition();
-      }
+      // Shared search: attach to the already-running GPS prewarm. This preserves
+      // each progress callback and avoids waiting for the prewarm promise to
+      // finish before displaying the provisional/valid geofence state.
+      const position = await acquirePosition();
 
       if (requestId !== gpsRequestRef.current) return;
       setCoords(position);

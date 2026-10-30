@@ -22,15 +22,31 @@ export interface WatchPositionOptions {
   forceFresh?: boolean;
 }
 
+
+/** One browser GPS watcher can serve multiple callers, each with its own deadline. */
+interface PositionSubscriber {
+  resolve: (position: LocationCoordinates) => void;
+  reject: (reason: Error) => void;
+  onProgress?: WatchPositionOptions['onProgress'];
+  maxStaleAgeMs: number;
+  forceFresh: boolean;
+  startedAt: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  settled: boolean;
+}
+
+interface ActivePositionSearch {
+  watchId: number | null;
+  stopped: boolean;
+  subscribers: Set<PositionSubscriber>;
+  bestReading: LocationCoordinates | null;
+}
+
 export class LocationService {
   /** Strictly enforced maximum attendance accuracy limit (50 meters) */
   public static readonly MAX_ATTENDANCE_ACCURACY_METERS = 50;
   private static readonly CACHE_KEY = 'piket-guru:last-valid-position';
-  private static activeWatchId: number | null = null;
-  private static activeTimeoutId: any = null;
-  private static activeRefineTimeoutId: any = null;
-  private static currentRequestId = 0;
-  private static activeRejector: ((reason?: any) => void) | null = null;
+  private static activeSearch: ActivePositionSearch | null = null;
   public static lastValidPosition: LocationCoordinates | null = null;
 
   private static persistLastValidPosition(position: LocationCoordinates | null): void {
@@ -208,251 +224,190 @@ export class LocationService {
   }
 
   /**
-   * Cleans up any running geolocation watcher and timeout timers immediately.
-   * Cancels in-flight requests and protects against stale callbacks.
-   * Always settle the interrupted promise by default; otherwise a caller
-   * awaiting the old GPS search may hang indefinitely after navigation.
+   * Stop a shared GPS search and settle every waiting caller. Explicit cancellation
+   * is reserved for page teardown, not for starting another GPS request.
    */
-  public static clearCurrentWatcher(rejectPending = true): void {
-    this.currentRequestId++;
-    if (this.activeWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
-      try {
-        navigator.geolocation.clearWatch(this.activeWatchId);
-      } catch {}
-      this.activeWatchId = null;
-    }
-    if (this.activeTimeoutId !== null) {
-      clearTimeout(this.activeTimeoutId);
-      this.activeTimeoutId = null;
-    }
-    if (this.activeRefineTimeoutId !== null) {
-      clearTimeout(this.activeRefineTimeoutId);
-      this.activeRefineTimeoutId = null;
-    }
-    if (rejectPending && this.activeRejector) {
-      const reject = this.activeRejector;
-      this.activeRejector = null;
-      try {
-        const abortErr = new Error('Pencarian GPS dibatalkan.');
-        abortErr.name = 'AbortError';
-        reject(abortErr);
-      } catch {}
-    } else {
-      this.activeRejector = null;
-    }
+  public static clearCurrentWatcher(_rejectPending = true): void {
+    const search = this.activeSearch;
+    if (!search) return;
+    const abort = new Error('Pencarian GPS dibatalkan.');
+    abort.name = 'AbortError';
+    this.rejectSearch(search, abort);
   }
 
-  /**
-   * Explicit action to cancel an ongoing GPS search.
-   */
   public static cancelCurrentSearch(): void {
     this.clearCurrentWatcher(true);
   }
 
+  private static stopSearch(search: ActivePositionSearch): void {
+    if (search.stopped) return;
+    search.stopped = true;
+    if (this.activeSearch === search) this.activeSearch = null;
+    if (search.watchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+      try { navigator.geolocation.clearWatch(search.watchId); } catch { /* browser disposed */ }
+      search.watchId = null;
+    }
+  }
+
+  private static finishSubscriber(
+    search: ActivePositionSearch,
+    subscriber: PositionSubscriber,
+    position?: LocationCoordinates,
+    error?: Error
+  ): void {
+    if (subscriber.settled) return;
+    subscriber.settled = true;
+    if (subscriber.timer !== null) clearTimeout(subscriber.timer);
+    subscriber.timer = null;
+    search.subscribers.delete(subscriber);
+    if (position) subscriber.resolve(position);
+    else subscriber.reject(error ?? new Error('Pembacaan GPS tidak tersedia.'));
+    if (search.subscribers.size === 0) this.stopSearch(search);
+  }
+
+  private static rejectSearch(search: ActivePositionSearch, reason: Error): void {
+    for (const subscriber of [...search.subscribers]) {
+      this.finishSubscriber(search, subscriber, undefined, reason);
+    }
+    this.stopSearch(search);
+  }
+
+  private static isEligibleForSubscriber(
+    reading: LocationCoordinates,
+    subscriber: PositionSubscriber
+  ): boolean {
+    // `forceFresh` must not be satisfied by a previous caller's cached fix.
+    // Allow a small provider timestamp delay while disallowing older fixes.
+    return this.isFreshPosition(reading, subscriber.maxStaleAgeMs) &&
+      (!subscriber.forceFresh || reading.timestamp >= subscriber.startedAt - 5000);
+  }
+
+  private static consumeReading(search: ActivePositionSearch, position: GeolocationPosition): void {
+    if (search.stopped || this.activeSearch !== search) return;
+    const reading = this.normalizePosition(position);
+    // Reject malformed, future, or stale readings before updating ANY UI.
+    if (!this.isFreshPosition(reading, 30_000)) return;
+    if (!search.bestReading || reading.accuracy < search.bestReading.accuracy ||
+        !this.isFreshPosition(search.bestReading, 30_000)) {
+      search.bestReading = reading;
+    }
+
+    for (const subscriber of [...search.subscribers]) {
+      if (!this.isEligibleForSubscriber(reading, subscriber)) continue;
+      const validAccuracy = reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS;
+      try {
+        // `isProvisional` follows the attendance threshold (50m), NOT the
+        // aspirational 20m hardware target. 25m is already ready for attendance.
+        subscriber.onProgress?.(reading, !validAccuracy);
+      } catch { /* UI callback cannot break GPS for other subscribers */ }
+      if (validAccuracy) {
+        this.persistLastValidPosition(reading);
+        this.finishSubscriber(search, subscriber, reading);
+      }
+    }
+  }
+
+  private static startHardwareSearch(
+    search: ActivePositionSearch,
+    timeoutMs: number,
+    maxStaleAgeMs: number,
+    forceFresh: boolean
+  ): void {
+    // Low-power network-assisted reading and precise watcher race each other.
+    // Only the first acceptable result is needed; do not wait for 20m accuracy.
+    const receive = (position: GeolocationPosition) => this.consumeReading(search, position);
+    const permissionFailure = (error: GeolocationPositionError) => {
+      if (search.stopped) return;
+      if (error.code === 1) {
+        this.rejectSearch(search, new Error(
+          'Izin lokasi GPS ditolak. Aktifkan izin lokasi untuk aplikasi di pengaturan browser.'
+        ));
+      }
+      // Transient timeouts/position-unavailable are handled by each caller's
+      // deadline; the high-accuracy watcher is allowed to improve the fix.
+    };
+    try {
+      navigator.geolocation.getCurrentPosition(receive, permissionFailure, {
+        enableHighAccuracy: false,
+        maximumAge: forceFresh ? 0 : maxStaleAgeMs,
+        timeout: Math.min(timeoutMs, 1200),
+      });
+      // A synchronous quick callback may already have satisfied every caller.
+      if (search.stopped) return;
+      const watchId = navigator.geolocation.watchPosition(receive, permissionFailure, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: Math.max(timeoutMs, 15000),
+      });
+      // Browser adapters can invoke the first watch callback synchronously.
+      if (search.stopped) {
+        try { navigator.geolocation.clearWatch(watchId); } catch { /* ignore */ }
+      } else {
+        search.watchId = watchId;
+      }
+    } catch (error: any) {
+      this.rejectSearch(search, new Error(error?.message || 'Gagal memulai pencarian GPS.'));
+    }
+  }
+
   /**
-   * Retrieves a fresh reading quickly when available and keeps searching on slower devices.
-   * Any valid reading meeting the 50m accuracy policy resolves immediately.
+   * Share one active hardware lookup across concurrent clients, with separate
+   * deadlines, callbacks and freshness requirements. A valid ≤50m reading
+   * resolves immediately and clears the watcher when the last caller finishes.
    */
   public static getCurrentPosition(
     options: WatchPositionOptions | boolean = {}
   ): Promise<LocationCoordinates> {
     const opts: WatchPositionOptions = typeof options === 'boolean' ? {} : options;
-
     const {
-      timeoutMs = 8500, // Allow slower devices to establish a real GPS fix without a UI countdown
-      desiredAccuracyMeters = 20,
+      timeoutMs = 8500,
       maxStaleAgeMs = 30000,
       forceFresh = false,
       onProgress,
     } = opts;
 
-    return new Promise((resolve, reject) => {
-      // 1. Browser capability check
-      if (typeof navigator === 'undefined' || !navigator.geolocation) {
-        reject(new Error('Perangkat atau peramban Anda tidak mendukung Geolocation GPS.'));
-        return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      return Promise.reject(new Error('Perangkat atau peramban Anda tidak mendukung Geolocation GPS.'));
+    }
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      return Promise.reject(new Error('GPS memerlukan sambungan HTTPS yang aman.'));
+    }
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 ||
+        !Number.isFinite(maxStaleAgeMs) || maxStaleAgeMs < 0) {
+      return Promise.reject(new Error('Pengaturan waktu pencarian GPS tidak valid.'));
+    }
+
+    const restored = forceFresh ? null : this.restoreCachedPosition(maxStaleAgeMs);
+    if (restored) {
+      try { onProgress?.(restored, false); } catch { /* non-critical */ }
+      return Promise.resolve(restored);
+    }
+
+    return new Promise<LocationCoordinates>((resolve, reject) => {
+      let search = this.activeSearch;
+      const isNewSearch = !search || search.stopped;
+      if (!search || search.stopped) {
+        search = { watchId: null, stopped: false, subscribers: new Set(), bestReading: null };
+        this.activeSearch = search;
       }
-
-      // 2. Insecure context check (Geolocation requires HTTPS)
-      if (typeof window !== 'undefined' && window.isSecureContext === false) {
-        reject(
-          new Error(
-            'Koneksi browser tidak aman (HTTPS diperlukan untuk izin lokasi GPS). Silakan buka aplikasi melalui protokol HTTPS.'
-          )
-        );
-        return;
-      }
-
-      // Fast Path: If recent valid reading exists (<=30s) and meets accuracy (<=50m), return immediately
-      const restored = forceFresh ? null : this.restoreCachedPosition(maxStaleAgeMs);
-      if (restored) {
-        if (onProgress) onProgress(restored, false);
-        resolve(restored);
-        return;
-      }
-
-      // Cancel any previous concurrent search immediately
-      this.clearCurrentWatcher(true);
-      const requestId = ++this.currentRequestId;
-      this.activeRejector = reject;
-
-      let bestReading: LocationCoordinates | null = null;
-      let hasCompleted = false;
-
-      const cleanup = () => {
-        if (this.activeWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
-          try {
-            navigator.geolocation.clearWatch(this.activeWatchId);
-          } catch {}
-          this.activeWatchId = null;
-        }
-        if (this.activeTimeoutId !== null) {
-          clearTimeout(this.activeTimeoutId);
-          this.activeTimeoutId = null;
-        }
-        if (this.activeRefineTimeoutId !== null) {
-          clearTimeout(this.activeRefineTimeoutId);
-          this.activeRefineTimeoutId = null;
-        }
-        this.activeRejector = null;
+      const subscriber: PositionSubscriber = {
+        resolve, reject, onProgress, maxStaleAgeMs, forceFresh,
+        startedAt: Date.now(), timer: null, settled: false,
       };
-
-      const finishSuccess = (coords: LocationCoordinates) => {
-        if (hasCompleted || requestId !== this.currentRequestId) return;
-        hasCompleted = true;
-        cleanup();
-        this.persistLastValidPosition(coords);
-        resolve(coords);
-      };
-
-      const finishError = (err: Error) => {
-        if (hasCompleted || requestId !== this.currentRequestId) return;
-        hasCompleted = true;
-        cleanup();
-        reject(err);
-      };
-
-      // Keep searching briefly on slower devices; the UI never displays a countdown.
-      this.activeTimeoutId = setTimeout(() => {
-        if (hasCompleted || requestId !== this.currentRequestId) return;
-
-        if (bestReading && bestReading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-          finishSuccess(bestReading);
-        } else if (bestReading && bestReading.accuracy > this.MAX_ATTENDANCE_ACCURACY_METERS) {
-          finishError(
-            new Error(
-              `Akurasi sinyal GPS terdeteksi ±${Math.round(
-                bestReading.accuracy
-              )}m, belum memenuhi batas presensi (≤50m). Silakan pindah ke area terbuka lalu klik Coba Lagi.`
-            )
-          );
-        } else {
-          finishError(
-            new Error(
-              'Lokasi belum terbaca. Aktifkan GPS, coba area terbuka, lalu pilih Perbarui GPS.'
-            )
-          );
-        }
+      search.subscribers.add(subscriber);
+      subscriber.timer = setTimeout(() => {
+        if (subscriber.settled) return;
+        const reading = search!.bestReading;
+        const reason = reading && this.isFreshPosition(reading, 30_000)
+          ? `Akurasi GPS terakhir ±${Math.round(reading.accuracy)}m, belum memenuhi syarat 50m. Pindah ke area terbuka lalu coba lagi.`
+          : 'Lokasi belum terbaca. Aktifkan GPS, coba area terbuka, lalu pilih Perbarui GPS.';
+        this.finishSubscriber(search!, subscriber, undefined, new Error(reason));
       }, timeoutMs);
 
-      const quickTimeout = Math.min(timeoutMs, 1200);
-      try {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (hasCompleted || requestId !== this.currentRequestId) return;
-            const reading = this.normalizePosition(pos);
-            if (!this.isFreshPosition(reading, maxStaleAgeMs)) return;
-
-            bestReading = !bestReading || reading.accuracy < bestReading.accuracy ? reading : bestReading;
-            onProgress?.(reading, reading.accuracy > desiredAccuracyMeters);
-
-            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-              finishSuccess(reading);
-            }
-          },
-          () => {
-            // Ignore quick-path failures and continue with watchPosition.
-          },
-          {
-            enableHighAccuracy: false,
-            maximumAge: forceFresh ? 0 : maxStaleAgeMs,
-            timeout: quickTimeout,
-          }
-        );
-
-        const watchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            if (hasCompleted || requestId !== this.currentRequestId) return;
-
-            const now = Date.now();
-            const posTime = pos.timestamp || now;
-            // Reject stale readings > 30s or future timestamps
-            if (now - posTime > maxStaleAgeMs || posTime > now + 5000) {
-              return;
-            }
-
-            const reading = this.normalizePosition(pos);
-            if (!this.isFreshPosition(reading, maxStaleAgeMs)) return;
-
-            if (!bestReading || reading.accuracy < bestReading.accuracy) {
-              bestReading = reading;
-            }
-
-            if (onProgress) {
-              onProgress(reading, reading.accuracy > desiredAccuracyMeters);
-            }
-
-            // Any fresh reading within the existing 50m policy is already
-            // sufficient; do not force users to wait for an arbitrary refine timer.
-            if (reading.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
-              finishSuccess(reading);
-              return;
-            }
-
-
-          },
-          (err) => {
-            if (hasCompleted || requestId !== this.currentRequestId) return;
-
-            let msg = 'Sinyal GPS tidak tersedia.';
-            switch (err.code) {
-              case err.PERMISSION_DENIED:
-                msg =
-                  'Izin lokasi GPS ditolak oleh browser/perangkat. Aktifkan izin lokasi di pengaturan browser Anda.';
-                break;
-              case err.POSITION_UNAVAILABLE:
-                msg =
-                  'Sinyal lokasi GPS tidak tersedia. Pastikan GPS/Location HP aktif dan berada di area terbuka.';
-                break;
-              case err.TIMEOUT:
-                msg =
-                  'Lokasi belum terbaca. Pastikan GPS aktif lalu pilih Perbarui GPS.';
-                break;
-            }
-
-            if (!bestReading) {
-              finishError(new Error(msg));
-            }
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: timeoutMs,
-          }
-        );
-        // Some mock/browser adapters deliver the first watch callback
-        // synchronously. A result may have completed before watchPosition
-        // returns its ID; clear that late ID instead of leaking a watcher.
-        if (hasCompleted || requestId !== this.currentRequestId) {
-          try { navigator.geolocation.clearWatch(watchId); } catch {}
-        } else {
-          this.activeWatchId = watchId;
-        }
-      } catch (err: any) {
-        finishError(
-          new Error(err?.message || 'Terjadi kesalahan saat memulai penelusuran lokasi GPS.')
-        );
-      }
+      // A new caller can join an existing search without canceling that search.
+      // Do not replay an old candidate to `forceFresh` callers: wait for an
+      // actual browser callback after subscription.
+      if (isNewSearch) this.startHardwareSearch(search, timeoutMs, maxStaleAgeMs, forceFresh);
     });
   }
 }

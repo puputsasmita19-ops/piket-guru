@@ -60,10 +60,11 @@ check('GPS prewarm requires already-granted permission', () => {
   assert.match(gps, /permission\.state !== 'granted'/);
   assert.match(gps, /document\.hidden/);
 });
-check('GPS reuses the prewarmed request and retries failures', () => {
-  assert.match(gps, /const earlyFix = !isManual \? earlyGpsFixRef\.current : null/);
-  assert.match(gps, /candidate = await earlyFix/);
-  assert.match(gps, /await acquirePosition\(\)/);
+check('GPS attaches to shared prewarmed search without waiting for warmup', () => {
+  assert.match(gps, /const request = LocationService\.getCurrentPosition\(\{/);
+  assert.match(gps, /void request\.catch\(\(\) => \{\}\)/);
+  assert.match(gps, /const position = await acquirePosition\(\)/);
+  assert.doesNotMatch(gps, /await earlyFix/);
 });
 check('GPS status uses fresh reading and official school geofence', () => {
   assert.match(gps, /LocationService\.isFreshPosition\(pos, 15000\)/);
