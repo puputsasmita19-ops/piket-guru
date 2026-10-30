@@ -50,7 +50,7 @@ export const ProfilePhotoService = {
 type Entry = { refs: number; controller: AbortController; url: string; promise: Promise<string> };
 const images = new Map<string, Entry>();
 let scope = '';
-export function acquireProfileImage(path: string) {
+export function acquireProfileImage(path: string, variant: 'original' | 'thumbnail' = 'original') {
   if (!/^\/api\/drive\/(?:profile-photo\/[^/?]+\/|photo\/)[A-Za-z0-9_-]+$/.test(path)) throw new Error('Foto profil belum tersedia.');
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sesi tidak tersedia.');
@@ -58,7 +58,7 @@ export function acquireProfileImage(path: string) {
     for (const entry of images.values()) { entry.controller.abort(); if (entry.url) URL.revokeObjectURL(entry.url); }
     images.clear(); scope = uid;
   }
-  const key = `${uid}:${path}`;
+  const key = `${uid}:${variant}:${path}`;
   let entry = images.get(key);
   if (!entry) {
     entry = { refs: 0, controller: new AbortController(), url: '', promise: Promise.resolve('') };
@@ -66,7 +66,8 @@ export function acquireProfileImage(path: string) {
     entry.promise = (async () => {
       const token = await auth.currentUser!.getIdToken();
       if (auth.currentUser?.uid !== uid || current.controller.signal.aborted) throw new Error('Sesi berubah.');
-      const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: current.controller.signal });
+      const requestPath = variant === 'thumbnail' ? `${path}?variant=thumbnail` : path;
+      const res = await fetch(requestPath, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: current.controller.signal });
       if (!res.ok) throw new Error('Foto belum tersedia.');
       const blob = await res.blob();
       if (blob.type !== 'image/jpeg' || auth.currentUser?.uid !== uid || current.controller.signal.aborted) throw new Error('Foto tidak valid.');

@@ -8,6 +8,8 @@ import { sanitizeDashboardInfoConfig } from '../../types/dashboardInfo.types';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { Modal } from '../../components/common/Modal';
 import { UserAvatar } from '../../components/common/UserAvatar';
+import { RosterTeacherAvatar } from './RosterTeacherAvatar';
+import { rosterCandidateIds, rosterUnresolvedNames, resolveRosterPhoto, ROSTER_PHOTO_QUERY_BATCH } from './rosterPhotoLookup';
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -42,12 +44,13 @@ import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { AnnouncementFormModal } from './AnnouncementFormModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS, type PermissionKey } from '../../config/permissions';
-import { where } from 'firebase/firestore';
+import { documentId, where } from 'firebase/firestore';
 import { FirestoreService } from '../../services/firebase/firestoreService';
 import { AnnouncementService } from '../../services/firebase/announcementService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import {
   ScheduleItem,
+  UserProfile,
   AttendanceRecord,
   SchoolSettings,
 } from '../../types';
@@ -255,6 +258,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   // Today's schedules & operational items
   const todaySchedules = dutyRosterForDate(schedules, todayISO);
   const tomorrowSchedules = dutyRosterForDate(schedules, tomorrowISO);
+  // R92: Only query the profiles of teachers shown in an OPEN roster modal.
+  // Never subscribe to the entire users collection as part of the dashboard.
+  const isRosterModalOpen = detailPanel === 'dutyRoster' || detailPanel === 'dutyRosterTomorrow';
+  const photoRoster = detailPanel === 'dutyRosterTomorrow' ? tomorrowSchedules : todaySchedules;
+  const candidateIds = rosterCandidateIds(photoRoster, teachers, staff);
+  const photoRosterSignature = `${candidateIds.join('|')}::${photoRoster.map(row => row.petugasName).join('|')}`;
+  const [rosterPhotoUsers, setRosterPhotoUsers] = useState<UserProfile[]>([]);
+  useEffect(() => {
+    if (!isRosterModalOpen) { setRosterPhotoUsers([]); return; }
+    let active = true;
+    setRosterPhotoUsers([]);
+    const loadPhotos = async () => {
+      try {
+        const matchedUsers: UserProfile[] = [];
+        // Small document-ID batches: only matching user profiles, never every staff account.
+        for (let i = 0; i < candidateIds.length; i += ROSTER_PHOTO_QUERY_BATCH) {
+          const part = await FirestoreService.getAll<UserProfile>('users', [where(documentId(), 'in', candidateIds.slice(i, i + ROSTER_PHOTO_QUERY_BATCH))]);
+          if (!active) return;
+          matchedUsers.push(...part);
+          if (active) setRosterPhotoUsers([...matchedUsers]);
+        }
+        // Legacy duty schedules sometimes store master-record IDs rather than user IDs.
+        // Resolve the remaining names with bounded equality queries, still on-demand.
+        const missingNames = rosterUnresolvedNames(photoRoster, matchedUsers, teachers, staff);
+        for (let i = 0; i < missingNames.length; i += ROSTER_PHOTO_QUERY_BATCH) {
+          const part = await FirestoreService.getAll<UserProfile>('users', [where('fullName', 'in', missingNames.slice(i, i + ROSTER_PHOTO_QUERY_BATCH))]);
+          if (!active) return;
+          matchedUsers.push(...part);
+          if (active) setRosterPhotoUsers([...new Map(matchedUsers.map(user => [user.id, user])).values()]);
+        }
+        if (active) setRosterPhotoUsers([...new Map(matchedUsers.map(user => [user.id, user])).values()]);
+      } catch {
+        // A photo-read error must not block the duty roster. Keep any already
+        // verified matching profiles from earlier successful batches.
+      }
+    };
+    void loadPhotos();
+    return () => { active = false; };
+    // Signatures contain every ID/name used by the bounded query; arrays otherwise
+    // gain a new identity on unrelated dashboard renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRosterModalOpen, photoRosterSignature, currentUser?.id]);
+
   const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
   const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
   const todayIncidents = incidents.filter((i) => i.tanggal === todayISO);
@@ -501,13 +547,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                   return (
                     <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-start gap-3 min-w-0">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isPresent
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600'
-                        }`}>
-                          {item.petugasName.charAt(0)}
-                        </div>
+                        <RosterTeacherAvatar
+                          name={item.petugasName}
+                          avatarUrl={resolveRosterPhoto(item, rosterPhotoUsers, teachers, staff)}
+                          isPresent={isPresent}
+                        />
                         <div className="min-w-0">
                           <div className="text-sm break-words [overflow-wrap:anywhere] font-bold text-slate-900 dark:text-white">
                             {item.petugasName}

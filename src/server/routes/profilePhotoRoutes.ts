@@ -96,15 +96,24 @@ profilePhotoRouter.get('/profile-photo/:userId/:fileId', requireAuth, async (req
   if (!adminDb) { res.status(503).end(); return; }
   try {
     const snap = await adminDb.collection('users').doc(uid).get();
-    if (!snap.exists || snap.data()?.avatarUrl !== photoPath(uid, String(fileId)) || (snap.data()?.isActive !== true && (req as any).user.role !== 'ADMIN')) { res.status(404).end(); return; }
-    const photo = await DriveStore.getPhotoStream(String(fileId));
-    if (photo.mimeType !== 'image/jpeg') { res.status(415).end(); return; }
+    const data = snap.data();
+    // A private thumbnail follows the same authentication and current-avatar check
+    // as the original. Public-login opt-in is NOT required for authenticated rosters.
+    if (!snap.exists || data?.avatarUrl !== photoPath(uid, String(fileId)) || (data?.isActive !== true && (req as any).user.role !== 'ADMIN')) {
+      res.status(404).end(); return;
+    }
+    const thumbId = data?.loginAvatarThumbFileId;
+    const useThumbnail = req.query.variant === 'thumbnail' && typeof thumbId === 'string' && /^[A-Za-z0-9_-]+$/.test(thumbId);
+    const photo = await DriveStore.getPhotoStream(useThumbnail ? thumbId : String(fileId));
+    if (photo.mimeType !== 'image/jpeg') { photo.stream.destroy(); res.status(415).end(); return; }
     res.type('image/jpeg');
+    res.setHeader('X-Avatar-Variant', useThumbnail ? 'thumbnail' : 'original');
+    if (photo.size) res.setHeader('Content-Length', photo.size);
     photo.stream.on('error', () => { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
+    res.on('close', () => { if (!res.writableEnded) photo.stream.destroy(); });
     photo.stream.pipe(res);
   } catch { if (!res.headersSent) res.status(502).end(); }
 });
-
 
 /**
  * Public login avatars are OPT-IN per user, controlled only by an administrator.
