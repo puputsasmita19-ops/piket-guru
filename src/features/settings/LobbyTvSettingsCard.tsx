@@ -5,7 +5,8 @@ import {
   RotateCcw,
   Eye,
   Sliders,
-  Sparkles,
+  Megaphone,
+  Monitor,
   Clock,
   Palette,
   Volume2,
@@ -46,6 +47,7 @@ import { AnnouncementRecord } from '../../types/announcement.types';
 import { PublicKioskDisplay } from '../kiosk/PublicKioskDisplay';
 import { getKioskTheme } from '../kiosk/kioskTheme';
 import { PASTEL_THEMES } from '../../contexts/ThemeContext';
+import { parseYouTubeVideoId } from '../kiosk/youtubeProfile';
 
 interface LobbyTvSettingsCardProps {
   settings: SchoolSettings;
@@ -173,6 +175,11 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
       return;
     }
 
+    if (draftConfig.profileVideoEnabled && draftConfig.profileVideoUrl?.trim() && !parseYouTubeVideoId(draftConfig.profileVideoUrl)) {
+      setFeedback({ tone: 'error', message: 'Link video tidak valid. Gunakan URL HTTPS YouTube (watch, youtu.be, Shorts, atau live) yang berisi ID video.' });
+      return;
+    }
+
     if (draftConfig.enabledPanels.length === 0) {
       setFeedback({
         tone: 'error',
@@ -200,16 +207,6 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
     }
   };
 
-  const parseMultilineText = (value: string, limit: number) =>
-    value
-      .split(/\r?\n/)
-      .map((line) => stripHtml(line))
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(0, limit);
-
-  const toMultilineText = (lines?: string[]) => (Array.isArray(lines) ? lines.join('\n') : '');
-
   const getPanelIcon = (panelId: TvPanelId) => {
     switch (panelId) {
       case 'duty_teachers':
@@ -221,7 +218,7 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
       case 'discipline':
         return <GraduationCap className="w-4 h-4 text-amber-500" />;
       case 'announcements':
-        return <Sparkles className="w-4 h-4 text-cyan-500" />;
+        return <Megaphone className="w-4 h-4 text-cyan-500" />;
       case 'school_identity':
         return <Building className="w-4 h-4 text-blue-500" />;
     }
@@ -872,114 +869,6 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <div className="rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] p-4 space-y-4">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Sematan Video Profil Sekolah</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan tautan YouTube saja agar TV Lobi tidak menyimpan file video di server sekolah.</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">URL Video YouTube:</label>
-                <input
-                  type="url"
-                  value={draftConfig.profileVideoUrl || ''}
-                  onChange={(e) =>
-                    setDraftConfig((prev) => ({
-                      ...prev,
-                      profileVideoUrl: e.target.value.trim(),
-                    }))
-                  }
-                  placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/..."
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Judul kartu video:</label>
-                  <input
-                    type="text"
-                    value={draftConfig.profileVideoTitle || ''}
-                    onChange={(e) =>
-                      setDraftConfig((prev) => ({
-                        ...prev,
-                        profileVideoTitle: stripHtml(e.target.value),
-                      }))
-                    }
-                    placeholder="Video Profil Utama Sekolah"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Subjudul / keterangan video:</label>
-                  <input
-                    type="text"
-                    value={draftConfig.profileVideoSubtitle || ''}
-                    onChange={(e) =>
-                      setDraftConfig((prev) => ({
-                        ...prev,
-                        profileVideoSubtitle: stripHtml(e.target.value),
-                      }))
-                    }
-                    placeholder="Profil singkat, live audio, atau keterangan lain"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)] p-4 space-y-4">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Konten Profil Sekolah pada TV Lobi</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur visi, misi, dan tata tertib ringkas yang akan tampil pada layout TV seperti contoh dashboard lobi.</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Visi Sekolah:</label>
-                <textarea
-                  rows={3}
-                  value={draftConfig.schoolVision || ''}
-                  onChange={(e) =>
-                    setDraftConfig((prev) => ({
-                      ...prev,
-                      schoolVision: stripHtml(e.target.value),
-                    }))
-                  }
-                  placeholder="Tuliskan visi utama sekolah"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Misi Sekolah (1 baris = 1 poin, maks. 8):</label>
-                <textarea
-                  rows={5}
-                  value={toMultilineText(draftConfig.schoolMissions)}
-                  onChange={(e) =>
-                    setDraftConfig((prev) => ({
-                      ...prev,
-                      schoolMissions: parseMultilineText(e.target.value, 8),
-                    }))
-                  }
-                  placeholder="1. Membudayakan disiplin...\n2. Mengembangkan literasi digital..."
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Tata Tertib / Imbauan Singkat (1 baris = 1 poin, maks. 10):</label>
-                <textarea
-                  rows={5}
-                  value={toMultilineText(draftConfig.schoolRules)}
-                  onChange={(e) =>
-                    setDraftConfig((prev) => ({
-                      ...prev,
-                      schoolRules: parseMultilineText(e.target.value, 10),
-                    }))
-                  }
-                  placeholder="Gunakan seragam lengkap...\nTamu wajib melapor ke guru piket..."
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-          </div>
-
           {/* Toggle Switches: Identitas, Indikator Koneksi, Bel Audio */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             <label className="p-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-surface-subtle)] flex items-center justify-between gap-2 cursor-pointer">
@@ -1035,6 +924,90 @@ export const LobbyTvSettingsCard: React.FC<LobbyTvSettingsCardProps> = ({
                 className="rounded text-[var(--theme-primary)] focus:ring-[var(--theme-primary)]"
               />
             </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* R90-D: YouTube is a separate optional slide, the original R90-B layout is unchanged. */}
+      <Card>
+        <CardHeader
+          title="Sematan Video Profil Sekolah (YouTube)"
+          subtitle="Tambahkan satu slide video ke akhir rotasi TV Lobi tanpa mengubah tampilan slide yang sudah ada."
+        />
+        <CardContent className="p-5 space-y-4">
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] bg-slate-50 dark:bg-[var(--theme-surface-subtle)] p-3 cursor-pointer">
+            <span className="flex items-center gap-3 min-w-0">
+              <Monitor className="w-5 h-5 shrink-0 text-[var(--theme-primary)]" />
+              <span>
+                <span className="block text-sm font-bold text-slate-900 dark:text-white">Tampilkan Video Profil Sekolah</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">Aktif setelah tautan valid disimpan. Slide video muncul setelah panel yang sudah ada.</span>
+              </span>
+            </span>
+            <input type="checkbox" checked={draftConfig.profileVideoEnabled !== false} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoEnabled: e.target.checked }))} />
+          </label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">URL video YouTube</label>
+            <input
+              type="url"
+              value={draftConfig.profileVideoUrl || ''}
+              onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoUrl: e.target.value }))}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white"
+            />
+            {Boolean(draftConfig.profileVideoUrl?.trim()) && !parseYouTubeVideoId(draftConfig.profileVideoUrl) && (
+              <p className="text-xs text-rose-600" role="alert">Masukkan link HTTPS YouTube yang valid, misalnya youtube.com/watch?v=... atau youtu.be/...</p>
+            )}
+            <p className="text-xs text-slate-500 dark:text-slate-400">Video berasal langsung dari YouTube, bukan diunggah ke Firebase Storage. Streaming tetap menggunakan kuota internet perangkat TV.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Judul slide video</label>
+              <input
+                type="text"
+                maxLength={100}
+                value={draftConfig.profileVideoTitle || ''}
+                onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoTitle: e.target.value }))}
+                placeholder="Video Profil Sekolah"
+                className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Subjudul / keterangan</label>
+              <input
+                type="text"
+                maxLength={160}
+                value={draftConfig.profileVideoSubtitle || ''}
+                onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoSubtitle: e.target.value }))}
+                placeholder="Profil resmi sekolah"
+                className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-[var(--theme-card-border)] p-3 cursor-pointer">
+              <span>
+                <span className="block text-sm font-bold text-slate-900 dark:text-white">Putar otomatis (tanpa suara)</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">Saat slide muncul, video dimuat dan diputar otomatis bila browser mengizinkan.</span>
+              </span>
+              <input type="checkbox" checked={draftConfig.profileVideoAutoplay !== false} onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoAutoplay: e.target.checked }))} />
+            </label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Durasi tampil slide video</label>
+              <select
+                value={draftConfig.profileVideoDurationSec ?? 90}
+                onChange={e => setDraftConfig(prev => ({ ...prev, profileVideoDurationSec: Number(e.target.value) }))}
+                className="w-full rounded-xl p-2.5 border border-slate-200 dark:border-[var(--theme-card-border)] bg-white dark:bg-[var(--theme-input-bg)] text-sm text-slate-900 dark:text-white"
+              >
+                <option value={30}>30 detik</option>
+                <option value={60}>60 detik</option>
+                <option value={90}>90 detik (default)</option>
+                <option value={120}>2 menit</option>
+                <option value={180}>3 menit</option>
+                <option value={300}>5 menit</option>
+                <option value={600}>10 menit</option>
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Durasi video terpisah dari interval slide informasi yang sudah ada. Video dihentikan ketika slide berganti.</p>
+            </div>
           </div>
         </CardContent>
       </Card>

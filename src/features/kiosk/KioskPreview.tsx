@@ -12,7 +12,6 @@ import {
   Volume2,
   Calendar,
   Clock,
-  Sparkles,
   ShieldCheck,
   Building,
   Monitor,
@@ -173,7 +172,7 @@ export const KioskPreview: React.FC = () => {
         <Card>
           <CardContent className="p-5 space-y-2">
             <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center">
-              <Sparkles className="w-5 h-5" />
+              <Megaphone className="w-5 h-5" strokeWidth={1.7} />
             </div>
             <h4 className="text-sm font-bold text-slate-900 dark:text-white">
               Running Ticker Pengumuman
