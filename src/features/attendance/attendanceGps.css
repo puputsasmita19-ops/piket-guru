@@ -85,3 +85,26 @@
   .attendance-gps-actions { justify-content: flex-end; }
   .attendance-gps-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* R95: GPS-confirmed next step. Outline uses a cheap box-shadow pulse only;
+   do not animate layout, height, position or the camera itself. */
+.attendance-selfie-target { scroll-margin-block: 96px; border-radius: 18px; }
+.attendance-selfie-ready-hint { padding: 11px 13px; border-radius: 12px;
+  border: 1px solid #6ee7b7; color: #065f46; background: #ecfdf5;
+  font-size: 12px; line-height: 1.55; font-weight: 700; }
+.dark .attendance-selfie-ready-hint { border-color: #047857; color: #a7f3d0; background: #064e3b; }
+.attendance-selfie-target.is-gps-ready [data-tour="selfie-trigger"] {
+  border: 2px solid var(--theme-primary, #0891b2);
+  background: var(--theme-primary-light, #ecfeff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary, #0891b2) 15%, transparent);
+  animation: selfie-gps-ready-glow 1.6s ease-in-out 3;
+}
+.dark .attendance-selfie-target.is-gps-ready [data-tour="selfie-trigger"] {
+  background: var(--theme-surface-subtle, #0f172a);
+}
+@keyframes selfie-gps-ready-glow {
+  50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--theme-primary, #0891b2) 24%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attendance-selfie-target.is-gps-ready [data-tour="selfie-trigger"] { animation: none; }
+}

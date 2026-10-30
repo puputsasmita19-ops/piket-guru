@@ -37,6 +37,7 @@ import { formatIndonesianDate, formatTime, getCurrentDayName, getTodayISODate, t
 import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils/scheduleUtils';
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
+import { shouldGuideToSelfie } from './selfieGpsGuide';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieForSubmission } from '../../services/attendance/selfieWatermark';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
@@ -94,6 +95,11 @@ export const AttendancePreview: React.FC = () => {
   const [coords, setCoords] = useState<LocationCoordinates | null>(null);
   const [geofence, setGeofence] = useState<GeofenceResult | null>(null);
   const gpsRequestRef = React.useRef(0);
+  const selfieTargetRef = React.useRef<HTMLDivElement | null>(null);
+  const selfieTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const autoGuidedSelfieKeyRef = React.useRef('');
+  const [highlightSelfieStep, setHighlightSelfieStep] = useState(false);
+  const [pageVisible, setPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden');
   const warmSelfieGpsRef = React.useRef<Promise<LocationCoordinates> | null>(null);
   const warmSelfieContextRef = React.useRef('');
   const validSchoolLocation = Number.isFinite(settings.schoolLat) && Math.abs(settings.schoolLat) <= 90 &&
@@ -209,6 +215,7 @@ export const AttendancePreview: React.FC = () => {
       const position = await LocationService.getCurrentPosition({
         timeoutMs: 8500,
         desiredAccuracyMeters: 20,
+        maxStaleAgeMs: 15000, // Align visible GPS status with selfie freshness; do not guide from older cached fixes.
         forceFresh: isManual,
         onProgress: (pos, isProv) => {
           if (requestId !== gpsRequestRef.current) return;
@@ -296,6 +303,55 @@ export const AttendancePreview: React.FC = () => {
   const existingAttendanceToday = attendanceList.find(
     (a) => a.tanggal === todayISO && a.userId === currentUser?.id
   );
+
+  // R95: A GPS reading may be shown provisionally while its precision is being
+  // refined. Only a fresh, policy-compliant reading may trigger the selfie guide.
+  // This is navigation assistance, not permission to bypass the shutter-time
+  // revalidation performed by prepareSelfieCapture().
+  const canGuideToSelfie = shouldGuideToSelfie({
+    activeTab, settingsReady, validSchoolLocation, userId: currentUser?.id,
+    hasCheckIn: !!existingAttendanceToday, hasSelfie: !!capturedSelfie,
+    isCameraOpen: isCameraModalOpen, isSubmitting,
+    canCheckIn: settings.attendanceMode === 'BEBAS' || isAdmin || todayUserSchedules.length > 0,
+    gpsError, position: coords, geofence, isGpsFresh: LocationService.isFreshPosition(coords, 15_000),
+  });
+  const showSelfieGuide = highlightSelfieStep && canGuideToSelfie;
+
+  useEffect(() => {
+    const refreshVisibility = () => setPageVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', refreshVisibility);
+    return () => document.removeEventListener('visibilitychange', refreshVisibility);
+  }, []);
+
+  // An account change must never inherit a previous account's highlight or
+  // auto-navigation state (GPS location itself is separately revalidated).
+  useEffect(() => {
+    autoGuidedSelfieKeyRef.current = '';
+    setHighlightSelfieStep(false);
+  }, [currentUser?.id, todayISO]);
+
+  useEffect(() => {
+    // Once per account/day: no repeated auto-scroll when GPS watcher reports
+    // nearby fixes, after manually refreshing, or while using other controls.
+    const key = `${currentUser?.id || ''}|${todayISO}`;
+    if (!canGuideToSelfie || !pageVisible || autoGuidedSelfieKeyRef.current === key) return;
+    autoGuidedSelfieKeyRef.current = key;
+    setHighlightSelfieStep(true);
+    // Prepare font in the background as soon as real GPS permits the next step.
+    void prepareSelfieWatermarkFont().catch(() => {});
+    const timer = window.setTimeout(() => {
+      if (!selfieTargetRef.current || isCameraModalOpen) return;
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      try {
+        selfieTargetRef.current.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      } catch {
+        selfieTargetRef.current.scrollIntoView();
+      }
+      try { selfieTriggerRef.current?.focus({ preventScroll: true }); }
+      catch { selfieTriggerRef.current?.focus(); }
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [canGuideToSelfie, currentUser?.id, todayISO, isCameraModalOpen, pageVisible]);
 
   // Restore attendance selfie draft for today if available
   useEffect(() => {
@@ -1013,7 +1069,18 @@ export const AttendancePreview: React.FC = () => {
                 )}
 
                 {/* Camera Selfie Section */}
-                <div data-tour="camera-section" className="space-y-2">
+                <div
+                  ref={selfieTargetRef}
+                  data-tour="camera-section"
+                  data-gps-auto-guide={showSelfieGuide ? 'ready' : 'idle'}
+                  className={`attendance-selfie-target space-y-2 ${showSelfieGuide ? 'is-gps-ready' : ''}`}
+                >
+                  {showSelfieGuide && (
+                    <p id="selfie-gps-ready-hint" role="status" className="attendance-selfie-ready-hint flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                      GPS dalam radius sekolah. Lanjutkan dengan mengetuk Ambil Swafoto.
+                    </p>
+                  )}
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
                       Swafoto Selfie di Pos / Area Tugas:
@@ -1063,8 +1130,13 @@ export const AttendancePreview: React.FC = () => {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setIsCameraModalOpen(true)}
+                      ref={selfieTriggerRef}
+                      onClick={() => {
+                        setHighlightSelfieStep(false);
+                        setIsCameraModalOpen(true);
+                      }}
                       data-tour="selfie-trigger"
+                      aria-describedby={showSelfieGuide ? 'selfie-gps-ready-hint' : undefined}
                       className="w-full flex items-center gap-3 text-left rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--theme-primary)] bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/50 p-3 sm:p-5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-primary)]"
                     >
                       <span className="w-10 h-10 shrink-0 rounded-xl bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] flex items-center justify-center">
