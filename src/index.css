@@ -1636,3 +1636,27 @@ button.bg-\[var\(--theme-primary\)\],
 @media (prefers-reduced-motion: reduce) {
   .tv-kiosk-ticker-track { animation: none !important; transform: none !important; will-change: auto; }
 }
+
+/* R98 — immediate-touch PIN keypad feedback (no layout movement or heavy shadows). */
+.login-pin-pad > button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 70ms ease-out, color 70ms ease-out, transform 85ms ease-out;
+  will-change: auto;
+}
+.login-pin-pad > button:not(:disabled):active {
+  transform: scale(.965);
+  background-color: var(--theme-primary-light);
+  outline: 2px solid var(--theme-primary);
+  outline-offset: -2px;
+}
+.login-pin-pad > button:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
+.login-pin-haptic-toggle { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.login-pin-haptic-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: #94a3b8; flex: none; }
+.login-pin-haptic-indicator.is-on { background: #10b981; }
+@media (prefers-reduced-motion: reduce) {
+  .login-pin-pad > button { transition: none !important; }
+  .login-pin-pad > button:not(:disabled):active { transform: none; }
+}

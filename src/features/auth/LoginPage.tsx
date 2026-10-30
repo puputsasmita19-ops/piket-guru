@@ -1,5 +1,7 @@
 import { LastLoginPreference } from '../../services/auth/lastLoginPreference';
 import { LoginBackdrop } from './LoginBackdrop';
+import { readPinHapticsEnabled, savePinHapticsEnabled, supportsPinHaptics, vibratePinKey } from './pinHaptics';
+import { appendPinDigit, normalizePinInput, removeLastPinDigit } from './pinInput';
 import { LoginCredit } from './LoginCredit';
 import { LoginAvatar } from './LoginAvatar';
 import { OverflowName } from '../../components/common/OverflowName';
@@ -31,6 +33,7 @@ import {
   ExternalLink,
   ShieldAlert,
   MessageSquare,
+  Smartphone,
 } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -38,6 +41,9 @@ import { authService, UserSummaryItem } from '../../services/auth/authService';
 import { APP_NAME, APP_SUBTITLE, DEFAULT_SCHOOL_SETTINGS, DEFAULT_LOGIN_SUPPORT_CONTACT, ROLE_LABELS } from '../../config/constants';
 import { SchoolSettings, LoginContactType } from '../../types';
 import { useSlowOperation } from '../../hooks/useSlowOperation';
+
+// Key presses update only the PIN state; the expensive animated media backdrop stays stable.
+const StableLoginBackdrop = React.memo(LoginBackdrop);
 
 export const LoginPage: React.FC = () => {
   const { loginWithPin, loginWithGoogle, isLoading, isTrustedDevice, setTrustedDevice, sessionNotice } = useAuth();
@@ -67,6 +73,8 @@ export const LoginPage: React.FC = () => {
   const [selectedIdentifier, setSelectedIdentifier] = useState<string>('');
   const [isManualInput, setIsManualInput] = useState<boolean>(false);
   const [pin, setPin] = useState<string>('');
+  const hapticsSupported = useMemo(() => supportsPinHaptics(), []);
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => readPinHapticsEnabled());
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [hasError, setHasError] = useState<boolean>(false);
@@ -100,6 +108,20 @@ export const LoginPage: React.FC = () => {
     }
     return DEFAULT_SCHOOL_SETTINGS;
   });
+
+  const loginBackdropConfig = useMemo(() => (
+    publicAppearanceReady
+      ? schoolSettings.loginAppearance
+      : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' as const }
+  ), [publicAppearanceReady, schoolSettings.loginAppearance]);
+
+  const togglePinHaptics = () => {
+    if (!hapticsSupported) return;
+    const next = !hapticsEnabled;
+    setHapticsEnabled(next);
+    savePinHapticsEnabled(next);
+    if (next) vibratePinKey(true, 'digit');
+  };
 
   useEffect(() => {
     fetch('/api/auth/public-config', { priority: 'low' })
@@ -259,7 +281,8 @@ export const LoginPage: React.FC = () => {
   }, [highlightedIndex, isComboboxOpen]);
 
   const handleGoogleLogin = async () => {
-    if (isGoogleSubmitting || isSubmitting || isLoading) return;
+    if (isGoogleSubmitting || isSubmitting || isLoading || loginBusyRef.current) return;
+    loginBusyRef.current = true; // synchronous guard before React commits the spinner
     setIsGoogleSubmitting(true);
     setIsSubmitting(true);
     setErrorMessage('');
@@ -271,36 +294,30 @@ export const LoginPage: React.FC = () => {
     } catch (err: any) {
       setErrorMessage(err?.message || 'Gagal masuk dengan Google.');
     } finally {
+      loginBusyRef.current = false;
       setIsGoogleSubmitting(false);
       setIsSubmitting(false);
     }
   };
 
   const handlePinInput = (num: string) => {
+    if (loginBusyRef.current || isLoading || !/^[0-9]$/.test(num)) return;
     selectionTouchedRef.current = true;
-    if (pin.length < 6) {
-      setPin((prev) => prev + num);
-      if (errorMessage) {
-        setErrorMessage('');
-        setHasError(false);
-      }
-    }
+    // Functional guard is essential on fast taps: two events can arrive before React paints.
+    setPin((prev) => appendPinDigit(prev, num));
+    if (errorMessage) { setErrorMessage(''); setHasError(false); }
   };
 
   const handleBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
-    if (errorMessage) {
-      setErrorMessage('');
-      setHasError(false);
-    }
+    if (loginBusyRef.current || isLoading) return;
+    setPin((prev) => removeLastPinDigit(prev));
+    if (errorMessage) { setErrorMessage(''); setHasError(false); }
   };
 
   const handleClear = () => {
+    if (loginBusyRef.current || isLoading) return;
     setPin('');
-    if (errorMessage) {
-      setErrorMessage('');
-      setHasError(false);
-    }
+    if (errorMessage) { setErrorMessage(''); setHasError(false); }
   };
 
   const handleSelectUser = (user: UserSummaryItem) => {
@@ -342,7 +359,7 @@ export const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isSubmitting || isLoading) return;
+    if (isSubmitting || isLoading || loginBusyRef.current) return;
 
     if (!selectedIdentifier.trim()) {
       setErrorMessage('Pilih akun pengguna atau masukkan ID login terlebih dahulu.');
@@ -360,6 +377,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
+    loginBusyRef.current = true; // prevent double requests from rapid taps/Enter before rerender
     setIsSubmitting(true);
     setErrorMessage('');
     setHasError(false);
@@ -434,6 +452,7 @@ export const LoginPage: React.FC = () => {
       setErrorMessage('Tidak dapat terhubung ke server. Periksa koneksi internet Anda lalu coba lagi.');
       setHasError(false);
     } finally {
+      loginBusyRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -498,13 +517,13 @@ export const LoginPage: React.FC = () => {
     }
   }, [showThemePicker, isContactAdminModalOpen]);
 
-  const selectedMatches = selectedIdentifier.trim() ? usersList.filter(
+  const selectedMatches = useMemo(() => selectedIdentifier.trim() ? usersList.filter(
     (u) =>
       (u.loginId && u.loginId === selectedIdentifier) ||
       (u.nip && u.nip === selectedIdentifier) ||
       u.id === selectedIdentifier ||
       u.userId === selectedIdentifier
-  ) : [];
+  ) : [], [selectedIdentifier, usersList]);
   const selectedUser = selectedUidRef.current ? usersList.find(u => u.id === selectedUidRef.current) : selectedMatches.length === 1 ? selectedMatches[0] : undefined;
 
   const supportContact = schoolSettings.loginSupportContact || DEFAULT_LOGIN_SUPPORT_CONTACT;
@@ -585,7 +604,7 @@ export const LoginPage: React.FC = () => {
         backgroundColor: 'var(--theme-bg-app)',
       }}
     >
-      <div className="login-backdrop-host" aria-hidden="true"><LoginBackdrop config={publicAppearanceReady ? schoolSettings.loginAppearance : { ...sanitizeLoginAppearance(schoolSettings.loginAppearance), mediaPolicy: 'economy' }} /></div>
+      <div className="login-backdrop-host" aria-hidden="true"><StableLoginBackdrop config={loginBackdropConfig} /></div>
       {/* Main App Card */}
       <div className="login-card relative w-full max-w-md bg-white dark:bg-[var(--theme-card-bg)] border border-slate-200/90 dark:border-[var(--theme-card-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
         {/* Integrated Theme Settings Button & Popover */}
@@ -973,9 +992,12 @@ export const LoginPage: React.FC = () => {
                 pattern="[0-9]*"
                 maxLength={6}
                 value={pin}
+                disabled={isSubmitting || isLoading}
+                autoComplete="off"
+                spellCheck={false}
                 onChange={(e) => {
                   selectionTouchedRef.current = true;
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  const val = normalizePinInput(e.target.value);
                   setPin(val);
                   if (errorMessage) {
                     setErrorMessage('');
@@ -1038,7 +1060,8 @@ export const LoginPage: React.FC = () => {
               key={num}
               type="button"
               disabled={isSubmitting || isLoading}
-              onClick={() => handlePinInput(num)}
+              onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput(num); vibratePinKey(hapticsEnabled); } }}
+              aria-label={`Angka ${num}`}
               className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-[var(--theme-surface-subtle)] dark:hover:bg-[var(--theme-surface-hover)] active:bg-[var(--theme-primary)] active:text-white text-slate-800 dark:text-white text-base sm:text-lg font-bold transition-all duration-100 flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px]"
             >
               {num}
@@ -1048,7 +1071,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             disabled={isSubmitting || isLoading || pin.length === 0}
-            onClick={handleClear}
+            onClick={() => { handleClear(); vibratePinKey(hapticsEnabled, 'clear'); }}
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100/60 hover:bg-slate-200/80 dark:bg-[var(--theme-surface-subtle)]/70 dark:hover:bg-[var(--theme-surface-hover)] active:bg-slate-200 dark:active:bg-[var(--theme-surface-hover)] text-slate-500 dark:text-slate-400 text-xs font-semibold transition-all flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] cursor-pointer disabled:opacity-40 min-h-[44px]"
           >
             HAPUS
@@ -1057,7 +1080,8 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             disabled={isSubmitting || isLoading}
-            onClick={() => handlePinInput('0')}
+            onClick={() => { if (pin.length < 6 && !isSubmitting && !isLoading) { handlePinInput('0'); vibratePinKey(hapticsEnabled); } }}
+            aria-label="Angka 0"
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-[var(--theme-surface-subtle)] dark:hover:bg-[var(--theme-surface-hover)] active:bg-[var(--theme-primary)] active:text-white text-slate-800 dark:text-white text-base sm:text-lg font-bold transition-all duration-100 flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px]"
           >
             0
@@ -1066,11 +1090,30 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             disabled={isSubmitting || isLoading || pin.length === 0}
-            onClick={handleBackspace}
+            onClick={() => { handleBackspace(); vibratePinKey(hapticsEnabled, 'delete'); }}
             aria-label="Hapus satu angka"
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100/60 hover:bg-slate-200/80 dark:bg-[var(--theme-surface-subtle)]/70 dark:hover:bg-[var(--theme-surface-hover)] active:bg-slate-200 dark:active:bg-[var(--theme-surface-hover)] text-slate-600 dark:text-slate-300 text-base font-semibold transition-all flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] cursor-pointer disabled:opacity-40 min-h-[44px]"
           >
             <Delete className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Local-only haptic preference. Unsupported browsers keep normal visual feedback. */}
+        <div className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={togglePinHaptics}
+            disabled={!hapticsSupported || isSubmitting || isLoading}
+            role="switch"
+            aria-checked={hapticsSupported && hapticsEnabled}
+            aria-label="Getaran tombol PIN"
+            title={hapticsSupported ? 'Aktifkan atau matikan getaran ringan pada keypad PIN' : 'Browser ini tidak mendukung getaran'}
+            className="login-pin-haptic-toggle inline-flex items-center gap-2 min-h-[36px] px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[var(--theme-surface-subtle)] disabled:opacity-55 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+          >
+            <Smartphone className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Getaran tombol</span>
+            <span aria-hidden="true" className={`login-pin-haptic-indicator ${hapticsSupported && hapticsEnabled ? 'is-on' : ''}`} />
+            <span className="sr-only">{!hapticsSupported ? 'Tidak didukung perangkat' : hapticsEnabled ? 'Aktif' : 'Nonaktif'}</span>
           </button>
         </div>
 
