@@ -90,6 +90,9 @@ export interface AttendanceRecord extends BaseEntityMetadata {
   distance: number;
   status: AttendanceStatus;
   photoUrl?: string;
+  /** Original photo-time coordinates (watermark) kept for audit when GPS is reverified at submission. */
+  selfieCapturedAt?: string;
+  selfieCaptureGps?: { latitude: number; longitude: number; accuracy: number; timestamp: number };
   attendanceModeAtCheckIn?: 'TERJADWAL' | 'BEBAS';
   checkoutPolicy?: {
     mode: 'TERJADWAL' | 'BEBAS';

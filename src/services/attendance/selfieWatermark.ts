@@ -19,6 +19,9 @@ export const TARGET_MAX_DATA_URL_LENGTH = 340_000;
 export const SAFE_MAX_DATA_URL_LENGTH = 550_000;
 export const MAX_SELFIE_DATA_URL_LENGTH = SAFE_MAX_DATA_URL_LENGTH;
 export const SELFIE_GPS_MAX_AGE_MS = 30_000;
+// One selfie per school day is sufficient; the UI verifies the same WIB day
+// and obtains fresh GPS again whenever the capture reading is older than 30s.
+export const SELFIE_SUBMISSION_WINDOW_MS = 24 * 60 * 60_000;
 
 /** The Piket Guru UI uses Open Sans. Canvas must explicitly load the same face;
  * otherwise some mobile browsers silently render a different fallback font. */
@@ -103,6 +106,17 @@ export function validateSelfieEvidence(evidence: SelfieEvidence, now = Date.now(
       coords.timestamp > capturedAt + 5000 || capturedAt - coords.timestamp > SELFIE_GPS_MAX_AGE_MS) {
     throw new Error('Foto atau GPS sudah kedaluwarsa/tidak valid. Ambil ulang swafoto dengan GPS akurat.');
   }
+}
+
+/** Validate the original photo/GPS pair at shutter time, without pretending
+ * that the GPS is still current at check-in time. A fresh GPS verification is
+ * required by the attendance submit handler once the 30-second window passes. */
+export function validateSelfieForSubmission(evidence: SelfieEvidence, now = Date.now()): void {
+  if (!Number.isFinite(evidence?.capturedAt) || evidence.capturedAt > now + 5000 ||
+      now - evidence.capturedAt > SELFIE_SUBMISSION_WINDOW_MS) {
+    throw new Error('Draf swafoto sudah melewati batas satu hari. Ambil foto baru untuk keamanan presensi.');
+  }
+  validateSelfieEvidence(evidence, evidence.capturedAt);
 }
 
 function cleanText(value: string): string {

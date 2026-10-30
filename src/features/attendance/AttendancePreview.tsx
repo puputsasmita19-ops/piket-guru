@@ -38,7 +38,7 @@ import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
-import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
+import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieForSubmission } from '../../services/attendance/selfieWatermark';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 
 interface AttendanceFeedback {
@@ -105,6 +105,8 @@ export const AttendancePreview: React.FC = () => {
   const capturedPhoto = capturedSelfie?.dataUrl || null;
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshingCheckInGps, setIsRefreshingCheckInGps] = useState(false);
+  const refreshCheckInGpsRef = React.useRef(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<AttendanceFeedback | null>(null);
 
@@ -329,7 +331,7 @@ export const AttendancePreview: React.FC = () => {
     // consume the 30-second freshness window of the selfie evidence.
     const watermarkFont = await prepareSelfieWatermarkFont();
     const captureCoords = { ...await LocationService.ensureFreshPosition(coords, () =>
-      LocationService.getCurrentPosition({ timeoutMs: 10000, desiredAccuracyMeters: 20 }), 15000) };
+      LocationService.getCurrentPosition({ timeoutMs: 12000, desiredAccuracyMeters: 20, maxStaleAgeMs: 15000, forceFresh: true }), 15000) };
     const captureGeofence = LocationService.evaluateGeofence(
       captureCoords.latitude, captureCoords.longitude, captureCoords.accuracy,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters
@@ -353,7 +355,7 @@ export const AttendancePreview: React.FC = () => {
 
   // --- SUBMIT PRESENSI MASUK ---
   const handleCheckIn = async () => {
-    if (isSubmitting) return; // Prevent double click
+    if (isSubmitting || refreshCheckInGpsRef.current) return; // Prevent double click
     if (!currentUser) {
       setCheckInStatus({ tone: 'error', message: 'Sesi akun tidak ditemukan. Silakan masuk kembali.' });
       return;
@@ -381,56 +383,56 @@ export const AttendancePreview: React.FC = () => {
       return;
     }
     try {
-      validateSelfieEvidence(capturedSelfie);
+      validateSelfieForSubmission(capturedSelfie);
       const photoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(capturedSelfie.capturedAt));
       if (photoDate !== todayISO) throw new Error('Tanggal foto sudah berganti. Muat ulang halaman dan ambil swafoto baru.');
     } catch (error: any) {
       setCheckInStatus({ tone: 'error', message: error.message });
       return;
     }
-    // Store exactly the coordinates printed on this photo, not a later GPS reading.
-    const coords = capturedSelfie.coords;
-    const geofence = LocationService.evaluateGeofence(
-      coords.latitude, coords.longitude, coords.accuracy,
+    // A single photo is enough: preserve its original GPS/watermark. When it
+    // takes >30s to press "Kirim", renew GPS separately instead of retaking the
+    // photo. The attendance record stores submission GPS and photo-time GPS.
+    let verifiedCoords = capturedSelfie.coords;
+    if (!LocationService.isFreshPosition(verifiedCoords, 30_000)) {
+      refreshCheckInGpsRef.current = true;
+      setIsRefreshingCheckInGps(true);
+      setCheckInStatus({
+        tone: 'info',
+        message: 'Memperbarui GPS sebelum mengirim presensi. Foto yang sudah diambil tetap digunakan.',
+      });
+      try {
+        verifiedCoords = await LocationService.getCurrentPosition({
+          timeoutMs: 12000,
+          desiredAccuracyMeters: 20,
+          maxStaleAgeMs: 15000,
+          forceFresh: true,
+        });
+        setCoords(verifiedCoords);
+      } catch (error: any) {
+        setCheckInStatus({
+          tone: 'error',
+          message: `GPS belum berhasil diperbarui: ${error?.message || 'Lokasi tidak tersedia'}. Foto tetap tersimpan; aktifkan GPS dan tekan Kirim Presensi Masuk lagi.`,
+        });
+        return;
+      } finally {
+        refreshCheckInGpsRef.current = false;
+        setIsRefreshingCheckInGps(false);
+      }
+    }
+    const verifiedGeofence = LocationService.evaluateGeofence(
+      verifiedCoords.latitude, verifiedCoords.longitude, verifiedCoords.accuracy,
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters
     );
-    if (!coords || !geofence || geofence.status === 'GPS_ERROR') {
-      setCheckInStatus({
-        tone: 'error',
-        message: 'Koordinat GPS belum berhasil diperoleh. Pastikan GPS aktif dan klik tombol "Perbarui Koordinat GPS".',
-      });
+    setGeofence(verifiedGeofence);
+
+    if (verifiedCoords.accuracy > LocationService.MAX_ATTENDANCE_ACCURACY_METERS ||
+        verifiedGeofence.status === 'AKURASI_RENDAH') {
+      setCheckInStatus({ tone: 'error', message: `Akurasi GPS ±${Math.round(verifiedCoords.accuracy)}m terlalu rendah (maksimal 50m). Foto tetap tersedia; perbarui lokasi lalu coba kirim lagi.` });
       return;
     }
-
-    if (coords.accuracy > LocationService.MAX_ATTENDANCE_ACCURACY_METERS) {
-      setCheckInStatus({
-        tone: 'error',
-        message: `Akurasi GPS (±${Math.round(coords.accuracy)}m) terlalu rendah untuk presensi (kebijakan presensi ≤50m). Silakan pindah ke area terbuka dan perbarui GPS.`,
-      });
-      return;
-    }
-
-    if (!LocationService.isFreshPosition(coords, 30000)) {
-      setCheckInStatus({
-        tone: 'error',
-        message: 'GPS pada swafoto sudah kedaluwarsa (>30 detik). Ambil ulang swafoto agar foto dan koordinat presensi tetap sesuai.',
-      });
-      return;
-    }
-
-    if (geofence.status === 'DI_LUAR_LOKASI') {
-      setCheckInStatus({
-        tone: 'error',
-        message: `Lokasi Anda berada di luar radius sekolah (${geofence.distanceMeters}m dari pusat sekolah, batas: ${settings.allowedRadiusMeters}m). Presensi masuk ditolak.`,
-      });
-      return;
-    }
-
-    if (!capturedPhoto || capturedPhoto.trim().length === 0) {
-      setCheckInStatus({
-        tone: 'error',
-        message: 'Mohon ambil swafoto selfie di pos piket terlebih dahulu sebelum mengirim presensi masuk.',
-      });
+    if (verifiedGeofence.status !== 'DALAM_LOKASI') {
+      setCheckInStatus({ tone: 'error', message: `Lokasi saat mengirim di luar radius sekolah (${verifiedGeofence.distanceMeters}m, batas ${settings.allowedRadiusMeters}m). Foto tetap tersedia; kembali ke lingkungan sekolah lalu coba kirim lagi.` });
       return;
     }
 
@@ -476,8 +478,10 @@ export const AttendancePreview: React.FC = () => {
         scheduleId: currentSchedule ? currentSchedule.id : null,
         attendanceModeAtCheckIn: isBebas ? 'BEBAS' : 'TERJADWAL',
         tanggal: todayISO,
-        coords,
-        geofence,
+        coords: verifiedCoords,
+        geofence: verifiedGeofence,
+        selfieCapturedAt: capturedSelfie.capturedAt,
+        selfieCaptureCoords: capturedSelfie.coords,
         photoUrl: capturedPhoto,
         userRole: currentUser.role,
         settings,
@@ -1031,8 +1035,9 @@ export const AttendancePreview: React.FC = () => {
                           variant="success"
                           size="lg"
                           className="w-full sm:w-auto"
-                          isLoading={isSubmitting}
+                          isLoading={isSubmitting || isRefreshingCheckInGps}
                           disabled={
+                            isRefreshingCheckInGps ||
                             isLocating ||
                             !coords ||
                             !capturedPhoto ||

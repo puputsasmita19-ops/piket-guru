@@ -26,6 +26,8 @@ export interface CheckInParams {
   coords: LocationCoordinates;
   geofence: GeofenceResult;
   photoUrl?: string;
+  selfieCapturedAt?: number;
+  selfieCaptureCoords?: LocationCoordinates;
   userRole?: UserRole | string;
   settings?: SchoolSettings;
 }
@@ -68,6 +70,8 @@ export class AttendanceService {
       coords,
       geofence,
       photoUrl,
+      selfieCapturedAt,
+      selfieCaptureCoords,
       userRole = 'GURU',
       settings: callerSettings,
     } = params;
@@ -172,6 +176,13 @@ export class AttendanceService {
       distance: Math.round(authoritativeGeofence.distanceMeters),
       status,
       photoUrl: finalPhotoUrl || undefined,
+      ...(Number.isFinite(selfieCapturedAt) && selfieCaptureCoords ? {
+        selfieCapturedAt: new Date(selfieCapturedAt!).toISOString(),
+        selfieCaptureGps: {
+          latitude: selfieCaptureCoords.latitude, longitude: selfieCaptureCoords.longitude,
+          accuracy: selfieCaptureCoords.accuracy, timestamp: selfieCaptureCoords.timestamp,
+        },
+      } : {}),
       attendanceModeAtCheckIn: effectiveMode,
       dataSource: 'PRODUCTION',
       isDemo: false,

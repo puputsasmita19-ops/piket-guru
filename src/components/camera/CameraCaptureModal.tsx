@@ -164,7 +164,14 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       // Suspend camera capture while reviewing the picture. Stream stays allocated
       // so retake is instant, and closing the dialog still stops all tracks.
       streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = false; });
-      setCapturedImage(dataUrl);
+      if (prepareCapture) {
+        // Attendance: one shutter press creates a ready-to-submit draft.
+        // No second photo confirmation and no automatic check-in.
+        onCapture(dataUrl);
+        onClose();
+      } else {
+        setCapturedImage(dataUrl);
+      }
     } catch (error: any) {
       if (generation === generationRef.current) {
         setCaptureError(error?.message || 'Gagal memproses foto. Silakan ulangi.');
@@ -285,7 +292,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         )}
         {prepareCapture && (
           <p className="text-xs text-slate-500">
-            Foto akan diberi watermark nama, sekolah, waktu WIB, dan GPS. Tunggu proses GPS selesai sebelum foto diambil.
+            Tekan Jepret Foto sekali. GPS disegarkan otomatis dan watermark ditambahkan. Foto akan langsung menjadi draf; pengiriman presensi tetap melalui tombol Kirim Presensi Masuk.
           </p>
         )}
         {watermarkProcessor && !prepareCapture && !subtitle && (
@@ -343,7 +350,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center text-white space-y-3 z-10">
                 <RefreshCw className="w-8 h-8 text-[var(--theme-primary)] animate-spin" />
                 <div className="space-y-1">
-                  <span className="font-bold text-sm block">Memproses Foto & Watermark...</span>
+                  <span className="font-bold text-sm block">Memeriksa GPS & Menyiapkan Swafoto...</span>
                   <span className="text-xs text-slate-300 block">
                     Menyinkronkan stempel informasi resmi dan kompresi file.
                   </span>

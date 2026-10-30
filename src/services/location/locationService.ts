@@ -111,11 +111,14 @@ export class LocationService {
     if (this.isFreshPosition(previous, maxAgeMs) && previous!.accuracy <= this.MAX_ATTENDANCE_ACCURACY_METERS) {
       return previous!;
     }
+    // Renew must use the SAME freshness policy as the caller. Callers of
+    // getCurrentPosition should pass forceFresh:true/maxStaleAgeMs accordingly.
     const fresh = await renew();
     if (!this.isFreshPosition(fresh, maxAgeMs)) {
-      throw new Error(
-        'Hasil pembacaan GPS baru tidak memenuhi batas kesegaran waktu (maksimal 30 detik). Silakan coba kembali.'
-      );
+      throw new Error('GPS yang diterima masih berasal dari cache lama. Aktifkan lokasi akurat, lalu coba kembali.');
+    }
+    if (fresh.accuracy > this.MAX_ATTENDANCE_ACCURACY_METERS) {
+      throw new Error(`Akurasi GPS ±${Math.round(fresh.accuracy)}m belum memenuhi batas presensi (maksimal 50m).`);
     }
     return fresh;
   }
