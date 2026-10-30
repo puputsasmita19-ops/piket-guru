@@ -38,6 +38,7 @@ import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { shouldGuideToSelfie } from './selfieGpsGuide';
+import { shouldHighlightCheckIn, shouldHighlightCheckOut } from './attendanceActionHighlight';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieForSubmission } from '../../services/attendance/selfieWatermark';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
@@ -316,6 +317,39 @@ export const AttendancePreview: React.FC = () => {
     gpsError, position: coords, geofence, isGpsFresh: LocationService.isFreshPosition(coords, 15_000),
   });
   const showSelfieGuide = highlightSelfieStep && canGuideToSelfie;
+
+  // R96: guide only genuinely available actions, never disabled or submitting buttons.
+  // This is a visual cue; it does not bypass the authoritative check-in/check-out guards.
+  const actionGuidance = {
+    activeTab,
+    hasUser: !!currentUser?.id,
+    online: !isOffline && (typeof navigator === 'undefined' || navigator.onLine),
+    settingsReady,
+    validSchoolLocation,
+    hasCheckIn: !!existingAttendanceToday,
+    hasCheckOut: !!existingAttendanceToday?.jamPulang,
+    hasPhoto: !!capturedPhoto,
+    hasPosition: !!coords,
+    gpsWithinRadius: geofence?.status === 'DALAM_LOKASI',
+    gpsAccuracyOk: !!coords && coords.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS,
+    gpsHasError: !!gpsError,
+    hasSchedulePermission: settings.attendanceMode === 'BEBAS' || isAdmin || todayUserSchedules.length > 0,
+    checkOutWindowAllowed: windowCheck.allowed,
+    busy: isSubmitting || isRefreshingCheckInGps || isCheckingOut,
+    locating: isLocating,
+    cameraOpen: isCameraModalOpen,
+  };
+  const highlightCheckIn = shouldHighlightCheckIn(actionGuidance);
+  const highlightCheckOut = shouldHighlightCheckOut(actionGuidance);
+
+  // Keep the checkout cue current when the allowed time window opens while
+  // the form stays on screen (does not poll GPS or write anything to Firestore).
+  const [, setCheckoutWindowClockTick] = useState(0);
+  useEffect(() => {
+    if (activeTab !== 'presensi' || !existingAttendanceToday || existingAttendanceToday.jamPulang) return;
+    const timer = window.setInterval(() => setCheckoutWindowClockTick(tick => tick + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, !!existingAttendanceToday, !!existingAttendanceToday?.jamPulang]);
 
   useEffect(() => {
     const refreshVisibility = () => setPageVisible(document.visibilityState !== 'hidden');
@@ -1162,7 +1196,9 @@ export const AttendancePreview: React.FC = () => {
                           data-tour="checkin-button"
                           variant="success"
                           size="lg"
-                          className="w-full sm:w-auto"
+                          className={`w-full sm:w-auto ${highlightCheckIn ? 'attendance-action-attention' : ''}`}
+                          data-action-ready={highlightCheckIn ? 'checkin' : 'idle'}
+                          aria-describedby={highlightCheckIn ? 'attendance-checkin-ready-hint' : undefined}
                           isLoading={isSubmitting || isRefreshingCheckInGps}
                           disabled={
                             isRefreshingCheckInGps ||
@@ -1177,6 +1213,12 @@ export const AttendancePreview: React.FC = () => {
                           Kirim Presensi Masuk (Check-In)
                         </Button>
                       </div>
+                      {highlightCheckIn && (
+                        <p id="attendance-checkin-ready-hint" className="attendance-action-hint" role="status">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                          Swafoto sudah siap. Ketuk Kirim Presensi Masuk untuk melanjutkan.
+                        </p>
+                      )}
                       <InlineAttendanceStatus status={checkInStatus} />
                     </div>
                   ) : !existingAttendanceToday.jamPulang ? (
@@ -1189,7 +1231,9 @@ export const AttendancePreview: React.FC = () => {
                           variant="primary"
                           size="lg"
                           data-tour="checkout-button"
-                          className="w-full sm:w-auto"
+                          className={`w-full sm:w-auto ${highlightCheckOut ? 'attendance-action-attention' : ''}`}
+                          data-action-ready={highlightCheckOut ? 'checkout' : 'idle'}
+                          aria-describedby={highlightCheckOut ? 'attendance-checkout-ready-hint' : undefined}
                           isLoading={isCheckingOut}
                           disabled={isCheckingOut || isSubmitting || isLocating || !settingsReady || !validSchoolLocation}
                           leftIcon={<Clock className="w-5 h-5" />}
@@ -1198,6 +1242,12 @@ export const AttendancePreview: React.FC = () => {
                           {isCheckingOut ? 'Memproses Pulang...' : 'Kirim Presensi Pulang (Check-Out)'}
                         </Button>
                       </div>
+                      {highlightCheckOut && (
+                        <p id="attendance-checkout-ready-hint" className="attendance-action-hint" role="status">
+                          <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
+                          Jam pulang sudah dibuka. Ketuk Check-Out untuk verifikasi GPS dan mengirim presensi.
+                        </p>
+                      )}
 
                       {/* Persistent status message right below the button */}
                       <InlineAttendanceStatus status={checkoutStatus} />

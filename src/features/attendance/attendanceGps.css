@@ -108,3 +108,42 @@
 @media (prefers-reduced-motion: reduce) {
   .attendance-selfie-target.is-gps-ready [data-tour="selfie-trigger"] { animation: none; }
 }
+
+/* R96: non-layout-shifting next-action outline for Check-In and Check-Out.
+   Shadows are painted outside the button and don't affect width/height. */
+[data-tour="attendance-actions"] .attendance-action-attention:not(:disabled) {
+  position: relative;
+  isolation: isolate;
+  outline: 2px solid var(--theme-primary, #0891b2);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-primary, #0891b2) 15%, transparent);
+  animation: attendance-next-action-glow 1.7s ease-in-out 3;
+}
+@keyframes attendance-next-action-glow {
+  50% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--theme-primary, #0891b2) 27%, transparent);
+  }
+}
+.attendance-action-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+  font-weight: 650;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dark .attendance-action-hint {
+  background: #064e3b;
+  border-color: #047857;
+  color: #a7f3d0;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tour="attendance-actions"] .attendance-action-attention:not(:disabled) {
+    animation: none;
+  }
+}
