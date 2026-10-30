@@ -267,6 +267,30 @@ authRouter.get('/signer-status', async (req: Request, res: Response) => {
   });
 });
 
+// R102: share identical public-directory reads within one server instance.
+// This is presentation-only data: actual PIN login still checks the live user
+// document, active status, revocation, rate limits, and credentials.
+let publicUsersSnapshotCache: { value: FirebaseFirestore.QuerySnapshot; expiresAt: number } | null = null;
+let publicUsersSnapshotRequest: Promise<FirebaseFirestore.QuerySnapshot> | null = null;
+async function readPublicUsersSummary(): Promise<FirebaseFirestore.QuerySnapshot> {
+  if (!adminDb) throw new Error('Database tidak tersedia.');
+  if (publicUsersSnapshotCache && Date.now() < publicUsersSnapshotCache.expiresAt) {
+    return publicUsersSnapshotCache.value;
+  }
+  if (!publicUsersSnapshotRequest) {
+    publicUsersSnapshotRequest = adminDb.collection('users')
+      .where('isActive', '==', true)
+      .select('loginId', 'nip', 'nuptk', 'fullName', 'role', 'avatarUrl', 'loginAvatarVisible', 'isActive')
+      .get()
+      .then((snapshot) => {
+        publicUsersSnapshotCache = { value: snapshot, expiresAt: Date.now() + 5000 };
+        return snapshot;
+      })
+      .finally(() => { publicUsersSnapshotRequest = null; });
+  }
+  return publicUsersSnapshotRequest;
+}
+
 /**
  * GET /api/auth/users-summary
  * Provides a minimal, sanitized DTO list of active users from database via Admin SDK.
@@ -285,11 +309,9 @@ authRouter.get('/users-summary', async (req: Request, res: Response) => {
   }
 
   try {
-    // R97: Fetch only fields required by the public selector, not full user documents.
-    const snap = await adminDb.collection('users')
-      .where('isActive', '==', true)
-      .select('loginId', 'nip', 'nuptk', 'fullName', 'role', 'avatarUrl', 'loginAvatarVisible', 'isActive')
-      .get();
+    // R102: in-flight coalescing + short-lived server memory snapshot.
+    res.setHeader('Cache-Control', 'no-store, private');
+    const snap = await readPublicUsersSummary();
     if (snap.empty) {
       res.json({
         success: true,

@@ -116,7 +116,8 @@ class AuthService {
     // Public account directory is optional for manual ID/NIP login. Fail fast on bad networks.
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'low' });
+      // The account directory is the primary interactive content of the first login screen.
+      const res = await fetch('/api/auth/users-summary', { cache: 'no-store', signal: controller.signal, priority: 'high' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }

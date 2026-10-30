@@ -1684,19 +1684,8 @@ button.bg-\[var\(--theme-primary\)\],
   outline-offset: -2px;
 }
 .login-pin-pad > button:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
-.login-pin-haptic-toggle { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.login-pin-haptic-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: #94a3b8; flex: none; }
-.login-pin-haptic-indicator.is-on { background: #10b981; }
 @media (prefers-reduced-motion: reduce) {
   .login-pin-pad > button { transition: none !important; }
   .login-pin-pad > button:not(:disabled):active { transform: none; }
 }
 
-/* R99 — compact, accessible per-device vibration controls; no layout shift. */
-.login-pin-haptics-panel { min-width: 0; }
-.login-pin-haptic-strength { appearance: auto; max-width: 100%; }
-.login-pin-haptic-test { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-@media (prefers-reduced-motion: reduce) {
-  .login-pin-haptic-test { transition: none !important; }
-  .login-pin-haptic-test:active { transform: none !important; }
-}

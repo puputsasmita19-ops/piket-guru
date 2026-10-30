@@ -101,6 +101,13 @@ export const AttendancePreview: React.FC = () => {
   const autoGuidedSelfieKeyRef = React.useRef('');
   const [highlightSelfieStep, setHighlightSelfieStep] = useState(false);
   const [pageVisible, setPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  // R102: warm the hardware location fix while school settings are loading,
+  // but ONLY after browser location permission was already granted.
+  // The warm fix never authorizes attendance; official school coordinates and
+  // freshness/accuracy still must be validated before any next step.
+  const earlyGpsFixRef = React.useRef<Promise<LocationCoordinates> | null>(null);
+  const settingsReadyRef = React.useRef(false);
+  settingsReadyRef.current = settingsReady;
   const warmSelfieGpsRef = React.useRef<Promise<LocationCoordinates> | null>(null);
   const warmSelfieContextRef = React.useRef('');
   const validSchoolLocation = Number.isFinite(settings.schoolLat) && Math.abs(settings.schoolLat) <= 90 &&
@@ -145,6 +152,26 @@ export const AttendancePreview: React.FC = () => {
     settings,
     isAdmin
   );
+
+  useEffect(() => {
+    let active = true;
+    const perms = typeof navigator !== 'undefined' ? navigator.permissions : undefined;
+    if (perms?.query && navigator.geolocation) {
+      void perms.query({ name: 'geolocation' }).then((permission) => {
+        if (!active || settingsReadyRef.current || document.hidden || permission.state !== 'granted') return;
+        // GPS searching is allowed early only when location access was already granted.
+        // Reuse the same promise once settings arrive, instead of canceling a search.
+        const request = LocationService.getCurrentPosition({
+          timeoutMs: 8500,
+          desiredAccuracyMeters: 20,
+          maxStaleAgeMs: 15000,
+        });
+        earlyGpsFixRef.current = request;
+        void request.catch(() => {}); // failure is handled by normal acquisition fallback
+      }).catch(() => {});
+    }
+    return () => { active = false; earlyGpsFixRef.current = null; };
+  }, []);
 
   // 1. Load Settings & Master Rosters (strictly once on mount, no coords dependency)
   useEffect(() => {
@@ -213,27 +240,43 @@ export const AttendancePreview: React.FC = () => {
     }
     setGpsError(null);
     try {
-      const position = await LocationService.getCurrentPosition({
+      const acquirePosition = () => LocationService.getCurrentPosition({
         timeoutMs: 8500,
         desiredAccuracyMeters: 20,
-        maxStaleAgeMs: 15000, // Align visible GPS status with selfie freshness; do not guide from older cached fixes.
+        maxStaleAgeMs: 15000, // Same freshness requirement as automatic selfie guidance.
         forceFresh: isManual,
         onProgress: (pos, isProv) => {
           if (requestId !== gpsRequestRef.current) return;
+          if (!LocationService.isFreshPosition(pos, 15000)) return;
           setCoords(pos);
           setIsProvisional(isProv);
-          // Calculate distance immediately on every received reading
-          const geo = LocationService.evaluateGeofence(
-            pos.latitude,
-            pos.longitude,
-            pos.accuracy,
-            settings.schoolLat,
-            settings.schoolLng,
-            settings.allowedRadiusMeters
-          );
-          setGeofence(geo);
+          // Immediately evaluate every fresh reading against verified school location.
+          // Accuracy >50m is never considered a valid attendance fix.
+          setGeofence(LocationService.evaluateGeofence(
+            pos.latitude, pos.longitude, pos.accuracy,
+            settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters
+          ));
         },
       });
+      // Use the already granted GPS fix acquired during settings hydration.
+      // A stale/error result falls through to the normal GPS service; never trust
+      // a previous fix as a new submission or bypass geofence validation.
+      const earlyFix = !isManual ? earlyGpsFixRef.current : null;
+      earlyGpsFixRef.current = null;
+      let position: LocationCoordinates;
+      if (earlyFix) {
+        try {
+          const candidate = await earlyFix;
+          position = LocationService.isFreshPosition(candidate, 15000) &&
+            candidate.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS
+            ? candidate
+            : await acquirePosition();
+        } catch {
+          position = await acquirePosition();
+        }
+      } else {
+        position = await acquirePosition();
+      }
 
       if (requestId !== gpsRequestRef.current) return;
       setCoords(position);
