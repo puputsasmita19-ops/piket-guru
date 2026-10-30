@@ -38,7 +38,7 @@ import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
-import { CapturedSelfie, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
+import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieEvidence } from '../../services/attendance/selfieWatermark';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
 
 interface AttendanceFeedback {
@@ -325,6 +325,9 @@ export const AttendancePreview: React.FC = () => {
     pendingSelfieRef.current = null;
     if (!currentUser) throw new Error('Sesi akun tidak ditemukan. Silakan masuk kembali.');
     if (!settingsReady) throw new Error('Pengaturan sekolah belum tersedia. Muat ulang halaman sebelum mengambil foto.');
+    // Resolve the app font before obtaining fresh GPS, so font loading does not
+    // consume the 30-second freshness window of the selfie evidence.
+    const watermarkFont = await prepareSelfieWatermarkFont();
     const captureCoords = { ...await LocationService.ensureFreshPosition(coords, () =>
       LocationService.getCurrentPosition({ timeoutMs: 10000, desiredAccuracyMeters: 20 }), 15000) };
     const captureGeofence = LocationService.evaluateGeofence(
@@ -342,7 +345,7 @@ export const AttendancePreview: React.FC = () => {
     };
     return (canvas: HTMLCanvasElement, capturedAt: number) => {
       const evidence = { ...identity, coords: captureCoords, capturedAt };
-      const dataUrl = stampCheckInSelfie(canvas, evidence);
+      const dataUrl = stampCheckInSelfie(canvas, evidence, watermarkFont);
       pendingSelfieRef.current = { ...evidence, dataUrl };
       return dataUrl;
     };

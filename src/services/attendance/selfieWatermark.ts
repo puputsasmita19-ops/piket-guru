@@ -20,6 +20,38 @@ export const SAFE_MAX_DATA_URL_LENGTH = 550_000;
 export const MAX_SELFIE_DATA_URL_LENGTH = SAFE_MAX_DATA_URL_LENGTH;
 export const SELFIE_GPS_MAX_AGE_MS = 30_000;
 
+/** The Piket Guru UI uses Open Sans. Canvas must explicitly load the same face;
+ * otherwise some mobile browsers silently render a different fallback font. */
+export type SelfieWatermarkFontFamily = 'Open Sans' | 'Arial';
+
+export async function prepareSelfieWatermarkFont(): Promise<SelfieWatermarkFontFamily> {
+  if (typeof document === 'undefined' || !document.fonts?.load) return 'Arial';
+
+  // A bounded wait keeps capture responsive on slow/offline networks. Always use
+  // a known sans-serif fallback; never inherit user/device custom mobile fonts.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const ready = Promise.all([
+      document.fonts.load('500 18px "Open Sans"', 'Nama guru dan lokasi presensi'),
+      document.fonts.load('700 18px "Open Sans"', 'PRESENSI MASUK CHECK-IN'),
+    ]).then((results): SelfieWatermarkFontFamily =>
+      results.every((faces) => faces.length > 0) ? 'Open Sans' : 'Arial'
+    ).catch((): SelfieWatermarkFontFamily => 'Arial');
+
+    const timeout = new Promise<SelfieWatermarkFontFamily>((resolve) => {
+      timeoutId = setTimeout(() => resolve('Arial'), 1300);
+    });
+    return await Promise.race([ready, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+function selfieCanvasFont(weight: 500 | 700, size: number, family: SelfieWatermarkFontFamily): string {
+  // Quoted exact family names prevent accidental parsing as a platform font.
+  return `${weight} ${size}px "${family}", Arial, sans-serif`;
+}
+
 export interface SelfieSizeCheckResult {
   isValid: boolean;
   sizeKb: number;
@@ -85,7 +117,9 @@ export function formatSelfieTime(timestamp: number): string {
 }
 
 /** Stamp into JPEG pixels with progressive compression and strict size bounds. */
-export function stampCheckInSelfie(source: HTMLCanvasElement, evidence: SelfieEvidence): string {
+export function stampCheckInSelfie(
+  source: HTMLCanvasElement, evidence: SelfieEvidence, fontFamily: SelfieWatermarkFontFamily = 'Arial'
+): string {
   validateSelfieEvidence(evidence);
   if (source.width <= 0 || source.height <= 0) throw new Error('Kamera belum siap. Coba ambil foto lagi.');
 
@@ -115,10 +149,15 @@ export function stampCheckInSelfie(source: HTMLCanvasElement, evidence: SelfieEv
     if (!context) throw new Error('Watermark tidak dapat dibuat. Coba gunakan browser lain.');
 
     const padding = Math.max(12, Math.round(width * 0.035));
-    const fontSize = Math.max(13, Math.round(width * 0.028));
-    const lineHeight = Math.round(fontSize * 1.5);
-    context.font = `500 ${fontSize}px Arial, sans-serif`;
+    const fontSize = Math.max(16, Math.round(width * 0.033));
+    const titleFontSize = fontSize + 2;
+    const lineHeight = Math.round(fontSize * 1.48);
+    const bodyFont = selfieCanvasFont(500, fontSize, fontFamily);
+    const headingFont = selfieCanvasFont(700, titleFontSize, fontFamily);
     const textWidth = width - padding * 2;
+    // Set dimensions before measuring, because resizing resets the 2D context's font.
+    canvas.width = width;
+    context.font = bodyFont;
 
     const wrap = (value: string): string[] => {
       const result: string[] = [];
@@ -154,7 +193,6 @@ export function stampCheckInSelfie(source: HTMLCanvasElement, evidence: SelfieEv
 
     if (lines.length > 24) throw new Error('Nama akun/sekolah terlalu panjang untuk watermark. Hubungi admin.');
 
-    canvas.width = width;
     canvas.height = photoHeight + padding * 2 + lineHeight * (lines.length + 1) + 10;
 
     context.fillStyle = '#ffffff';
@@ -167,10 +205,12 @@ export function stampCheckInSelfie(source: HTMLCanvasElement, evidence: SelfieEv
     context.fillRect(0, photoHeight, width, 5);
 
     context.textBaseline = 'top';
-    context.font = `700 ${fontSize}px Arial, sans-serif`;
+    context.font = headingFont;
     context.fillText('PRESENSI MASUK • CHECK-IN', padding, photoHeight + padding);
 
-    context.font = `500 ${fontSize}px Arial, sans-serif`;
+    // Resizing canvas.height above also resets font/text state. Re-apply the
+    // exact face before painting the evidence lines (including on mobile Safari).
+    context.font = bodyFont;
     context.fillStyle = '#f8fafc';
     lines.forEach((line, index) => context.fillText(line, padding, photoHeight + padding + lineHeight * (index + 1) + 5));
 
