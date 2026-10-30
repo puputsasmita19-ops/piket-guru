@@ -38,6 +38,7 @@ import { isScheduleMatchingUser, getEffectiveSchedulesOnDate } from '../../utils
 import AttendanceMapPreview from './AttendanceMapPreview';
 import './attendanceGps.css';
 import { shouldGuideToSelfie } from './selfieGpsGuide';
+import { shouldRefreshGpsOnForeground } from './gpsMobileLifecycle';
 import { shouldHighlightCheckIn, shouldHighlightCheckOut } from './attendanceActionHighlight';
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieForSubmission } from '../../services/attendance/selfieWatermark';
@@ -99,6 +100,9 @@ export const AttendancePreview: React.FC = () => {
   // This is a local timer, not a repeating browser GPS search/network poll.
   const [gpsExpiryTick, setGpsExpiryTick] = useState(0);
   const gpsRequestRef = React.useRef(0);
+  const gpsSchoolKeyRef = React.useRef('');
+  const lastForegroundGpsAttemptRef = React.useRef(0);
+  const [gpsResumeNotice, setGpsResumeNotice] = useState('');
   const selfieTargetRef = React.useRef<HTMLDivElement | null>(null);
   const selfieTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const autoGuidedSelfieKeyRef = React.useRef('');
@@ -228,7 +232,7 @@ export const AttendancePreview: React.FC = () => {
       settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
 
   // 2. Fetch GPS on mount and refresh manually, without blocking the status once valid.
-  const refreshGpsLocation = async (isManual = false) => {
+  const refreshGpsLocation = async (isManual = false, requireNewFix = false) => {
     if (!settingsReady || !validSchoolLocation) return;
     const requestId = ++gpsRequestRef.current;
     const hadPreviousReading = !!coords && !!geofence;
@@ -246,7 +250,7 @@ export const AttendancePreview: React.FC = () => {
         timeoutMs: 8500,
         desiredAccuracyMeters: 20,
         maxStaleAgeMs: 15000, // Same freshness requirement as automatic selfie guidance.
-        forceFresh: isManual,
+        forceFresh: isManual || requireNewFix,
         onProgress: (pos, isProv) => {
           if (requestId !== gpsRequestRef.current) return;
           if (!LocationService.isFreshPosition(pos, 15000)) return;
@@ -300,21 +304,51 @@ export const AttendancePreview: React.FC = () => {
         status: 'GPS_ERROR',
       });
     } finally {
-      if (requestId === gpsRequestRef.current) setIsLocating(false);
+      if (requestId === gpsRequestRef.current) {
+        setIsLocating(false);
+        setGpsResumeNotice('');
+      }
     }
   };
 
+  // Keep one up-to-date snapshot for browser lifecycle listeners. They are
+  // registered only once, rather than reattached on every GPS/render update.
+  const gpsLifecycleRef = React.useRef({
+    activeTab, settingsReady, validSchoolLocation, isLocating, coords,
+    busy: isSubmitting || isCheckingOut || isRefreshingCheckInGps || isCameraModalOpen,
+    refresh: refreshGpsLocation,
+  });
+  gpsLifecycleRef.current = {
+    activeTab, settingsReady, validSchoolLocation, isLocating, coords,
+    busy: isSubmitting || isCheckingOut || isRefreshingCheckInGps || isCameraModalOpen,
+    refresh: refreshGpsLocation,
+  };
+
   useEffect(() => {
-    setCoords(null);
-    setGeofence(null);
-    setGpsError(null);
-    if (settingsReady && validSchoolLocation) refreshGpsLocation();
-    else setIsLocating(false);
+    // A changed school geofence invalidates the previous displayed result.
+    // Switching from Riwayat to Presensi must not discard a valid recent fix.
+    const schoolKey = `${settings.schoolLat}|${settings.schoolLng}|${settings.allowedRadiusMeters}`;
+    const schoolChanged = settingsReady && gpsSchoolKeyRef.current !== schoolKey;
+    if (schoolChanged) {
+      gpsSchoolKeyRef.current = schoolKey;
+      setCoords(null);
+      setGeofence(null);
+      setGpsError(null);
+      setIsProvisional(false);
+    }
+    if (activeTab === 'presensi' && settingsReady && validSchoolLocation &&
+        (typeof document === 'undefined' || !document.hidden)) {
+      const recent = !schoolChanged && LocationService.isFreshPosition(coords, 8_000) &&
+        coords!.accuracy <= LocationService.MAX_ATTENDANCE_ACCURACY_METERS;
+      if (!recent) void refreshGpsLocation(false, !!coords);
+    } else {
+      setIsLocating(false);
+    }
     return () => {
       ++gpsRequestRef.current;
       LocationService.clearCurrentWatcher();
     };
-  }, [settingsReady, settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters]);
+  }, [settingsReady, settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters, activeTab]);
 
   // Today's schedule for current logged in user (strictly bound by ID/UID akun, with legacy teacher fallback)
   const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
@@ -391,10 +425,55 @@ export const AttendancePreview: React.FC = () => {
     return () => window.clearInterval(timer);
   }, [activeTab, !!existingAttendanceToday, !!existingAttendanceToday?.jamPulang]);
 
+  // R104-C: browser/PWA resume events may arrive in a burst (visibilitychange,
+  // pageshow and focus). Refresh only when the displayed reading is no longer
+  // recent; never restart GPS during an active submission or camera capture.
   useEffect(() => {
-    const refreshVisibility = () => setPageVisible(document.visibilityState !== 'hidden');
-    document.addEventListener('visibilitychange', refreshVisibility);
-    return () => document.removeEventListener('visibilitychange', refreshVisibility);
+    const pause = () => {
+      setPageVisible(false);
+      setGpsResumeNotice('');
+      const state = gpsLifecycleRef.current;
+      if (state.busy) return; // Do not interrupt Check-In/Check-Out or camera.
+      ++gpsRequestRef.current; // Ignore callbacks from the paused search.
+      LocationService.cancelCurrentSearch();
+      // Keep the snapshot consistent even if Android emits hide/show events
+      // before React has rendered the queued isLocating(false) update.
+      gpsLifecycleRef.current = { ...gpsLifecycleRef.current, isLocating: false };
+      setIsLocating(false);
+      setIsProvisional(false);
+      lastForegroundGpsAttemptRef.current = 0;
+    };
+    const resume = () => {
+      if (document.visibilityState === 'hidden') return;
+      setPageVisible(true);
+      const state = gpsLifecycleRef.current;
+      const now = Date.now();
+      if (!shouldRefreshGpsOnForeground({
+        now, lastAttemptAt: lastForegroundGpsAttemptRef.current,
+        visible: true, activeTab: state.activeTab,
+        settingsReady: state.settingsReady,
+        validSchoolLocation: state.validSchoolLocation,
+        locating: state.isLocating, busy: state.busy,
+        position: state.coords,
+      })) return;
+      lastForegroundGpsAttemptRef.current = now;
+      setGpsResumeNotice('Memperbarui GPS setelah aplikasi kembali aktif…');
+      void state.refresh(false, true);
+    };
+    const onVisibility = () => document.visibilityState === 'hidden' ? pause() : resume();
+    const onPageShow = () => resume();
+    const onPageHide = () => pause();
+    const onFocus = () => resume();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   // An account change must never inherit a previous account's highlight or
@@ -1019,6 +1098,12 @@ export const AttendancePreview: React.FC = () => {
                       </div>
                     )}
 
+                    {gpsResumeNotice && isLocating && (
+                      <p className="attendance-gps-resume-note" role="status" aria-live="polite">
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        {gpsResumeNotice}
+                      </p>
+                    )}
                     {isProvisional && coords && !gpsError && (
                       <p className="attendance-gps-helper">* GPS sudah terbaca dan sedang disempurnakan. Anda tetap dapat menunggu atau menekan Perbarui GPS.</p>
                     )}

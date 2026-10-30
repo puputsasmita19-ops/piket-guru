@@ -147,3 +147,6 @@
     animation: none;
   }
 }
+
+/* R104-C: compact, non-animated mobile foreground GPS status. */
+.attendance-gps-resume-note { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; font-size: 11px; line-height: 1.5; font-weight: 600; color: var(--theme-primary-text); border: 1px solid var(--theme-primary-border); background: var(--theme-primary-light); border-radius: 12px; padding: 8px 10px; }
