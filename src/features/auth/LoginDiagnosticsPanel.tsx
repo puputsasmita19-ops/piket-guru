@@ -39,6 +39,7 @@ export default function LoginDiagnosticsPanel() {
   ] as const;
   const shareText = [
     'Diagnostik Login Piket Guru (ms, tanpa data akun)',
+    `Vercel Function region: ${report?.functionRegion ?? 'tidak tersedia'}`,
     ...breakdown.map(([label, ms]) => `${label}: ${ms ?? 'tidak tersedia'}`),
     'Catatan: server dan jaringan bisa overlap; durasi kerangka dashboard bukan waktu seluruh data selesai.',
   ].join('\n');
@@ -61,6 +62,7 @@ export default function LoginDiagnosticsPanel() {
               </div>
             ))}
           </dl>
+          <p className="text-slate-500 dark:text-slate-400">Vercel Function region: {report?.functionRegion || 'tidak tersedia'} (lokasi Firestore diperiksa di Firebase Console).</p>
           <p className="text-slate-500 dark:text-slate-400">Total = tombol Masuk hingga autentikasi selesai. Waktu "kerangka dashboard" sejak tombol Masuk sampai komponen halaman terpasang, bukan sampai seluruh data selesai.</p>
           <button type="button" className="min-h-11 rounded-xl px-4 border border-slate-300 dark:border-slate-600 font-semibold"
             onClick={() => { void navigator.clipboard?.writeText(shareText).then(() => setCopied(true)).catch(() => setCopied(false)); }}>

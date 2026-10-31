@@ -554,6 +554,12 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     res.setHeader('Server-Timing', Object.entries(phaseMs)
       .map(([name, ms]) => `${name};dur=${Math.max(0, Math.round(ms))}`)
       .join(', '));
+    // R110: report only the coarse Vercel compute region for opt-in diagnostics.
+    // Never include Firestore credentials, identities or location guesses.
+    const computeRegion = process.env.VERCEL_REGION || '';
+    if (/^[a-z]{3}[0-9]$/.test(computeRegion)) {
+      res.setHeader('X-PG-Function-Region', computeRegion);
+    }
   };
   const rawIdentifier = (req.body?.identifier || req.body?.loginId || req.body?.nip || '').trim();
   const pin = (req.body?.pin || '').trim();

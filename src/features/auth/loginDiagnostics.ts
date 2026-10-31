@@ -7,6 +7,7 @@ export type LoginDiagnostics = {
   firebaseMs?: number;
   totalMs?: number;
   shellVisibleMs?: number;
+  functionRegion?: string;
   serverMs?: Partial<Record<'gate' | 'lookup' | 'lock' | 'pin' | 'rateReset' | 'signer' | 'total', number>>;
 };
 
@@ -65,6 +66,16 @@ export function captureLoginServerTiming(header: string | null): void {
     diagnostics.updatedAt = Date.now();
     publish();
   }
+}
+
+/** R110: Vercel runtime region (coarse region code only; no user location). */
+export function captureLoginFunctionRegion(header: string | null): void {
+  if (!loginDiagnosticsEnabled() || !diagnostics || !header) return;
+  const region = header.trim().toLowerCase();
+  if (!/^[a-z]{3}[0-9]$/.test(region)) return;
+  diagnostics.functionRegion = region;
+  diagnostics.updatedAt = Date.now();
+  publish();
 }
 
 /** Called only after lazy authenticated shell renders; not a dashboard-data-complete signal. */

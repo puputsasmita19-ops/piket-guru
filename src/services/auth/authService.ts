@@ -3,7 +3,7 @@ import { auth } from '../firebase/firebaseAuth';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { OfflineStorage } from '../offline/offlineStorage';
 import { loginClockNow, recordLoginDuration } from '../../features/auth/loginPerformance';
-import { captureLoginServerTiming, captureClientLoginPhase } from '../../features/auth/loginDiagnostics';
+import { captureLoginServerTiming, captureClientLoginPhase, captureLoginFunctionRegion } from '../../features/auth/loginDiagnostics';
 import { preloadAuthenticatedShell } from '../../appBootstrap';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
@@ -198,6 +198,7 @@ class AuthService {
       // Same-origin Server-Timing is numeric-only: never log identifiers, PIN or tokens.
       const serverTiming = response.headers.get('Server-Timing');
       captureLoginServerTiming(serverTiming);
+      captureLoginFunctionRegion(response.headers.get('X-PG-Function-Region'));
       if (serverTiming && typeof console !== 'undefined') {
         console.info('[PIKET LOGIN PERFORMANCE] Backend:', serverTiming);
       }

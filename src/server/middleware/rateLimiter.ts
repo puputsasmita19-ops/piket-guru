@@ -507,11 +507,26 @@ export interface AtomicTransactionTransport {
   runTransaction<T>(
     updateFn: (tx: {
       get(key: string): Promise<any>;
+      /** Optional R110 batch-read; tested fallback is used for test transports. */
+      getMany?(keys: string[]): Promise<any[]>;
       set(key: string, data: any): void;
       delete(key: string): void;
     }) => Promise<T>
   ): Promise<T>;
   isHealthy(): Promise<boolean>;
+}
+
+/** Read multiple authoritative records; old test/mock transports remain compatible. */
+async function readRateLimiterRecords(
+  tx: { get(key: string): Promise<any>; getMany?(keys: string[]): Promise<any[]> },
+  keys: string[],
+): Promise<any[]> {
+  if (!keys.length) return [];
+  const records = tx.getMany
+    ? await tx.getMany(keys)
+    : await Promise.all(keys.map(key => tx.get(key)));
+  if (records.length !== keys.length) throw new StoreUnavailableError('Incomplete rate limiter reads');
+  return records;
 }
 
 /**
@@ -545,6 +560,19 @@ export function createFirestoreAdminTransport(db: any): AtomicTransactionTranspo
             const ref = db.collection(collectionPath).doc(encodeURIComponent(key));
             const snap = await firestoreTx.get(ref);
             return snap.exists ? snap.data() : null;
+          },
+          // R110: Firestore Transaction.getAll batches several document reads
+          // over one RPC, without weakening transaction isolation or lock checks.
+          async getMany(keys: string[]) {
+            if (keys.length === 0) return [];
+            const refs = keys.map(key => db.collection(collectionPath).doc(encodeURIComponent(key)));
+            const snaps = typeof firestoreTx.getAll === 'function'
+              ? await firestoreTx.getAll(...refs)
+              : await Promise.all(refs.map((ref: any) => firestoreTx.get(ref)));
+            if (!Array.isArray(snaps) || snaps.length !== keys.length) {
+              throw new StoreUnavailableError('Incomplete rate limiter transaction read');
+            }
+            return snaps.map((snap: any) => snap.exists ? snap.data() : null);
           },
           set(key: string, data: any) {
             const ref = db.collection(collectionPath).doc(encodeURIComponent(key));
@@ -714,9 +742,12 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
 
     return this.transport.runTransaction(async (tx) => {
       // Phase 1: READ ALL
-      const idRecord = await tx.get(`records:${idKey}`);
-      const actRecord = actKey ? await tx.get(`records:${actKey}`) : null;
-      const ipRecord = await tx.get(`records:${ipKey}`);
+      const failureKeys = [...new Set([idKey, actKey, ipKey].filter((v): v is string => !!v))];
+      const failureRecords = await readRateLimiterRecords(tx, failureKeys.map(key => `records:${key}`));
+      const failureByKey = new Map(failureKeys.map((key, i) => [key, failureRecords[i]]));
+      const idRecord = failureByKey.get(idKey);
+      const actRecord = actKey ? failureByKey.get(actKey) : null;
+      const ipRecord = failureByKey.get(ipKey);
 
       // Phase 2: COMPUTE
       const now = Date.now();
@@ -837,10 +868,11 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
     return this.transport.runTransaction(async (tx) => {
       const keys = [...new Set([ipKey, idKey, aliasKey].filter((key): key is string => !!key))];
       // READ phase: parallel reads reduce Firestore network round trips.
-      const [lockDocs, registry] = await Promise.all([
-        Promise.all(keys.map(key => tx.get(`records:${key}`))),
-        tx.get('leases:registry'),
+      const [...lockDocsAndRegistry] = await readRateLimiterRecords(tx, [
+        ...keys.map(key => `records:${key}`), 'leases:registry',
       ]);
+      const registry = lockDocsAndRegistry.pop();
+      const lockDocs = lockDocsAndRegistry;
       const now = Date.now();
       const locks = new Map(keys.map((key, index) => [key, lockDocs[index]]));
       const remainingSeconds = (key: string): number => {
@@ -857,7 +889,7 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
       }
 
       const activeTokensList: string[] = Array.isArray(registry?.activeTokens) ? registry.activeTokens : [];
-      const leaseDocs = await Promise.all(activeTokensList.map(token => tx.get(`leases:${token}`)));
+      const leaseDocs = await readRateLimiterRecords(tx, activeTokensList.map(token => `leases:${token}`));
       const validTokens: string[] = [];
       const expiredTokens: string[] = [];
       let activeIdCount = 0;
@@ -962,7 +994,7 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
     const uniqueKeys = [...new Set(idKeys.filter(Boolean))];
     await this.transport.runTransaction(async (tx) => {
       const keys = [...new Set([...uniqueKeys, ipKey])];
-      const records = await Promise.all(keys.map(key => tx.get(`records:${key}`)));
+      const records = await readRateLimiterRecords(tx, keys.map(key => `records:${key}`));
       const recordByKey = new Map(keys.map((key, index) => [key, records[index]]));
       const ipRecord = recordByKey.get(ipKey);
       const ipStillLocked = Number(ipRecord?.lockedUntil || 0) > Date.now();
