@@ -381,7 +381,7 @@ export class SyncQueueService {
       // Web Locks/lease protection has already been acquired for this account.
       for (const item of items) {
         if (!sameSyncSession(currentUser.id, epoch) || isSyncCancelled) break;
-        if (item.status === 'SENDING' && currentTime - new Date(item.updatedAt || item.createdAt).getTime() > 120000) {
+        if (OfflineStorage.isStaleSendingItem(item, currentTime)) {
           // Recheck against the actual stored item: another tab may have
           // completed or updated it while this tab was acquiring the lease.
           await OfflineStorage.recoverStaleSyncItem(item, currentTime);
@@ -405,11 +405,10 @@ export class SyncQueueService {
         // 3. Pre-flight permission verification for this operation type
         const permissionError = this.validateUserAuthority(item, currentUser);
         if (permissionError) {
-          item.status = 'NEEDS_ACTION';
-          item.lastError = permissionError;
-          item.updatedAt = new Date().toISOString();
-          await OfflineStorage.updateSyncItem(item);
-          failed++;
+          // R114-C1: permission evaluation runs on an earlier queue snapshot.
+          // Only transition if the stored item is STILL the same pending work;
+          // never overwrite an in-flight claim from another tab.
+          if (await OfflineStorage.markPendingSyncItemNeedsAction(item, permissionError)) failed++;
           continue;
         }
 

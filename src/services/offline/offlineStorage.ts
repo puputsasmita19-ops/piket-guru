@@ -494,12 +494,32 @@ export class OfflineStorage {
     });
   }
 
-  /** Recover only the unchanged stale SENDING submission; never overwrite another tab's write. */
+  /**
+   * A stale send MUST be timed from its last attempt update, NOT createdAt.
+   * A draft can be days old but have a recently started delivery. Invalid or
+   * missing attempt timestamps are left in place for manual recovery review.
+   */
+  public static isStaleSendingItem(item: QueueItem, now = Date.now()): boolean {
+    if (item.status !== 'SENDING') return false;
+    const lastAttempt = Date.parse(item.updatedAt || '');
+    return Number.isFinite(lastAttempt) && now - lastAttempt > 120000;
+  }
+
+  /**
+   * R114-C1: Recover only the exact interrupted delivery attempt.
+   * Matching only the fingerprint could reset another tab's newer SENDING
+   * attempt if the recovery snapshot is out of date. Legacy rows without an
+   * attempt token are recoverable only if both snapshots lack that token.
+   */
   public static async recoverStaleSyncItem(item: QueueItem, now = Date.now()): Promise<boolean> {
-    const stale = (stored?: QueueItem) => !!stored && stored.userId === item.userId &&
-      stored.projectId === CURRENT_PROJECT_ID && stored.operationId === item.operationId &&
-      stored.status === 'SENDING' && stored.submissionFingerprint === item.submissionFingerprint &&
-      now - new Date(stored.updatedAt || stored.createdAt).getTime() > 120000;
+    const stale = (stored?: QueueItem) => {
+      if (!stored || item.projectId !== CURRENT_PROJECT_ID || stored.userId !== item.userId || stored.projectId !== CURRENT_PROJECT_ID ||
+          stored.operationId !== item.operationId || stored.status !== 'SENDING' ||
+          stored.submissionFingerprint !== item.submissionFingerprint ||
+          stored.deliveryAttemptId !== item.deliveryAttemptId) return false;
+      // Unknown timestamps require manual review rather than blind replay.
+      return this.isStaleSendingItem(stored, now);
+    };
     const recovered = (stored: QueueItem): QueueItem => ({ ...stored, status: 'PENDING_NETWORK',
       deliveryAttemptId: undefined, nextRetryAt: undefined, updatedAt: new Date().toISOString() });
     if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
@@ -519,6 +539,41 @@ export class OfflineStorage {
       };
       tx.oncomplete = () => resolve(changed);
       tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Pemulihan antrean gagal.'));
+    });
+  }
+
+  /**
+   * R114-C1: Only the same, still-pending submission can transition to
+   * NEEDS_ACTION before dispatch. A stale permission check from another tab
+   * must never overwrite SENDING, SUCCESS, or a newer queue item.
+   */
+  public static async markPendingSyncItemNeedsAction(item: QueueItem, reason: string): Promise<boolean> {
+    const matches = (stored?: QueueItem) => !!stored &&
+      stored.operationId === item.operationId && stored.userId === item.userId &&
+      item.projectId === CURRENT_PROJECT_ID && stored.projectId === CURRENT_PROJECT_ID && stored.status === 'PENDING_NETWORK' &&
+      stored.submissionFingerprint === item.submissionFingerprint &&
+      !stored.deliveryAttemptId;
+    const changed = (stored: QueueItem): QueueItem => ({ ...stored,
+      status: 'NEEDS_ACTION', lastError: reason, nextRetryAt: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const stored = memoryStore.syncQueue.get(item.operationId);
+      if (!matches(stored)) return false;
+      memoryStore.syncQueue.set(item.operationId, changed(stored!));
+      return true;
+    }
+    const db = await this.getDb();
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let updated = false;
+      const req = store.get(item.operationId);
+      req.onsuccess = () => {
+        if (matches(req.result)) { store.put(changed(req.result)); updated = true; }
+      };
+      tx.oncomplete = () => resolve(updated);
+      tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Penandaan konflik antrean gagal.'));
     });
   }
 
