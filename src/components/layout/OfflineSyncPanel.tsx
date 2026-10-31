@@ -44,7 +44,13 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
     'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200';
   let statusIconStyle = 'text-emerald-600 dark:text-emerald-400';
 
-  if (needsActionCount > 0) {
+  if (syncStatus.storageError) {
+    statusTitle = 'Penyimpanan belum terbaca';
+    statusExplanation = 'Status draf dan antrean belum dapat dipastikan. Jangan hapus data atau keluar sebelum penyimpanan pulih.';
+    StatusIcon = ShieldAlert;
+    statusCardStyle = 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200';
+    statusIconStyle = 'text-rose-600 dark:text-rose-400';
+  } else if (needsActionCount > 0) {
     statusTitle = 'Perlu tindakan';
     statusExplanation = `${needsActionCount} item antrean memerlukan konfirmasi atau perbaikan pengguna.`;
     StatusIcon = AlertCircle;
@@ -86,7 +92,12 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
 
     try {
       const res = await SyncQueueService.triggerSync(currentUser);
-      if (res.processed === 0) {
+      const latest = await SyncQueueService.refreshStatus(currentUser.id);
+      if (latest.storageError) {
+        setFeedback('Status antrean belum dapat diperiksa. Jangan anggap data sudah terkirim.');
+      } else if (res.processed === 0 && (latest.pendingCount > 0 || latest.needsActionCount > 0)) {
+        setFeedback('Antrean masih tertunda. Periksa koneksi, status akun, dan coba lagi.');
+      } else if (res.processed === 0) {
         setFeedback('Tidak ada antrean yang perlu disinkronkan.');
       } else if (res.failed > 0) {
         setFeedback(`${res.succeeded} berhasil terkirim, ${res.failed} gagal.`);
@@ -175,7 +186,7 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
               </button>
             </div>
           ) : (
-            <span className="text-slate-400 font-medium">Kosong (0)</span>
+            <span className="text-slate-400 font-medium">{syncStatus.storageError ? 'Belum dapat diperiksa' : 'Kosong (0)'}</span>
           )}
         </div>
 
@@ -255,7 +266,7 @@ export const OfflineSyncPanel: React.FC<OfflineSyncPanelProps> = ({
           <button
             type="button"
             onClick={handleSyncAll}
-            disabled={isOffline || isSyncing || isSyncingLocal || items.length === 0}
+            disabled={syncStatus.storageError || isOffline || isOfflineSession || isSyncing || isSyncingLocal || items.length === 0}
             className="flex-1 px-3 py-2 bg-[var(--theme-primary)] hover:bg-[var(--theme-primary-hover)] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:cursor-not-allowed text-center truncate flex items-center justify-center gap-1.5"
           >
             <RefreshCw

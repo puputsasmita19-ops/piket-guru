@@ -35,7 +35,7 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    SyncQueueService.refreshStatus(currentUser.id).then(setSyncStatus);
+    SyncQueueService.refreshStatus(currentUser.id).then(setSyncStatus).catch(console.warn);
     const unsub = SyncQueueService.subscribe(setSyncStatus);
     return () => unsub();
   }, [currentUser?.id]);
@@ -84,7 +84,10 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
   let shortLabel = 'Online';
   let Icon = Wifi;
 
-  if (needsActionCount > 0) {
+  if (syncStatus.storageError) {
+    shortLabel = 'Status belum terbaca';
+    Icon = AlertCircle;
+  } else if (needsActionCount > 0) {
     shortLabel = 'Perlu tindakan';
     Icon = AlertCircle;
   } else if (isSyncing) {
@@ -103,7 +106,7 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
 
   // Accessible Label
   const accessibleLabel = `Status koneksi: ${shortLabel}.${
-    pendingCount > 0 ? ` ${pendingCount} data belum terkirim.` : ''
+    syncStatus.storageError ? ' Penyimpanan perangkat belum dapat diperiksa; jangan hapus data atau keluar sebelum status pulih.' : pendingCount > 0 ? ` ${pendingCount} data belum terkirim.` : ''
   } Klik untuk membaca rincian status koneksi.`;
 
   const handleTogglePanel = () => {
@@ -146,7 +149,7 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
           className={`w-5 h-5 shrink-0 ${
             isSyncing
               ? 'animate-spin text-blue-600 dark:text-blue-400'
-              : needsActionCount > 0
+              : syncStatus.storageError || needsActionCount > 0
               ? 'text-rose-600 dark:text-rose-400'
               : isOffline || isOfflineSession
               ? 'text-amber-600 dark:text-amber-400'
@@ -164,7 +167,7 @@ export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({
         )}
 
         {/* Needs action dot indicator if no pending items but action needed */}
-        {needsActionCount > 0 && pendingCount === 0 && (
+        {(syncStatus.storageError || needsActionCount > 0) && pendingCount === 0 && (
           <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-[var(--theme-card-bg)] animate-pulse" />
         )}
       </button>

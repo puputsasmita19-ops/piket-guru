@@ -24,6 +24,8 @@ export interface SyncQueueStatus {
   isSyncing: boolean;
   lastSuccessfulSyncAt: string | null;
   items: QueueItem[];
+  /** True when persistent queue cannot be inspected; never present it as empty. */
+  storageError?: boolean;
 }
 
 type SyncListener = (status: SyncQueueStatus) => void;
@@ -120,7 +122,7 @@ export class SyncQueueService {
   public static async resumeNetwork(user: UserProfile): Promise<void> {
     const epoch = syncEpoch;
     if (auth.currentUser?.uid !== user.id || isSyncInProgress) return;
-    for (const item of await OfflineStorage.getSyncItemsByUser(user.id)) {
+    for (const item of await OfflineStorage.getSyncItemsByUser(user.id, { strict: true })) {
       if (!sameSyncSession(user.id, epoch)) return;
       await OfflineStorage.resetSyncItemForRetry(item.operationId, user.id, true);
     }
@@ -201,7 +203,15 @@ export class SyncQueueService {
       return empty;
     }
 
-    const items = await OfflineStorage.getSyncItemsByUser(userId);
+    let items: QueueItem[] = [];
+    let storageError = false;
+    try {
+      // A failed IndexedDB read means UNKNOWN, not an empty/successfully sent queue.
+      items = await OfflineStorage.getSyncItemsByUser(userId, { strict: true });
+    } catch (error) {
+      storageError = true;
+      console.warn('[SYNC_QUEUE] Antrean perangkat belum dapat diperiksa:', error);
+    }
     const pendingCount = items.filter((i) => i.status === 'PENDING_NETWORK' || i.status === 'SENDING').length;
     const needsActionCount = items.filter((i) => i.status === 'NEEDS_ACTION').length;
 
@@ -211,6 +221,7 @@ export class SyncQueueService {
       isSyncing: isSyncInProgress,
       lastSuccessfulSyncAt,
       items,
+      storageError,
     };
 
     if (sameSyncSession(userId, epoch)) this.notifyListeners(summary);

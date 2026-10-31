@@ -17,7 +17,9 @@ export function useAutomaticSync() {
       if (!user || user.id !== currentUser.id) return;
       busy = true;
       try {
-        const items = await OfflineStorage.getSyncItemsByUser(user.id);
+        // On storage failure do not report an empty queue and silently skip recovery.
+        // A failed read is retried by the existing bounded background loop.
+        const items = await OfflineStorage.getSyncItemsByUser(user.id, { strict: true });
         if (!items.some(i => i.status === 'PENDING_NETWORK' || i.status === 'SENDING')) return;
         if (offlineSession) { await verify(); return; }
         if (!stopped) {

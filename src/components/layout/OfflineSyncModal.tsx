@@ -35,7 +35,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
   onClose,
   syncStatus,
 }) => {
-  const { currentUser, isOffline } = useAuth();
+  const { currentUser, isOffline, isOfflineSession } = useAuth();
   const [isSyncingLocal, setIsSyncingLocal] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -66,7 +66,12 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
 
     try {
       const res = await SyncQueueService.triggerSync(currentUser);
-      if (res.processed === 0) {
+      const latest = await SyncQueueService.refreshStatus(currentUser.id);
+      if (latest.storageError) {
+        setFeedback('Status antrean belum dapat diperiksa. Jangan anggap data sudah terkirim.');
+      } else if (res.processed === 0 && (latest.pendingCount > 0 || latest.needsActionCount > 0)) {
+        setFeedback('Antrean masih tertunda. Periksa koneksi, status akun, dan coba lagi.');
+      } else if (res.processed === 0) {
         setFeedback('Tidak ada antrean tertunda.');
       } else if (res.failed > 0) {
         setFeedback(`${res.succeeded} data berhasil dikirim, ${res.failed} data perlu tindakan.`);
@@ -82,12 +87,14 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
   };
 
   const handleRetrySingle = async (opId: string) => {
-    await SyncQueueService.retryItem(opId, currentUser);
+    try { await SyncQueueService.retryItem(opId, currentUser); }
+    catch (error: any) { setFeedback(error?.message || 'Antrean belum dapat dicoba ulang.'); }
   };
 
   const handleDeleteSingle = async (opId: string) => {
     if (window.confirm('Hapus item ini dari antrean offline? Data yang belum tersinkron akan dibatalkan.')) {
-      await SyncQueueService.removeItem(opId, currentUser.id);
+      try { await SyncQueueService.removeItem(opId, currentUser.id); }
+      catch (error: any) { setFeedback(error?.message || 'Antrean belum dapat dihapus.'); }
     }
   };
 
@@ -119,7 +126,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
                 Rincian Antrean Pengiriman
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                {items.length} item dalam antrean luring
+                {syncStatus.storageError ? 'Status antrean belum terbaca' : `${items.length} item dalam antrean luring`}
               </p>
             </div>
           </div>
@@ -143,7 +150,12 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
             </div>
           )}
 
-          {items.length === 0 ? (
+          {syncStatus.storageError ? (
+            <div role="alert" className="p-4 rounded-2xl border border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+              <p className="text-xs font-bold">Penyimpanan offline belum dapat diperiksa</p>
+              <p className="text-[11px] mt-1">Data belum tentu sudah terkirim. Jangan hapus cache aplikasi atau keluar dari akun. Periksa ruang penyimpanan lalu buka kembali panel.</p>
+            </div>
+          ) : items.length === 0 ? (
             <div className="p-6 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -245,7 +257,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
           <button
             type="button"
             onClick={handleSyncAll}
-            disabled={isOffline || isSyncing || isSyncingLocal || items.length === 0}
+            disabled={syncStatus.storageError || isOffline || isOfflineSession || isSyncing || isSyncingLocal || items.length === 0}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 bg-[var(--theme-primary)] hover:bg-[var(--theme-primary-hover)] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:cursor-not-allowed"
           >
             <RefreshCw

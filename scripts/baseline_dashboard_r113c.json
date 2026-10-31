@@ -1,0 +1,22 @@
+{
+  "id": "STABLE-DASHBOARD-R113C",
+  "extends": "STABLE-LOGIN-GPS-R112",
+  "description": "Code baseline snapshot after R113-C; not a runtime lock. Changes require review and regression.",
+  "protectedSha256": {
+    "src/features/dashboard/DashboardView.tsx": "2af8584d470ed6fc739f3855748495c6678892ab6ed9ddf9cadc0057b4e5e304",
+    "src/features/dashboard/DashboardStatistics.tsx": "6f6e3a7ac4e58898695105a7ffab88c65368a49bbd9da4edde5a416503ff98cd",
+    "src/features/dashboard/QuickActions.tsx": "0b62d4f2706a7abf632a1b518b99347940fa5a61b88f8d2b206d0457df38c5f4",
+    "src/features/dashboard/DashboardFlashInfo.tsx": "e38cf4c6566c26b13d60445e4e9d07a643d9b42278e2f132b00ad1f21cf0a9ef",
+    "src/features/dashboard/dashboardSwipeGesture.ts": "d882bbc4b22d7abac85e965861cd6b8daac3fc3994652b1f9b1cdd62cd8ec444",
+    "src/features/dashboard/dashboardPerformanceAudit.ts": "dd35559a6d7bda11f41a6c741a1220b8f7b0dba774866c162a7712c767d322ae",
+    "src/features/dashboard/dashboardLoadingStabilizer.ts": "fb3e8fb0eeb71b4aced16c3dc0589f44eb64b6391f9b67d4c8851e6916d7f752",
+    "src/features/dashboard/DashboardAuditPanel.tsx": "6d7fd9955663876c08c3df8af0f7a0f70ce9649c7ef8757122328600de85c7b3",
+    "src/index.css": "62d32ddb6f2a7679cb0302be3f0ac45315e0009443a5a175bc1e7a7f3425db29"
+  },
+  "tests": [
+    "scripts/test_r113a_dashboard_performance_audit.mjs",
+    "scripts/test_r113b_smart_dashboard_loading.mjs",
+    "scripts/test_r113b2_dashboard_loading_stabilization.mjs",
+    "scripts/test_r113c_mobile_rendering_ux.mjs"
+  ]
+}
