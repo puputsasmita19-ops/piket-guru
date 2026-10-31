@@ -49,6 +49,8 @@ export interface QueueItem<T = any> {
   schemaVersion: number;
   /** Hash of the original submission, unchanged by upload/sync progress. */
   submissionFingerprint?: string;
+  /** Random lease token for the CURRENT sender, invalidated on stale recovery. */
+  deliveryAttemptId?: string;
 }
 
 export interface ScopedCacheRecord<T = any> {
@@ -428,6 +430,127 @@ export class OfflineStorage {
       console.warn('[OFFLINE_STORAGE] Antrean belum tersimpan secara permanen:', err);
       throw new Error('Antrean belum berhasil disimpan di perangkat. Jangan tutup formulir; periksa ruang penyimpanan lalu coba lagi.');
     }
+  }
+
+  /**
+   * R114-B: Claim an immutable queued submission inside ONE IndexedDB transaction.
+   * A second tab must never send the same pending operation concurrently.
+   * Only the original queued fingerprint may be claimed; unrelated edits cannot
+   * replace a pending submission while it is being delivered.
+   */
+  public static async claimSyncItem(item: QueueItem): Promise<string | null> {
+    const attemptId = crypto.randomUUID();
+    const matches = (stored?: QueueItem) => !!stored &&
+      stored.operationId === item.operationId && stored.projectId === CURRENT_PROJECT_ID &&
+      stored.userId === item.userId && stored.status === 'PENDING_NETWORK' &&
+      stored.submissionFingerprint === item.submissionFingerprint;
+    const claimed = (stored: QueueItem): QueueItem => ({
+      ...stored, status: 'SENDING', deliveryAttemptId: attemptId, updatedAt: new Date().toISOString(),
+    });
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const current = memoryStore.syncQueue.get(item.operationId);
+      if (!matches(current)) return null;
+      memoryStore.syncQueue.set(item.operationId, claimed(current!));
+      return attemptId;
+    }
+    const db = await this.getDb();
+    return new Promise<string | null>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let acquired = false;
+      const req = store.get(item.operationId);
+      req.onsuccess = () => {
+        if (matches(req.result)) { store.put(claimed(req.result)); acquired = true; }
+      };
+      tx.oncomplete = () => resolve(acquired ? attemptId : null);
+      tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Klaim antrean gagal.'));
+    });
+  }
+
+  /** A stale sender may only remove the exact submission it originally claimed. */
+  public static async acknowledgeSyncItem(item: QueueItem): Promise<boolean> {
+    const matches = (stored?: QueueItem) => !!stored &&
+      stored.operationId === item.operationId && stored.projectId === CURRENT_PROJECT_ID &&
+      stored.userId === item.userId && stored.status === 'SENDING' &&
+      !!item.deliveryAttemptId && stored.deliveryAttemptId === item.deliveryAttemptId &&
+      stored.submissionFingerprint === item.submissionFingerprint;
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const stored = memoryStore.syncQueue.get(item.operationId);
+      if (!matches(stored)) return false;
+      memoryStore.syncQueue.delete(item.operationId);
+      return true;
+    }
+    const db = await this.getDb();
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let acknowledged = false;
+      const req = store.get(item.operationId);
+      req.onsuccess = () => {
+        if (matches(req.result)) { store.delete(item.operationId); acknowledged = true; }
+      };
+      tx.oncomplete = () => resolve(acknowledged);
+      tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Konfirmasi antrean gagal.'));
+    });
+  }
+
+  /** Recover only the unchanged stale SENDING submission; never overwrite another tab's write. */
+  public static async recoverStaleSyncItem(item: QueueItem, now = Date.now()): Promise<boolean> {
+    const stale = (stored?: QueueItem) => !!stored && stored.userId === item.userId &&
+      stored.projectId === CURRENT_PROJECT_ID && stored.operationId === item.operationId &&
+      stored.status === 'SENDING' && stored.submissionFingerprint === item.submissionFingerprint &&
+      now - new Date(stored.updatedAt || stored.createdAt).getTime() > 120000;
+    const recovered = (stored: QueueItem): QueueItem => ({ ...stored, status: 'PENDING_NETWORK',
+      deliveryAttemptId: undefined, nextRetryAt: undefined, updatedAt: new Date().toISOString() });
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const stored = memoryStore.syncQueue.get(item.operationId);
+      if (!stale(stored)) return false;
+      memoryStore.syncQueue.set(item.operationId, recovered(stored!));
+      return true;
+    }
+    const db = await this.getDb();
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let changed = false;
+      const req = store.get(item.operationId);
+      req.onsuccess = () => {
+        if (stale(req.result)) { store.put(recovered(req.result)); changed = true; }
+      };
+      tx.oncomplete = () => resolve(changed);
+      tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Pemulihan antrean gagal.'));
+    });
+  }
+
+  /**
+   * R114-B: Save conversion progress or a final failure only if THIS sender
+   * still owns the same attempt. A delayed tab must never overwrite a later
+   * attempt or an already acknowledged/removed submission.
+   */
+  public static async updateClaimedSyncItem(item: QueueItem): Promise<boolean> {
+    const matches = (stored?: QueueItem) => !!stored && stored.status === 'SENDING' &&
+      stored.projectId === CURRENT_PROJECT_ID && stored.userId === item.userId &&
+      !!item.deliveryAttemptId && stored.deliveryAttemptId === item.deliveryAttemptId &&
+      stored.submissionFingerprint === item.submissionFingerprint;
+    const next = (stored: QueueItem) => ({ ...stored, ...item });
+    if (!this.isTrustedDevice() || !this.isIndexedDBSupported) {
+      const stored = memoryStore.syncQueue.get(item.operationId);
+      if (!matches(stored)) return false;
+      memoryStore.syncQueue.set(item.operationId, next(stored!));
+      return true;
+    }
+    const db = await this.getDb();
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let updated = false;
+      const req = store.get(item.operationId);
+      req.onsuccess = () => {
+        if (matches(req.result)) { store.put(next(req.result)); updated = true; }
+      };
+      tx.oncomplete = () => resolve(updated);
+      tx.onabort = tx.onerror = () => reject(tx.error || req.error || new Error('Status kiriman gagal disimpan.'));
+    });
   }
 
   public static async updateSyncItem(item: QueueItem): Promise<void> {

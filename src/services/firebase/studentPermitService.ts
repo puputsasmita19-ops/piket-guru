@@ -93,6 +93,9 @@ export class StudentPermitService {
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', id);
       if (existingDoc) {
+        // An already-used record ID is only an idempotent replay for its owner.
+        // Never acknowledge a different account's existing record as ours.
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
         return existingDoc;
       }
 
@@ -138,13 +141,17 @@ export class StudentPermitService {
    */
   public static async updatePermit(
     data: Partial<StudentPermitRecord> & { id: string },
-    user: UserProfile
+    user: UserProfile,
+    offlineSubmissionKey?: string
   ): Promise<StudentPermitRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<StudentPermitRecord>('studentPermits', data.id);
       if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
+      if (existing && offlineSubmissionKey && existing.offlineSubmissionKey === offlineSubmissionKey) {
+        return existing; // Exact offline update already committed; response was lost.
+      }
       if (!existing) {
         throw new Error(`Data surat izin siswa dengan ID ${data.id} tidak ditemukan.`);
       }
@@ -175,6 +182,7 @@ export class StudentPermitService {
         isDemo: existing.isDemo,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       // If jenisIzin changed from LAINNYA to another, remove field if controlledReplace

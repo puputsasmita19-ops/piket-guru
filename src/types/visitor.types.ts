@@ -12,6 +12,8 @@ export type VisitorCategory =
   | 'LAINNYA';
 
 export interface VisitorRecord extends BaseEntityMetadata {
+  /** Exact queued update already committed to Firestore. */
+  offlineSubmissionKey?: string | null;
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamMasuk: string; // HH:mm WIB

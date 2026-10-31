@@ -95,6 +95,9 @@ export class VisitorService {
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', id);
       if (existingDoc) {
+        // An already-used record ID is only an idempotent replay for its owner.
+        // Never acknowledge a different account's existing record as ours.
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
         return existingDoc;
       }
 
@@ -133,13 +136,17 @@ export class VisitorService {
    */
   public static async updateVisitor(
     data: Partial<VisitorRecord> & { id: string },
-    user: UserProfile
+    user: UserProfile,
+    offlineSubmissionKey?: string
   ): Promise<VisitorRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<VisitorRecord>('visitors', data.id);
       if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
+      if (existing && offlineSubmissionKey && existing.offlineSubmissionKey === offlineSubmissionKey) {
+        return existing; // Exact offline update already committed; response was lost.
+      }
       if (!existing) {
         throw new Error(`Data buku tamu dengan ID ${data.id} tidak ditemukan.`);
       }
@@ -177,6 +184,7 @@ export class VisitorService {
         isDemo: existing.isDemo,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       // If kategori is changed from LAINNYA to another, ensure keteranganLainnya is completely removed

@@ -382,12 +382,17 @@ export class SyncQueueService {
       for (const item of items) {
         if (!sameSyncSession(currentUser.id, epoch) || isSyncCancelled) break;
         if (item.status === 'SENDING' && currentTime - new Date(item.updatedAt || item.createdAt).getTime() > 120000) {
-          item.status = 'PENDING_NETWORK'; item.nextRetryAt = undefined;
-          await OfflineStorage.updateSyncItem(item);
+          // Recheck against the actual stored item: another tab may have
+          // completed or updated it while this tab was acquiring the lease.
+          await OfflineStorage.recoverStaleSyncItem(item, currentTime);
         }
       }
+      // Reload after recovery: the recovered status may differ from the stale
+      // initial snapshot, and must be eligible in THIS sync pass.
+      const refreshedItems = await OfflineStorage.getSyncItemsByUser(currentUser.id, { strict: true });
+      if (!sameSyncSession(currentUser.id, epoch)) return noSyncWork();
       // Only pick items in PENDING_NETWORK whose backoff window has passed
-      const eligibleItems = items.filter(
+      const eligibleItems = refreshedItems.filter(
         (i) => i.status === 'PENDING_NETWORK' && (!i.nextRetryAt || i.nextRetryAt <= currentTime)
       );
 
@@ -408,10 +413,14 @@ export class SyncQueueService {
           continue;
         }
 
+        // Claim is an atomic read+write, rather than overwriting a snapshot.
+        // Duplicate browser tabs cannot both submit the same operation.
+        const attemptId = await OfflineStorage.claimSyncItem(item);
+        if (!attemptId) continue;
         processed++;
+        item.deliveryAttemptId = attemptId;
         item.status = 'SENDING';
         item.updatedAt = new Date().toISOString();
-        await OfflineStorage.updateSyncItem(item);
         await this.refreshStatus(currentUser.id);
 
         try {
@@ -421,7 +430,16 @@ export class SyncQueueService {
           // 5. Execute operation idempotently
           await this.executeOperation(item, currentUser);
 
-          await OfflineStorage.removeSyncItem(item.operationId, { allowSending: true, userId: currentUser.id });
+          // Acknowledgement is guarded by immutable fingerprint + ownership.
+          // If a different tab has changed the queue state, retain it for review.
+          const acknowledged = await OfflineStorage.acknowledgeSyncItem(item);
+          if (!acknowledged) {
+            // A later sender now owns the queue row. Never enter the generic
+            // failure path, which would overwrite that sender's newer state.
+            console.warn('[SYNC_QUEUE] Konfirmasi pengiriman sudah diambil alih proses lain.');
+            failed++;
+            continue;
+          }
           succeeded++;
           lastSuccessfulSyncAt = new Date().toISOString();
         } catch (err: any) {
@@ -430,7 +448,7 @@ export class SyncQueueService {
             // for its owner without consuming retries or requiring manual repair.
             item.status = 'PENDING_NETWORK';
             item.updatedAt = new Date().toISOString();
-            await OfflineStorage.updateSyncItem(item);
+            await OfflineStorage.updateClaimedSyncItem(item);
             break;
           }
           failed++;
@@ -466,7 +484,7 @@ export class SyncQueueService {
             }
           }
           item.updatedAt = new Date().toISOString();
-          await OfflineStorage.updateSyncItem(item);
+          await OfflineStorage.updateClaimedSyncItem(item);
         }
       }
     } finally {
@@ -530,7 +548,9 @@ export class SyncQueueService {
     }
 
     if (hasNewConversions) {
-      await OfflineStorage.updateSyncItem(item);
+      if (!await OfflineStorage.updateClaimedSyncItem(item)) {
+        throw new Error('Klaim sinkronisasi berubah ketika menyiapkan lampiran.');
+      }
     }
 
     // Inject prepared attachments into the operation payload
@@ -579,10 +599,11 @@ export class SyncQueueService {
         const { DutyBookService } = await import('../firebase/dutyBookService');
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isSubmitOnly, originalUpdatedAt } = item.payload;
+        const submissionKey = item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined;
         if (isSubmitOnly) {
-          await DutyBookService.submitJournal(record, user, originalUpdatedAt);
+          await DutyBookService.submitJournal(record, user, originalUpdatedAt, submissionKey);
         } else {
-          await DutyBookService.saveDraft(record, user, originalUpdatedAt);
+          await DutyBookService.saveDraft(record, user, originalUpdatedAt, submissionKey);
         }
         break;
       }
@@ -590,14 +611,16 @@ export class SyncQueueService {
       case 'INCIDENT_REPORT': {
         const { IncidentService } = await import('../firebase/incidentService');
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
-        await IncidentService.saveIncident(item.payload, user);
+        await IncidentService.saveIncident(item.payload, user,
+          item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined);
         break;
       }
 
       case 'TARDY_REPORT': {
         const { StudentTardyService } = await import('../firebase/studentTardyService');
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
-        await StudentTardyService.saveTardyStudent(item.payload, user);
+        await StudentTardyService.saveTardyStudent(item.payload, user, false,
+          item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined);
         break;
       }
 
@@ -606,7 +629,8 @@ export class SyncQueueService {
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
-          await StudentPermitService.updatePermit(record, user);
+          await StudentPermitService.updatePermit(record, user,
+            item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined);
         } else {
           await StudentPermitService.createPermit(record, user);
         }
@@ -618,7 +642,8 @@ export class SyncQueueService {
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
-          await VisitorService.updateVisitor(record, user);
+          await VisitorService.updateVisitor(record, user,
+            item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined);
         } else {
           await VisitorService.registerVisitor(record, user);
         }
@@ -630,7 +655,8 @@ export class SyncQueueService {
         if (isSyncCancelled || auth.currentUser?.uid !== user.id) throw new Error('Sesi sinkronisasi berubah. Coba kembali dengan akun pemilik data.');
         const { record, isUpdate } = item.payload;
         if (isUpdate) {
-          await SubstitutionService.updateSubstitution(record, user);
+          await SubstitutionService.updateSubstitution(record, user,
+            item.submissionFingerprint ? `${item.operationId}:${item.submissionFingerprint}` : undefined);
         } else {
           await SubstitutionService.createSubstitution(record, user);
         }

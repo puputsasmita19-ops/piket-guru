@@ -10,6 +10,8 @@ export type StudentPermitType =
 export type StudentPermitStatus = 'SEDANG_KELUAR' | 'SUDAH_KEMBALI' | 'SELESAI_PULANG';
 
 export interface StudentPermitRecord extends BaseEntityMetadata {
+  /** Exact queued update already committed to Firestore. */
+  offlineSubmissionKey?: string | null;
   id: string;
   groupId?: string; // ID grup untuk menghubungkan satu pengajuan massal
   isGroupSubmission?: boolean;

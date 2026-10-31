@@ -71,6 +71,9 @@ export interface DutyBookRecord extends DutyBookSection, BaseEntityMetadata {
   lockedAt?: string;
   lockedBy?: string;
 
+  /** Durable acknowledgement marker for a single offline journal submission. */
+  offlineSubmissionKey?: string | null;
+
   // Timestamps
   createdAt: string;
   createdBy: string;

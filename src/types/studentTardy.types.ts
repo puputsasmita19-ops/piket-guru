@@ -38,6 +38,8 @@ export interface TardyAdminCorrection {
 }
 
 export interface StudentTardyRecord extends BaseEntityMetadata {
+  /** Exact queued submission already committed to Firestore. */
+  offlineSubmissionKey?: string | null;
   id: string;
   tanggal: string; // YYYY-MM-DD
   jamDatang: string; // HH:mm WIB

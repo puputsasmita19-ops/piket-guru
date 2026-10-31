@@ -62,7 +62,8 @@ export class DutyBookService {
   public static async saveDraft(
     record: DutyBookRecord,
     user: UserProfile,
-    originalUpdatedAt?: string
+    originalUpdatedAt?: string,
+    offlineSubmissionKey?: string
   ): Promise<DutyBookRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
@@ -73,6 +74,19 @@ export class DutyBookService {
 
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+      // A committed write can lose its network acknowledgement.  Recognize
+      // the exact durable submission before applying workflow/conflict rules.
+      if (existing && offlineSubmissionKey && existing.offlineSubmissionKey === offlineSubmissionKey) {
+        assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasId');
+        return existing;
+      }
+      // Reject an obsolete queued create whose receipt was superseded by a
+      // newer edit. A lost acknowledgement alone is handled by the exact
+      // receipt equality check above; unrelated later edits must not be lost.
+      if (existing && offlineSubmissionKey && !originalUpdatedAt &&
+          record.updatedAt && existing.updatedAt && existing.updatedAt !== record.updatedAt) {
+        throw new Error('Konflik revisi: Buku piket sudah berubah setelah antrean dibuat. Muat ulang data terbaru sebelum mengirim ulang.');
+      }
       const now = FirestoreService.nextUpdatedAt(existing);
 
       if (existing) {
@@ -105,6 +119,7 @@ export class DutyBookService {
         createdBy: existing?.createdBy || record.createdBy || user.fullName,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       session.assertActive();
@@ -140,7 +155,8 @@ export class DutyBookService {
   public static async submitJournal(
     record: DutyBookRecord,
     user: UserProfile,
-    originalUpdatedAt?: string
+    originalUpdatedAt?: string,
+    offlineSubmissionKey?: string
   ): Promise<DutyBookRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
@@ -152,6 +168,19 @@ export class DutyBookService {
 
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<DutyBookRecord>('dutyBooks', id);
+      // A committed write can lose its network acknowledgement.  Recognize
+      // the exact durable submission before applying workflow/conflict rules.
+      if (existing && offlineSubmissionKey && existing.offlineSubmissionKey === offlineSubmissionKey) {
+        assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasId');
+        return existing;
+      }
+      // Reject an obsolete queued create whose receipt was superseded by a
+      // newer edit. A lost acknowledgement alone is handled by the exact
+      // receipt equality check above; unrelated later edits must not be lost.
+      if (existing && offlineSubmissionKey && !originalUpdatedAt &&
+          record.updatedAt && existing.updatedAt && existing.updatedAt !== record.updatedAt) {
+        throw new Error('Konflik revisi: Buku piket sudah berubah setelah antrean dibuat. Muat ulang data terbaru sebelum mengirim ulang.');
+      }
       const now = FirestoreService.nextUpdatedAt(existing);
 
       if (existing) {
@@ -190,6 +219,7 @@ export class DutyBookService {
         createdBy: existing?.createdBy || record.createdBy || user.fullName,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       session.assertActive();

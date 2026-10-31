@@ -102,7 +102,8 @@ export class IncidentService {
    */
   public static async saveIncident(
     record: IncidentRecord,
-    user: UserProfile
+    user: UserProfile,
+    offlineSubmissionKey?: string
   ): Promise<IncidentRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
@@ -114,7 +115,12 @@ export class IncidentService {
       // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<IncidentRecord>('incidents', id);
+      if (existingDoc && offlineSubmissionKey && existingDoc.offlineSubmissionKey === offlineSubmissionKey) {
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'pelaporId');
+        return existingDoc; // Server committed earlier; acknowledgement was lost.
+      }
       if (needsGeneratedId && existingDoc) {
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'pelaporId');
         return existingDoc;
       }
       // Forms reserve IDs before saving so retries keep the same photo identity.
@@ -141,6 +147,7 @@ export class IncidentService {
         isDemo: false,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
         createdAt: existingDoc?.createdAt || record.createdAt || now,
         createdBy: existingDoc?.createdBy || user.fullName,
       };

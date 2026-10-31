@@ -144,7 +144,8 @@ export class StudentTardyService {
   public static async saveTardyStudent(
     data: Partial<StudentTardyRecord>,
     user: UserProfile,
-    isEdit: boolean = false
+    isEdit: boolean = false,
+    offlineSubmissionKey?: string
   ): Promise<StudentTardyRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
@@ -159,6 +160,10 @@ export class StudentTardyService {
       // Idempotency check: jika id sudah tercatat di server (misal retry respons terputus), kembalikan tanpa duplikasi
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<StudentTardyRecord>('studentTardiness', id);
+      if (existingDoc && offlineSubmissionKey && existingDoc.offlineSubmissionKey === offlineSubmissionKey) {
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
+        return existingDoc; // Replayed after server success and lost acknowledgement.
+      }
       const isNew = !existingDoc;
       if (existingDoc) assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
       if (!isEdit && existingDoc && data.batchRequestId) {
@@ -250,6 +255,7 @@ export class StudentTardyService {
         createdBy: existingDoc?.createdBy || data.createdBy || user.fullName,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       const payload = FirestoreService.sanitizeFirestorePayload(rawPayload);

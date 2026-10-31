@@ -46,6 +46,8 @@ export type SubstitutionStatus =
   | 'SELESAI_INVAL';
 
 export interface TeacherSubstitutionRecord extends BaseEntityMetadata {
+  /** Exact queued update already committed to Firestore. */
+  offlineSubmissionKey?: string | null;
   id: string;
   groupId?: string; // ID grup untuk menghubungkan satu input massal beberapa guru / penugasan
   batchRequestId?: string; // Identitas request idempotent untuk mencegah duplikasi saat retry

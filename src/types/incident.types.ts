@@ -44,6 +44,8 @@ export interface IncidentRecord extends BaseEntityMetadata {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+  /** Exact queued submission already committed to Firestore. */
+  offlineSubmissionKey?: string | null;
 }
 
 /**

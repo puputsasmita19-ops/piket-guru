@@ -68,6 +68,9 @@ export class SubstitutionService {
       session.assertActive();
       const existingDoc = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', id);
       if (existingDoc) {
+        // An already-used record ID is only an idempotent replay for its owner.
+        // Never acknowledge a different account's existing record as ours.
+        assertRecordOwner(user, existingDoc as unknown as Record<string, unknown>, 'petugasPiketId');
         return existingDoc;
       }
 
@@ -108,13 +111,17 @@ export class SubstitutionService {
    */
   public static async updateSubstitution(
     data: Partial<TeacherSubstitutionRecord> & { id: string },
-    user: UserProfile
+    user: UserProfile,
+    offlineSubmissionKey?: string
   ): Promise<TeacherSubstitutionRecord> {
     const session = createAuthenticatedSession(user.id);
     try {
       session.assertActive();
       const existing = await FirestoreService.getByIdStrict<TeacherSubstitutionRecord>('substitutions', data.id);
       if (existing) assertRecordOwner(user, existing as unknown as Record<string, unknown>, 'petugasPiketId');
+      if (existing && offlineSubmissionKey && existing.offlineSubmissionKey === offlineSubmissionKey) {
+        return existing; // Exact offline update already committed; response was lost.
+      }
       if (!existing) {
         throw new Error(`Catatan penugasan inval ID ${data.id} tidak ditemukan.`);
       }
@@ -134,6 +141,7 @@ export class SubstitutionService {
         petugasPiketName: existing.petugasPiketName,
         updatedAt: now,
         updatedBy: user.fullName,
+        offlineSubmissionKey: offlineSubmissionKey ?? null,
       };
 
       session.assertActive();
