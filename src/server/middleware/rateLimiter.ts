@@ -40,6 +40,21 @@ export interface AcquireResult {
   leaseToken?: string;
 }
 
+/** R108: a single atomic admission checks IP/account locks and lease capacity. */
+export interface LoginAdmissionResult extends AcquireResult {
+  blockedBy?: 'IP_LOCKED' | 'ACCOUNT_LOCKED' | 'TOO_MANY_CONCURRENT_REQUESTS';
+  remainingSeconds?: number;
+}
+
+export interface LoginAdmissionParams {
+  idKey: string;
+  ipKey: string;
+  aliasKey?: string;
+  maxId: number;
+  maxIp: number;
+  leaseTtlMs: number;
+}
+
 export class StoreUnavailableError extends Error {
   constructor(message: string = 'Rate limit store is unavailable') {
     super(message);
@@ -108,6 +123,9 @@ export interface RateLimitStoreDriver {
   renewDualInFlight(leaseToken: string, extensionMs: number): Promise<boolean>;
   releaseDualInFlight(leaseToken: string): Promise<void>;
   reset(canonicalKey: string): Promise<void>;
+  /** Firestore fast path; optional to preserve local and test drivers. */
+  resetLoginSuccess?(idKeys: string[], ipKey: string): Promise<void>;
+  acquireLoginAdmission?(params: LoginAdmissionParams): Promise<LoginAdmissionResult>;
   clearAll(): Promise<void>;
   dumpState(): Promise<SharedStoreState>;
 }
@@ -781,6 +799,73 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
     });
   }
 
+  /**
+   * R108: one Firestore transaction instead of separate lock reads and lease acquire.
+   * All security checks are performed on authoritative shared records in the same
+   * transaction, so concurrent failed PIN attempts cannot bypass the lockout.
+   */
+  public async acquireLoginAdmission(params: LoginAdmissionParams): Promise<LoginAdmissionResult> {
+    const { idKey, ipKey, aliasKey, maxId, maxIp, leaseTtlMs } = params;
+    return this.transport.runTransaction(async (tx) => {
+      const keys = [...new Set([ipKey, idKey, aliasKey].filter((key): key is string => !!key))];
+      // READ phase: parallel reads reduce Firestore network round trips.
+      const [lockDocs, registry] = await Promise.all([
+        Promise.all(keys.map(key => tx.get(`records:${key}`))),
+        tx.get('leases:registry'),
+      ]);
+      const now = Date.now();
+      const locks = new Map(keys.map((key, index) => [key, lockDocs[index]]));
+      const remainingSeconds = (key: string): number => {
+        const lockedUntil = Number(locks.get(key)?.lockedUntil || 0);
+        return lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
+      };
+      if (remainingSeconds(ipKey) > 0) {
+        return { admitted: false, blockedBy: 'IP_LOCKED', remainingSeconds: remainingSeconds(ipKey) };
+      }
+      for (const key of [idKey, aliasKey]) {
+        if (key && remainingSeconds(key) > 0) {
+          return { admitted: false, blockedBy: 'ACCOUNT_LOCKED', remainingSeconds: remainingSeconds(key) };
+        }
+      }
+
+      const activeTokensList: string[] = Array.isArray(registry?.activeTokens) ? registry.activeTokens : [];
+      const leaseDocs = await Promise.all(activeTokensList.map(token => tx.get(`leases:${token}`)));
+      const validTokens: string[] = [];
+      const expiredTokens: string[] = [];
+      let activeIdCount = 0;
+      let activeIpCount = 0;
+      for (let i = 0; i < activeTokensList.length; i++) {
+        const token = activeTokensList[i];
+        const doc = leaseDocs[i];
+        if (doc && Number(doc.expiresAt) > now) {
+          validTokens.push(token);
+          if (doc.idKey === idKey) activeIdCount++;
+          if (doc.ipKey === ipKey) activeIpCount++;
+        } else {
+          expiredTokens.push(token);
+        }
+      }
+      const admitted = activeIdCount < maxId && activeIpCount < maxIp;
+      let leaseToken: string | undefined;
+      if (admitted) {
+        leaseToken = `dist_lease_${now}_${Math.random().toString(36).slice(2, 10)}`;
+        validTokens.push(leaseToken);
+      }
+
+      // WRITE phase only after every document read.
+      for (const token of expiredTokens) tx.delete(`leases:${token}`);
+      if (leaseToken) {
+        tx.set(`leases:${leaseToken}`, {
+          leaseToken, idKey, ipKey, acquiredAt: now, expiresAt: now + leaseTtlMs,
+        } satisfies InFlightLease);
+      }
+      tx.set('leases:registry', { activeTokens: validTokens });
+      return admitted
+        ? { admitted: true, leaseToken }
+        : { admitted: false, blockedBy: 'TOO_MANY_CONCURRENT_REQUESTS' };
+    });
+  }
+
   public async renewDualInFlight(leaseToken: string, extensionMs: number): Promise<boolean> {
     if (!leaseToken) return false;
     try {
@@ -836,6 +921,29 @@ export class FirestoreStoreDriver implements RateLimitStoreDriver {
       // Phase 3: WRITE ALL
       if (record) {
         tx.delete(`records:${canonicalKey}`);
+      }
+    });
+  }
+
+  /**
+   * R108: atomic cleanup of verified aliases and the IP bucket in one Firestore
+   * transaction. Never clear an IP lock that is still active; any store error
+   * aborts login instead of treating the reset as optional.
+   */
+  public async resetLoginSuccess(idKeys: string[], ipKey: string): Promise<void> {
+    const uniqueKeys = [...new Set(idKeys.filter(Boolean))];
+    await this.transport.runTransaction(async (tx) => {
+      const keys = [...new Set([...uniqueKeys, ipKey])];
+      const records = await Promise.all(keys.map(key => tx.get(`records:${key}`)));
+      const recordByKey = new Map(keys.map((key, index) => [key, records[index]]));
+      const ipRecord = recordByKey.get(ipKey);
+      const ipStillLocked = Number(ipRecord?.lockedUntil || 0) > Date.now();
+      // READ phase completed. Remove only records that exist; do not create empty records.
+      for (const key of uniqueKeys) {
+        if (recordByKey.get(key)) tx.delete(`records:${key}`);
+      }
+      if (!ipStillLocked && ipRecord && !uniqueKeys.includes(ipKey)) {
+        tx.delete(`records:${ipKey}`);
       }
     });
   }
@@ -1281,8 +1389,14 @@ export class AuthRateLimiter {
   /** Clear each verified account alias once, then inspect the shared IP bucket once. */
   public static async recordLoginSuccessForIdentifiers(identifiers: string[], ip: string): Promise<void> {
     const keys = new Set(identifiers.filter(id => typeof id === 'string' && id.trim()).map(toAccountIdKey));
-    await Promise.all([...keys].map(key => activeStoreDriver.reset(key)));
     const ipKey = toIpKey(ip);
+    if (activeStoreDriver.resetLoginSuccess) {
+      // Production Firestore driver: one atomic transaction for all aliases + IP.
+      await activeStoreDriver.resetLoginSuccess([...keys], ipKey);
+      return;
+    }
+    // Preserve existing fail-closed behavior in local and simulator drivers.
+    await Promise.all([...keys].map(key => activeStoreDriver.reset(key)));
     const ipLock = await activeStoreDriver.isLocked(ipKey);
     if (!ipLock.locked) await activeStoreDriver.reset(ipKey);
   }
@@ -1356,69 +1470,116 @@ export class AuthRateLimiter {
     const idKey = toAccountIdKey(targetAccountId || 'anon');
 
     try {
-      // 1–2. Independent IP and account lock checks share a round trip window.
-      // Both MUST succeed (fail-closed) before acquiring the in-flight lease.
-      const [ipLock, canonicalLock] = await Promise.all([
-        activeStoreDriver.isLocked(ipKey),
-        targetAccountId ? activeStoreDriver.isLocked(toAccountIdKey(targetAccountId)) : Promise.resolve({ locked: false } as LockStatus),
-      ]);
-      if (ipLock.locked) {
-        res.status(429).json({
-          success: false,
-          error: `Alamat IP diblokir sementara karena terlalu banyak percobaan gagal. Silakan tunggu ${ipLock.remainingSeconds} detik.`,
-          code: 'IP_LOCKED',
-          remainingSeconds: ipLock.remainingSeconds,
+      let acquireRes: LoginAdmissionResult;
+      if (activeStoreDriver.acquireLoginAdmission) {
+        // R108: authoritative IP/account lock checks + in-flight lease in one
+        // atomic Firestore transaction. Same limits, fail-closed on errors.
+        const aliasKey = rawIdentifier && rawIdentifier !== targetAccountId
+          ? toAccountIdKey(rawIdentifier) : undefined;
+        acquireRes = await activeStoreDriver.acquireLoginAdmission({
+          idKey, ipKey, aliasKey,
+          maxId: MAX_CONCURRENT_IN_FLIGHT_PER_ID,
+          maxIp: MAX_CONCURRENT_IN_FLIGHT_PER_IP,
+          leaseTtlMs: IN_FLIGHT_LEASE_TTL_MS,
         });
-        return;
-      }
-
-      // 2. Check Account / Alias lockout
-      let isAccountLocked = false;
-      let remainingLockSeconds: number | undefined;
-
-      if (targetAccountId) {
-        if (canonicalLock.locked) {
-          isAccountLocked = true;
-          remainingLockSeconds = canonicalLock.remainingSeconds;
+        if (!acquireRes.admitted) {
+          if (acquireRes.blockedBy === 'IP_LOCKED') {
+            res.status(429).json({
+              success: false,
+              error: `Alamat IP diblokir sementara karena terlalu banyak percobaan gagal. Silakan tunggu ${acquireRes.remainingSeconds} detik.`,
+              code: 'IP_LOCKED', remainingSeconds: acquireRes.remainingSeconds,
+            });
+          } else if (acquireRes.blockedBy === 'ACCOUNT_LOCKED') {
+            res.status(429).json({
+              success: false,
+              error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${acquireRes.remainingSeconds} detik.`,
+              code: 'ACCOUNT_LOCKED', remainingSeconds: acquireRes.remainingSeconds,
+            });
+          } else {
+            res.status(429).json({
+              success: false,
+              error: 'Terlalu banyak permintaan serentak dari alamat IP atau akun ini. Silakan coba beberapa saat lagi.',
+              code: 'TOO_MANY_CONCURRENT_REQUESTS',
+            });
+          }
+          return;
         }
-      }
-
-      if (!isAccountLocked && rawIdentifier && rawIdentifier !== targetAccountId) {
-        const rawLock = await activeStoreDriver.isLocked(toAccountIdKey(rawIdentifier));
-        if (rawLock.locked) {
-          isAccountLocked = true;
-          remainingLockSeconds = rawLock.remainingSeconds;
+      } else {
+        // Legacy/test driver fallback retains the previous verification path.
+        // 1–2. Independent IP and account lock checks share a round trip window.
+        // Both MUST succeed (fail-closed) before acquiring the in-flight lease.
+        const [ipLock, canonicalLock] = await Promise.all([
+          activeStoreDriver.isLocked(ipKey),
+          targetAccountId ? activeStoreDriver.isLocked(toAccountIdKey(targetAccountId)) : Promise.resolve({ locked: false } as LockStatus),
+        ]);
+        if (ipLock.locked) {
+          res.status(429).json({
+            success: false,
+            error: `Alamat IP diblokir sementara karena terlalu banyak percobaan gagal. Silakan tunggu ${ipLock.remainingSeconds} detik.`,
+            code: 'IP_LOCKED',
+            remainingSeconds: ipLock.remainingSeconds,
+          });
+          return;
         }
-      }
 
-      if (isAccountLocked) {
-        res.status(429).json({
-          success: false,
-          error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${remainingLockSeconds} detik.`,
-          code: 'ACCOUNT_LOCKED',
-          remainingSeconds: remainingLockSeconds,
+        // 2. Check Account / Alias lockout
+        let isAccountLocked = false;
+        let remainingLockSeconds: number | undefined;
+
+        if (targetAccountId) {
+          if (canonicalLock.locked) {
+            isAccountLocked = true;
+            remainingLockSeconds = canonicalLock.remainingSeconds;
+          }
+        }
+
+        if (!isAccountLocked && rawIdentifier && rawIdentifier !== targetAccountId) {
+          const rawLock = await activeStoreDriver.isLocked(toAccountIdKey(rawIdentifier));
+          if (rawLock.locked) {
+            isAccountLocked = true;
+            remainingLockSeconds = rawLock.remainingSeconds;
+          }
+        }
+
+        if (isAccountLocked) {
+          res.status(429).json({
+            success: false,
+            error: `Akun ini terkunci sementara karena 5 kali percobaan PIN salah. Silakan coba lagi dalam ${remainingLockSeconds} detik.`,
+            code: 'ACCOUNT_LOCKED',
+            remainingSeconds: remainingLockSeconds,
+          });
+          return;
+        }
+
+        // 3. Acquire Token-Based In-Flight Lease
+        acquireRes = await activeStoreDriver.tryAcquireDualInFlight({
+          idKey,
+          ipKey,
+          maxId: MAX_CONCURRENT_IN_FLIGHT_PER_ID,
+          maxIp: MAX_CONCURRENT_IN_FLIGHT_PER_IP,
+          leaseTtlMs: IN_FLIGHT_LEASE_TTL_MS,
         });
-        return;
+
+        if (!acquireRes.admitted || !acquireRes.leaseToken) {
+          res.status(429).json({
+            success: false,
+            error: 'Terlalu banyak permintaan serentak dari alamat IP atau akun ini. Silakan coba beberapa saat lagi.',
+            code: 'TOO_MANY_CONCURRENT_REQUESTS',
+          });
+          return;
+        }
+
       }
 
-      // 3. Acquire Token-Based In-Flight Lease
-      const acquireRes = await activeStoreDriver.tryAcquireDualInFlight({
-        idKey,
-        ipKey,
-        maxId: MAX_CONCURRENT_IN_FLIGHT_PER_ID,
-        maxIp: MAX_CONCURRENT_IN_FLIGHT_PER_IP,
-        leaseTtlMs: IN_FLIGHT_LEASE_TTL_MS,
-      });
-
+      // Defensive check: an admitted request must always own a concrete lease.
       if (!acquireRes.admitted || !acquireRes.leaseToken) {
-        res.status(429).json({
+        res.status(503).json({
           success: false,
-          error: 'Terlalu banyak permintaan serentak dari alamat IP atau akun ini. Silakan coba beberapa saat lagi.',
-          code: 'TOO_MANY_CONCURRENT_REQUESTS',
+          error: 'Layanan keamanan autentikasi tidak dapat menerbitkan lease.',
+          code: 'RATE_LIMIT_STORE_UNAVAILABLE',
         });
         return;
       }
-
       const leaseToken = acquireRes.leaseToken;
       let released = false;
 
