@@ -86,9 +86,9 @@ test('Dashboard audit is opt-in, and never triggers Firestore reads directly',()
  assert.doesNotMatch(core,/FirestoreService|getDocs|onSnapshot|localStorage|fetch\(/);
  assert.doesNotMatch(panel,/FirestoreService|getDocs|onSnapshot|localStorage|fetch\(/);
 });
-test('All ten collection listeners plus optional substitutions use tracked wrapper',()=>{
+test('Dashboard core listeners and on-demand roster masters use tracked wrapper',()=>{
  const matches=view.match(/watchCollection<\w+>\(/g)||[];
- assert.equal(matches.length,11);
+ assert.equal(matches.length,13); // 11 standard sources + 2 on-demand roster sources
  assert.equal((view.match(/FirestoreService\.subscribeToCollection</g)||[]).length,2); // opt-out pass-through + instrumented path
  assert.match(view,/audit\?\.subscribe\('settings\/school_config'\)/);
 });

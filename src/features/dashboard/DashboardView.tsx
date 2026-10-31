@@ -11,8 +11,9 @@ import { UserAvatar } from '../../components/common/UserAvatar';
 import { RosterTeacherAvatar } from './RosterTeacherAvatar';
 import { rosterCandidateIds, rosterUnresolvedNames, resolveRosterPhoto, ROSTER_PHOTO_QUERY_BATCH } from './rosterPhotoLookup';
 import { QuickActions } from './QuickActions';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createDashboardPerformanceAudit } from './dashboardPerformanceAudit';
+import { createRosterMasterState, updateRosterMasterState, areRosterMastersReady, type RosterMasterState } from './dashboardSmartData';
 import {
   Calendar,
   Clock,
@@ -83,6 +84,9 @@ const ActivityGridOutlineIcon: React.FC<{ className?: string }> = ({ className }
   </svg>
 );
 
+const EMPTY_TEACHERS: TeacherRecord[] = [];
+const EMPTY_STAFF: StaffRecord[] = [];
+
 interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
 }
@@ -101,14 +105,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     return () => window.cancelAnimationFrame(frame);
   }, [audit]);
   const watchCollection = <T,>(collectionName: string, onData: (items: T[]) => void,
-    onError?: (error: Error) => void, constraints: QueryConstraint[] = [], options?: QueryDataOptions) => {
+    onError?: (error: Error) => void, constraints: QueryConstraint[] = [], options?: QueryDataOptions,
+    auditLabel = collectionName) => {
     if (!audit) return FirestoreService.subscribeToCollection<T>(collectionName, onData, onError, constraints, options);
-    audit.subscribe(collectionName);
+    audit.subscribe(auditLabel);
     const stop = FirestoreService.subscribeToCollection<T>(collectionName,
-      items => { audit?.snapshot(collectionName, items.length); onData(items); },
-      error => { audit?.failure(collectionName); onError?.(error); },
+      items => { audit?.snapshot(auditLabel, items.length); onData(items); },
+      error => { audit?.failure(auditLabel); onError?.(error); },
       constraints, options);
-    return () => { stop(); audit?.unsubscribe(collectionName); };
+    return () => { stop(); audit?.unsubscribe(auditLabel); };
   };
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const { subView, setSubView } = useNavigation();
@@ -127,8 +132,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [reminderSettingsReady, setReminderSettingsReady] = useState(false);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
-  const [staff, setStaff] = useState<StaffRecord[]>([]);
+  // Key the minimal master directory to the actual account, never show a
+  // previous user's linked records while a different session is mounting.
+  const [linkedMasters, setLinkedMasters] = useState<{
+    userId: string; teachers: TeacherRecord[]; staff: StaffRecord[];
+  } | null>(null);
+  const teachers = linkedMasters?.userId === currentUser?.id ? linkedMasters.teachers : EMPTY_TEACHERS;
+  const staff = linkedMasters?.userId === currentUser?.id ? linkedMasters.staff : EMPTY_STAFF;
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [dutyBooks, setDutyBooks] = useState<DutyBookRecord[]>([]);
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
@@ -219,8 +229,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       setSchedules(data);
       setIsLoadingMetrics(false);
     });
-    const unsubTeachers = watchCollection<TeacherRecord>('teachers', setTeachers);
-    const unsubStaff = watchCollection<StaffRecord>('staff', setStaff);
+    // R113-B: The landing dashboard only needs masters linked to the active
+    // account for legacy teacher/staff schedule IDs and personal duty books.
+    // The full directories are read only while the roster modal is open.
+    const linkedUserId = currentUser?.id;
+    setLinkedMasters(linkedUserId ? { userId: linkedUserId, teachers: [], staff: [] } : null);
+    const unsubTeachers = linkedUserId
+      ? watchCollection<TeacherRecord>('teachers', rows => setLinkedMasters(current =>
+          current?.userId === linkedUserId ? { ...current, teachers: rows } : current), undefined,
+          [where('userId', '==', linkedUserId)], { cacheKey: `linked:${linkedUserId}` }, 'teachers:linked')
+      : () => {};
+    const unsubStaff = linkedUserId
+      ? watchCollection<StaffRecord>('staff', rows => setLinkedMasters(current =>
+          current?.userId === linkedUserId ? { ...current, staff: rows } : current), undefined,
+          [where('userId', '==', linkedUserId)], { cacheKey: `linked:${linkedUserId}` }, 'staff:linked')
+      : () => {};
     const unsubAtt = watchCollection<AttendanceRecord>(
       'attendance',
       setAttendance,
@@ -281,20 +304,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       unsubPermits();
       unsubVisitors();
     };
-  }, [todayISO]);
+  }, [todayISO, currentUser?.id]);
 
   // Today's schedules & operational items
-  const todaySchedules = dutyRosterForDate(schedules, todayISO);
-  const tomorrowSchedules = dutyRosterForDate(schedules, tomorrowISO);
-  // R92: Only query the profiles of teachers shown in an OPEN roster modal.
-  // Never subscribe to the entire users collection as part of the dashboard.
+  const todaySchedules = useMemo(() => dutyRosterForDate(schedules, todayISO), [schedules, todayISO]);
+  const tomorrowSchedules = useMemo(() => dutyRosterForDate(schedules, tomorrowISO), [schedules, tomorrowISO]);
+  // R113-B: Reading all teachers/staff is only needed to resolve legacy master
+  // references for avatar photos in the *open* duty-roster modal. Realtime
+  // listeners exist only while that modal is visible, and are torn down on exit.
   const isRosterModalOpen = detailPanel === 'dutyRoster' || detailPanel === 'dutyRosterTomorrow';
+  const rosterMasterKey = currentUser?.id || '';
+  const [rosterMasters, setRosterMasters] = useState<RosterMasterState | null>(null);
+  useEffect(() => {
+    if (!isRosterModalOpen || !rosterMasterKey) { setRosterMasters(null); return; }
+    const key = rosterMasterKey;
+    setRosterMasters(createRosterMasterState(key));
+    const update = (field: 'teachers' | 'staff', records: TeacherRecord[] | StaffRecord[]) => {
+      setRosterMasters(current => updateRosterMasterState(current, key, field, records));
+    };
+    const stopTeachers = watchCollection<TeacherRecord>('teachers',
+      rows => update('teachers', rows), () => update('teachers', []), [], undefined, 'teachers:roster');
+    const stopStaff = watchCollection<StaffRecord>('staff',
+      rows => update('staff', rows), () => update('staff', []), [], undefined, 'staff:roster');
+    return () => { stopTeachers(); stopStaff(); };
+  }, [isRosterModalOpen, rosterMasterKey]);
+  const rosterMastersReady = areRosterMastersReady(rosterMasters, rosterMasterKey, isRosterModalOpen);
+  const rosterTeachers = rosterMastersReady ? rosterMasters!.teachers : [];
+  const rosterStaff = rosterMastersReady ? rosterMasters!.staff : [];
+  // R92: User avatar profiles remain bounded and are only queried after
+  // the master-ID mapping has finished loading for the active roster.
   const photoRoster = detailPanel === 'dutyRosterTomorrow' ? tomorrowSchedules : todaySchedules;
-  const candidateIds = rosterCandidateIds(photoRoster, teachers, staff);
-  const photoRosterSignature = `${candidateIds.join('|')}::${photoRoster.map(row => row.petugasName).join('|')}`;
+  const candidateIds = useMemo(() => rosterMastersReady
+    ? rosterCandidateIds(photoRoster, rosterTeachers, rosterStaff) : [],
+    [rosterMastersReady, photoRoster, rosterTeachers, rosterStaff]);
+  const photoRosterSignature = `${rosterMastersReady}:${candidateIds.join('|')}::${photoRoster.map(row => row.petugasName).join('|')}`;
   const [rosterPhotoUsers, setRosterPhotoUsers] = useState<UserProfile[]>([]);
   useEffect(() => {
     if (!isRosterModalOpen) { setRosterPhotoUsers([]); return; }
+    if (!rosterMastersReady) { setRosterPhotoUsers([]); return; }
     let active = true;
     setRosterPhotoUsers([]);
     const loadPhotos = async () => {
@@ -309,7 +356,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         }
         // Legacy duty schedules sometimes store master-record IDs rather than user IDs.
         // Resolve the remaining names with bounded equality queries, still on-demand.
-        const missingNames = rosterUnresolvedNames(photoRoster, matchedUsers, teachers, staff);
+        const missingNames = rosterUnresolvedNames(photoRoster, matchedUsers, rosterTeachers, rosterStaff);
         for (let i = 0; i < missingNames.length; i += ROSTER_PHOTO_QUERY_BATCH) {
           const part = await FirestoreService.getAll<UserProfile>('users', [where('fullName', 'in', missingNames.slice(i, i + ROSTER_PHOTO_QUERY_BATCH))]);
           if (!active) return;
@@ -327,7 +374,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     // Signatures contain every ID/name used by the bounded query; arrays otherwise
     // gain a new identity on unrelated dashboard renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRosterModalOpen, photoRosterSignature, currentUser?.id]);
+  }, [isRosterModalOpen, rosterMastersReady, photoRosterSignature, currentUser?.id]);
 
   const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
   const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
@@ -338,12 +385,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const todayVisitors = visitors.filter((v) => v.tanggal === todayISO);
 
   // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
-  const isMySchedule = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
-
-  const myTodaySchedule = schedules.find((s) => isScheduleOnDate(s, todayISO) && isMySchedule(s));
+  // Schedule matching only needs the active user's linked master records.
+  // Memoize scans so unrelated realtime dashboard snapshots do not repeat them.
+  const personalSchedules = useMemo(() => {
+    const belongsToMe = (s: ScheduleItem) => isScheduleMatchingUser(s, currentUser, teachers, staff);
+    return {
+      today: schedules.find(s => isScheduleOnDate(s, todayISO) && belongsToMe(s)),
+      upcoming: schedules.filter(s => belongsToMe(s) && !isScheduleOnDate(s, todayISO) &&
+        s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO)),
+    };
+  }, [schedules, todayISO, currentUser, teachers, staff]);
+  const myTodaySchedule = personalSchedules.today;
+  const myOtherSchedules = personalSchedules.upcoming;
   const myAttendance = attendance.find((a) => a.tanggal === todayISO && a.userId === currentUser?.id);
   const myDutyBook = dutyBooks.find((b) => b.tanggal === todayISO && (b.petugasId === currentUser?.id || (teachers.some(t => t.userId === currentUser?.id && t.id === b.petugasId))));
-  const myOtherSchedules = schedules.filter((s) => isMySchedule(s) && !isScheduleOnDate(s, todayISO) && s.status !== 'DIBATALKAN' && (s.recurrence !== 'ONCE' || s.tanggal >= todayISO));
 
   // Present count today
   const presentCount = todayAttendance.filter((a) => a.status === 'DALAM_LOKASI').length;
@@ -577,7 +632,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                       <div className="flex items-start gap-3 min-w-0">
                         <RosterTeacherAvatar
                           name={item.petugasName}
-                          avatarUrl={resolveRosterPhoto(item, rosterPhotoUsers, teachers, staff)}
+                          avatarUrl={resolveRosterPhoto(item, rosterPhotoUsers, rosterTeachers, rosterStaff)}
                           isPresent={isPresent}
                         />
                         <div className="min-w-0">
