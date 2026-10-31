@@ -55,6 +55,34 @@ export interface LoginAdmissionParams {
   leaseTtlMs: number;
 }
 
+/**
+ * R109: admission proof is only attached by the server middleware AFTER the
+ * authoritative lock checks and lease admission have succeeded. A WeakMap
+ * keeps it inaccessible to JSON request fields, and prevents cross-request reuse.
+ */
+const verifiedLoginAdmissions = new WeakMap<object, {
+  userId: string;
+  identifier: string;
+  leaseSignal: AbortSignal;
+}>();
+
+/**
+ * Skip the redundant route-level lock read ONLY when middleware checked the
+ * very same canonical UID and raw identifier. Manual ID/NIP ambiguity or a
+ * changed identity always falls back to an authoritative store read.
+ */
+export function admissionCoversVerifiedAccount(req: Request, userId: string, rawIdentifier: string): boolean {
+  const proof = verifiedLoginAdmissions.get(req);
+  return Boolean(
+    proof &&
+    userId &&
+    proof.userId === userId &&
+    proof.identifier === rawIdentifier &&
+    !proof.leaseSignal.aborted &&
+    !(req as any).clientDisconnected
+  );
+}
+
 export class StoreUnavailableError extends Error {
   constructor(message: string = 'Rate limit store is unavailable') {
     super(message);
@@ -1640,9 +1668,18 @@ export class AuthRateLimiter {
         heartbeatTimer.unref();
       }
 
+      // This proof is strictly server-derived. No client body field can grant it.
+      // The account is checked again in the route if the resolved UID differs.
+      verifiedLoginAdmissions.set(req, {
+        userId: targetAccountId,
+        identifier: rawIdentifier,
+        leaseSignal: leaseAbortController.signal,
+      });
+
       const safeRelease = () => {
         if (!released) {
           released = true;
+          verifiedLoginAdmissions.delete(req);
           clearInterval(heartbeatTimer);
           activeStoreDriver.releaseDualInFlight(leaseToken).catch(() => {});
         }

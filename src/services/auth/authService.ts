@@ -4,6 +4,7 @@ import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'fireba
 import { OfflineStorage } from '../offline/offlineStorage';
 import { loginClockNow, recordLoginDuration } from '../../features/auth/loginPerformance';
 import { captureLoginServerTiming, captureClientLoginPhase } from '../../features/auth/loginDiagnostics';
+import { preloadAuthenticatedShell } from '../../appBootstrap';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 
@@ -226,6 +227,16 @@ class AuthService {
       }
 
       try {
+        // R109: only after backend confirms a valid PIN and active account,
+        // start a speculative JS-only shell download while Firebase exchanges
+        // the custom token. Never treat this as authentication or mount the UI.
+        // Respect mobile data-saving modes; failures never affect login.
+        const connection = (typeof navigator !== 'undefined' ? (navigator as Navigator & {
+          connection?: { saveData?: boolean; effectiveType?: string };
+        }).connection : undefined);
+        if (!connection?.saveData && connection?.effectiveType !== 'slow-2g' && connection?.effectiveType !== '2g' && connection?.effectiveType !== '3g') {
+          preloadAuthenticatedShell();
+        }
         const firebaseStarted = loginClockNow();
         const userCredential = await signInWithCustomToken(auth, data.customToken);
         captureClientLoginPhase('firebase', recordLoginDuration('firebase-signin', firebaseStarted));

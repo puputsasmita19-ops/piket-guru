@@ -5,7 +5,7 @@ import { adminAuth, adminDb, testSignerCapability } from '../firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { CredentialStore } from '../services/credentialStore.js';
 import { hashPinAdaptive } from '../crypto/adaptiveHash.js';
-import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
+import { AuthRateLimiter, admissionCoversVerifiedAccount, getClientIp } from '../middleware/rateLimiter.js';
 import { UserProfile } from '../../types/index.js';
 import firebaseConfig from '../../../firebase-applet-config.json' with { type: 'json' };
 import { validSchoolDisplayName } from '../../features/auth/publicLoginBrand.js';
@@ -714,9 +714,15 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     const userId = userDoc.id;
     const userData = userDoc.data() as any;
 
-    // Check account-level lockout: all aliases share this unified account check (Requirement 5)
+    // R109: middleware's authoritative admission already checked the canonical
+    // UID and entered a bounded in-flight lease. Reuse that decision ONLY for
+    // this exact UID/identifier pair; mismatched or manual/ambiguous resolution
+    // still makes the original fail-closed store check.
     const lockStartedAt = Date.now();
-    const accountLock = await AuthRateLimiter.isLocked(userId);
+    const admissionMatchesAccount = admissionCoversVerifiedAccount(req, userId, rawIdentifier);
+    const accountLock = admissionMatchesAccount
+      ? { locked: false as const }
+      : await AuthRateLimiter.isLocked(userId);
     markPhase('lock', lockStartedAt);
     if (accountLock.locked) {
       void recordServerAuditLog({
