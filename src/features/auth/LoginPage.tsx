@@ -1054,13 +1054,12 @@ export const LoginPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Error Message DIRECTLY BELOW INPUT */}
+            {/* One login error alert for all authentication failures; referenced by the PIN input. */}
             {sessionNotice && <p role="status" className="mb-3 rounded-xl border border-[var(--theme-card-border)] bg-[var(--theme-surface-subtle)] p-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{sessionNotice}</p>}
             {errorMessage && (
               <div
                 id="pin-error-message"
                 role="alert"
-                aria-live="polite"
                 className="mt-1.5 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2 shadow-xs transition-all"
               >
                 <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
@@ -1118,18 +1117,6 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <p className="px-1 text-[11px] text-slate-500 dark:text-slate-400">Masukkan 6 digit PIN Anda</p>
-
-        {/* Companion Error Message Above Submit Button (Ensures full visibility on mobile viewports) */}
-        {errorMessage && (
-          <div
-            role="alert"
-            aria-live="polite"
-            className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2 shadow-xs"
-          >
-            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
-            <span className="flex-1 font-medium">{errorMessage}</span>
-          </div>
-        )}
 
         {/* Pilihan Perangkat Pribadi vs Perangkat Bersama */}
         <div className="flex items-start gap-2.5 px-1 py-1 rounded-xl bg-slate-50/70 dark:bg-[var(--theme-surface-subtle)]/50 border border-slate-200/60 dark:border-[var(--theme-card-border)]/60">
