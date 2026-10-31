@@ -1,5 +1,6 @@
 import { useAutomaticSync } from './hooks/useAutomaticSync';
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
+import { markAuthenticatedShellVisible } from './features/auth/loginDiagnostics';
 import { useNavigation } from './contexts/NavigationContext';
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
 import { PageLoading } from './components/common/PageLoading';
@@ -26,6 +27,14 @@ const AdminAttendanceDashboard = lazy(() => import('./features/attendance/AdminA
 
 
 export default function AuthenticatedShell() {
+  useEffect(() => {
+    // Two paint frames: shell can be visible after the mandatory auth and JS load.
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(markAuthenticatedShellVisible);
+    });
+    let secondFrame = 0;
+    return () => { cancelAnimationFrame(firstFrame); cancelAnimationFrame(secondFrame); };
+  }, []);
   useAutomaticSync();
   const { activeTab, setActiveTab } = useNavigation();
   const { hasRole } = useAuth();

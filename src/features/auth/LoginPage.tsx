@@ -3,6 +3,7 @@ import { readPublicLoginBrand, storePublicLoginBrand, validSchoolDisplayName } f
 import { LoginBackdrop } from './LoginBackdrop';
 import { appendPinDigit, normalizePinInput, removeLastPinDigit } from './pinInput';
 import { loginClockNow, recordLoginDuration } from './loginPerformance';
+import { beginLoginDiagnostics, captureClientLoginPhase } from './loginDiagnostics';
 import { LoginCredit } from './LoginCredit';
 import { LoginAvatar } from './LoginAvatar';
 import { OverflowName } from '../../components/common/OverflowName';
@@ -392,6 +393,7 @@ export const LoginPage: React.FC = () => {
 
     loginBusyRef.current = true; // prevent double requests from rapid taps/Enter before rerender
     const loginStarted = loginClockNow();
+    beginLoginDiagnostics(loginStarted);
     authService.pausePublicDirectoryForLogin();
     setIsSubmitting(true);
     setErrorMessage('');
@@ -469,7 +471,7 @@ export const LoginPage: React.FC = () => {
       setErrorMessage('Tidak dapat terhubung ke server. Periksa koneksi internet Anda lalu coba lagi.');
       setHasError(false);
     } finally {
-      recordLoginDuration('pin-end-to-end', loginStarted);
+      captureClientLoginPhase('total', recordLoginDuration('pin-end-to-end', loginStarted));
       loginBusyRef.current = false;
       setIsSubmitting(false);
     }

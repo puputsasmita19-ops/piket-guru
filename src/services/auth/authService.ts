@@ -3,6 +3,7 @@ import { auth } from '../firebase/firebaseAuth';
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { OfflineStorage } from '../offline/offlineStorage';
 import { loginClockNow, recordLoginDuration } from '../../features/auth/loginPerformance';
+import { captureLoginServerTiming, captureClientLoginPhase } from '../../features/auth/loginDiagnostics';
 
 const STORAGE_SESSION_KEY = 'piket_guru_active_session';
 
@@ -192,9 +193,10 @@ class AuthService {
       });
 
       const data = await response.json();
-      recordLoginDuration('pin-api', apiStarted);
+      captureClientLoginPhase('pinApi', recordLoginDuration('pin-api', apiStarted));
       // Same-origin Server-Timing is numeric-only: never log identifiers, PIN or tokens.
       const serverTiming = response.headers.get('Server-Timing');
+      captureLoginServerTiming(serverTiming);
       if (serverTiming && typeof console !== 'undefined') {
         console.info('[PIKET LOGIN PERFORMANCE] Backend:', serverTiming);
       }
@@ -226,7 +228,7 @@ class AuthService {
       try {
         const firebaseStarted = loginClockNow();
         const userCredential = await signInWithCustomToken(auth, data.customToken);
-        recordLoginDuration('firebase-signin', firebaseStarted);
+        captureClientLoginPhase('firebase', recordLoginDuration('firebase-signin', firebaseStarted));
         if (!isCurrent()) {
           if (auth.currentUser === userCredential.user) await signOut(auth);
           return cancelled();

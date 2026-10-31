@@ -9,6 +9,8 @@ const PublicVisitorCheckin = lazy(() => import('./features/visitors/PublicVisito
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
 import { PageLoading } from './components/common/PageLoading';
 import { loadAuthenticatedShell } from './appBootstrap';
+import { loginDiagnosticsEnabled } from './features/auth/loginDiagnostics';
+const LoginDiagnosticsPanel = lazy(() => import('./features/auth/LoginDiagnosticsPanel'));
 
 const AuthenticatedShell = lazy(loadAuthenticatedShell);
 
@@ -67,7 +69,10 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <NavigationProvider>
-          <GuideProvider><AppContent /></GuideProvider>
+          <GuideProvider>
+            <AppContent />
+            {loginDiagnosticsEnabled() && <Suspense fallback={null}><LoginDiagnosticsPanel /></Suspense>}
+          </GuideProvider>
         </NavigationProvider>
       </AuthProvider>
     </ThemeProvider>
