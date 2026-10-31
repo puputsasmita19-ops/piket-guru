@@ -1,0 +1,77 @@
+{
+  "baselineId": "PIKET-GURU-STABLE-LOGIN-GPS-R112",
+  "baselineDate": "2026-10-31",
+  "source": "Kode setelah R112 GPS, optimasi login R110, penempatan fungsi Vercel di sin1",
+  "version": "v1.0.1 (aplikasi) / baseline internal R112",
+  "environment": {
+    "vercelFunctionsRegion": "sin1",
+    "firestoreLocation": "asia-southeast2"
+  },
+  "policy": {
+    "radiusMeter": 300,
+    "maxAccuracyMeter": 50,
+    "maxUiFixAgeSeconds": 15,
+    "note": "Radius berasal dari setting sekolah, bukan literal yang dipaksakan oleh manifest."
+  },
+  "observedMeasurements": {
+    "loginAfterRegionChangeSeconds": [
+      2.37,
+      2.0,
+      2.08
+    ],
+    "loginMeanSeconds": 2.15,
+    "dashboardVisibleSeconds": [
+      2.97,
+      2.84,
+      2.8
+    ],
+    "dashboardMeanSeconds": 2.87,
+    "gps": "Laporan pengguna sesudah R111: sedikit di atas 2 detik; belum ada hasil numerik sesudah R112",
+    "measurementCaveat": "Hasil HP pada kondisi uji tertentu, bukan SLA atau jaminan untuk semua perangkat dan jaringan."
+  },
+  "protectedSha256": {
+    "vercel.json": "afa983b070f09b4ec937b4cafb820d6fd8b5204e3c9ae401b24335801a6cd3cb",
+    "firestore.rules": "4999bb8c4ebce9cd2e27bdb5ad2f53c483dba77f3d5ae348b94ff2ee3493afb4",
+    "src/AuthenticatedShell.tsx": "3bee7dc96decf0397428a281955467f76babf7d03730b73b05c3079c5dcdd91c",
+    "src/server/middleware/rateLimiter.ts": "662a0151a75298bcedaf5212a86e0b1b7d81db693fe1920eeb863a613085210e",
+    "src/server/routes/authRoutes.ts": "1143e2b6616d1250403acecd4bc9bff542b7ffacfe9f867e94f3bc77a2e7b299",
+    "src/contexts/AuthContext.tsx": "b712a92aeaf2f40a1d3b9c6d93b197aeeb3156c4c710de4f2d955ea8c9fa7105",
+    "src/services/auth/authService.ts": "b1bf9245e1f978dd065f309d58c9936190f30fcf278da4242b4b61c16a8a2f3f",
+    "src/services/firebase/firebaseAuth.ts": "0951cff0b9f596396459216511a22b1085a15b520cb74669d24b23fe7718bc3b",
+    "src/features/auth/LoginPage.tsx": "dac4adbadb2ce5ddee5faceff2d68cd718013e3bbfd23f31216bd394093689ac",
+    "src/features/auth/loginDiagnostics.ts": "e2f08ab3b11c6bbf4475642aabae712eb583c6ca8c7a199a5135099aa9336449",
+    "src/features/auth/loginPerformance.ts": "0466f1ae382af1cfe54e36bcd29ae398399cd00576f8de1d483d90fe385e7881",
+    "src/services/location/locationService.ts": "5dca6124e2ecaec70bd859bd3d08af9633649ccfa0dc981395cfffcc3ae58cdf",
+    "src/services/location/gpsFastWarmup.ts": "ea001035871d87458053cce49461bc3370c13c65d805e708b260796bab9936d5",
+    "src/features/attendance/AttendancePreview.tsx": "93c2c2129381d281b2bc9e7a2b7669b7b7c9615e8bc7a3fcfe051634734cd246",
+    "src/features/attendance/gpsMobileLifecycle.ts": "21f5384e9fd741847f367615f19754fa5d0a92462fd66b102e6a01cc89fbf866",
+    "src/features/attendance/selfieGpsGuide.ts": "d3f032f4eb493c4d03dcadc983c5527908eb1b6cfb808356218321cdaa0b267b",
+    "src/features/attendance/gpsDiagnostics.ts": "720b4d06274bbac6ecb65f33d40104affc6febd72e6611e9c613e2b8adb3543c",
+    "src/features/attendance/attendanceGps.css": "2563d8e5927bf5a960e5985f0113ab5596b6a0e60d505a8386697cdee5273374",
+    "src/services/firebase/attendanceService.ts": "bd8c815d558d61f85a74d35c0bf4fc9cab3a3c7c3683027c093dcb71c8ae15eb",
+    "src/services/attendance/attendancePolicy.ts": "d9cef6f09952d4e8ddbc8e4df7759b316890bbb31cae699f4722ee39c27e3b16"
+  },
+  "quickTests": [
+    "scripts/test_r108_atomic_rate_limiter_login.mjs",
+    "scripts/test_r109_fast_authentication_pipeline.mjs",
+    "scripts/test_r110_firestore_region_optimization.mjs",
+    "scripts/test_r104a_gps_lifecycle_accuracy.mjs",
+    "scripts/test_r104b_instant_gps_engine.mjs",
+    "scripts/test_r112_gps_ux_stabilization.mjs"
+  ],
+  "fullTests": [
+    "scripts/test_r103_public_school_branding.mjs",
+    "scripts/test_r105_single_login_error_alert.mjs",
+    "scripts/test_r106_login_latency.mjs",
+    "scripts/test_r107_mobile_login_diagnostics.mjs",
+    "scripts/test_r108_atomic_rate_limiter_login.mjs",
+    "scripts/test_r109_fast_authentication_pipeline.mjs",
+    "scripts/test_r110_firestore_region_optimization.mjs",
+    "scripts/test_r104a_gps_lifecycle_accuracy.mjs",
+    "scripts/test_r104b_instant_gps_engine.mjs",
+    "scripts/test_r104c_mobile_gps_lifecycle.mjs",
+    "scripts/test_r104d_admin_gps_diagnostics.mjs",
+    "scripts/test_r111_gps_fast_warm_start.mjs",
+    "scripts/test_r112_gps_ux_stabilization.mjs"
+  ]
+}
