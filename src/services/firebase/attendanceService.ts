@@ -39,6 +39,7 @@ export interface CheckOutParams {
   userRole?: UserRole | string;
   isAdmin?: boolean;
   tanggal?: string;
+  coords: LocationCoordinates;
   settings?: SchoolSettings;
 }
 
@@ -185,6 +186,8 @@ export class AttendanceService {
       longitude: coords.longitude,
       accuracy: Math.round(coords.accuracy * 10) / 10,
       distance: Math.round(authoritativeGeofence.distanceMeters),
+      checkInGpsCapturedAt: new Date(coords.timestamp).toISOString(),
+      checkInRadiusMeters: allowedRadius,
       status,
       photoUrl: finalPhotoUrl || undefined,
       ...(Number.isFinite(selfieCapturedAt) && selfieCaptureCoords ? {
@@ -292,10 +295,16 @@ export class AttendanceService {
   }
 
   private static async performCheckOut(params: CheckOutParams, assertSession: () => void): Promise<CheckOutResult> {
-    const { attendanceId, userId, userName, userRole = 'GURU', isAdmin = false, tanggal } = params;
+    const { attendanceId, userId, userName, userRole = 'GURU', isAdmin = false, tanggal, coords } = params;
 
     if (!userId) {
       throw new Error('Identitas pengguna tidak valid.');
+    }
+    // R104-D: The checkout evidence must refer to a real, fresh GPS measurement.
+    // Do not allow an admin correction or old screen status to masquerade as GPS.
+    if (!LocationService.isFreshPosition(coords, 30_000) ||
+        coords.accuracy > LocationService.MAX_ATTENDANCE_ACCURACY_METERS) {
+      throw new Error('GPS Check-Out tidak segar atau akurasinya melebihi 50 meter. Perbarui lokasi lalu coba lagi.');
     }
 
     // Authenticated user session verification
@@ -374,6 +383,33 @@ export class AttendanceService {
         const authoritativeSettings: SchoolSettings = settingsSnap.exists()
           ? (settingsSnap.data() as SchoolSettings)
           : (params.settings || DEFAULT_SCHOOL_SETTINGS);
+
+        // Derive Check-Out GPS evidence from the exact submission fix, using
+        // school coordinates/radius fetched inside the transaction. UI status
+        // is informational only. Do not trust a prior/geofence-screen result.
+        if (!LocationService.isFreshPosition(coords, 30_000)) {
+          throw new Error('GPS Check-Out kedaluwarsa saat transaksi. Perbarui GPS lalu coba lagi.');
+        }
+        const schoolLat = authoritativeSettings.schoolLat;
+        const schoolLng = authoritativeSettings.schoolLng;
+        const effectiveRadius = authoritativeSettings.allowedRadiusMeters;
+        const checkoutFence = LocationService.evaluateGeofence(
+          coords.latitude, coords.longitude, coords.accuracy,
+          schoolLat, schoolLng, effectiveRadius,
+        );
+        if (checkoutFence.status !== 'DALAM_LOKASI') {
+          throw new Error('GPS Check-Out belum memenuhi radius/akurasi sekolah saat disimpan. Perbarui lokasi lalu coba lagi.');
+        }
+        const checkoutGps = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: Math.round(coords.accuracy * 10) / 10,
+          distance: Math.round(checkoutFence.distanceMeters),
+          radiusMeters: effectiveRadius,
+          status: 'DALAM_LOKASI' as const,
+          capturedAt: new Date(coords.timestamp).toISOString(),
+          validatedAt: serverTimestamp(),
+        };
 
         // Stage read-record: Read existing attendance record
         capturedStage = 'read-record';
@@ -456,12 +492,14 @@ export class AttendanceService {
         };
 
         // Stage write-check-out: Update jamPulang, updatedAt, and checkoutPolicy atomically
-        // Diff strictly matches firestore.rules hasOnly(['jamPulang', 'updatedAt', 'checkoutPolicy'])
+        // R104-D: save fresh checkout evidence in the SAME atomic transaction.
+        // firestore.rules must be deployed alongside this client change.
         capturedStage = 'write-check-out';
         transaction.update(docRef, {
           jamPulang: serverTimestamp(),
           updatedAt: serverTimestamp(),
           checkoutPolicy: policySnapshot,
+          checkoutGps,
         });
       });
     } catch (txErr: any) {
@@ -516,6 +554,8 @@ export class AttendanceService {
         attendanceId: targetDocId,
         jamMasuk: freshRecord?.jamMasuk,
         jamPulang: freshRecord?.jamPulang || 'SERVER_TIMESTAMP',
+        gpsDistanceMeters: freshRecord?.checkoutGps?.distance,
+        gpsAccuracyMeters: freshRecord?.checkoutGps?.accuracy,
       },
     }).catch((auditErr) => {
       console.warn('Audit log for checkout non-fatal error:', auditErr);

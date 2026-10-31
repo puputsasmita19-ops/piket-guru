@@ -89,6 +89,21 @@ export interface AttendanceRecord extends BaseEntityMetadata {
   accuracy: number;
   distance: number;
   status: AttendanceStatus;
+  /** Hardware GPS reading time at Check-In (not jamMasuk/server write time). Added R104-D. */
+  checkInGpsCapturedAt?: string;
+  /** Effective school radius recorded at Check-In. Older records may not have it. */
+  checkInRadiusMeters?: number;
+  /** GPS evidence for new Check-Out records; absent on historical/admin-corrected checkouts. */
+  checkoutGps?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    distance: number;
+    radiusMeters: number;
+    status: 'DALAM_LOKASI';
+    capturedAt: string;
+    validatedAt: DateValue;
+  };
   photoUrl?: string;
   /** Original photo-time coordinates (watermark) kept for audit when GPS is reverified at submission. */
   selfieCapturedAt?: string;

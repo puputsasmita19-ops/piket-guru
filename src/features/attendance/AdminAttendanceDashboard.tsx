@@ -15,6 +15,8 @@ import { MissingCheckoutPanel } from './MissingCheckoutPanel';
 import { Activity, Users, CheckCircle2, AlertTriangle, Clock, MapPin, Edit3, Trash2 } from '../../components/icons';
 import { RealtimeMonitorLogo } from '../../components/icons/RealtimeMonitorLogo';
 import { buildAdminMonitorRows } from '../../utils/adminMonitorRows';
+import { GpsDiagnosticsDetails } from './GpsDiagnosticsDetails';
+import { getGpsDiagnostic, getGpsDiagnosticLabel } from './gpsDiagnostics';
 
 const Metric: React.FC<{ label: string; value: number; description: string; icon: React.ReactNode; tone?: string }> = ({ label, value, description, icon, tone = 'text-slate-700 dark:text-slate-200' }) => <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-[var(--theme-card-bg)] shadow-sm">
   <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span><span className={tone}>{icon}</span></div>
@@ -99,6 +101,20 @@ export const AdminAttendanceDashboard: React.FC = () => {
     `${a.userName} ${a.tanggal} ${a.status} ${a.id}`.toLocaleLowerCase('id-ID').includes(search.toLocaleLowerCase('id-ID'))
   ).sort((a,b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk)), [historicalRecords, userFilter, search, currentUser?.id]);
   const page = useHistoryPagination(filtered, `${history.key}:${userFilter}:${search}`, 12);
+  const gpsStats = useMemo(() => {
+    let validIn = 0, warningIn = 0, missingIn = 0, recordedOut = 0, missingOut = 0;
+    for (const attendance of todayRecords) {
+      const inGps = getGpsDiagnosticLabel(getGpsDiagnostic(attendance, 'in'));
+      if (inGps === 'Memenuhi batas') validIn++;
+      else if (inGps === 'Perlu diperiksa') warningIn++;
+      else missingIn++;
+      if (attendance.jamPulang) {
+        if (attendance.checkoutGps) recordedOut++;
+        else missingOut++;
+      }
+    }
+    return { validIn, warningIn, missingIn, recordedOut, missingOut };
+  }, [todayRecords]);
   if (!admin) return <div role="alert" className="p-5 rounded-xl bg-rose-50 text-rose-800">Menu Monitoring Piket hanya untuk Administrator.</div>;
 
   const buttons = (record: AttendanceRecord) => <div className="flex items-center gap-2 flex-wrap">
@@ -142,6 +158,36 @@ export const AdminAttendanceDashboard: React.FC = () => {
         </div>)}
       </div></div>}
     </section>
+    <section aria-labelledby="gps-diagnostics-title" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
+      <div className="border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+        <h2 id="gps-diagnostics-title" className="text-sm font-bold text-slate-900 dark:text-white">Diagnostik GPS Presensi Hari Ini</h2>
+        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Dari data presensi yang sudah dimuat. Tidak ada permintaan Firebase tambahan. Data lama tanpa bukti GPS ditandai Tidak tersedia.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-5">
+        {([
+          ['Check-In valid', gpsStats.validIn],
+          ['Perlu diperiksa', gpsStats.warningIn],
+          ['Check-In tanpa data', gpsStats.missingIn],
+          ['GPS pulang tercatat', gpsStats.recordedOut],
+          ['GPS pulang belum ada', gpsStats.missingOut],
+        ] as const).map(([label, count]) => <div key={label} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+          <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-300">{label}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{count}</p>
+        </div>)}
+      </div>
+      <div className="space-y-2 px-3 pb-3">
+        {todayRecords.length === 0 ? <p className="py-3 text-xs text-slate-500">Belum ada data presensi hari ini.</p> :
+          [...todayRecords].sort((a, b) => toEpochMs(b.jamMasuk) - toEpochMs(a.jamMasuk)).map(attendance => <div key={attendance.id} className="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0"><p className="text-xs font-semibold text-slate-900 dark:text-white">{attendance.userName}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Check-In: {formatTime(attendance.jamMasuk)} · Check-Out: {attendance.jamPulang ? formatTime(attendance.jamPulang) : 'Belum'}</p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">Jarak: {typeof attendance.distance === 'number' && Number.isFinite(attendance.distance) ? `${attendance.distance} m` : 'Tidak tersedia'} · Akurasi: {typeof attendance.accuracy === 'number' && Number.isFinite(attendance.accuracy) && attendance.accuracy > 0 ? `±${Math.round(attendance.accuracy)} m` : 'Tidak tersedia'}</p></div>
+              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">{getGpsDiagnosticLabel(getGpsDiagnostic(attendance, 'in'))}</span>
+            </div>
+            <div className="mt-1"><GpsDiagnosticsDetails record={attendance} /></div>
+          </div>)}
+      </div>
+    </section>
     <MissingCheckoutPanel today={today} correctionRevision={correctionRevision} onCorrect={record => setSelection({ record, mode: 'edit', source: 'missing-checkout' })} />
     <section aria-labelledby="duty-activity-title" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[var(--theme-card-bg)] overflow-hidden">
       <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2"><div><h2 id="duty-activity-title" className="font-bold text-slate-900 dark:text-white">Jurnal Kegiatan Piket Hari Ini</h2><p className="text-xs text-slate-500">Kegiatan dari Buku Piket Digital diperbarui secara realtime.</p></div>
@@ -170,7 +216,8 @@ export const AdminAttendanceDashboard: React.FC = () => {
       </div>
       <div className="max-h-[32rem] overflow-y-auto"><div className={historyView === 'grid' ? "grid grid-cols-1 lg:grid-cols-2 gap-3 p-3" : "divide-y divide-slate-100 dark:divide-slate-800"}>{page.records.map(a => <div key={a.id} className={`${historyView === 'grid' ? 'rounded-xl border border-slate-200 dark:border-slate-700' : ''} p-3 sm:p-4 flex flex-col sm:flex-row sm:justify-between gap-3`}>
         <div className="space-y-1 min-w-0"><p className="font-bold text-sm">{a.userName}</p><p className="text-xs text-slate-500">{formatIndonesianDate(a.tanggal)} · Masuk: {formatTime(a.jamMasuk)} · Pulang: {formatTime(a.jamPulang)}</p>
-          <p className="text-[11px] text-slate-500">{a.status} · Jarak {a.distance} m {a.adminCorrection ? '· Sudah dikoreksi admin' : ''}</p></div>
+          <p className="text-[11px] text-slate-500">{a.status} · Jarak {a.distance} m · Akurasi {typeof a.accuracy === 'number' ? `±${Math.round(a.accuracy)} m` : 'Tidak tersedia'} {a.adminCorrection ? '· Sudah dikoreksi admin' : ''}</p>
+          <GpsDiagnosticsDetails record={a} /></div>
         <div className="self-start shrink-0">{buttons(a)}</div></div>)}
         {page.records.length === 0 && <p className="p-6 text-sm text-slate-500">Tidak ada presensi pada filter/periode ini.</p>}
       </div></div>

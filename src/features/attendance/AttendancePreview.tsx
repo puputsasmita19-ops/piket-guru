@@ -43,6 +43,7 @@ import { shouldHighlightCheckIn, shouldHighlightCheckOut } from './attendanceAct
 import { AttendancePolicy, WindowCheckResult } from '../../services/attendance/attendancePolicy';
 import { CapturedSelfie, prepareSelfieWatermarkFont, stampCheckInSelfie, validateSelfieForSubmission } from '../../services/attendance/selfieWatermark';
 import { AdminAttendanceDialog, AdminAttendanceSelection } from './AdminAttendanceDialog';
+import { GpsDiagnosticsDetails } from './GpsDiagnosticsDetails';
 
 interface AttendanceFeedback {
   tone: 'success' | 'error' | 'info';
@@ -887,6 +888,7 @@ export const AttendancePreview: React.FC = () => {
         userRole: currentUser.role,
         isAdmin,
         tanggal: todayISO,
+        coords: activeCoords,
         settings,
       });
 
@@ -900,6 +902,7 @@ export const AttendancePreview: React.FC = () => {
             ? {
                 ...item,
                 jamPulang: confirmedPulang,
+                ...(result.data?.checkoutGps ? { checkoutGps: result.data.checkoutGps } : {}),
               }
             : item
         )
@@ -1486,6 +1489,7 @@ export const AttendancePreview: React.FC = () => {
                   <th className="p-4">Jam Pulang</th>
                   <th className="p-4">Durasi Kehadiran</th>
                   <th className="p-4">Jarak GPS</th>
+                  <th className="p-4">Akurasi GPS</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-center">Foto</th>
                   {canManageHistory && <th className="p-4">Tindakan Admin</th>}
@@ -1494,7 +1498,7 @@ export const AttendancePreview: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageHistory ? 9 : 8} className="p-8 text-center text-slate-400">
+                    <td colSpan={canManageHistory ? 10 : 9} className="p-8 text-center text-slate-400">
                       Belum ada rekaman data presensi piket untuk periode ini.
                     </td>
                   </tr>
@@ -1515,7 +1519,10 @@ export const AttendancePreview: React.FC = () => {
                       </td>
                       <td className="p-4 font-semibold">{attendanceDuration(item.jamMasuk, item.jamPulang)}</td>
                       <td className="p-4 font-mono">
-                        {item.distance} meter
+                        {typeof item.distance === 'number' && Number.isFinite(item.distance) ? `${item.distance} meter` : 'Tidak tersedia'}
+                      </td>
+                      <td className="p-4 font-mono">
+                        {typeof item.accuracy === 'number' && Number.isFinite(item.accuracy) && item.accuracy > 0 ? `±${Math.round(item.accuracy)} m` : 'Tidak tersedia'}
                       </td>
                       <td className="p-4">
                         <Badge
@@ -1538,10 +1545,12 @@ export const AttendancePreview: React.FC = () => {
                           <span className="text-slate-300 text-[10px]">-</span>
                         )}
                       </td>
-                      {canManageHistory && <td className="p-4"><div className="flex items-center gap-2">
+                      {canManageHistory && <td className="p-4"><div className="flex flex-col items-start gap-2">
+                        <GpsDiagnosticsDetails record={item} />
+                        <div className="flex items-center gap-2 flex-wrap">
                         <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'edit' })} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[var(--theme-primary)] text-xs font-bold">Edit</button>
                         <button type="button" onClick={() => setAdminSelection({ record: item, mode: 'delete' })} className="px-3 py-2 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold">Hapus</button>
-                      </div></td>}
+                      </div></div></td>}
                     </tr>
                   ))
                 )}
