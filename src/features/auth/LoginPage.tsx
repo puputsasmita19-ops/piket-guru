@@ -398,7 +398,8 @@ export const LoginPage: React.FC = () => {
     setHasError(false);
     try {
       // Keep server PIN verification and Firebase token validation mandatory.
-      const res = await loginWithPin(selectedUidRef.current || selectedIdentifier, pin);
+      const selectedUid = selectedUidRef.current;
+      const res = await loginWithPin(selectedUid || selectedIdentifier, pin, selectedUid ? { accountUid: selectedUid } : undefined);
       if (!res.success) {
         const rawErr = (res.error || '').trim();
         let displayMsg = 'PIN salah. Silakan coba lagi.';
@@ -1091,8 +1092,7 @@ export const LoginPage: React.FC = () => {
             onClick={handleClear}
             className="h-11 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100/60 hover:bg-slate-200/80 dark:bg-[var(--theme-surface-subtle)]/70 dark:hover:bg-[var(--theme-surface-hover)] active:bg-slate-200 dark:active:bg-[var(--theme-surface-hover)] text-slate-500 dark:text-slate-400 text-xs font-semibold transition-all flex items-center justify-center border border-slate-200 dark:border-[var(--theme-card-border)] cursor-pointer disabled:opacity-40 min-h-[44px]"
           >
-            <X className="w-4 h-4" aria-hidden="true" />
-            <span className="ml-1">Hapus</span>
+            <span>Hapus</span>
           </button>
 
           <button

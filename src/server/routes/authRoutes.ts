@@ -9,6 +9,7 @@ import { AuthRateLimiter, getClientIp } from '../middleware/rateLimiter.js';
 import { UserProfile } from '../../types/index.js';
 import firebaseConfig from '../../../firebase-applet-config.json' with { type: 'json' };
 import { validSchoolDisplayName } from '../../features/auth/publicLoginBrand.js';
+import { exactSelectedLoginUid } from '../utils/loginLookupMode.js';
 
 export const authRouter = Router();
 
@@ -542,6 +543,18 @@ export async function recordServerAuditLog(entry: {
  * Returns a cryptographically signed Firebase Custom Token for client signInWithCustomToken.
  */
 authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, res: Response) => {
+  const loginStartedAt = Date.now();
+  const phaseMs: Record<string, number> = {};
+  const markPhase = (name: string, startedAt: number) => { phaseMs[name] = Date.now() - startedAt; };
+  // Emit same-origin, numeric-only performance timing for successful PIN logins.
+  // Never log PINs, identifiers, credentials, or auth tokens.
+  const setLoginTiming = () => {
+    phaseMs.total = Date.now() - loginStartedAt + Number((req as any).loginAdmissionMs || 0);
+    phaseMs.gate = Number((req as any).loginAdmissionMs || 0);
+    res.setHeader('Server-Timing', Object.entries(phaseMs)
+      .map(([name, ms]) => `${name};dur=${Math.max(0, Math.round(ms))}`)
+      .join(', '));
+  };
   const rawIdentifier = (req.body?.identifier || req.body?.loginId || req.body?.nip || '').trim();
   const pin = (req.body?.pin || '').trim();
   const ip = getClientIp(req);
@@ -584,22 +597,28 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
   }
 
   try {
-    // 1. Find user by loginId, legacy NIP, or document ID
+    // 1. Name-list selection has a specific UID, so avoid redundant alias queries.
+    // Manual ID/NIP keeps all three lookups and ambiguity rejection intact.
+    const lookupStartedAt = Date.now();
+    const exactUid = exactSelectedLoginUid(req.body);
     const normalized = normalizeLoginId(rawIdentifier);
     let matchedDocs = new Map<string, FirebaseFirestore.DocumentSnapshot>();
 
     try {
-      const [byLoginId, byNip, byId] = await Promise.all([
-        adminDb.collection('users').where('loginId', '==', normalized).get(),
-        adminDb.collection('users').where('nip', '==', rawIdentifier).get(),
-        adminDb.collection('users').doc(rawIdentifier).get().catch(() => null),
-      ]);
-
-      byLoginId.docs.forEach((d) => matchedDocs.set(d.id, d));
-      byNip.docs.forEach((d) => matchedDocs.set(d.id, d));
-      if (byId && byId.exists) {
-        matchedDocs.set(byId.id, byId);
+      if (exactUid) {
+        const selectedSnap = await adminDb.collection('users').doc(exactUid).get();
+        if (selectedSnap.exists) matchedDocs.set(selectedSnap.id, selectedSnap);
+      } else {
+        const [byLoginId, byNip, byId] = await Promise.all([
+          adminDb.collection('users').where('loginId', '==', normalized).get(),
+          adminDb.collection('users').where('nip', '==', rawIdentifier).get(),
+          adminDb.collection('users').doc(rawIdentifier).get().catch(() => null),
+        ]);
+        byLoginId.docs.forEach((d) => matchedDocs.set(d.id, d));
+        byNip.docs.forEach((d) => matchedDocs.set(d.id, d));
+        if (byId && byId.exists) matchedDocs.set(byId.id, byId);
       }
+      markPhase('lookup', lookupStartedAt);
     } catch (dbErr: any) {
       if (isResponseClosed(res)) return;
       if (isRequestAborted(req)) {
@@ -696,7 +715,9 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     const userData = userDoc.data() as any;
 
     // Check account-level lockout: all aliases share this unified account check (Requirement 5)
+    const lockStartedAt = Date.now();
     const accountLock = await AuthRateLimiter.isLocked(userId);
+    markPhase('lock', lockStartedAt);
     if (accountLock.locked) {
       void recordServerAuditLog({
         userId,
@@ -756,7 +777,9 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
     // 2. Check private credential store strictly via adaptive scrypt
     let isValid = false;
     try {
+      const verifyStartedAt = Date.now();
       isValid = await CredentialStore.verifyCredential(userId, pin);
+      markPhase('pin', verifyStartedAt);
     } catch (credErr: any) {
       if (isResponseClosed(res)) return;
       if (isRequestAborted(req)) {
@@ -841,46 +864,41 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       return;
     }
 
-    // 3. Reset rate limiter on success for canonical userId and all known aliases
-    await AuthRateLimiter.recordLoginSuccessForIdentifiers([userId, rawIdentifier, userData.loginId, userData.nip], ip);
-
-    if (isRequestAborted(req)) {
-      if (!res.headersSent) {
-        res.status(503).json({
-          success: false,
-          error: 'Sesi permintaan dibatalkan setelah pembaruan batas laju.',
-          code: 'RATE_LIMIT_LEASE_LOST',
-        });
-      }
-      return;
-    }
-
-    // 4. Generate clean sanitized profile
+    // 3–5. Successful-PIN cleanup and token signing are independent.
+    // Run in parallel, but NEVER respond until BOTH security operations succeed.
+    // A rate-limiter store failure remains fail-closed; scrypt strength stays unchanged.
     const safeUser = sanitizeUserProfile({ id: userId, ...userData });
-
-    // 5. Mint Firebase Custom Token with role custom claims
-    let customToken: string | null = null;
-    try {
-      const developerClaims = {
-        role: safeUser.role,
-        nip: safeUser.nip || '',
-        loginId: safeUser.loginId || '',
-      };
-
-      if (!isRequestAborted(req)) {
-        customToken = await adminAuth.createCustomToken(userId, developerClaims);
-      }
-    } catch (signerErr: any) {
-      if (isResponseClosed(res)) return;
-      if (!res.headersSent) {
-        res.status(503).json({
-          success: false,
-          error: 'Layanan penandatangan token autentikasi (Firebase Admin SDK) tidak tersedia.',
-          code: 'SIGNER_UNAVAILABLE',
-        });
-      }
+    const developerClaims = {
+      role: safeUser.role,
+      nip: safeUser.nip || '',
+      loginId: safeUser.loginId || '',
+    };
+    const resetStartedAt = Date.now();
+    const resetPromise = AuthRateLimiter.recordLoginSuccessForIdentifiers(
+      [userId, rawIdentifier, userData.loginId, userData.nip], ip,
+    ).then(() => { markPhase('rateReset', resetStartedAt); });
+    const signerStartedAt = Date.now();
+    const signerPromise = adminAuth.createCustomToken(userId, developerClaims)
+      .then(token => { markPhase('signer', signerStartedAt); return token; });
+    const [resetResult, signerResult] = await Promise.allSettled([resetPromise, signerPromise]);
+    if (isRequestAborted(req) || isResponseClosed(res)) return;
+    if (resetResult.status === 'rejected') {
+      res.status(503).json({
+        success: false,
+        error: 'Layanan keamanan pembatasan login sedang tidak tersedia.',
+        code: 'RATE_LIMIT_STORE_UNAVAILABLE',
+      });
       return;
     }
+    if (signerResult.status === 'rejected' || !signerResult.value) {
+      res.status(503).json({
+        success: false,
+        error: 'Layanan penandatangan token autentikasi (Firebase Admin SDK) tidak tersedia.',
+        code: 'SIGNER_UNAVAILABLE',
+      });
+      return;
+    }
+    const customToken = signerResult.value;
 
     if (isRequestAborted(req)) {
       if (!res.headersSent) {
@@ -904,6 +922,7 @@ authRouter.post('/login', AuthRateLimiter.loginMiddleware, async (req: Request, 
       return;
     }
 
+    setLoginTiming();
     res.json({
       success: true,
       user: safeUser,

@@ -165,7 +165,7 @@ class AuthService {
    * PIN -> Backend scrypt verification -> Firebase Custom Token -> Frontend signInWithCustomToken -> Firebase ID token.
    * Closes SEC-01, SEC-06, SEC-07, and SEC-08.
    */
-  public async authenticateWithPin(identifier: string, pin: string, options: { isCurrent?: () => boolean } = {}): Promise<AuthResult> {
+  public async authenticateWithPin(identifier: string, pin: string, options: { isCurrent?: () => boolean; accountUid?: string } = {}): Promise<AuthResult> {
     await this.init();
     const isCurrent = options.isCurrent || (() => true);
     const cancelled = () => ({ success: false, error: 'Sesi autentikasi dibatalkan.' });
@@ -186,12 +186,18 @@ class AuthService {
           loginId: trimmedId,
           nip: trimmedId,
           pin: pin.trim(),
+          ...(options.accountUid === trimmedId ? { accountUid: trimmedId } : {}),
         }),
         signal: controller.signal,
       });
 
       const data = await response.json();
       recordLoginDuration('pin-api', apiStarted);
+      // Same-origin Server-Timing is numeric-only: never log identifiers, PIN or tokens.
+      const serverTiming = response.headers.get('Server-Timing');
+      if (serverTiming && typeof console !== 'undefined') {
+        console.info('[PIKET LOGIN PERFORMANCE] Backend:', serverTiming);
+      }
       if (!isCurrent()) return cancelled();
 
       if (!response.ok || !data.success) {

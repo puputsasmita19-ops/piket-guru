@@ -13,6 +13,19 @@ export function recordLoginDuration(phase: LoginPhase, started: number): number 
   if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
     try {
       performance.measure(`piket-login-${phase}`, { start: started, end: loginClockNow() });
+      if (phase === 'pin-end-to-end') {
+        const latest = (name: string): number | null => {
+          const entries = performance.getEntriesByName(`piket-login-${name}`, 'measure')
+            .filter(entry => entry.startTime >= started);
+          return entries.length ? Math.round(entries[entries.length - 1].duration) : null;
+        };
+        // Only numeric phase durations; never print any account/credential identifiers.
+        console.info('[PIKET LOGIN PERFORMANCE] Mobile (ms):', {
+          total: Math.round(elapsed),
+          pinApi: latest('pin-api'),
+          firebaseSignIn: latest('firebase-signin'),
+        });
+      }
     } catch { /* Browser may not support numeric measure bounds. */ }
   }
   return elapsed;

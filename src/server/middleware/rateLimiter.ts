@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { adminDb } from '../firebaseAdmin.js';
+import { exactSelectedLoginUid } from '../utils/loginLookupMode.js';
 
 export interface AttemptRecord {
   count: number;
@@ -1323,12 +1324,17 @@ export class AuthRateLimiter {
    * active request lease renewal heartbeat (R10-02, R11-02, R12-02, R13-02), and fail-closed store check
    */
   public static async loginMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const admissionStartedAt = Date.now();
+    const exactUid = exactSelectedLoginUid(req.body);
     const rawIdentifier = (req.body?.identifier || req.body?.loginId || req.body?.nip || '').trim();
     const ip = getClientIp(req);
     const ipKey = toIpKey(ip);
 
     let targetAccountId = rawIdentifier;
-    if (rawIdentifier && adminDb) {
+    if (exactUid) {
+      targetAccountId = exactUid;
+      (req as any).resolvedUserId = exactUid;
+    } else if (rawIdentifier && adminDb) {
       try {
         const normalized = rawIdentifier.trim().toUpperCase();
         const [loginIdSnap, nipSnap] = await Promise.all([
@@ -1350,8 +1356,12 @@ export class AuthRateLimiter {
     const idKey = toAccountIdKey(targetAccountId || 'anon');
 
     try {
-      // 1. Check IP lockout
-      const ipLock = await activeStoreDriver.isLocked(ipKey);
+      // 1–2. Independent IP and account lock checks share a round trip window.
+      // Both MUST succeed (fail-closed) before acquiring the in-flight lease.
+      const [ipLock, canonicalLock] = await Promise.all([
+        activeStoreDriver.isLocked(ipKey),
+        targetAccountId ? activeStoreDriver.isLocked(toAccountIdKey(targetAccountId)) : Promise.resolve({ locked: false } as LockStatus),
+      ]);
       if (ipLock.locked) {
         res.status(429).json({
           success: false,
@@ -1367,10 +1377,9 @@ export class AuthRateLimiter {
       let remainingLockSeconds: number | undefined;
 
       if (targetAccountId) {
-        const targetLock = await activeStoreDriver.isLocked(toAccountIdKey(targetAccountId));
-        if (targetLock.locked) {
+        if (canonicalLock.locked) {
           isAccountLocked = true;
-          remainingLockSeconds = targetLock.remainingSeconds;
+          remainingLockSeconds = canonicalLock.remainingSeconds;
         }
       }
 
@@ -1481,6 +1490,7 @@ export class AuthRateLimiter {
       res.on('finish', safeRelease);
       res.on('close', safeRelease);
 
+      (req as any).loginAdmissionMs = Date.now() - admissionStartedAt;
       next();
     } catch (storeErr: any) {
       // Fail-closed with 503 Service Unavailable (R10-01)

@@ -28,7 +28,8 @@ interface AuthContextType {
   revalidateSessionOnline: () => Promise<boolean>;
   loginWithPin: (
     nipOrUserId: string,
-    pin: string
+    pin: string,
+    options?: { accountUid?: string }
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -399,7 +400,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithPin = async (
     nipOrUserId: string,
-    pin: string
+    pin: string,
+    options: { accountUid?: string } = {},
   ): Promise<{
     success: boolean;
     error?: string;
@@ -411,7 +413,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentEpoch = ++sessionEpochRef.current;
     manualLoginEpochRef.current = currentEpoch;
     try {
-      const res = await authService.authenticateWithPin(nipOrUserId, pin, { isCurrent: () => currentEpoch === sessionEpochRef.current });
+      const res = await authService.authenticateWithPin(nipOrUserId, pin, { isCurrent: () => currentEpoch === sessionEpochRef.current, accountUid: options.accountUid });
       if (currentEpoch !== sessionEpochRef.current) {
         return { success: false, error: 'Sesi autentikasi dibatalkan.' };
       }
