@@ -37,7 +37,21 @@ export default function AuthenticatedShell() {
   }, []);
   useAutomaticSync();
   const { activeTab, setActiveTab } = useNavigation();
-  const { hasRole } = useAuth();
+  const { hasRole, hasPermission, currentUser } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    // Start one shared GPS fix before the lazy Presensi page loads, only if
+    // permission was already granted. Lazy-import after auth so GPS code does
+    // not increase the critical login/dashboard JavaScript bundle.
+    if (currentUser?.id && hasPermission(PERMISSIONS.ATTENDANCE_VIEW) &&
+        (activeTab === 'dashboard' || activeTab === 'attendance')) {
+      void import('./services/location/gpsFastWarmup').then(({ prewarmAttendanceGpsIfGranted }) => {
+        if (!cancelled) return prewarmAttendanceGpsIfGranted();
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [activeTab, currentUser?.id, hasPermission]);
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard':

@@ -104,6 +104,12 @@ export const AttendancePreview: React.FC = () => {
   const gpsSchoolKeyRef = React.useRef('');
   const lastForegroundGpsAttemptRef = React.useRef(0);
   const [gpsResumeNotice, setGpsResumeNotice] = useState('');
+  // R111: optional device-side metric from opening Presensi to a truly valid fix.
+  // This never changes authentication or GPS acceptance.
+  const gpsReadStartRef = React.useRef(typeof performance === 'undefined' ? Date.now() : performance.now());
+  const gpsReadyRecordedRef = React.useRef(false);
+  const [gpsReadyElapsedMs, setGpsReadyElapsedMs] = useState<number | null>(null);
+  const gpsDiagnosticEnabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('gps_diag') === '1';
   const selfieTargetRef = React.useRef<HTMLDivElement | null>(null);
   const selfieTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const autoGuidedSelfieKeyRef = React.useRef('');
@@ -235,6 +241,11 @@ export const AttendancePreview: React.FC = () => {
   // 2. Fetch GPS on mount and refresh manually, without blocking the status once valid.
   const refreshGpsLocation = async (isManual = false, requireNewFix = false) => {
     if (!settingsReady || !validSchoolLocation) return;
+    if (isManual || requireNewFix) {
+      gpsReadStartRef.current = typeof performance === 'undefined' ? Date.now() : performance.now();
+      gpsReadyRecordedRef.current = false;
+      setGpsReadyElapsedMs(null);
+    }
     const requestId = ++gpsRequestRef.current;
     const hadPreviousReading = !!coords && !!geofence;
     if (!hadPreviousReading) {
@@ -283,6 +294,11 @@ export const AttendancePreview: React.FC = () => {
         settings.allowedRadiusMeters
       );
       setGeofence(geo);
+      if (geo.status === 'DALAM_LOKASI' && !gpsReadyRecordedRef.current) {
+        gpsReadyRecordedRef.current = true;
+        const now = typeof performance === 'undefined' ? Date.now() : performance.now();
+        setGpsReadyElapsedMs(Math.max(0, Math.round(now - gpsReadStartRef.current)));
+      }
 
       if (geo.status === 'AKURASI_RENDAH') {
         setGpsError(`Akurasi sinyal GPS saat ini (±${Math.round(position.accuracy)}m) belum memenuhi kebijakan presensi (maksimal ≤50m). Silakan pindah ke area terbuka dan klik tombol Perbarui.`);
@@ -1101,6 +1117,14 @@ export const AttendancePreview: React.FC = () => {
                       </div>
                     )}
 
+                    {gpsDiagnosticEnabled && (
+                      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" role="status">
+                        Diagnostik GPS: {gpsReadyElapsedMs === null
+                          ? 'menunggu koordinat valid (≤50 m dan dalam radius)'
+                          : `siap dalam ${(gpsReadyElapsedMs / 1000).toFixed(2)} detik sejak membuka Presensi / pembaruan GPS`}
+                        . Target &lt;2 detik bergantung pada perangkat dan sinyal.
+                      </p>
+                    )}
                     {gpsResumeNotice && isLocating && (
                       <p className="attendance-gps-resume-note" role="status" aria-live="polite">
                         <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
