@@ -48,9 +48,10 @@ await test('visibilitychange, focus, pageshow, pagehide are all wired',()=>{
   assert.match(ui,new RegExp(`removeEventListener\\('${event}'`));
  }
 });
-await test('Pause cancels stale shared GPS only outside critical attendance/camera work',()=>{
+await test('Pause cancels only screen GPS while other shared GPS clients continue',()=>{
  assert.match(ui,/if \(state\.busy\) return;\s*\/\/ Do not interrupt Check-In\/Check-Out or camera/);
- assert.match(ui,/LocationService\.cancelCurrentSearch\(\)/);
+ assert.match(ui,/gpsScreenAbortRef\.current\?\.abort\(\)/);
+ assert.doesNotMatch(ui,/LocationService\.cancelCurrentSearch\(\)/);
  assert.match(ui,/\+\+gpsRequestRef\.current;\s*\/\/ Ignore callbacks/);
 });
 await test('Resume requires a new browser GPS fix; not a stale cached result',()=>{

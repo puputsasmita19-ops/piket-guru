@@ -20,6 +20,8 @@ export interface WatchPositionOptions {
   maxStaleAgeMs?: number;
   onProgress?: (pos: LocationCoordinates, isProvisional: boolean) => void;
   forceFresh?: boolean;
+  /** Cancel only this caller; other subscribers continue using the shared watcher. */
+  signal?: AbortSignal;
 }
 
 
@@ -33,6 +35,8 @@ interface PositionSubscriber {
   startedAt: number;
   timer: ReturnType<typeof setTimeout> | null;
   settled: boolean;
+  signal?: AbortSignal;
+  onAbort?: () => void;
 }
 
 interface ActivePositionSearch {
@@ -259,6 +263,10 @@ export class LocationService {
     subscriber.settled = true;
     if (subscriber.timer !== null) clearTimeout(subscriber.timer);
     subscriber.timer = null;
+    if (subscriber.signal && subscriber.onAbort) {
+      subscriber.signal.removeEventListener('abort', subscriber.onAbort);
+      subscriber.onAbort = undefined;
+    }
     search.subscribers.delete(subscriber);
     if (position) subscriber.resolve(position);
     else subscriber.reject(error ?? new Error('Pembacaan GPS tidak tersedia.'));
@@ -364,6 +372,7 @@ export class LocationService {
       maxStaleAgeMs = 30000,
       forceFresh = false,
       onProgress,
+      signal,
     } = opts;
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -375,6 +384,12 @@ export class LocationService {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 ||
         !Number.isFinite(maxStaleAgeMs) || maxStaleAgeMs < 0) {
       return Promise.reject(new Error('Pengaturan waktu pencarian GPS tidak valid.'));
+    }
+
+    if (signal?.aborted) {
+      const error = new Error('Pencarian GPS dibatalkan.');
+      error.name = 'AbortError';
+      return Promise.reject(error);
     }
 
     const restored = forceFresh ? null : this.restoreCachedPosition(maxStaleAgeMs);
@@ -392,9 +407,21 @@ export class LocationService {
       }
       const subscriber: PositionSubscriber = {
         resolve, reject, onProgress, maxStaleAgeMs, forceFresh,
-        startedAt: Date.now(), timer: null, settled: false,
+        startedAt: Date.now(), timer: null, settled: false, signal,
       };
       search.subscribers.add(subscriber);
+      if (signal) {
+        subscriber.onAbort = () => {
+          const error = new Error('Pencarian GPS dibatalkan.');
+          error.name = 'AbortError';
+          this.finishSubscriber(search!, subscriber, undefined, error);
+        };
+        signal.addEventListener('abort', subscriber.onAbort, { once: true });
+        if (signal.aborted) {
+          subscriber.onAbort();
+          return;
+        }
+      }
       subscriber.timer = setTimeout(() => {
         if (subscriber.settled) return;
         const reading = search!.bestReading;

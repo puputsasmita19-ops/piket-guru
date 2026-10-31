@@ -101,6 +101,9 @@ export const AttendancePreview: React.FC = () => {
   // This is a local timer, not a repeating browser GPS search/network poll.
   const [gpsExpiryTick, setGpsExpiryTick] = useState(0);
   const gpsRequestRef = React.useRef(0);
+  // R112: cancel only this screen's GPS subscriber, not the shared hardware
+  // search needed by the selfie camera or authenticated dashboard warm-start.
+  const gpsScreenAbortRef = React.useRef<AbortController | null>(null);
   const gpsSchoolKeyRef = React.useRef('');
   const lastForegroundGpsAttemptRef = React.useRef(0);
   const [gpsResumeNotice, setGpsResumeNotice] = useState('');
@@ -207,7 +210,8 @@ export const AttendancePreview: React.FC = () => {
     const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
 
     return () => {
-      LocationService.clearCurrentWatcher();
+      gpsScreenAbortRef.current?.abort();
+      gpsScreenAbortRef.current = null;
       if (slowTxTimerRef.current) {
         clearTimeout(slowTxTimerRef.current);
       }
@@ -246,6 +250,9 @@ export const AttendancePreview: React.FC = () => {
       gpsReadyRecordedRef.current = false;
       setGpsReadyElapsedMs(null);
     }
+    gpsScreenAbortRef.current?.abort();
+    const requestController = new AbortController();
+    gpsScreenAbortRef.current = requestController;
     const requestId = ++gpsRequestRef.current;
     const hadPreviousReading = !!coords && !!geofence;
     if (!hadPreviousReading) {
@@ -263,6 +270,7 @@ export const AttendancePreview: React.FC = () => {
         desiredAccuracyMeters: 20,
         maxStaleAgeMs: 15000, // Same freshness requirement as automatic selfie guidance.
         forceFresh: isManual || requireNewFix,
+        signal: requestController.signal,
         onProgress: (pos, isProv) => {
           if (requestId !== gpsRequestRef.current) return;
           if (!LocationService.isFreshPosition(pos, 15000)) return;
@@ -322,6 +330,7 @@ export const AttendancePreview: React.FC = () => {
       });
     } finally {
       if (requestId === gpsRequestRef.current) {
+        if (gpsScreenAbortRef.current === requestController) gpsScreenAbortRef.current = null;
         setIsLocating(false);
         setGpsResumeNotice('');
       }
@@ -363,7 +372,8 @@ export const AttendancePreview: React.FC = () => {
     }
     return () => {
       ++gpsRequestRef.current;
-      LocationService.clearCurrentWatcher();
+      gpsScreenAbortRef.current?.abort();
+      gpsScreenAbortRef.current = null;
     };
   }, [settingsReady, settings.schoolLat, settings.schoolLng, settings.allowedRadiusMeters, activeTab]);
 
@@ -452,7 +462,8 @@ export const AttendancePreview: React.FC = () => {
       const state = gpsLifecycleRef.current;
       if (state.busy) return; // Do not interrupt Check-In/Check-Out or camera.
       ++gpsRequestRef.current; // Ignore callbacks from the paused search.
-      LocationService.cancelCurrentSearch();
+      gpsScreenAbortRef.current?.abort();
+      gpsScreenAbortRef.current = null;
       // Keep the snapshot consistent even if Android emits hide/show events
       // before React has rendered the queued isLocating(false) update.
       gpsLifecycleRef.current = { ...gpsLifecycleRef.current, isLocating: false };
@@ -505,22 +516,29 @@ export const AttendancePreview: React.FC = () => {
     // nearby fixes, after manually refreshing, or while using other controls.
     const key = `${currentUser?.id || ''}|${todayISO}`;
     if (!canGuideToSelfie || !pageVisible || autoGuidedSelfieKeyRef.current === key) return;
-    autoGuidedSelfieKeyRef.current = key;
     setHighlightSelfieStep(true);
-    // Prepare font in the background as soon as real GPS permits the next step.
+    // Prepare the font independently; never block next-step guidance on it.
     void prepareSelfieWatermarkFont().catch(() => {});
-    const timer = window.setTimeout(() => {
-      if (!selfieTargetRef.current || isCameraModalOpen) return;
-      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-      try {
-        selfieTargetRef.current.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
-      } catch {
-        selfieTargetRef.current.scrollIntoView();
+    // The element already exists in the mounted React tree. A paint frame
+    // ensures layout is ready without the old fixed 160ms delay.
+    const frame = window.requestAnimationFrame(() => {
+      if (!selfieTargetRef.current || !selfieTriggerRef.current || document.hidden || isCameraModalOpen) return;
+      autoGuidedSelfieKeyRef.current = key; // Mark only after guidance occurs.
+      const target = selfieTargetRef.current;
+      const bounds = selfieTriggerRef.current.getBoundingClientRect();
+      const alreadyVisible = bounds.top >= 70 && bounds.bottom <= window.innerHeight - 36;
+      if (!alreadyVisible) {
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+        try { target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' }); }
+        catch { target.scrollIntoView(); }
       }
-      try { selfieTriggerRef.current?.focus({ preventScroll: true }); }
-      catch { selfieTriggerRef.current?.focus(); }
-    }, 160);
-    return () => window.clearTimeout(timer);
+      // Focus only if the next action is not already controlled by the user.
+      if (!document.activeElement || document.activeElement === document.body) {
+        try { selfieTriggerRef.current?.focus({ preventScroll: true }); }
+        catch { selfieTriggerRef.current?.focus(); }
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [canGuideToSelfie, currentUser?.id, todayISO, isCameraModalOpen, pageVisible]);
 
   // Restore attendance selfie draft for today if available
@@ -1021,7 +1039,7 @@ export const AttendancePreview: React.FC = () => {
                   <div className="p-4 sm:p-5 space-y-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="gps-search-heading" role="status" aria-live="polite" aria-atomic="true">
-                        <div className={isLocating ? 'gps-search-indicator' : 'attendance-gps-icon'} aria-hidden="true" data-gps-search={isLocating ? 'active' : 'idle'}>
+                        <div className={isLocating && !gpsConfirmedWithinRadius ? 'gps-search-indicator' : 'attendance-gps-icon'} aria-hidden="true" data-gps-search={isLocating && !gpsConfirmedWithinRadius ? 'active' : 'idle'}>
                           <MapPin className="w-5 h-5" />
                         </div>
                         <div>
