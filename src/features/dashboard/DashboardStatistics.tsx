@@ -11,6 +11,9 @@ export interface DashboardStatistic {
   series?: number[] | null;
   chartLabel?: string;
   stage?: number;
+  /** Per-card data may start after first paint, without marking all cards loading. */
+  loading?: boolean;
+  loadError?: boolean;
 }
 
 function MiniTrend({ series, label }: { series: number[] | null | undefined; label: string }) {
@@ -35,14 +38,16 @@ export function DashboardStatistics({ items, loading, onNavigate }: { items: Das
   return <section aria-label="Statistik hari ini" className="dashboard-statistics">
     {items.map(item => {
       const Icon = item.icon;
+      const pending = loading || item.loading;
+      const failed = !pending && item.loadError;
       const numeric = typeof item.value === 'number';
       const formatted = numeric ? new Intl.NumberFormat('id-ID', { notation: (item.value as number) >= 10000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(item.value as number) : item.value;
       const accessibleValue = numeric ? new Intl.NumberFormat('id-ID').format(item.value as number) : item.value;
       return <button key={item.tab} type="button" data-statistic={item.tab} data-value={item.value} className="dashboard-statistic" onClick={() => onNavigate(item.tab)}
-        aria-label={`${item.title}: ${loading ? 'Memuat' : `${accessibleValue}${item.unit ? ` ${item.unit}` : ''}`}. ${item.detail}. Buka rincian.`}>
+        aria-label={`${item.title}: ${pending ? 'Memuat' : failed ? 'Data belum tersedia' : `${accessibleValue}${item.unit ? ` ${item.unit}` : ''}`}. ${item.detail}. Buka rincian.`}>
         <span className="statistic-heading"><span className="statistic-title">{item.title}</span>{item.stage === undefined ? <Icon className="statistic-icon" /> : <span className="statistic-stages" aria-hidden="true">{[1, 2, 3].map(stage => <span key={stage} data-complete={stage <= item.stage!} />)}</span>}</span>
         <span className="statistic-body">
-          {loading ? <span className="statistic-skeleton" aria-hidden="true" /> : <>
+          {pending ? <span className="statistic-skeleton" aria-hidden="true" /> : failed ? <span className="statistic-status">Belum tersambung</span> : <>
             <span data-long={numeric && String(formatted).length > 4 || undefined} className={`statistic-amount ${numeric ? '' : 'statistic-status'}`}><strong>{formatted}</strong>{item.unit && <span className="statistic-unit">{item.unit}</span>}</span>
             {numeric && <MiniTrend series={item.series} label={item.chartLabel || 'Akumulasi pencatatan hari ini'} />}
           </>}

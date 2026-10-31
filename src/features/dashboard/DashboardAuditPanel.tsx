@@ -20,12 +20,15 @@ export function DashboardAuditPanel({ audit }: { audit: Audit }) {
     } catch { setCopyStatus('Salin teks laporan secara manual dari panel'); }
   };
   return <details className="fixed bottom-3 right-3 z-[90] w-[min(94vw,440px)] rounded-xl border border-slate-300 bg-white/95 text-slate-900 shadow-xl dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100" aria-label="Diagnostik performa dashboard">
-    <summary className="cursor-pointer select-none p-3 text-xs font-semibold">Diagnostik Dashboard · R113-A</summary>
+    <summary className="cursor-pointer select-none p-3 text-xs font-semibold">Diagnostik Dashboard · R113-B2</summary>
     <div className="max-h-[65vh] overflow-y-auto border-t border-slate-200 p-3 text-xs dark:border-slate-700">
       <dl className="grid grid-cols-2 gap-2">
         <div><dt>Kerangka awal (frame)</dt><dd className="font-semibold">{ms(summary.firstFrameMs)}</dd></div>
         <div><dt>Snapshot pertama</dt><dd className="font-semibold">{ms(summary.firstSnapshotMs)}</dd></div>
-        <div><dt>3 sumber inti siap</dt><dd className="font-semibold">{ms(summary.coreSourcesReadyMs)}</dd></div>
+        <div><dt>3 sumber historis siap</dt><dd className="font-semibold">{ms(summary.coreSourcesReadyMs)}</dd></div>
+        <div><dt>3 sumber personal siap</dt><dd className="font-semibold">{ms(summary.personalSourcesReadyMs)}</dd></div>
+        <div><dt>Observer sekunder mulai</dt><dd className="font-semibold">{ms(summary.secondarySubscriptionsStartedMs)}</dd></div>
+        <div><dt>Semua sumber siap</dt><dd className="font-semibold">{ms(summary.allInitialSourcesReadyMs)}</dd></div>
         <div><dt>Listener aktif</dt><dd className="font-semibold">{summary.activeListeners}</dd></div>
         <div><dt>Callback data</dt><dd className="font-semibold">{summary.totalSnapshots}</dd></div>
         <div><dt>Dokumen snapshot terkini</dt><dd className="font-semibold">{summary.latestDocuments}</dd></div>
@@ -36,7 +39,7 @@ export function DashboardAuditPanel({ audit }: { audit: Audit }) {
           <span className="font-mono">{ms(row.firstMs)} · {row.lastDocuments ?? '—'} dok · {row.snapshots}×</span>
         </div>)}
       </div>
-      <p className="mt-3 text-[11px] text-slate-600 dark:text-slate-300">Snapshot dapat berasal dari cache/offline. Ini bukan hitungan biaya pembacaan Firebase. Tidak menyertakan nama akun atau isi dokumen.</p>
+      <p className="mt-3 text-[11px] text-slate-600 dark:text-slate-300">Pengukuran dimulai saat dashboard terpasang. Snapshot bisa berasal dari cache SDK, penyimpanan offline, atau server (belum dibedakan). Jumlah dokumen bukan hitungan biaya Firebase. Data akun tidak dicatat.</p>
       <button type="button" onClick={() => { void copyReport(); }} className="mt-2 min-h-10 rounded-lg bg-slate-800 px-3 py-2 font-semibold text-white dark:bg-slate-100 dark:text-slate-900">Salin ringkasan</button>
       {copyStatus && <p role="status" className="mt-2">{copyStatus}</p>}
     </div>

@@ -13,6 +13,7 @@ import { rosterCandidateIds, rosterUnresolvedNames, resolveRosterPhoto, ROSTER_P
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createDashboardPerformanceAudit } from './dashboardPerformanceAudit';
+import { stageDashboardSecondaryListeners } from './dashboardLoadingStabilizer';
 import { createRosterMasterState, updateRosterMasterState, areRosterMastersReady, type RosterMasterState } from './dashboardSmartData';
 import {
   Calendar,
@@ -197,6 +198,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const todayISO = useWibToday();
   const todayName = getCurrentDayName(todayISO);
   const tomorrowISO = nextDutyDate(todayISO);
+  // Never label an unreceived, delayed operational snapshot as a genuine zero.
+  // Tie source readiness to both UID and WIB date to avoid cross-account stale UI.
+  const secondaryKey = `${currentUser?.id || ''}:${todayISO}`;
+  type SecondarySourceName = 'tardy' | 'permits' | 'visitors';
+  type SecondarySourceStatus = 'ready' | 'error';
+  const [secondarySourceState, setSecondarySourceState] = useState<{
+    key: string; statuses: Partial<Record<SecondarySourceName, SecondarySourceStatus>>;
+  }>({ key: '', statuses: {} });
+  const markSecondaryStatus = (source: SecondarySourceName, status: SecondarySourceStatus) => {
+    setSecondarySourceState(current => ({
+      key: secondaryKey,
+      statuses: { ...(current.key === secondaryKey ? current.statuses : {}), [source]: status },
+    }));
+  };
+  const sourceStatus = (source: SecondarySourceName) =>
+    secondarySourceState.key === secondaryKey ? secondarySourceState.statuses[source] : undefined;
+
   const canViewSubstitutions = hasPermission(PERMISSIONS.SUBSTITUTIONS_VIEW);
 
   useEffect(() => {
@@ -214,6 +232,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [todayISO, canViewSubstitutions, currentUser?.id]);
 
   useEffect(() => {
+    // Reset optional data on a new account/day before secondary subscriptions start.
+    setSecondarySourceState({ key: secondaryKey, statuses: {} });
+    setStudentTardiness([]);
+    setStudentPermits([]);
+    setVisitors([]);
     // Announcement bootstrap is a production no-op; do not schedule unnecessary work.
 
     audit?.subscribe('settings/school_config');
@@ -250,6 +273,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
+    const unsubAnn = watchCollection<AnnouncementRecord>(
+      'announcements',
+      (data) => {
+        setAnnouncements([...data].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()));
+        setIsLoadingAnnouncements(false);
+        setAnnouncementError('');
+      },
+      () => { setIsLoadingAnnouncements(false); setAnnouncementError('Papan pengumuman belum tersambung. Periksa koneksi dan izin akun.'); },
+      [where('isActive', '==', true)], { cacheKey: 'active' }
+    );
+    // Books and incidents are operationally important; subscribe immediately.
     const unsubBooks = watchCollection<DutyBookRecord>(
       'dutyBooks',
       setDutyBooks,
@@ -262,34 +296,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubAnn = watchCollection<AnnouncementRecord>(
-      'announcements',
-      (data) => {
-        setAnnouncements([...data].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()));
-        setIsLoadingAnnouncements(false);
-        setAnnouncementError('');
-      },
-      () => { setIsLoadingAnnouncements(false); setAnnouncementError('Papan pengumuman belum tersambung. Periksa koneksi dan izin akun.'); },
-      [where('isActive', '==', true)], { cacheKey: 'active' }
-    );
-    const unsubTardy = watchCollection<StudentTardyRecord>(
-      'studentTardiness',
-      setStudentTardiness,
-      undefined,
-      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
-    );
-    const unsubPermits = watchCollection<StudentPermitRecord>(
-      'studentPermits',
-      setStudentPermits,
-      undefined,
-      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
-    );
-    const unsubVisitors = watchCollection<VisitorRecord>(
-      'visitors',
-      setVisitors,
-      undefined,
-      [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
-    );
+
+    // Secondary student/visitor statistics should not compete with first paint.
+    // All sources stay realtime; no extra Firestore query or weakened access.
+    const stopSecondary = stageDashboardSecondaryListeners(() => {
+      audit?.markSecondaryStart();
+      const unsubTardy = watchCollection<StudentTardyRecord>(
+        'studentTardiness',
+        data => React.startTransition(() => { setStudentTardiness(data); markSecondaryStatus('tardy', 'ready'); }),
+        () => markSecondaryStatus('tardy', 'error'),
+        [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
+      );
+      const unsubPermits = watchCollection<StudentPermitRecord>(
+        'studentPermits',
+        data => React.startTransition(() => { setStudentPermits(data); markSecondaryStatus('permits', 'ready'); }),
+        () => markSecondaryStatus('permits', 'error'),
+        [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
+      );
+      const unsubVisitors = watchCollection<VisitorRecord>(
+        'visitors',
+        data => React.startTransition(() => { setVisitors(data); markSecondaryStatus('visitors', 'ready'); }),
+        () => markSecondaryStatus('visitors', 'error'),
+        [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
+      );
+      return [unsubTardy, unsubPermits, unsubVisitors];
+    }, window);
 
     return () => {
       unsubSettings();
@@ -297,12 +328,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       unsubTeachers();
       unsubStaff();
       unsubAtt();
+      unsubAnn();
       unsubBooks();
       unsubInc();
-      unsubAnn();
-      unsubTardy();
-      unsubPermits();
-      unsubVisitors();
+      stopSecondary();
     };
   }, [todayISO, currentUser?.id]);
 
@@ -483,10 +512,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     { tab: 'attendance', permission: PERMISSIONS.ATTENDANCE_VIEW, title: 'Kehadiran GPS', value: attendancePercentage, unit: '%', detail: `${presentCount} dari ${todaySchedules.length} terverifikasi`, icon: ShieldCheck, series: buildDailyStatisticSeries(todayAttendance.filter(item => item.status === 'DALAM_LOKASI').map(item => item.jamMasuk), todayISO), chartLabel: 'Akumulasi presensi GPS terverifikasi hari ini menurut jam masuk' },
     { tab: 'duty-book', permission: PERMISSIONS.DUTYBOOK_VIEW, title: 'Buku Piket', value: bookStage?.label || 'Belum dibuat', detail: todayDutyBook ? 'Tahap jurnal hari ini' : 'Siap diisi', icon: BookOpenCheck, stage: bookStage ? { DRAFT: 1, TERKIRIM: 2, SELESAI: 3 }[bookStage.stage] : 0 },
     { tab: 'incidents', permission: PERMISSIONS.INCIDENT_VIEW, title: 'Insiden Terlapor', value: todayIncidents.length, unit: 'kejadian', detail: `${todayIncidents.filter(item => item.status === 'SELESAI').length} tuntas ditangani`, icon: AlertTriangle, series: buildDailyStatisticSeries(todayIncidents.map(item => item.waktu), todayISO) },
-    { tab: 'student-tardiness', permission: PERMISSIONS.STUDENT_TARDY_VIEW, title: 'Siswa Terlambat', value: todayTardiness.length, unit: 'siswa', detail: 'Masuk gerbang hari ini', icon: UserX, series: buildDailyStatisticSeries(todayTardiness.map(item => item.jamDatang), todayISO) },
-    { tab: 'student-permits', permission: PERMISSIONS.STUDENT_PERMITS_VIEW, title: 'Izin Keluar Kelas', value: todayPermits.length, unit: 'siswa', detail: `${todayPermits.filter(item => item.status === 'SEDANG_KELUAR').length} masih di luar`, icon: FileText, series: buildDailyStatisticSeries(todayPermits.map(item => item.jamKeluar), todayISO) },
+    { tab: 'student-tardiness', permission: PERMISSIONS.STUDENT_TARDY_VIEW, title: 'Siswa Terlambat', loading: sourceStatus('tardy') === undefined, loadError: sourceStatus('tardy') === 'error', value: todayTardiness.length, unit: 'siswa', detail: 'Masuk gerbang hari ini', icon: UserX, series: buildDailyStatisticSeries(todayTardiness.map(item => item.jamDatang), todayISO) },
+    { tab: 'student-permits', permission: PERMISSIONS.STUDENT_PERMITS_VIEW, title: 'Izin Keluar Kelas', loading: sourceStatus('permits') === undefined, loadError: sourceStatus('permits') === 'error', value: todayPermits.length, unit: 'siswa', detail: `${todayPermits.filter(item => item.status === 'SEDANG_KELUAR').length} masih di luar`, icon: FileText, series: buildDailyStatisticSeries(todayPermits.map(item => item.jamKeluar), todayISO) },
     { tab: 'substitutions', permission: PERMISSIONS.SUBSTITUTIONS_VIEW, title: 'Guru Pengganti', value: todaySubstitutions.length, unit: 'tugas', detail: 'Penugasan inval hari ini', icon: GraduationCap, series: buildDailyStatisticSeries(todaySubstitutions.map(item => item.createdAt), todayISO), chartLabel: 'Akumulasi penugasan inval yang dicatat hari ini' },
-    { tab: 'visitors', permission: PERMISSIONS.VISITORS_VIEW, title: 'Buku Tamu', value: todayVisitors.length, unit: 'tamu', detail: `${todayVisitors.filter(item => item.status === 'SEDANG_BERKUNJUNG').length} sedang berkunjung`, icon: Building, series: buildDailyStatisticSeries(todayVisitors.map(item => item.jamMasuk), todayISO) },
+    { tab: 'visitors', permission: PERMISSIONS.VISITORS_VIEW, title: 'Buku Tamu', loading: sourceStatus('visitors') === undefined, loadError: sourceStatus('visitors') === 'error', value: todayVisitors.length, unit: 'tamu', detail: `${todayVisitors.filter(item => item.status === 'SEDANG_BERKUNJUNG').length} sedang berkunjung`, icon: Building, series: buildDailyStatisticSeries(todayVisitors.map(item => item.jamMasuk), todayISO) },
   ];
   const visibleStatistics = statistics.filter(item => hasPermission(item.permission));
   const activitySlide: DashboardFlashSlide = {
