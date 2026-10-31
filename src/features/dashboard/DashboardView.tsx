@@ -12,6 +12,7 @@ import { RosterTeacherAvatar } from './RosterTeacherAvatar';
 import { rosterCandidateIds, rosterUnresolvedNames, resolveRosterPhoto, ROSTER_PHOTO_QUERY_BATCH } from './rosterPhotoLookup';
 import { QuickActions } from './QuickActions';
 import React, { useState, useEffect, useRef } from 'react';
+import { createDashboardPerformanceAudit } from './dashboardPerformanceAudit';
 import {
   Calendar,
   Clock,
@@ -44,8 +45,8 @@ import { WhatsAppModal } from '../../components/common/WhatsAppModal';
 import { AnnouncementFormModal } from './AnnouncementFormModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS, type PermissionKey } from '../../config/permissions';
-import { documentId, where } from 'firebase/firestore';
-import { FirestoreService } from '../../services/firebase/firestoreService';
+import { documentId, where, type QueryConstraint } from 'firebase/firestore';
+import { FirestoreService, type QueryDataOptions } from '../../services/firebase/firestoreService';
 import { AnnouncementService } from '../../services/firebase/announcementService';
 import { WhatsAppService } from '../../services/notifications/whatsappService';
 import {
@@ -68,6 +69,9 @@ import { isScheduleMatchingUser, isScheduleOnDate } from '../../utils/scheduleUt
 import { nextDutyDate, dutyRosterForDate } from '../../utils/dutyRoster';
 import { buildSubstitutionFlashSummary } from './substitutionFlashSummary';
 
+// Optional diagnostics have a separate chunk, not fetched during normal mobile dashboard load.
+const DashboardAuditPanel = React.lazy(() => import('./DashboardAuditPanel').then(module => ({ default: module.DashboardAuditPanel })));
+
 /** R75: independent thin outline, unlike filled icon geometry. */
 const ActivityGridOutlineIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -85,6 +89,27 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
   const { currentUser, hasRole, hasPermission } = useAuth();
+  // R113-A: diagnostics are opt-in and session-local; they do not query Firestore.
+  const auditRef = useRef<ReturnType<typeof createDashboardPerformanceAudit> | null>(null);
+  if (!auditRef.current && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dashboard_diag') === '1') {
+    auditRef.current = createDashboardPerformanceAudit();
+  }
+  const audit = auditRef.current;
+  useEffect(() => {
+    if (!audit) return;
+    const frame = window.requestAnimationFrame(() => audit.markFirstFrame());
+    return () => window.cancelAnimationFrame(frame);
+  }, [audit]);
+  const watchCollection = <T,>(collectionName: string, onData: (items: T[]) => void,
+    onError?: (error: Error) => void, constraints: QueryConstraint[] = [], options?: QueryDataOptions) => {
+    if (!audit) return FirestoreService.subscribeToCollection<T>(collectionName, onData, onError, constraints, options);
+    audit.subscribe(collectionName);
+    const stop = FirestoreService.subscribeToCollection<T>(collectionName,
+      items => { audit?.snapshot(collectionName, items.length); onData(items); },
+      error => { audit?.failure(collectionName); onError?.(error); },
+      constraints, options);
+    return () => { stop(); audit?.unsubscribe(collectionName); };
+  };
   const isAdmin = hasRole('ADMIN', 'KEPALA_SEKOLAH');
   const { subView, setSubView } = useNavigation();
   const [detailPanel, setDetailPanel] = useState<'announcements' | 'dutyRoster' | 'dutyRosterTomorrow' | 'incidents' | null>(null);
@@ -169,7 +194,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     setSubstitutions([]);
     setSubstitutionReadState('loading');
     if (!canViewSubstitutions) return;
-    const unsubscribe = FirestoreService.subscribeToCollection<TeacherSubstitutionRecord>(
+    const unsubscribe = watchCollection<TeacherSubstitutionRecord>(
       'substitutions',
       data => { if (active) { setSubstitutions(data); setSubstitutionReadState('ready'); } },
       () => { if (active) { setSubstitutions([]); setSubstitutionReadState('error'); } },
@@ -179,39 +204,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   }, [todayISO, canViewSubstitutions, currentUser?.id]);
 
   useEffect(() => {
-    AnnouncementService.bootstrapIfEmpty();
+    // Announcement bootstrap is a production no-op; do not schedule unnecessary work.
 
-    const unsubSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => {
+    audit?.subscribe('settings/school_config');
+    const stopSettings = FirestoreService.subscribeToDocument<SchoolSettings>('settings', 'school_config', data => {
+      audit?.snapshot('settings/school_config', data ? 1 : 0);
       setSettings(data || DEFAULT_SCHOOL_SETTINGS);
       // Do not assume the bundled default is a verified school policy.
       setReminderSettingsReady(Boolean(data));
-    });
+    }, () => { audit?.failure('settings/school_config'); });
+    const unsubSettings = () => { stopSettings(); audit?.unsubscribe('settings/school_config'); };
 
-    const unsubSched = FirestoreService.subscribeToCollection<ScheduleItem>('schedules', (data) => {
+    const unsubSched = watchCollection<ScheduleItem>('schedules', (data) => {
       setSchedules(data);
       setIsLoadingMetrics(false);
     });
-    const unsubTeachers = FirestoreService.subscribeToCollection<TeacherRecord>('teachers', setTeachers);
-    const unsubStaff = FirestoreService.subscribeToCollection<StaffRecord>('staff', setStaff);
-    const unsubAtt = FirestoreService.subscribeToCollection<AttendanceRecord>(
+    const unsubTeachers = watchCollection<TeacherRecord>('teachers', setTeachers);
+    const unsubStaff = watchCollection<StaffRecord>('staff', setStaff);
+    const unsubAtt = watchCollection<AttendanceRecord>(
       'attendance',
       setAttendance,
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubBooks = FirestoreService.subscribeToCollection<DutyBookRecord>(
+    const unsubBooks = watchCollection<DutyBookRecord>(
       'dutyBooks',
       setDutyBooks,
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubInc = FirestoreService.subscribeToCollection<IncidentRecord>(
+    const unsubInc = watchCollection<IncidentRecord>(
       'incidents',
       setIncidents,
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubAnn = FirestoreService.subscribeToCollection<AnnouncementRecord>(
+    const unsubAnn = watchCollection<AnnouncementRecord>(
       'announcements',
       (data) => {
         setAnnouncements([...data].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()));
@@ -221,19 +249,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       () => { setIsLoadingAnnouncements(false); setAnnouncementError('Papan pengumuman belum tersambung. Periksa koneksi dan izin akun.'); },
       [where('isActive', '==', true)], { cacheKey: 'active' }
     );
-    const unsubTardy = FirestoreService.subscribeToCollection<StudentTardyRecord>(
+    const unsubTardy = watchCollection<StudentTardyRecord>(
       'studentTardiness',
       setStudentTardiness,
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubPermits = FirestoreService.subscribeToCollection<StudentPermitRecord>(
+    const unsubPermits = watchCollection<StudentPermitRecord>(
       'studentPermits',
       setStudentPermits,
       undefined,
       [where('tanggal', '==', todayISO)], { cacheKey: `today:${todayISO}` }
     );
-    const unsubVisitors = FirestoreService.subscribeToCollection<VisitorRecord>(
+    const unsubVisitors = watchCollection<VisitorRecord>(
       'visitors',
       setVisitors,
       undefined,
@@ -644,6 +672,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
 
   return (
     <div className="space-y-6">
+      {audit && <React.Suspense fallback={null}><DashboardAuditPanel audit={audit} /></React.Suspense>}
       <DashboardWelcome config={flashConfig.welcome} nameMarquee={flashConfig.nameMarquee} user={currentUser} />
 
       <DashboardFlashInfo config={flashConfig} slides={dashboardSlides} onAnnouncements={openAnnouncements} suspended={detailPanel !== null || isAnnModalOpen || waModalData.isOpen} />
