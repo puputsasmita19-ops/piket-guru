@@ -29,7 +29,7 @@ const KNOWN_IDS = SHORTCUT_ACTIONS.map(action => action.tab);
 const DEFAULT_IDS = KNOWN_IDS.slice(0, 6);
 const MAX_SHORTCUTS = 8;
 
-export function QuickActions({ onNavigate }: { onNavigate: (tab: NavigationTab) => void }) {
+export const QuickActions = React.memo(function QuickActions({ onNavigate }: { onNavigate: (tab: NavigationTab) => void }) {
   const { currentUser, hasPermission, isTrustedDevice } = useAuth();
   const uid = currentUser?.id || '';
   const project = firebaseConfig.projectId;
@@ -90,4 +90,4 @@ export function QuickActions({ onNavigate }: { onNavigate: (tab: NavigationTab) 
       </div>
     </Modal>
   </section>;
-}
+});

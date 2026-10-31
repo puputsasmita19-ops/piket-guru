@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DashboardOutlineControlIcon } from './DashboardOutlineControlIcon';
 import type { DashboardInfoConfig, DashboardInfoPanel } from '../../types/dashboardInfo.types';
 import { announcementPreview } from '../../utils/announcementPreview';
+import { getSwipeIntent, getSwipeDirection } from './dashboardSwipeGesture';
 
 export interface DashboardFlashSlide {
   id: DashboardInfoPanel | 'activity';
@@ -41,7 +42,7 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(document.hidden);
   const [dragging, setDragging] = useState(false);
-  const gesture = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const gesture = useRef<{ x: number; y: number; pointerId: number; horizontal: boolean } | null>(null);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const index = Math.max(0, slides.findIndex(s => s.id === selectedId));
   const slide = slides[index];
@@ -124,17 +125,27 @@ export function DashboardFlashInfo({ slides, config, suspended = false, onAnnoun
     <div className="flash-viewport"
       onPointerDown={e => {
         if (!e.isPrimary || e.button !== 0 || (e.target as HTMLElement).closest('button, a, input')) return;
-        gesture.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-        setDragging(true); e.currentTarget.setPointerCapture(e.pointerId);
+        // Do not capture every touch: vertical dashboard scrolling belongs to the browser.
+        gesture.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId, horizontal: false };
+        if (e.pointerType === 'mouse') e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={e => {
+        const start = gesture.current;
+        if (!start || start.pointerId !== e.pointerId || start.horizontal) return;
+        if (getSwipeIntent(start, e.clientX, e.clientY) !== 'horizontal') return;
+        start.horizontal = true;
+        setDragging(true);
+        if (!e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.setPointerCapture(e.pointerId);
       }}
       onPointerUp={e => {
         const start = gesture.current;
-        gesture.current = null; setDragging(false);
+        gesture.current = null;
+        if (start?.horizontal) setDragging(false);
         if (!start || start.pointerId !== e.pointerId) return;
-        const dx = e.clientX - start.x, dy = e.clientY - start.y;
-        if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.3) change(dx < 0 ? 1 : -1);
+        const direction = getSwipeDirection(start, e.clientX, e.clientY);
+        if (direction) change(direction);
       }}
-      onPointerCancel={() => { gesture.current = null; setDragging(false); }}>
+      onPointerCancel={() => { const start = gesture.current; gesture.current = null; if (start?.horizontal) setDragging(false); }}>
       <div className={`flash-track ${snap ? 'flash-track-snap' : ''}`} style={{ transform: `translate3d(${-trackIndex * 100}%, 0, 0)` }}
         onTransitionEnd={e => { if (e.target === e.currentTarget && e.propertyName === 'transform') finishMove(); }}>
         {cards.map(({ item, logicalIndex, clone, key }, position) => {

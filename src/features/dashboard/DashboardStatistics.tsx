@@ -16,7 +16,11 @@ export interface DashboardStatistic {
   loadError?: boolean;
 }
 
-function MiniTrend({ series, label }: { series: number[] | null | undefined; label: string }) {
+const standardNumberFormatter = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+const accessibleNumberFormatter = new Intl.NumberFormat('id-ID');
+const compactNumberFormatter = new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 });
+
+const MiniTrend = React.memo(function MiniTrend({ series, label }: { series: number[] | null | undefined; label: string }) {
   const gradient = useId().replace(/:/g, '');
   if (!series) return <span className="statistic-no-chart" aria-label="Grafik belum tersedia karena waktu pencatatan belum lengkap"><span /></span>;
   const max = Math.max(1, ...series);
@@ -31,9 +35,9 @@ function MiniTrend({ series, label }: { series: number[] | null | undefined; lab
     <path d={`${path} L61,41 L3,41 Z`} fill={`url(#${gradient})`} />
     <path d={path} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
-}
+});
 
-export function DashboardStatistics({ items, loading, onNavigate }: { items: DashboardStatistic[]; loading: boolean; onNavigate: (tab: NavigationTab) => void }) {
+export const DashboardStatistics = React.memo(function DashboardStatistics({ items, loading, onNavigate }: { items: DashboardStatistic[]; loading: boolean; onNavigate: (tab: NavigationTab) => void }) {
   if (!items.length) return null;
   return <section aria-label="Statistik hari ini" className="dashboard-statistics">
     {items.map(item => {
@@ -41,8 +45,8 @@ export function DashboardStatistics({ items, loading, onNavigate }: { items: Das
       const pending = loading || item.loading;
       const failed = !pending && item.loadError;
       const numeric = typeof item.value === 'number';
-      const formatted = numeric ? new Intl.NumberFormat('id-ID', { notation: (item.value as number) >= 10000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(item.value as number) : item.value;
-      const accessibleValue = numeric ? new Intl.NumberFormat('id-ID').format(item.value as number) : item.value;
+      const formatted = numeric ? ((item.value as number) >= 10000 ? compactNumberFormatter : standardNumberFormatter).format(item.value as number) : item.value;
+      const accessibleValue = numeric ? accessibleNumberFormatter.format(item.value as number) : item.value;
       return <button key={item.tab} type="button" data-statistic={item.tab} data-value={item.value} className="dashboard-statistic" onClick={() => onNavigate(item.tab)}
         aria-label={`${item.title}: ${pending ? 'Memuat' : failed ? 'Data belum tersedia' : `${accessibleValue}${item.unit ? ` ${item.unit}` : ''}`}. ${item.detail}. Buka rincian.`}>
         <span className="statistic-heading"><span className="statistic-title">{item.title}</span>{item.stage === undefined ? <Icon className="statistic-icon" /> : <span className="statistic-stages" aria-hidden="true">{[1, 2, 3].map(stage => <span key={stage} data-complete={stage <= item.stage!} />)}</span>}</span>
@@ -56,4 +60,4 @@ export function DashboardStatistics({ items, loading, onNavigate }: { items: Das
       </button>;
     })}
   </section>;
-}
+});

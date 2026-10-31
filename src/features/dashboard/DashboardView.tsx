@@ -405,13 +405,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRosterModalOpen, rosterMastersReady, photoRosterSignature, currentUser?.id]);
 
-  const todayAttendance = attendance.filter((a) => a.tanggal === todayISO);
-  const todayDutyBook = dutyBooks.find((b) => b.tanggal === todayISO);
-  const todayIncidents = incidents.filter((i) => i.tanggal === todayISO);
-  const todayTardiness = studentTardiness.filter((t) => t.tanggal === todayISO);
-  const todayPermits = studentPermits.filter((p) => p.tanggal === todayISO);
-  const todaySubstitutions = substitutions.filter((s) => s.tanggal === todayISO);
-  const todayVisitors = visitors.filter((v) => v.tanggal === todayISO);
+  // R113-C: keep references stable on unrelated Firestore callbacks and carousel
+  // interactions. Statistics can now skip recalculating seven-point series.
+  const todayAttendance = useMemo(() => attendance.filter(a => a.tanggal === todayISO), [attendance, todayISO]);
+  const todayDutyBook = useMemo(() => dutyBooks.find(b => b.tanggal === todayISO), [dutyBooks, todayISO]);
+  const todayIncidents = useMemo(() => incidents.filter(i => i.tanggal === todayISO), [incidents, todayISO]);
+  const todayTardiness = useMemo(() => studentTardiness.filter(t => t.tanggal === todayISO), [studentTardiness, todayISO]);
+  const todayPermits = useMemo(() => studentPermits.filter(p => p.tanggal === todayISO), [studentPermits, todayISO]);
+  const todaySubstitutions = useMemo(() => substitutions.filter(s => s.tanggal === todayISO), [substitutions, todayISO]);
+  const todayVisitors = useMemo(() => visitors.filter(v => v.tanggal === todayISO), [visitors, todayISO]);
 
   // Personal duty schedule & status for currentUser (supports users.id and legacy teacher.id)
   // Schedule matching only needs the active user's linked master records.
@@ -478,7 +480,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     });
     return () => cancelAnimationFrame(frame);
   }, [detailPanel, focusedAnnouncementId, isLoadingAnnouncements, announcements]);
-  const flashConfig = sanitizeDashboardInfoConfig(settings.dashboardInfoConfig);
+  // A stable config reference prevents unnecessary welcome/carousel re-renders
+  // when an unrelated Firestore listener publishes an update.
+  const flashConfig = useMemo(() => sanitizeDashboardInfoConfig(settings.dashboardInfoConfig), [settings.dashboardInfoConfig]);
   const substitutionSummary = buildSubstitutionFlashSummary(substitutions, todayISO);
   const operationItems = [
     hasPermission(PERMISSIONS.STUDENT_TARDY_VIEW) && { id: 'tardy', title: `${todayTardiness.length} siswa terlambat`, detail: 'Pencatatan hari ini' },
@@ -507,7 +511,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     ...(operationItems.length ? [{ id: 'operations' as const, title: 'Kegiatan Sekolah Hari Ini', icon: Building2, items: operationItems, emptyText: 'Belum ada kegiatan tercatat.', actionLabel: 'Lihat rincian tugas', onAction: revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body' }] : []),
   ].filter(slide => flashConfig.panels[slide.id]);
   const bookStage = todayDutyBook ? getDutyBookDisplayStatus(todayDutyBook.status) : null;
-  const statistics: (DashboardStatistic & { permission: PermissionKey })[] = [
+  const statistics = useMemo((): (DashboardStatistic & { permission: PermissionKey })[] => [
     { tab: 'schedules', permission: PERMISSIONS.SCHEDULE_VIEW, title: 'Petugas Hari Ini', value: todaySchedules.length, unit: 'guru', detail: `Shift ${todayName.toLocaleLowerCase('id-ID')}`, icon: Users, series: buildDailyStatisticSeries(todaySchedules.map(item => item.jamMulai), todayISO, true), chartLabel: 'Akumulasi jadwal terencana hari ini menurut jam mulai' },
     { tab: 'attendance', permission: PERMISSIONS.ATTENDANCE_VIEW, title: 'Kehadiran GPS', value: attendancePercentage, unit: '%', detail: `${presentCount} dari ${todaySchedules.length} terverifikasi`, icon: ShieldCheck, series: buildDailyStatisticSeries(todayAttendance.filter(item => item.status === 'DALAM_LOKASI').map(item => item.jamMasuk), todayISO), chartLabel: 'Akumulasi presensi GPS terverifikasi hari ini menurut jam masuk' },
     { tab: 'duty-book', permission: PERMISSIONS.DUTYBOOK_VIEW, title: 'Buku Piket', value: bookStage?.label || 'Belum dibuat', detail: todayDutyBook ? 'Tahap jurnal hari ini' : 'Siap diisi', icon: BookOpenCheck, stage: bookStage ? { DRAFT: 1, TERKIRIM: 2, SELESAI: 3 }[bookStage.stage] : 0 },
@@ -516,8 +520,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     { tab: 'student-permits', permission: PERMISSIONS.STUDENT_PERMITS_VIEW, title: 'Izin Keluar Kelas', loading: sourceStatus('permits') === undefined, loadError: sourceStatus('permits') === 'error', value: todayPermits.length, unit: 'siswa', detail: `${todayPermits.filter(item => item.status === 'SEDANG_KELUAR').length} masih di luar`, icon: FileText, series: buildDailyStatisticSeries(todayPermits.map(item => item.jamKeluar), todayISO) },
     { tab: 'substitutions', permission: PERMISSIONS.SUBSTITUTIONS_VIEW, title: 'Guru Pengganti', value: todaySubstitutions.length, unit: 'tugas', detail: 'Penugasan inval hari ini', icon: GraduationCap, series: buildDailyStatisticSeries(todaySubstitutions.map(item => item.createdAt), todayISO), chartLabel: 'Akumulasi penugasan inval yang dicatat hari ini' },
     { tab: 'visitors', permission: PERMISSIONS.VISITORS_VIEW, title: 'Buku Tamu', loading: sourceStatus('visitors') === undefined, loadError: sourceStatus('visitors') === 'error', value: todayVisitors.length, unit: 'tamu', detail: `${todayVisitors.filter(item => item.status === 'SEDANG_BERKUNJUNG').length} sedang berkunjung`, icon: Building, series: buildDailyStatisticSeries(todayVisitors.map(item => item.jamMasuk), todayISO) },
-  ];
-  const visibleStatistics = statistics.filter(item => hasPermission(item.permission));
+  ], [todaySchedules, todayName, todayISO, todayAttendance, todayDutyBook, todayIncidents,
+      todayTardiness, todayPermits, todaySubstitutions, todayVisitors, presentCount,
+      attendancePercentage, secondarySourceState.key, secondarySourceState.statuses, secondaryKey]);
+  const visibleStatistics = useMemo(() => statistics.filter(item => hasPermission(item.permission)),
+    [statistics, hasPermission]);
   const activitySlide: DashboardFlashSlide = {
     id: 'activity', title: isLoadingMetrics ? 'Menyiapkan kegiatan Anda…' : myTodaySchedule ? 'Piket Anda hari ini' : 'Kegiatan sekolah, lebih praktis',
     icon: myTodaySchedule ? Calendar : ActivityGridOutlineIcon,
@@ -530,7 +537,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
     items: [], emptyText: '', actionLabel: showDutyDetails ? 'Tutup rincian tugas' : 'Lihat rincian tugas', onAction: showDutyDetails ? toggleDutyDetails : revealDutyDetails, expanded: showDutyDetails, controls: 'personal-duty-body',
   };
   const dashboardSlides = [activitySlide, ...(flashConfig.enabled ? flashSlides : [])];
-  const announcementBoard = (
+  const announcementBoard = detailPanel === 'announcements' ? (
 <Card className="announcement-board">
         <CardHeader
           title="Papan Pengumuman & Instruksi Khusus Piket"
@@ -629,11 +636,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           )}
         </CardContent>
       </Card>
-  );
+  ) : null;
   const isTomorrowRoster = detailPanel === 'dutyRosterTomorrow';
   const rosterSchedules = isTomorrowRoster ? tomorrowSchedules : todaySchedules;
   const rosterTitle = isTomorrowRoster ? 'Daftar Guru Bertugas Besok' : 'Daftar Guru Bertugas Hari Ini';
-  const dutyRosterBoard = (
+  const dutyRosterBoard = (detailPanel === 'dutyRoster' || detailPanel === 'dutyRosterTomorrow') ? (
 <Card>
           <CardHeader
             title={rosterTitle}
@@ -702,8 +709,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             )}
           </CardContent>
         </Card>
-  );
-  const incidentBoard = (
+  ) : null;
+  const incidentBoard = detailPanel === 'incidents' ? (
 <Card>
           <CardHeader
             title="Laporan Insiden & Kejadian Terbaru"
@@ -752,7 +759,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             )}
           </CardContent>
         </Card>
-  );
+  ) : null;
 
   return (
     <div className="space-y-6">
